@@ -108,6 +108,7 @@
     "d3-force": "3.0.0",
     "dnd-core": "14.0.1",
     "dompurify": "3.4.13",
+    "electron-updater": "6.8.9",
     "emojibase-data": "16.0.3",
     "fflate": "0.8.3",
     "frimousse": "0.3.0",
@@ -183,6 +184,13 @@
     ],
     "artifactName": "Hermes-${version}-${os}-${arch}.${ext}",
     "icon": "assets/icon",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "NousResearch",
+        "repo": "hermes-agent"
+      }
+    ],
     "directories": {
       "output": "release"
     },
