@@ -160,6 +160,26 @@ jobs:
             printf 'OPENSSL_STATIC=1\n'
           } >> "$GITHUB_ENV"
 
+      # ── Payload python + site-packages cache ───────────────────────────
+      # The two expensive staging trees. Their content depends only on the
+      # lock, the payload python version, and the target — NOT the release
+      # tag, so one cache serves every release until the lock moves. The
+      # staging script owns correctness: it validates the restored trees
+      # against its .stage-cache-key (schema version, target triple,
+      # source-build list, requirements hash) and restages from scratch on
+      # any mismatch — an exact key here is an optimization, never a proof.
+      # No restore-keys: a partial match would fail that check and restage
+      # anyway. win32-arm64 saves the most (15+ min of MSVC/Rust sdist
+      # builds); every platform saves the python install + wheel downloads.
+      - name: Cache payload python + site-packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            apps/desktop/build/agent-payload/python
+            apps/desktop/build/agent-payload/site-packages
+            apps/desktop/build/agent-payload/.stage-cache-key
+          key: agent-payload-${{ matrix.label }}-py${{ env.HERMES_PAYLOAD_PYTHON }}-${{ hashFiles('uv.lock') }}
+
       # ── Azure OIDC login for Windows signing ───────────────────────────
       # No client secret exists anywhere. GitHub mints an OIDC token for
       # this job; Azure redeems it only when the token's subject matches

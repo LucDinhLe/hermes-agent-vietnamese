@@ -32,6 +32,7 @@
  */
 
 import { execSync, spawnSync } from "node:child_process"
+import { createHash } from "node:crypto"
 import fs from "node:fs"
 import path from "node:path"
 
@@ -235,6 +236,31 @@ export function buildManifest({ tag, commit, target }) {
   }
 }
 
+/**
+ * The cache identity of the python/ + site-packages/ pair. These two
+ * stages dominate staging time (win32-arm64 compiles cryptography and
+ * friends from sdist with MSVC + Rust for 15+ minutes), and their content
+ * is a pure function of exactly these inputs — the release tag is NOT one
+ * of them. When the key matches a previous run's, the trees are reusable
+ * as-is; everything tag-dependent (repo/, dist-info, manifest) is staged
+ * fresh every run. The key says "reuse is allowed"; the arch probes and
+ * the import backstop still decide "reuse is correct".
+ */
+export function stageCacheKey({ target, pythonVersion, requirementsText }) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        schemaVersion: PAYLOAD_SCHEMA_VERSION,
+        target: target.key,
+        uvPython: target.uvPython,
+        pythonVersion,
+        sourceBuild: target.sourceBuild || [],
+        requirements: createHash("sha256").update(requirementsText).digest("hex"),
+      })
+    )
+    .digest("hex")
+}
+
 // ─── impure staging steps (they shell out, have no unit tests, and run in CI) ──────
 
 function run(cmd, args, opts = {}) {
@@ -383,16 +409,20 @@ export function hostTarBin() {
     : "tar"
 }
 
-function stageUvAndPython(target, outDir) {
+function stageUvAndPython(target, outDir, { reusePython = false } = {}) {
   const uvDir = path.join(outDir, "uv")
   const pythonDir = path.join(outDir, "python")
   // Wipe before staging (stageRepo does the same). A rerun after a failed
   // or wrong-arch attempt must not leave a stale interpreter beside the
-  // new one — the banner probe would find the old build first.
+  // new one — the banner probe would find the old build first. The uv
+  // stage is a cheap copy and is never reused; the python install is the
+  // expensive half, and a cache-key match (main) skips its reinstall.
   fs.rmSync(uvDir, { recursive: true, force: true })
-  fs.rmSync(pythonDir, { recursive: true, force: true })
   fs.mkdirSync(uvDir, { recursive: true })
-  fs.mkdirSync(pythonDir, { recursive: true })
+  if (!reusePython) {
+    fs.rmSync(pythonDir, { recursive: true, force: true })
+    fs.mkdirSync(pythonDir, { recursive: true })
+  }
   // Native runner: the uv that runs this build IS the target-platform uv.
   // HERMES_PAYLOAD_UV overrides this for unusual setups. The default is
   // `uv` on PATH.
@@ -424,8 +454,11 @@ function stageUvAndPython(target, outDir) {
 
   // --no-bin: staging must not write launcher shims into the build
   // host's ~/.local/bin (it collided with a preexisting python3.11.exe
-  // on the Windows test box).
-  run("uv", ["python", "install", "--no-bin", "--install-dir", pythonDir, pythonRequest(target)])
+  // on the Windows test box). On reuse the install is already on disk;
+  // the probes below still run against it.
+  if (!reusePython) {
+    run("uv", ["python", "install", "--no-bin", "--install-dir", pythonDir, pythonRequest(target)])
+  }
 
   // uv leaves two things beside the versioned install that must not ship:
   // a minor-version alias that is an ABSOLUTE symlink to this build host's
@@ -497,10 +530,8 @@ function findPythonBinary(pythonDir, target) {
   throw new Error(`python: no ${name} found under ${roots.join(", ")}`)
 }
 
-function stageSitePackages(target, outDir, pythonBinary) {
+function stageSitePackages(target, outDir, pythonBinary, { reuse = false } = {}) {
   const sitePackagesDir = path.join(outDir, "site-packages")
-  fs.rmSync(sitePackagesDir, { recursive: true, force: true })
-  fs.mkdirSync(sitePackagesDir, { recursive: true })
   // Export the lock to a requirements file, then install the whole tree
   // with pip running ON THE STAGED PAYLOAD INTERPRETER: pip resolves
   // platform tags for the interpreter that executes it, so this is what
@@ -509,15 +540,22 @@ function stageSitePackages(target, outDir, pythonBinary) {
   // wheels.) No venv anywhere: a venv's bin/python is a symlink to an
   // ABSOLUTE build-host path, and the .app runs from unpredictable
   // locations (renames, Gatekeeper translocation, AppImage mounts).
+  // main() already exported requirements-payload.txt (the cache key
+  // hashes it); on reuse the installed tree is already on disk and only
+  // the pip install is skipped — the dist-info rewrite and the import
+  // backstop below run every time.
   if (!pythonBinary) {
     throw new Error("site-packages: the uv/python stage must run first (it provides the payload interpreter)")
   }
-  run("uv", ["export", "--frozen", "--no-emit-project", "-o", "requirements-payload.txt"], { cwd: REPO_ROOT })
-  run(
-    "uvx",
-    ["--python", pythonBinary, "pip", ...pipTargetArgs({ sitePackagesDir, sourceBuild: target.sourceBuild || [] })],
-    { cwd: REPO_ROOT }
-  )
+  if (!reuse) {
+    fs.rmSync(sitePackagesDir, { recursive: true, force: true })
+    fs.mkdirSync(sitePackagesDir, { recursive: true })
+    run(
+      "uvx",
+      ["--python", pythonBinary, "pip", ...pipTargetArgs({ sitePackagesDir, sourceBuild: target.sourceBuild || [] })],
+      { cwd: REPO_ROOT }
+    )
+  }
 
   // hermes-agent's own code imports from repo/ (the .pth puts it first on
   // sys.path — PROJECT_ROOT derivations need the real tree around the
@@ -526,6 +564,14 @@ function stageSitePackages(target, outDir, pythonBinary) {
   // wheel builds outside Nix (and pip install --target builds a wheel
   // internally). importlib.metadata only reads METADATA, so write the
   // minimal dist-info directly — same trick as flat layouts everywhere.
+  // The version comes from repo/, which is staged fresh every run: on a
+  // cache reuse the previous release's dist-info is on disk and MUST be
+  // replaced, or the payload would report the old version.
+  for (const entry of fs.readdirSync(sitePackagesDir)) {
+    if (/^hermes_agent-.*\.dist-info$/.test(entry)) {
+      fs.rmSync(path.join(sitePackagesDir, entry), { recursive: true, force: true })
+    }
+  }
   const version = probe(pythonBinary, [
     "-c",
     `import pathlib, re; print(re.search(r'__version__ = \"([^\"]+)\"', pathlib.Path(${JSON.stringify(
@@ -634,14 +680,43 @@ function main() {
 
   fs.mkdirSync(OUT_DIR, { recursive: true })
 
+  // The expensive stages (python install + site-packages) are reused
+  // when their cache identity matches the previous run's — CI restores
+  // them via actions/cache keyed on uv.lock. Export the requirements
+  // FIRST: the key hashes the exported file, which is what pip actually
+  // installs from. Reuse skips only the installs; every probe, the
+  // dist-info rewrite, the .pth, and the manifest run identically on
+  // both paths, so a wrong or stale cache fails the same checks a bad
+  // fresh staging would.
+  run("uv", ["export", "--frozen", "--no-emit-project", "-o", "requirements-payload.txt"], { cwd: REPO_ROOT })
+  const cacheKey = stageCacheKey({
+    target,
+    pythonVersion: process.env.HERMES_PAYLOAD_PYTHON || "3.11",
+    requirementsText: fs.readFileSync(path.join(REPO_ROOT, "requirements-payload.txt"), "utf8"),
+  })
+  const cacheKeyFile = path.join(OUT_DIR, ".stage-cache-key")
+  let reuse = false
+  try {
+    reuse = fs.readFileSync(cacheKeyFile, "utf8").trim() === cacheKey
+  } catch {
+    // No key file: first run or restored nothing — stage from scratch.
+  }
+  // A stale or foreign key means the trees on disk are for other inputs.
+  // Drop the key BEFORE restaging: an interrupted run must never leave a
+  // matching key beside half-staged trees.
+  fs.rmSync(cacheKeyFile, { force: true })
+  if (reuse) {
+    console.log(`[stage-agent-payloads] python + site-packages reused (cache key ${cacheKey.slice(0, 12)}…)`)
+  }
+
   // Every stage runs, in order. A failure throws and the build fails:
   // an embedded payload is complete, or it does not exist.
   console.log(`[stage-agent-payloads] staging: repo (${target.key}, ${tag})`)
   const commit = stageRepo(tag, OUT_DIR)
   console.log(`[stage-agent-payloads] staging: uv + python (${target.key}, ${tag})`)
-  const payloadPython = stageUvAndPython(target, OUT_DIR)
+  const payloadPython = stageUvAndPython(target, OUT_DIR, { reusePython: reuse })
   console.log(`[stage-agent-payloads] staging: site-packages (${target.key}, ${tag})`)
-  stageSitePackages(target, OUT_DIR, payloadPython)
+  stageSitePackages(target, OUT_DIR, payloadPython, { reuse })
   // The glue that makes the payload interpreter resolve repo/ and
   // site-packages/ wherever the bundle sits. Written after both stages
   // exist so a failed staging run never leaves a .pth that points at
@@ -654,6 +729,10 @@ function main() {
 
   const manifest = buildManifest({ tag, commit, target })
   fs.writeFileSync(path.join(OUT_DIR, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n")
+  // The key is written LAST: it asserts that the python/site-packages
+  // trees on disk are complete for these inputs, which is only true once
+  // every stage and probe above has passed.
+  fs.writeFileSync(cacheKeyFile, cacheKey + "\n")
   console.log(`[stage-agent-payloads] wrote ${path.join(OUT_DIR, "manifest.json")}`)
 }
 

@@ -12,7 +12,8 @@ import {
   pythonDirPattern,
   pythonRequest,
   resolveTag,
-  resolveTargets
+  resolveTargets,
+  stageCacheKey
 } from '../scripts/stage-agent-payloads.mjs'
 
 // ─── resolveTargets ────────────────────────────────────────────────
@@ -178,4 +179,21 @@ test('source-build exceptions override only-binary for the named packages only',
   const noBinary = args[args.indexOf('--no-binary') + 1]
   assert.ok(args.indexOf('--no-binary') > args.indexOf('--only-binary'))
   assert.equal(noBinary, 'cryptography,httptools,ruamel-yaml-clib,pywinpty,pyyaml')
+})
+
+// ─── stageCacheKey ─────────────────────────────────────────────────
+
+test('stageCacheKey is stable for identical inputs and moves with each one', () => {
+  const winArm = resolveTargets('win32', 'arm64')
+  const base = { target: winArm, pythonVersion: '3.11', requirementsText: 'cryptography==46.0.3\n' }
+
+  // Deterministic: same inputs, same key (a cache hit must be reproducible).
+  assert.equal(stageCacheKey(base), stageCacheKey({ ...base }))
+
+  // Every input the staged trees depend on must change the key: the lock
+  // contents, the payload python version, and the target (which carries
+  // the triple and the source-build list).
+  assert.notEqual(stageCacheKey(base), stageCacheKey({ ...base, requirementsText: 'cryptography==46.0.4\n' }))
+  assert.notEqual(stageCacheKey(base), stageCacheKey({ ...base, pythonVersion: '3.12' }))
+  assert.notEqual(stageCacheKey(base), stageCacheKey({ ...base, target: resolveTargets('win32', 'x64') }))
 })
