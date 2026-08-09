@@ -81,16 +81,22 @@ the publisher name contains spaces, and spaces do not survive the cmd.exe
 hops between npm and the builder on Windows. Without the variables, the
 build produces unsigned artifacts. Forks and local builds work unsigned.
 
-The release workflow also sets `AZURE_TOKEN_CREDENTIALS=dev` so the signing
-dlib's DefaultAzureCredential chain runs only its developer-tool half and
-reaches the credential `azure/login` (OIDC) prepared. Without it, the chain
-probes managed identity first, and on GitHub-hosted runners (which are
-Azure VMs) that probe reaches a live IMDS endpoint that never grants a
-token, hanging signtool. The dlib's Azure.Identity accepts only `dev` or
-`prod` here — it predates per-credential names — and
-`win.sign.additionalMetadata.ExcludeCredentials` cannot express the
-exclusion either: electron-builder's v27 schema types it as a string while
-the dlib requires a JSON list.
+The release workflow authenticates the signing dlib as a **workload
+identity**: it mints the job's GitHub OIDC token into a file (reminted
+every 4 minutes — the tokens live only minutes and signing runs for the
+better part of an hour) and points `AZURE_FEDERATED_TOKEN_FILE`,
+`AZURE_CLIENT_ID`, and `AZURE_TENANT_ID` at it, with
+`AZURE_TOKEN_CREDENTIALS=prod` restricting the chain to
+Environment → WorkloadIdentity → ManagedIdentity. EnvironmentCredential
+fails instantly (no secret), WorkloadIdentityCredential redeems the token
+file in-process, and ManagedIdentityCredential is never reached. The
+dev-tool credentials (AzureCli & co.) all spawn subprocesses, which wedged
+the x64-emulated signtool on the windows-11-arm runner for 35+ minutes;
+the managed-identity probe hangs on GitHub-hosted runners (they are Azure
+VMs whose IMDS endpoint answers but never grants a token).
+`win.sign.additionalMetadata.ExcludeCredentials` cannot express any of
+this: electron-builder's v27 schema types it as a string while the dlib
+requires a JSON list.
 
 Authentication uses the Azure credential chain: OIDC federated login in CI,
 or an `az login` session on a dev machine. There is no signing secret.

@@ -164,10 +164,10 @@ jobs:
       # No client secret exists anywhere. GitHub mints an OIDC token for
       # this job; Azure redeems it only when the token's subject matches
       # the app registration's federated credential
-      # (repo:<owner>/<repo>:environment:release-signing). electron-
-      # builder's TrustedSigning module then picks the CLI credential up
-      # from the Azure credential chain. Skipped when the environment
-      # variables are absent (forks, dry runs) — the build stays unsigned.
+      # (repo:<owner>/<repo>:environment:release-signing). This login
+      # validates the federation early and fails fast when it is broken.
+      # Skipped when the environment variables are absent (forks, dry
+      # runs) — the build stays unsigned.
       - name: Azure login (OIDC)
         if: startsWith(matrix.label, 'win32-') && vars.AZURE_CLIENT_ID != ''
         uses: azure/login@f5d393ae46f8fde4be8b75f32e3fc50e654ad0ca # v3.0.1
@@ -176,26 +176,33 @@ jobs:
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           allow-no-subscriptions: true
 
-      # The Trusted Signing tool install freezes the runner when no .NET 8
-      # runtime is present (actions/runner-images#13538). electron-builder
-      # always runs its own `Install-Module TrustedSigning -Force` before it
-      # signs — a preinstalled module cannot short-circuit that — so the fix
-      # is to give the runner the runtime the tooling needs up front.
-      # Observed on the arm64 runner: 32+ minutes stalled inside that
-      # Install-Module call until the job was canceled.
-      - name: Install .NET 8 runtime for Trusted Signing
-        if: startsWith(matrix.label, 'win32-') && vars.AZURE_CLIENT_ID != ''
-        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
-        with:
-          dotnet-version: '8.x'
-
-      # setup-dotnet exports DOTNET_ROOT. On ARM64 Windows that points the
-      # x64 signtool at an arm64 runtime and it dies with exit code 3 (seen
-      # on the promise build box). The tooling only needs dotnet on PATH.
-      - name: Clear DOTNET_ROOT
+      # The signing dlib authenticates with WorkloadIdentityCredential:
+      # a fresh GitHub OIDC token on disk + AZURE_FEDERATED_TOKEN_FILE.
+      # The dev-tool credentials (AzureCli & co.) all spawn subprocesses,
+      # and inside the x64-emulated dlib on the arm64 runner that spawn
+      # wedged signtool for 35+ minutes. WorkloadIdentityCredential is
+      # in-process HTTPS only — the same token exchange azure/login just
+      # performed, done by the dlib itself.
+      #
+      # GitHub OIDC tokens live only minutes, and the first signtool call
+      # comes 20+ minutes into the build (payload staging), with more
+      # calls for an hour after — so a background loop remints the file
+      # every 4 minutes for the life of the job. Every signtool spawn is
+      # a fresh dlib process that re-reads the file. The runner reaps the
+      # loop at job end.
+      - name: Mint federated token for the signing dlib
         if: startsWith(matrix.label, 'win32-') && vars.AZURE_CLIENT_ID != ''
         shell: bash
-        run: echo "DOTNET_ROOT=" >> "$GITHUB_ENV"
+        run: |
+          file="$RUNNER_TEMP/azure-federated-token"
+          mint() {
+            curl -sSf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=api://AzureADTokenExchange" \
+              | jq -r .value > "$file.tmp" && mv -f "$file.tmp" "$file"
+          }
+          mint
+          ( while sleep 240; do mint || true; done ) &
+          echo "AZURE_FEDERATED_TOKEN_FILE=$file" >> "$GITHUB_ENV"
 
       # ── Build + package through the shared script ──────────────────────
       # scripts/build-bundled-desktop.mjs owns the whole sequence: the root
@@ -219,28 +226,29 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          # Windows signing with Azure Trusted Signing. The TrustedSigning
-          # module authenticates through the OIDC login above — no secret
-          # exists. These non-secret variables in the release-signing
-          # environment turn signing on; without them the build stays
-          # unsigned, so forks and dry runs continue to work.
+          # Windows signing with Azure Trusted Signing. The signing dlib
+          # authenticates as a workload identity — no secret exists. These
+          # non-secret variables in the release-signing environment turn
+          # signing on; without them the build stays unsigned, so forks
+          # and dry runs continue to work.
           AZURE_SIGN_ENDPOINT: ${{ vars.AZURE_SIGN_ENDPOINT }}
           AZURE_SIGN_ACCOUNT: ${{ vars.AZURE_SIGN_ACCOUNT }}
           AZURE_SIGN_PROFILE: ${{ vars.AZURE_SIGN_PROFILE }}
           AZURE_SIGN_PUBLISHER: ${{ vars.AZURE_SIGN_PUBLISHER }}
           AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-          # Restrict the signing dlib's DefaultAzureCredential chain to the
-          # 'dev' half (SharedTokenCache/VisualStudio/AzureCli/
-          # AzurePowerShell/AzureDeveloperCli) so it reaches the CLI
-          # credential azure/login prepared. The full chain probes managed
-          # identity first, and on GitHub-hosted runners (Azure VMs) that
-          # probe reaches a live IMDS endpoint that never grants a token —
-          # signtool hung for 30+ minutes. The dlib's Azure.Identity is too
-          # old for per-credential names here ('dev'/'prod' only), and
-          # ExcludeCredentials in win.sign.additionalMetadata cannot express
-          # it either: the v27 schema types it as a string while the dlib
-          # requires a list.
-          AZURE_TOKEN_CREDENTIALS: dev
+          # WorkloadIdentityCredential inputs: client + tenant + the token
+          # file minted above. 'prod' restricts the dlib's chain to
+          # Environment/WorkloadIdentity/ManagedIdentity — Environment
+          # fails instantly (no secret set), WorkloadIdentity succeeds
+          # from the token file, ManagedIdentity is never reached. The
+          # dev-tool half of the chain spawns subprocesses, which wedged
+          # the x64-emulated signtool on the arm64 runner for 35+ minutes.
+          # (The dlib's Azure.Identity accepts only 'dev'/'prod' here, and
+          # ExcludeCredentials in win.sign.additionalMetadata cannot be
+          # expressed: the v27 schema types it as a string while the dlib
+          # requires a list.)
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_TOKEN_CREDENTIALS: prod
         run: |
           # Windows signing turns on inside run-electron-builder.mjs when the
           # AZURE_SIGN_* variables above are present. It cannot ride through
