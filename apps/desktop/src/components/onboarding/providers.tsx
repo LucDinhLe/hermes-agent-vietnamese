@@ -9,10 +9,11 @@ const PROVIDER_DISPLAY: Record<string, { order: number; title: string }> = {
   'minimax-oauth': { order: 2, title: 'MiniMax' },
   'qwen-oauth': { order: 3, title: 'Qwen Code' },
   'xai-oauth': { order: 4, title: 'xAI Grok' },
-  // Both Anthropic entries sit at the bottom: the API-key path first, then
-  // the subscription OAuth path (only works with extra usage credits).
+  // Keep the metered Anthropic API path distinct from the Claude Code
+  // subscription bridge. The latter uses the user's official Claude Pro/Max
+  // login and refuses Extra Usage, so its title must never imply API billing.
   anthropic: { order: 5, title: 'Anthropic API Key' },
-  'claude-code': { order: 6, title: 'Anthropic OAuth: Required Extra Usage Credits to Use Subscription' }
+  'claude-code': { order: 6, title: 'Claude Pro / Max (qua Claude Code)' }
 }
 
 const assetPath = (path: string) => `${import.meta.env.BASE_URL}${path.replace(/^\/+/, '')}`
