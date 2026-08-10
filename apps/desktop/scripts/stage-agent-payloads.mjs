@@ -474,6 +474,19 @@ function stageUvAndPython(target, outDir, { reusePython = false } = {}) {
     }
   }
 
+  // python-build-standalone's windows-aarch64 dist ships an X64
+  // vcruntime140_1.dll beside an otherwise all-arm64 install (verified
+  // by PE header). The DLL exists solely for x64 __CxxFrameHandler4
+  // exception unwinding; arm64 binaries never link it and an x64 DLL
+  // cannot load into an arm64 process, so it is inert dead weight —
+  // delete it rather than teach the arch audit to tolerate it.
+  if (target.key === "win32-arm64") {
+    for (const entry of fs.readdirSync(pythonDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      fs.rmSync(path.join(pythonDir, entry.name, "vcruntime140_1.dll"), { force: true })
+    }
+  }
+
   // The installed CPython proves its architecture at runtime.
   // `python -VV` names the arch on Windows ("[MSC v.1944 64 bit (ARM64)]")
   // but not on Linux/macOS ("[Clang 22.1.3 ]"), so the check asks
