@@ -192,12 +192,24 @@ def gui_install_summary(hermes_home: "Path | None" = None) -> dict:
     Returns JSON-serializable primitives so the Electron main process can
     forward it to the renderer via IPC (paths as strings, booleans for the
     high-level questions the UI gates options on).
+
+    ``steward`` names who owns the agent code tree: ``"git"`` for a checkout
+    the uninstaller may remove, or the sealed tree's steward
+    (``"nix"`` / ``"desktop-app"`` / ``"docker"`` / ``"unknown"``) whose code
+    the uninstaller refuses to touch. ``code_removal_allowed`` is the derived
+    gate the UI should branch on.
     """
     home: Path = hermes_home if hermes_home is not None else get_hermes_home()
 
     source_artifacts = [p for p in source_built_gui_artifacts(home) if p.exists()]
     packaged = [p for p in packaged_gui_app_paths() if p.exists()]
     userdata = desktop_userdata_dir()
+
+    from hermes_cli.runtime_tree import GitCheckout, runtime_tree
+
+    code_root = Path(__file__).parent.parent.resolve()
+    tree = runtime_tree(code_root)
+    steward = "git" if isinstance(tree, GitCheckout) else tree.steward
 
     return {
         "hermes_home": str(home),
@@ -208,6 +220,8 @@ def gui_install_summary(hermes_home: "Path | None" = None) -> dict:
         "userdata_dir": str(userdata),
         "userdata_exists": userdata.exists(),
         "platform": sys.platform,
+        "steward": steward,
+        "code_removal_allowed": steward == "git",
     }
 
 

@@ -25,6 +25,7 @@ This is a pure-stdlib leaf module. It does not import hermes_cli.config.
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -46,12 +47,7 @@ STEWARD_UPDATE_MESSAGES = {
     STEWARD_DESKTOP: (
         "✗ This Hermes runs from inside the desktop app bundle.\n"
         "\n"
-        "The app updates itself, and every app update carries the agent\n"
-        "with it. There is nothing for `hermes update` to do here.\n"
-        "\n"
-        "To manage the agent from the command line with git, run\n"
-        "`hermes update --eject`. It installs a source checkout and a\n"
-        "desktop app built from it."
+        "Manage updates from within the desktop app."
     ),
     STEWARD_DOCKER: (
         "✗ This Hermes runs from a Docker image.\n"
@@ -73,6 +69,85 @@ _STEWARD_FALLBACK_MESSAGE = (
     "The tree has no git checkout, so `hermes update` cannot update it.\n"
     "Update it with the tool that installed it."
 )
+
+# What the uninstaller says when it refuses to remove code from a sealed
+# tree. The steward put the code there; the steward removes it. The
+# desktop-app message is per-OS because each OS owns app removal
+# differently.
+_STEWARD_DELETE_DATA_PREAMBLE = "To delete your Hermes data (chats, configuration, etc),\n"
+_STEWARD_DELETE_DATA_CLI = "run:\n$ hermes uninstall --data\n"
+_STEWARD_DELETE_DATA_DESKTOP = "Open Hermes Desktop, go to Settings -> About, and delete your data from there.\n"
+
+_STEWARD_UNINSTALL_MESSAGES = {
+    STEWARD_DOCKER: (
+        "✗ This Hermes runs from a Docker image.\n"
+        "\n"
+        "There is no code to uninstall — remove the container and image:\n"
+        "  docker rm <container> && docker rmi nousresearch/hermes-agent\n"
+        "\n" +
+        _STEWARD_DELETE_DATA_PREAMBLE +
+        _STEWARD_DELETE_DATA_CLI
+    ),
+    STEWARD_NIX: (
+        "✗ This Hermes was installed by Nix.\n"
+        "\n"
+        "The store path is immutable — uninstall it the same way you\n"
+        "installed it: remove hermes-agent from your flake / profile\n"
+        "(e.g. `nix profile remove`), then rebuild.\n"
+        "\n" +
+        _STEWARD_DELETE_DATA_PREAMBLE +
+        _STEWARD_DELETE_DATA_CLI
+    ),
+}
+
+_STEWARD_MANAGED_BY_DESKTOP = "✗ Hermes is managed by the desktop app.\n"
+
+_STEWARD_DESKTOP_UNINSTALL_BY_PLATFORM = {
+    "win32": (
+        _STEWARD_MANAGED_BY_DESKTOP +
+        "\n"
+        "Remove the app from Windows Settings → Apps → Installed apps.\n" +
+        _STEWARD_DELETE_DATA_PREAMBLE +
+        _STEWARD_DELETE_DATA_DESKTOP
+    ),
+    "darwin": (
+        _STEWARD_MANAGED_BY_DESKTOP +
+        "\n"
+        "Quit the app and drag Hermes.app from Applications to the Trash.\n" +
+        _STEWARD_DELETE_DATA_PREAMBLE +
+        _STEWARD_DELETE_DATA_DESKTOP
+    ),
+}
+
+_STEWARD_DESKTOP_UNINSTALL_DEFAULT = (
+    _STEWARD_MANAGED_BY_DESKTOP +
+    "\n"
+    "Delete the Hermes AppImage (or app directory) from wherever you\n"
+    "saved it.\n" +
+    _STEWARD_DELETE_DATA_PREAMBLE +
+    _STEWARD_DELETE_DATA_DESKTOP
+)
+
+_STEWARD_UNINSTALL_FALLBACK = (
+    "✗ Hermes is managed by {steward}.\n"
+    "\n"
+    "The tree has no git checkout, so the uninstaller will not remove it.\n"
+    "Remove it with the tool that installed it.\n"
+    "\n" +
+    _STEWARD_DELETE_DATA_PREAMBLE +
+    _STEWARD_DELETE_DATA_DESKTOP
+)
+
+
+def steward_uninstall_message(steward: str, platform: "str | None" = None) -> str:
+    """The uninstall refusal text for a sealed tree."""
+    if steward == STEWARD_DESKTOP:
+        key = platform if platform is not None else sys.platform
+        return _STEWARD_DESKTOP_UNINSTALL_BY_PLATFORM.get(key, _STEWARD_DESKTOP_UNINSTALL_DEFAULT)
+    message = _STEWARD_UNINSTALL_MESSAGES.get(steward)
+    if message is not None:
+        return message
+    return _STEWARD_UNINSTALL_FALLBACK.format(steward=steward)
 
 
 @dataclass(frozen=True)

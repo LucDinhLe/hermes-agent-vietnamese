@@ -30,6 +30,35 @@ def get_project_root() -> Path:
     return Path(__file__).parent.parent.resolve()
 
 
+def code_removal_refusal() -> "str | None":
+    """Why the uninstaller must not remove this tree's code, or ``None``.
+
+    A git checkout (the install.sh / install.ps1 / `hermes desktop` layout)
+    is ours to remove. A sealed tree (no ``.git``) belongs to a steward —
+    the Nix store, the bundled desktop app, a Docker image — and only the
+    steward removes it. Returns the user-facing refusal text for sealed
+    trees; the text always points at ``hermes uninstall --data`` for the
+    user-data cleanup that IS allowed everywhere.
+    """
+    from hermes_cli.runtime_tree import GitCheckout, runtime_tree, steward_uninstall_message
+
+    tree = runtime_tree(get_project_root())
+    if isinstance(tree, GitCheckout):
+        return None
+    return steward_uninstall_message(tree.steward)
+
+
+def _refuse_if_steward_owned() -> None:
+    """Exit with the steward's instructions when code removal is forbidden."""
+    refusal = code_removal_refusal()
+    if refusal is None:
+        return
+    print()
+    print(refusal)
+    print()
+    raise SystemExit(1)
+
+
 def find_shell_configs() -> list:
     """Find shell configuration files that might have PATH entries."""
     home = Path.home()
@@ -509,6 +538,85 @@ def _uninstall_profile(profile) -> None:
         log_warn(f"  Could not remove {profile_home}: {e}")
 
 
+def run_data_uninstall(args):
+    """Remove Hermes user data only — no code, on any install kind.
+
+    This is the one destructive action that is valid everywhere: source
+    checkouts, the bundled desktop app, Nix, Docker. It removes everything
+    under ``$HERMES_HOME`` EXCEPT the ``hermes-agent`` checkout (which is
+    code, owned by the code-removal modes / the steward), plus the desktop
+    app's Electron userData directory.
+    """
+    hermes_home = get_hermes_home()
+    agent_root = hermes_home / "hermes-agent"
+    skip_confirm = bool(getattr(args, "yes", False))
+
+    targets = []
+    if hermes_home.exists():
+        targets = sorted(
+            (p for p in hermes_home.iterdir() if p.name != "hermes-agent"),
+            key=lambda p: p.name,
+        )
+
+    from hermes_cli.gui_uninstall import desktop_userdata_dir
+
+    userdata = desktop_userdata_dir()
+
+    if not targets and not userdata.exists():
+        print("No Hermes user data found.")
+        print(f"  Checked: {hermes_home}")
+        return
+
+    print()
+    print(color("This removes your Hermes data — config, chats, secrets, logs.", Colors.YELLOW, Colors.BOLD))
+    print(color("Installed code is not touched.", Colors.CYAN))
+    print()
+    print(color("Will remove:", Colors.YELLOW, Colors.BOLD))
+    for p in targets:
+        print(f"  • {p}")
+    if userdata.exists():
+        print(f"  • {userdata}  (desktop app data)")
+    if agent_root.exists():
+        print()
+        print(color("Kept intact:", Colors.GREEN, Colors.BOLD))
+        print(f"  • {agent_root}")
+    print()
+
+    if not skip_confirm:
+        try:
+            confirm = input(f"Type '{color('yes', Colors.YELLOW)}' to remove your Hermes data: ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            print()
+            print("Cancelled.")
+            return
+        if confirm != "yes":
+            print()
+            print("Uninstall cancelled.")
+            return
+
+    print()
+    for p in targets:
+        try:
+            if p.is_symlink() or p.is_file():
+                p.unlink()
+            else:
+                shutil.rmtree(p)
+            log_success(f"Removed {p}")
+        except Exception as e:
+            log_warn(f"Could not remove {p}: {e}")
+
+    if userdata.exists():
+        try:
+            shutil.rmtree(userdata)
+            log_success(f"Removed {userdata}")
+        except Exception as e:
+            log_warn(f"Could not remove {userdata}: {e}")
+
+    print()
+    print(color("✓ Hermes data removed.", Colors.GREEN, Colors.BOLD))
+    print()
+
+
 def run_gui_uninstall(args):
     """GUI-only uninstall: remove the Chat GUI, leave the agent + data intact.
 
@@ -522,6 +630,8 @@ def run_gui_uninstall(args):
         gui_install_summary,
         uninstall_gui,
     )
+
+    _refuse_if_steward_owned()
 
     hermes_home = get_hermes_home()
     summary = gui_install_summary(hermes_home)
@@ -589,6 +699,8 @@ def run_uninstall(args):
     - Full uninstall: removes code + ~/.hermes/ (configs, data, logs)
     - Keep data: removes code but keeps ~/.hermes/ for future reinstall
     """
+    _refuse_if_steward_owned()
+
     project_root = get_project_root()
     hermes_home = get_hermes_home()
 
@@ -939,11 +1051,12 @@ class _UninstallArgs:
         self.gui = mode == "gui"
         self.gui_summary = False
         self.full = mode == "full"
+        self.data = mode == "data"
         self.yes = True  # the module entrypoint is always non-interactive
 
 
 def main(argv=None) -> int:
-    """Module entrypoint: ``python -m hermes_cli.uninstall --mode <gui|lite|full>``.
+    """Module entrypoint: ``python -m hermes_cli.uninstall --mode <gui|lite|full|data>``.
 
     Exists so the desktop app can run the uninstall under a Python interpreter
     OUTSIDE the venv being deleted. On Windows, ``lite``/``full`` rmtree the
@@ -952,23 +1065,30 @@ def main(argv=None) -> int:
     The desktop launches this with the system Python + ``PYTHONPATH=<agentRoot>``
     so ``import hermes_cli`` resolves from source while the venv is torn down.
 
+    ``data`` removes user data only (no code) and is the one mode allowed on
+    steward-owned installs (Nix, the bundled desktop app, Docker); the
+    code-removing modes hard-fail there with the steward's instructions.
+
     This module imports only stdlib + ``hermes_constants`` + ``hermes_cli.colors``
-    (and lazily ``hermes_cli.gui_uninstall``), so it runs fine under a bare
-    system Python with no site-packages from the venv.
+    (and lazily ``hermes_cli.gui_uninstall`` / ``hermes_cli.runtime_tree``), so
+    it runs fine under a bare system Python with no site-packages from the venv.
     """
     import argparse
 
     parser = argparse.ArgumentParser(prog="python -m hermes_cli.uninstall")
     parser.add_argument(
         "--mode",
-        choices=["gui", "lite", "full"],
+        choices=["gui", "lite", "full", "data"],
         required=True,
-        help="gui = Chat GUI only; lite = GUI + agent, keep data; full = everything",
+        help="gui = Chat GUI only; lite = GUI + agent, keep data; "
+        "full = everything; data = user data only, keep code",
     )
     ns = parser.parse_args(argv)
     args = _UninstallArgs(mode=ns.mode)
 
-    if args.gui:
+    if args.data:
+        run_data_uninstall(args)
+    elif args.gui:
         run_gui_uninstall(args)
     else:
         run_uninstall(args)

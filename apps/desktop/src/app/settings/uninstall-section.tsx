@@ -42,8 +42,20 @@ const OPTIONS: ModeOption[] = [
     // connecting to a remote backend has no local agent OR local user data the
     // GUI installed, so gui-only is the correct (and only) option there.
     needsAgent: true
+  },
+  {
+    // The one action available on managed installs (Nix, bundled app) where
+    // the steward owns the code: wipe user data, leave every install intact.
+    mode: 'data',
+    title: 'Remove my Hermes data',
+    description: 'Delete config, chats, secrets, and logs. Installed code is not touched.',
+    consequence: 'all of your Hermes data — config, chats, secrets, scheduled jobs, and logs (installed code stays)',
+    needsAgent: false
   }
 ]
+
+/** The classic option set, for summaries that predate allowed_modes. */
+const LEGACY_MODES: DesktopUninstallMode[] = ['gui', 'lite', 'full']
 
 export function UninstallSection() {
   const [summary, setSummary] = useState<DesktopUninstallSummary | null>(null)
@@ -89,10 +101,14 @@ export function UninstallSection() {
     return null
   }
 
-  // Gate the agent-removing options on whether an agent is actually present.
-  // A future lite client that ships without the bundled agent shows GUI-only.
+  // Which actions exist is decided by the install kind (the summary's
+  // allowed_modes); which of those are sensible is decided by what's
+  // installed (agent_installed hides agent-removing options on a lite
+  // client). Older backends without allowed_modes get the classic set.
   const agentInstalled = summary?.agent_installed ?? false
-  const visibleOptions = OPTIONS.filter(opt => agentInstalled || !opt.needsAgent)
+  const allowedModes = summary?.allowed_modes ?? LEGACY_MODES
+  const visibleOptions = OPTIONS.filter(opt => allowedModes.includes(opt.mode)).filter(opt => agentInstalled || !opt.needsAgent)
+  const nativeRemoval = summary?.native_removal ?? null
 
   const handleConfirm = async () => {
     if (!pending) {
@@ -153,8 +169,18 @@ export function UninstallSection() {
         ) : (
           <div className="flex flex-col gap-2">
             <p className="text-sm font-medium">Uninstall Hermes</p>
+            {nativeRemoval && (
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">
+                  {summary?.install_kind === 'nix' ? 'This installation is managed by Nix. ' : 'This app is removed through your OS. '}
+                </span>
+                {nativeRemoval}
+              </p>
+            )}
             <p className="text-xs text-muted-foreground">
-              Choose how much to remove. The app closes to finish the job; reopen the installer any time to come back.
+              {nativeRemoval
+                ? 'From here you can remove your Hermes data.'
+                : 'Choose how much to remove. The app closes to finish the job; reopen the installer any time to come back.'}
             </p>
             <div className="mt-1 flex flex-col gap-2">
               {visibleOptions.map(opt => (

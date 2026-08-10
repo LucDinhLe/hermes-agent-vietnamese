@@ -28,67 +28,81 @@
 
 import path from 'node:path'
 
-const UNINSTALL_MODES = ['gui', 'lite', 'full']
+const UNINSTALL_MODES = ['gui', 'lite', 'full', 'data']
 
-// How this desktop app got onto the machine. The uninstall flow branches on
-// this, not on path shapes alone:
-//   'nix'      — the app came from a Nix build (install-stamp distribution
-//                'nix', or the executable lives in /nix/store). The store is
+// How this desktop app got onto the machine, read from the install stamp
+// (install-stamp.json) that every packager writes:
+//   'nix'      — a Nix build (stamp distribution 'nix'). The store is
 //                immutable and the install is owned by Nix tooling, so the
-//                app must NOT try to remove anything itself.
-//   'bundled'  — an embedded artifact (agent payload in resources). There is
-//                no agent venv under HERMES_HOME; data cleanup runs on the
-//                embedded Python, and the app bundle is removed the native
-//                way (Control Panel / Trash / delete the AppImage).
+//                app must not remove any code, its own bundle included.
+//   'bundled'  — an embedded artifact (agent payload in resources; the
+//                stamp has payload:true). There is no agent venv under
+//                HERMES_HOME, and the OS owns app removal (Apps & Features
+//                / Trash / delete the AppImage).
 //   'standard' — everything else: the git-clone install the desktop
 //                installer bootstraps, or a `hermes desktop` source build.
 //                The classic script flow (venv python + rm the bundle) works.
+//
+// Only 'standard' installs may remove code. 'nix' and 'bundled' installs
+// may only remove user data (mode 'data') — the app itself is removed the
+// native way, per nativeRemovalInstructions().
 const INSTALL_KINDS = ['nix', 'bundled', 'standard']
 
 /**
- * Classify the install from build provenance + runtime facts. Pure so it can
- * be unit-tested: callers pass the stamp fields (`distribution`, `source`),
- * the running executable path, and whether an embedded agent payload
- * resolved. Nix wins over bundled: a Nix build never carries a payload, but
- * an explicit 'nix' distribution is authoritative regardless.
+ * Classify the install from the stamp. Pure so it can be unit-tested:
+ * callers pass the stamp fields (`distribution`, `source`, `payload`).
+ * `distribution` is authoritative; `source` is the schema-1 fallback.
  */
-function resolveInstallKind({ distribution = null, source = null, execPath = '', hasPayload = false }: any = {}) {
+function resolveInstallKind({ distribution, source, payload = false }: {distribution?: string, source?: string, payload?: boolean} = {}) {
   if (distribution === 'nix' || source === 'nix') {
     return 'nix'
   }
 
-  // Stampless belt: a dirty Nix build can drop the stamp (no commit), but
-  // the wrapped electron binary always lives in the store.
-  if (
-    String(execPath || '')
-      .replace(/\\/g, '/')
-      .startsWith('/nix/store/')
-  ) {
-    return 'nix'
-  }
-
-  if (hasPayload) {
+  if (payload === true) {
     return 'bundled'
   }
 
   return 'standard'
 }
 
+/** True when this install kind lets the app remove code (agent / bundle). */
+function installKindAllowsCodeRemoval(kind) {
+  return kind === 'standard'
+}
+
 /**
- * Human instructions for removing the app itself the native way. Used for
- * 'bundled' installs, where the cleanup script deliberately does not touch
- * the app bundle: Windows owns it through Apps & Features, macOS through the
- * Trash, and a Linux AppImage is a single file the user placed somewhere.
- * `appPath` is the resolveRemovableAppPath() result (the AppImage path on
- * Linux), used only to name the exact file in the message.
+ * The modes the uninstall UI may offer for an install kind. Every kind can
+ * remove user data. Only 'standard' may also remove code — there the 'full'
+ * mode already covers data, so 'data' alone is not offered. Managed installs
+ * (nix, bundled) get exactly one destructive action — remove user data —
+ * with app removal handed to the steward via nativeRemovalInstructions().
  */
-function nativeRemovalInstructions(platform, appPath = null) {
+function allowedUninstallModes(kind) {
+  return installKindAllowsCodeRemoval(kind) ? ['gui', 'lite', 'full'] : ['data']
+}
+
+/**
+ * Human instructions for removing the app itself the native way. Used when
+ * the install kind forbids code removal: Windows owns the bundled app
+ * through Apps & Features, macOS through the Trash, a Linux AppImage is a
+ * single file the user placed somewhere, and a Nix install belongs to the
+ * flake / profile that made it. `appPath` is the resolveRemovableAppPath()
+ * result (the AppImage path on Linux), used only to name the exact file.
+ */
+function nativeRemovalInstructions(kind, platform, appPath = null) {
+  if (kind === 'nix') {
+    return (
+      'This Hermes desktop app was installed by Nix. Uninstall it the same way you installed it: ' +
+      'remove hermes-agent from your flake or profile, then rebuild.'
+    )
+  }
+
   if (platform === 'win32') {
     return 'Remove Hermes from Windows Settings → Apps → Installed apps.'
   }
 
   if (platform === 'darwin') {
-    return 'Drag Hermes.app from Applications to the Trash.'
+    return 'Quit the app and drag Hermes.app from Applications to the Trash.'
   }
 
   if (appPath && /\.appimage$/i.test(String(appPath))) {
@@ -109,7 +123,7 @@ function nativeRemovalInstructions(platform, appPath = null) {
  * lite/full delete — see the Finding-3 note in buildWindowsCleanupScript.
  * Throws on an unknown mode so a typo can't silently become a full wipe.
  */
-function uninstallArgsForMode(mode) {
+function uninstallArgsForMode(mode: string) {
   if (!UNINSTALL_MODES.includes(mode)) {
     throw new Error(`Unknown uninstall mode: ${mode}`)
   }
@@ -117,14 +131,14 @@ function uninstallArgsForMode(mode) {
   return ['-m', 'hermes_cli.uninstall', '--mode', mode]
 }
 
-/** True when `mode` removes the agent (lite/full), false for gui-only. */
-function modeRemovesAgent(mode) {
+/** True when `mode` removes the agent code (lite/full), false otherwise. */
+function modeRemovesAgent(mode: string) {
   return mode === 'lite' || mode === 'full'
 }
 
-/** True when `mode` removes user data (full only). */
-function modeRemovesUserData(mode) {
-  return mode === 'full'
+/** True when `mode` removes user data (full and data). */
+function modeRemovesUserData(mode: string) {
+  return mode === 'full' || mode === 'data'
 }
 
 /**
@@ -329,9 +343,11 @@ function buildWindowsCleanupScript({
 }
 
 export {
+  allowedUninstallModes,
   buildPosixCleanupScript,
   buildWindowsCleanupScript,
   INSTALL_KINDS,
+  installKindAllowsCodeRemoval,
   modeRemovesAgent,
   modeRemovesUserData,
   nativeRemovalInstructions,

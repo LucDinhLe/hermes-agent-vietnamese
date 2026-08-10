@@ -82,12 +82,17 @@ import { describeCrashReason, installCrashForensics } from './crash-forensics'
 import { adoptServedDashboardToken } from './dashboard-token'
 import { loadOrCreateInstallationId, sshOwnershipId } from './desktop-installation'
 import {
+  allowedUninstallModes,
   buildPosixCleanupScript,
   buildWindowsCleanupScript,
+  installKindAllowsCodeRemoval,
   modeRemovesAgent,
   modeRemovesUserData,
+  nativeRemovalInstructions,
+  resolveInstallKind,
   resolveRemovableAppPath,
   shouldRemoveAppBundle,
+  UNINSTALL_MODES,
   uninstallArgsForMode
 } from './desktop-uninstall'
 import { describeDevCdpDecision, resolveDevCdpPort } from './dev-cdp'
@@ -493,7 +498,11 @@ function loadInstallStamp() {
       const raw = fs.readFileSync(p, 'utf8')
       const parsed = JSON.parse(raw)
 
-      if (parsed && typeof parsed === 'object' && typeof parsed.commit === 'string' && parsed.commit.length >= 7) {
+      // A stamp without a usable commit is still a stamp: a dirty Nix build
+      // writes commit:null but the provenance fields (distribution, source)
+      // must survive — the uninstall flow branches on them. Consumers that
+      // need a pin (bootstrap) already handle a missing/invalid commit.
+      if (parsed && typeof parsed === 'object' && (typeof parsed.commit === 'string' ? parsed.commit.length >= 7 : parsed.commit == null)) {
         if (parsed.schemaVersion !== 1 && parsed.schemaVersion !== INSTALL_STAMP_SCHEMA_VERSION) {
           console.warn(
             `[hermes] install-stamp.json schemaVersion ${parsed.schemaVersion} != expected ${INSTALL_STAMP_SCHEMA_VERSION}; ignoring`
@@ -504,7 +513,7 @@ function loadInstallStamp() {
 
         return Object.freeze({
           schemaVersion: parsed.schemaVersion,
-          commit: parsed.commit,
+          commit: typeof parsed.commit === 'string' ? parsed.commit : null,
           branch: parsed.branch || null,
           baseVersion: typeof parsed.baseVersion === 'string' ? parsed.baseVersion : null,
           displayVersion: typeof parsed.displayVersion === 'string' ? parsed.displayVersion : null,
@@ -534,7 +543,7 @@ const INSTALL_STAMP = loadInstallStamp()
 
 if (INSTALL_STAMP) {
   console.log(
-    `[hermes] install stamp: ${INSTALL_STAMP.commit.slice(0, 12)}${INSTALL_STAMP.branch ? ` (${INSTALL_STAMP.branch})` : ''}${INSTALL_STAMP.dirty ? ' [DIRTY]' : ''} from ${INSTALL_STAMP.source || 'unknown'}`
+    `[hermes] install stamp: ${INSTALL_STAMP.commit ? INSTALL_STAMP.commit.slice(0, 12) : 'no-commit'}${INSTALL_STAMP.branch ? ` (${INSTALL_STAMP.branch})` : ''}${INSTALL_STAMP.dirty ? ' [DIRTY]' : ''} from ${INSTALL_STAMP.source || 'unknown'}`
   )
 } else if (IS_PACKAGED) {
   // Dev builds without a stamp are normal; packaged builds without one
@@ -12316,102 +12325,64 @@ ipcMain.handle('hermes:version', () => ({
 // JSON probe) so the UI can gate options on what's actually installed — and
 // detect a missing agent (a future "lite client" that ships without the
 // bundled agent), hiding the agent/full options when there's nothing to remove.
+//
+// The install stamp decides WHICH actions exist at all (see
+// resolveInstallKind / allowedUninstallModes in desktop-uninstall.ts):
+// 'standard' installs own their code and get the classic gui/lite/full flow;
+// 'nix' and 'bundled' installs only ever remove user data, with app removal
+// handed to the steward (Nix tooling / Apps & Features / Trash / delete the
+// AppImage). The Python uninstaller enforces the same rule independently
+// from its own build stamp (.hermes_build_info.json), so the renderer can
+// never talk a managed install into deleting code.
 
 function uninstallVenvPython() {
   return getVenvPython(VENV_ROOT)
 }
 
-async function getUninstallSummary() {
-  const py = uninstallVenvPython()
-  const agentRoot = ACTIVE_HERMES_ROOT
-
-  // Fast JS-side fallback used when the agent venv is gone (lite client) or the
-  // probe fails — the renderer still needs *something* to render options from.
-  const fallback = () => ({
-    hermes_home: HERMES_HOME,
-    agent_installed: isHermesSourceRoot(agentRoot) && fileExists(py),
-    gui_installed: true,
-    source_built_artifacts: [],
-    packaged_app_paths: [],
-    userdata_dir: app.getPath('userData'),
-    userdata_exists: true,
-    platform: process.platform,
-    probe: 'fallback'
-  })
-
-  if (!fileExists(py)) {
-    return fallback()
-  }
-
-  return new Promise(resolve => {
-    let stdout = ''
-    let settled = false
-
-    const done = value => {
-      if (settled) {
-        return
-      }
-
-      settled = true
-      resolve(value)
-    }
-
-    try {
-      const child = spawn(
-        py,
-        ['-m', 'hermes_cli.main', 'uninstall', '--gui-summary'],
-        hiddenWindowsChildOptions({
-          cwd: agentRoot,
-          env: { ...process.env, HERMES_HOME, NO_COLOR: '1' },
-          stdio: ['ignore', 'pipe', 'ignore']
-        })
-      )
-
-      child.stdout.on('data', chunk => {
-        stdout += chunk.toString()
-      })
-      child.on('error', () => done(fallback()))
-      child.on('exit', code => {
-        if (code !== 0) {
-          return done(fallback())
-        }
-
-        try {
-          const line = stdout.trim().split('\n').filter(Boolean).pop() || '{}'
-          const parsed = JSON.parse(line)
-          // The app bundle the renderer would be removing on *this* machine,
-          // resolved from the running exe (the Python probe only knows the
-          // standard locations, not where THIS build actually runs from).
-          parsed.running_app_path = resolveRemovableAppPath(process.execPath, process.platform, process.env)
-          done(parsed)
-        } catch {
-          done(fallback())
-        }
-      })
-      setTimeout(() => done(fallback()), 8000)
-    } catch {
-      done(fallback())
-    }
+function desktopInstallKind() {
+  return resolveInstallKind({
+    distribution: INSTALL_STAMP?.distribution ?? null,
+    source: INSTALL_STAMP?.source ?? null,
+    payload: INSTALL_STAMP?.payload === true
   })
 }
 
-async function runDesktopUninstall(mode) {
-  let uninstallArgs
+// The interpreter + argv + cwd that can run `hermes_cli.uninstall` for this
+// install kind, or null when none exists. For 'bundled' the venv never
+// exists — the embedded payload's own CPython runs the module straight from
+// the sealed repo (its .pth glue resolves imports; data mode deletes nothing
+// the payload needs). For 'nix' the module runs via the Nix-wrapped hermes
+// python; HERMES_DESKTOP_HERMES points at the wrapped binary whose venv
+// python is baked in — but the simplest reliable runner is the wrapped
+// `hermes` CLI itself, so nix uses command-style args instead of -m.
+function uninstallRunner(mode) {
+  const kind = desktopInstallKind()
 
-  try {
-    uninstallArgs = uninstallArgsForMode(mode)
-  } catch (error) {
-    return { ok: false, error: 'invalid-mode', message: error.message }
+  if (kind === 'bundled') {
+    const payload = embeddedPayload()
+    const py = payload ? findEmbeddedPython(payload.dir) : null
+
+    if (!py) {
+      return null
+    }
+
+    return { agentRoot: path.join(payload.dir, 'repo'), args: uninstallArgsForMode(mode), command: py, pythonPath: null }
+  }
+
+  if (kind === 'nix') {
+    const hermesBin = process.env.HERMES_DESKTOP_HERMES
+
+    if (!hermesBin || !fileExists(hermesBin)) {
+      return null
+    }
+
+    return { agentRoot: HERMES_HOME, args: ['uninstall', `--${mode}`, '--yes'], command: hermesBin, pythonPath: null }
   }
 
   const venvPy = uninstallVenvPython()
 
   if (!fileExists(venvPy)) {
-    return {
-      ok: false,
-      error: 'agent-missing',
-      message: `Can't run the uninstaller: no Hermes agent venv at ${VENV_ROOT}.`
-    }
+    return null
   }
 
   // Interpreter choice (Finding 3): lite/full rmtree the venv that holds the
@@ -12440,8 +12411,153 @@ async function runDesktopUninstall(mode) {
     }
   }
 
+  return { agentRoot: ACTIVE_HERMES_ROOT, args: uninstallArgsForMode(mode), command: py, pythonPath }
+}
+
+async function getUninstallSummary() {
+  const py = uninstallVenvPython()
+  const agentRoot = ACTIVE_HERMES_ROOT
+  const kind = desktopInstallKind()
   const appPath = resolveRemovableAppPath(process.execPath, process.platform, process.env)
-  const removeBundle = shouldRemoveAppBundle(IS_PACKAGED, appPath) ? appPath : null
+
+  // Install-kind facts every summary carries, probe or fallback: which
+  // actions exist, and what to tell the user about removing the app itself
+  // when the steward owns it.
+  const kindFacts = () => ({
+    allowed_modes: allowedUninstallModes(kind),
+    install_kind: kind,
+    native_removal: installKindAllowsCodeRemoval(kind) ? null : nativeRemovalInstructions(kind, process.platform, appPath),
+    running_app_path: appPath
+  })
+
+  // Fast JS-side fallback used when no runnable uninstaller exists (managed
+  // installs before their runner resolves, a gone venv) or the probe fails —
+  // the renderer still needs *something* to render options from.
+  const fallback = () => ({
+    hermes_home: HERMES_HOME,
+    agent_installed: isHermesSourceRoot(agentRoot) && fileExists(py),
+    gui_installed: true,
+    source_built_artifacts: [],
+    packaged_app_paths: [],
+    userdata_dir: app.getPath('userData'),
+    userdata_exists: true,
+    platform: process.platform,
+    probe: 'fallback',
+    ...kindFacts()
+  })
+
+  // The probe runs on whatever interpreter can import hermes_cli for this
+  // install kind ('data' is valid for every kind, so use its runner).
+  let runner
+
+  try {
+    runner = uninstallRunner('data')
+  } catch {
+    runner = null
+  }
+
+  if (!runner) {
+    return fallback()
+  }
+
+  const probeArgs =
+    runner.command === process.env.HERMES_DESKTOP_HERMES
+      ? ['uninstall', '--gui-summary']
+      : ['-m', 'hermes_cli.main', 'uninstall', '--gui-summary']
+
+  return new Promise(resolve => {
+    let stdout = ''
+    let settled = false
+
+    const done = value => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      resolve(value)
+    }
+
+    try {
+      const child = spawn(
+        runner.command,
+        probeArgs,
+        hiddenWindowsChildOptions({
+          cwd: runner.agentRoot,
+          env: { ...process.env, HERMES_HOME, NO_COLOR: '1' },
+          stdio: ['ignore', 'pipe', 'ignore']
+        })
+      )
+
+      child.stdout.on('data', chunk => {
+        stdout += chunk.toString()
+      })
+      child.on('error', () => done(fallback()))
+      child.on('exit', code => {
+        if (code !== 0) {
+          return done(fallback())
+        }
+
+        try {
+          const line = stdout.trim().split('\n').filter(Boolean).pop() || '{}'
+          const parsed = JSON.parse(line)
+
+          // The Electron side owns the install-kind facts: the stamp lives in
+          // the app's resources, and the app bundle path comes from the
+          // running exe (the Python probe only knows the standard locations,
+          // not where THIS build actually runs from).
+          done({ ...parsed, ...kindFacts() })
+        } catch {
+          done(fallback())
+        }
+      })
+      setTimeout(() => done(fallback()), 8000)
+    } catch {
+      done(fallback())
+    }
+  })
+}
+
+async function runDesktopUninstall(mode) {
+  const kind = desktopInstallKind()
+
+  if (!UNINSTALL_MODES.includes(mode)) {
+    return { ok: false, error: 'invalid-mode', message: `Unknown uninstall mode: ${mode}` }
+  }
+
+  // The install-kind gate: managed installs (nix, bundled) never remove code
+  // from this app, no matter what the renderer asked for. The Python
+  // uninstaller enforces the same rule from its own stamp; this check just
+  // fails fast with the right instructions instead of a child-process error.
+  if (!allowedUninstallModes(kind).includes(mode)) {
+    return {
+      ok: false,
+      error: 'mode-not-allowed',
+      message: nativeRemovalInstructions(kind, process.platform, resolveRemovableAppPath(process.execPath, process.platform, process.env))
+    }
+  }
+
+  let runner
+
+  try {
+    runner = uninstallRunner(mode)
+  } catch (error) {
+    return { ok: false, error: 'invalid-mode', message: error.message }
+  }
+
+  if (!runner) {
+    return {
+      ok: false,
+      error: 'agent-missing',
+      message: `Can't run the uninstaller: no usable Hermes runtime found for this ${kind} install.`
+    }
+  }
+
+  const appPath = resolveRemovableAppPath(process.execPath, process.platform, process.env)
+  // Only a standard install removes its own bundle. Managed installs hand
+  // that to the steward (per nativeRemovalInstructions), so the script never
+  // touches the store path / .app / AppImage.
+  const removeBundle = installKindAllowsCodeRemoval(kind) && shouldRemoveAppBundle(IS_PACKAGED, appPath) ? appPath : null
 
   // CRITICAL (Windows): tear down every backend the desktop owns and wait for
   // the venv shim to unlock BEFORE the cleanup script runs. lite/full delete
@@ -12457,36 +12573,36 @@ async function runDesktopUninstall(mode) {
 
   const scriptArgs = {
     desktopPid: process.pid,
-    pythonExe: py,
-    pythonPath,
-    agentRoot: ACTIVE_HERMES_ROOT,
-    uninstallArgs,
+    pythonExe: runner.command,
+    pythonPath: runner.pythonPath,
+    agentRoot: runner.agentRoot,
+    uninstallArgs: runner.args,
     appPath: removeBundle,
     hermesHome: HERMES_HOME
   }
 
   let scriptPath
-  let runner
-  let runnerArgs
+  let shellCommand
+  let shellArgs
 
   try {
     if (IS_WINDOWS) {
       scriptPath = path.join(app.getPath('temp'), `hermes-uninstall-${Date.now()}.cmd`)
       fs.writeFileSync(scriptPath, buildWindowsCleanupScript(scriptArgs))
-      runner = process.env.ComSpec || 'cmd.exe'
-      runnerArgs = ['/c', scriptPath]
+      shellCommand = process.env.ComSpec || 'cmd.exe'
+      shellArgs = ['/c', scriptPath]
     } else {
       scriptPath = path.join(app.getPath('temp'), `hermes-uninstall-${Date.now()}.sh`)
       fs.writeFileSync(scriptPath, buildPosixCleanupScript(scriptArgs), { mode: 0o755 })
-      runner = '/bin/bash'
-      runnerArgs = [scriptPath]
+      shellCommand = '/bin/bash'
+      shellArgs = [scriptPath]
     }
   } catch (error) {
     return { ok: false, error: 'script-write-failed', message: error.message }
   }
 
   try {
-    const child = spawn(runner, runnerArgs, {
+    const child = spawn(shellCommand, shellArgs, {
       detached: true,
       stdio: 'ignore',
       windowsHide: true

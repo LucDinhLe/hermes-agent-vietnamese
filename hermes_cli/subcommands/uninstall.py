@@ -30,6 +30,12 @@ def build_uninstall_parser(subparsers, *, cmd_uninstall: Callable) -> None:
         help="Uninstall only the desktop Chat GUI, leaving the agent intact",
     )
     uninstall_parser.add_argument(
+        "--data",
+        action="store_true",
+        help="Remove only Hermes user data (~/.hermes), leaving installed code "
+        "intact — the one mode that works on Nix / bundled-app / Docker installs",
+    )
+    uninstall_parser.add_argument(
         "--gui-summary",
         action="store_true",
         help="Print a JSON summary of installed GUI/agent artifacts and exit "
