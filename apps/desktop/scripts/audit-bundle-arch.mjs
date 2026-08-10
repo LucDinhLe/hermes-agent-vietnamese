@@ -178,6 +178,11 @@ function* walkFiles(dir) {
  */
 const EXEMPT_PATTERNS = [
   /agent-payload[\/\\]python[\/\\]cpython-[^\/\\]+[\/\\]lib([\/\\]python[\d.]+)?[\/\\]site-packages[\/\\](setuptools|pip[\/\\]_vendor[\/\\]distlib)[\/\\]/i,
+  // electron-builder's NSIS finalize task drops its elevation helper into
+  // resources/ (see e-b #9852; electron-updater runs it for elevated
+  // installs). It is ia32 BY DESIGN: one binary that runs on every
+  // Windows arch through the always-present x86 emulation layer.
+  /^resources[\/\\]elevate\.exe$/i,
 ]
 
 export function isExemptPath(relPath) {

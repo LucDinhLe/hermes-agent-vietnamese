@@ -30,6 +30,78 @@ import path from 'node:path'
 
 const UNINSTALL_MODES = ['gui', 'lite', 'full']
 
+// How this desktop app got onto the machine. The uninstall flow branches on
+// this, not on path shapes alone:
+//   'nix'      — the app came from a Nix build (install-stamp distribution
+//                'nix', or the executable lives in /nix/store). The store is
+//                immutable and the install is owned by Nix tooling, so the
+//                app must NOT try to remove anything itself.
+//   'bundled'  — an embedded artifact (agent payload in resources). There is
+//                no agent venv under HERMES_HOME; data cleanup runs on the
+//                embedded Python, and the app bundle is removed the native
+//                way (Control Panel / Trash / delete the AppImage).
+//   'standard' — everything else: the git-clone install the desktop
+//                installer bootstraps, or a `hermes desktop` source build.
+//                The classic script flow (venv python + rm the bundle) works.
+const INSTALL_KINDS = ['nix', 'bundled', 'standard']
+
+/**
+ * Classify the install from build provenance + runtime facts. Pure so it can
+ * be unit-tested: callers pass the stamp fields (`distribution`, `source`),
+ * the running executable path, and whether an embedded agent payload
+ * resolved. Nix wins over bundled: a Nix build never carries a payload, but
+ * an explicit 'nix' distribution is authoritative regardless.
+ */
+function resolveInstallKind({ distribution = null, source = null, execPath = '', hasPayload = false }: any = {}) {
+  if (distribution === 'nix' || source === 'nix') {
+    return 'nix'
+  }
+
+  // Stampless belt: a dirty Nix build can drop the stamp (no commit), but
+  // the wrapped electron binary always lives in the store.
+  if (
+    String(execPath || '')
+      .replace(/\\/g, '/')
+      .startsWith('/nix/store/')
+  ) {
+    return 'nix'
+  }
+
+  if (hasPayload) {
+    return 'bundled'
+  }
+
+  return 'standard'
+}
+
+/**
+ * Human instructions for removing the app itself the native way. Used for
+ * 'bundled' installs, where the cleanup script deliberately does not touch
+ * the app bundle: Windows owns it through Apps & Features, macOS through the
+ * Trash, and a Linux AppImage is a single file the user placed somewhere.
+ * `appPath` is the resolveRemovableAppPath() result (the AppImage path on
+ * Linux), used only to name the exact file in the message.
+ */
+function nativeRemovalInstructions(platform, appPath = null) {
+  if (platform === 'win32') {
+    return 'Remove Hermes from Windows Settings → Apps → Installed apps.'
+  }
+
+  if (platform === 'darwin') {
+    return 'Drag Hermes.app from Applications to the Trash.'
+  }
+
+  if (appPath && /\.appimage$/i.test(String(appPath))) {
+    return `Delete the AppImage file at ${appPath}.`
+  }
+
+  if (appPath) {
+    return `Delete the app directory at ${appPath}.`
+  }
+
+  return 'Delete the Hermes AppImage (or app directory) from wherever you saved it.'
+}
+
 /**
  * Map an uninstall mode to the `python -m hermes_cli.uninstall` argv (after the
  * python executable). Uses the dedicated lightweight module entrypoint (not
@@ -259,8 +331,11 @@ function buildWindowsCleanupScript({
 export {
   buildPosixCleanupScript,
   buildWindowsCleanupScript,
+  INSTALL_KINDS,
   modeRemovesAgent,
   modeRemovesUserData,
+  nativeRemovalInstructions,
+  resolveInstallKind,
   resolveRemovableAppPath,
   shouldRemoveAppBundle,
   UNINSTALL_MODES,
