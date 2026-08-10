@@ -101,6 +101,17 @@ requires a JSON list.
 Authentication uses the Azure credential chain: OIDC federated login in CI,
 or an `az login` session on a dev machine. There is no signing secret.
 
+## Code signing + notarization (macOS)
+
+electron-builder's builtin notarization runs when the `APPLE_API_KEY` /
+`APPLE_API_KEY_ID` / `APPLE_API_ISSUER` env vars are set (the release
+workflow passes them from secrets) and the app is signed with the
+Developer ID certificate from `CSC_LINK`. `APPLE_API_KEY` holds the
+**base64-encoded** `.p8` App Store Connect key — not the raw PEM: raw
+multiline content ends up spliced into the notarytool argv and dies with
+`Invalid option`. Without the variables, the build skips notarization
+(and stays unsigned without `CSC_LINK`), so forks and local builds work.
+
 ## Where builds run
 
 - **CI:** `.github/workflows/desktop-bundled-release.yml`. A push of a

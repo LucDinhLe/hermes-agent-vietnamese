@@ -49,7 +49,7 @@ function resolveApiKeyPath(rawValue) {
   }
 }
 
-export default async function notarize(context) {
+export default async function /(context) {
   const { electronPlatformName, appOutDir, packager } = context
   if (electronPlatformName !== 'darwin') return
 

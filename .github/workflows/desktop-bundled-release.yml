@@ -20,9 +20,9 @@ name: Desktop Bundled Release
 # As a result, there are no cross-platform wheel-tag tables anywhere.
 #
 # Signing and notarization: if the APPLE_* and CSC_* secrets are absent,
-# notarize.mjs and electron-builder skip those steps. Thus this workflow
-# produces unsigned artifacts on forks. When the org secrets are set, it
-# produces signed artifacts.
+# electron-builder skips those steps. Thus this workflow produces
+# unsigned artifacts on forks. When the org secrets are set, it produces
+# signed artifacts.
 
 on:
   push:
@@ -239,8 +239,11 @@ jobs:
           # child output — the only visibility into a signing hang.
           DEBUG: 'electron-builder'
           HERMES_BUNDLE_TAG: ${{ env.HERMES_PAYLOAD_TAG }}
-          # macOS signing and notarization. Forks do not have the secrets.
-          # notarize.mjs and electron-builder both skip without them.
+          # macOS signing and notarization (electron-builder builtin).
+          # APPLE_API_KEY is the BASE64-ENCODED App Store Connect .p8 —
+          # raw PEM splices its newlines into the notarytool argv and
+          # dies with "Invalid option". Forks do not have the secrets;
+          # electron-builder skips both steps without them.
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
