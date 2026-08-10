@@ -137,7 +137,10 @@ jobs:
   contributor-check:
     name: Check contributors
     needs: detect
-    if: needs.detect.outputs.python == 'true'
+    # AUTHOR_MAP is release bookkeeping for the upstream NousResearch repo.
+    # Community forks use GitHub noreply commit identities instead of
+    # publishing maintainers' personal email addresses as mapping filenames.
+    if: needs.detect.outputs.python == 'true' && github.repository == 'NousResearch/hermes-agent'
     uses: ./.github/workflows/contributor-check.yml
 
   uv-lockfile:

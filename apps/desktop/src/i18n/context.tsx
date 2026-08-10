@@ -56,6 +56,7 @@ function toError(error: unknown): Error {
 }
 
 const RTL_LOCALES = new Set<Locale>(['ar'])
+const FIRST_RUN_LOCALE: Locale = 'vi'
 
 function applyDocumentLocale(locale: Locale) {
   if (typeof document === 'undefined') {
@@ -121,7 +122,12 @@ export function I18nProvider({ children, configClient = defaultConfigClient, ini
       .getConfig()
       .then(config => {
         if (!cancelled) {
-          setLocaleState(normalizeLocale(getConfigDisplayLanguage(config)))
+          const configuredLanguage = getConfigDisplayLanguage(config)
+
+          // The community build opens in Vietnamese on a fresh profile while
+          // preserving English as the technical fallback for missing strings,
+          // plugins, unsupported values, and config-load failures.
+          setLocaleState(configuredLanguage == null ? FIRST_RUN_LOCALE : normalizeLocale(configuredLanguage))
         }
       })
       .catch(error => {

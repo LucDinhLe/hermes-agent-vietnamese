@@ -1,0 +1,109 @@
+name: Phát hành Hermes tiếng Việt cho Windows
+
+on:
+  push:
+    tags:
+      - 'vi-v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Nhãn phát hành, ví dụ vi-v0.20.0-1'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    name: Kiểm thử, đóng gói và phát hành
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 26
+          cache: npm
+
+      - name: Cài npm 12
+        run: npm install --global npm@12
+
+      - name: Cài phụ thuộc
+        uses: ./.github/actions/retry
+        with:
+          command: npm ci
+
+      - name: Kiểm toán thư viện đi vào ứng dụng
+        run: npm audit --omit=optional --audit-level=high
+
+      - name: Kiểm thử phần phân phối cộng đồng
+        run: npm run --prefix apps/desktop test:desktop:platforms -- scripts/community-distribution.test.mjs electron/bootstrap-runner.test.ts electron/update-remote.test.ts
+
+      - name: Kiểm thử giao diện và ngôn ngữ
+        run: npm run --prefix apps/desktop test:ui -- src/i18n/languages.test.ts src/i18n/context.test.tsx
+
+      - name: Kiểm tra kiểu dữ liệu
+        run: npm run --prefix apps/desktop typecheck
+
+      - name: Đóng gói bộ cài Windows
+        run: npm run --prefix apps/desktop dist:win:nsis
+
+      - name: Chuẩn hóa tệp phát hành
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          $installer = Get-ChildItem apps/desktop/release -Filter 'Hermes-*-win-*.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'Không tìm thấy bộ cài NSIS' }
+          Copy-Item $installer.FullName release-assets/Hermes-Vietnamese-Windows-x64-Setup.exe
+          Compress-Archive -Path apps/desktop/release/win-unpacked/* -DestinationPath release-assets/Hermes-Vietnamese-Windows-x64-Portable.zip -Force
+          Get-ChildItem release-assets -File |
+            ForEach-Object {
+              $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              "$hash  $($_.Name)"
+            } | Set-Content release-assets/SHA256SUMS.txt -Encoding utf8
+
+      - name: Lưu bản dựng
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: hermes-vietnamese-windows
+          path: release-assets/*
+          retention-days: 30
+
+      - name: Xác định nhãn phát hành
+        id: release
+        shell: pwsh
+        run: |
+          $tag = if ('${{ github.event_name }}' -eq 'push') { '${{ github.ref_name }}' } else { '${{ inputs.tag }}' }
+          if ($tag -notmatch '^vi-v[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$') {
+            throw "Nhãn không hợp lệ: $tag"
+          }
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+
+      - name: Tạo GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          @'
+          ## Hermes Agent tiếng Việt
+
+          Bản cộng đồng dành cho Windows x64. Giao diện mặc định là tiếng Việt.
+
+          Sau khi cài, mỗi người đăng nhập OpenAI Codex, Claude, Gemini hoặc nhà cung cấp khác bằng tài khoản của chính mình. Bản dựng không chứa tài khoản hay khóa API của người đóng gói.
+
+          Windows có thể cảnh báo SmartScreen vì bộ cài cộng đồng chưa có chứng thư ký số thương mại. Hãy đối chiếu SHA-256 trong SHA256SUMS.txt.
+
+          Xem hướng dẫn đầy đủ trong README.vi.md.
+          '@ | Set-Content release-notes.md -Encoding utf8
+
+          if (gh release view $env:RELEASE_TAG 2>$null) {
+            gh release upload $env:RELEASE_TAG release-assets/* --clobber
+          } else {
+            gh release create $env:RELEASE_TAG release-assets/* --title "Hermes tiếng Việt $env:RELEASE_TAG" --notes-file release-notes.md --target '${{ github.sha }}'
+          }
