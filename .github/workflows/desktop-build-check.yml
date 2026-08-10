@@ -1,0 +1,138 @@
+name: Desktop Build Check
+
+# Proves the desktop app still packages on every OS — without a release
+# tag and without signing. Each job builds the THIN (external-payload)
+# app and packages the real distributable target for its OS, which
+# produces, in one electron-builder pass:
+#   * the unpacked app directory   (release/<platform>[-arch]-unpacked, mac/)
+#   * the installer                 (AppImage / NSIS .exe / DMG + ZIP)
+#   * the electron-updater feed     (latest*.yml + .blockmap; the mac ZIP
+#                                    is what MacUpdater actually installs)
+# The bundled release workflow stays the only place payloads are baked in;
+# this check catches packaging and config breakage before a tag does.
+#
+# Signing: no secrets are passed, so electron-builder skips Windows signing
+# (no AZURE_SIGN_* env), macOS signs ad-hoc at most, and notarize.mjs
+# skips. Unsigned is fine — this is a build check, not a release.
+
+on:
+  pull_request:
+    paths:
+      - 'apps/desktop/**'
+      - 'apps/shared/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/desktop-build-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-build-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # One job per OS on the default runner arch. The release matrix
+          # covers the full (os, arch) product; this check exists to catch
+          # packaging breakage early, not to rebuild the release.
+          - label: linux-x64
+            runner: ubuntu-24.04
+            target: '--linux AppImage'
+          - label: darwin-arm64
+            runner: macos-15
+            target: '--mac dmg zip'
+          - label: win32-x64
+            runner: windows-2025
+            target: '--win nsis'
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 26
+          cache: npm
+
+      - name: grab npm 12
+        shell: bash
+        run: npm i -g npm@12
+
+      # The desktop build script writes the install stamp through uv.
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # 9.0.0
+        with:
+          version: '0.12.1'
+          python-version: '3.11'
+
+      - name: Install dependencies
+        shell: bash
+        run: npm ci --no-audit --no-fund
+        env:
+          CI: 'true'
+
+      # Thin build: HERMES_DESKTOP_BUNDLED is unset, so payload staging
+      # writes the external stub manifest and no toolchains are needed.
+      - name: Build and package
+        shell: bash
+        timeout-minutes: 30
+        working-directory: apps/desktop
+        run: |
+          npm run build
+          npm run builder -- ${{ matrix.target }}
+
+      # Same invariant as the release: every native binary in the unpacked
+      # app must match the arch this job builds for.
+      - name: Audit bundle architecture
+        shell: bash
+        run: |
+          MATRIX_LABEL="${{ matrix.label }}"
+          node apps/desktop/scripts/audit-bundle-arch.mjs \
+            --arch="${MATRIX_LABEL##*-}" --root=apps/desktop/release
+
+      # The unpacked directory ships as its own artifact so a reviewer can
+      # run the exact bytes the installer would lay down. tar first: the
+      # tree holds symlinks (mac frameworks) and executable bits that
+      # upload-artifact's zip does not preserve.
+      - name: Pack unpacked app for upload
+        shell: bash
+        run: |
+          shopt -s nullglob
+          cd apps/desktop/release
+          dirs=()
+          for d in *-unpacked mac mac-*; do
+            [ -d "$d" ] && dirs+=("$d")
+          done
+          if [ ${#dirs[@]} -eq 0 ]; then
+            echo "::error::no unpacked app directory found"; exit 1
+          fi
+          tar -czf "unpacked-${{ matrix.label }}.tar.gz" "${dirs[@]}"
+
+      - name: Upload unpacked app
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-check-unpacked-${{ matrix.label }}-${{ github.sha }}
+          path: apps/desktop/release/unpacked-*.tar.gz
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload installers + updater feed
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: desktop-check-dist-${{ matrix.label }}-${{ github.sha }}
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.blockmap
+            apps/desktop/release/latest*.yml
+          retention-days: 7
+          if-no-files-found: error
