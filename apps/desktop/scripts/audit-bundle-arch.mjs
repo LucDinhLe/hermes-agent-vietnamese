@@ -163,9 +163,31 @@ function* walkFiles(dir) {
   }
 }
 
+/**
+ * Paths allowed to carry foreign-arch binaries. pip and setuptools ship
+ * Windows launcher STUB TEMPLATES as package data (distlib t32/t64/w32/
+ * w64.exe, setuptools cli*.exe / gui*.exe). They are not executed from
+ * here; pip copies one to build a console-script shim at install time.
+ * They exist on every platform and are always x86 PEs — inside an arm64
+ * or linux payload they are inert bytes, not a wrong-arch bug.
+ *
+ * Anchored at agent-payload (not the tree root: mac nests the payload
+ * under Hermes.app/Contents/Resources/). The lib segment is `Lib` on
+ * Windows and `lib/python3.11` elsewhere; both separators appear in
+ * relative paths depending on the build host.
+ */
+const EXEMPT_PATTERNS = [
+  /agent-payload[\/\\]python[\/\\]cpython-[^\/\\]+[\/\\]lib([\/\\]python[\d.]+)?[\/\\]site-packages[\/\\](setuptools|pip[\/\\]_vendor[\/\\]distlib)[\/\\]/i,
+]
+
+export function isExemptPath(relPath) {
+  return EXEMPT_PATTERNS.some((p) => p.test(relPath))
+}
+
 export function auditTree(rootDir, targetArch) {
   const mismatches = []
   let binaries = 0
+  let exempted = 0
   for (const file of walkFiles(rootDir)) {
     let info
     try {
@@ -176,10 +198,15 @@ export function auditTree(rootDir, targetArch) {
     if (!info) continue
     binaries += 1
     if (!archMatches(info.arches, targetArch)) {
-      mismatches.push({ file: path.relative(rootDir, file), format: info.format, arches: info.arches })
+      const rel = path.relative(rootDir, file)
+      if (isExemptPath(rel)) {
+        exempted += 1
+        continue
+      }
+      mismatches.push({ file: rel, format: info.format, arches: info.arches })
     }
   }
-  return { binaries, mismatches }
+  return { binaries, exempted, mismatches }
 }
 
 function main() {
@@ -204,7 +231,7 @@ function main() {
 
   let failed = false
   for (const dir of dirs) {
-    const { binaries, mismatches } = auditTree(dir, targetArch)
+    const { binaries, exempted, mismatches } = auditTree(dir, targetArch)
     if (binaries === 0) {
       console.error(`audit-bundle-arch: ${dir}: found no native binaries at all — the scan is broken, failing`)
       failed = true
@@ -217,7 +244,8 @@ function main() {
         console.error(`  [${m.format} ${m.arches.join("+")}] ${m.file}`)
       }
     } else {
-      console.log(`audit-bundle-arch: ${dir}: ${binaries} native binaries, all ${targetArch}`)
+      const exemptNote = exempted > 0 ? ` (${exempted} exempt launcher stubs)` : ""
+      console.log(`audit-bundle-arch: ${dir}: ${binaries} native binaries, all ${targetArch}${exemptNote}`)
     }
   }
   process.exit(failed ? 1 : 0)

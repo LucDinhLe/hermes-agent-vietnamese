@@ -104,12 +104,15 @@ or an `az login` session on a dev machine. There is no signing secret.
 ## Code signing + notarization (macOS)
 
 electron-builder's builtin notarization runs when the `APPLE_API_KEY` /
-`APPLE_API_KEY_ID` / `APPLE_API_ISSUER` env vars are set (the release
-workflow passes them from secrets) and the app is signed with the
-Developer ID certificate from `CSC_LINK`. `APPLE_API_KEY` holds the
-**base64-encoded** `.p8` App Store Connect key — not the raw PEM: raw
-multiline content ends up spliced into the notarytool argv and dies with
-`Invalid option`. Without the variables, the build skips notarization
+`APPLE_API_KEY_ID` / `APPLE_API_ISSUER` env vars are set and the app is
+signed with the Developer ID certificate from `CSC_LINK`. `APPLE_API_KEY`
+must be a **path to the `.p8`** App Store Connect key: the value travels
+verbatim from the env var into `notarytool --key`, which takes a file
+path (no decode, no temp file anywhere in the chain — raw PEM content
+dies with `Invalid option`, base64 content is a nonexistent path). The
+release workflow keeps the raw `.p8` content in the `APPLE_API_KEY_P8`
+secret and writes it to a runner-temp file whose path becomes
+`APPLE_API_KEY`. Without the variables, the build skips notarization
 (and stays unsigned without `CSC_LINK`), so forks and local builds work.
 
 ## Where builds run
