@@ -1,5 +1,6 @@
 import { atom } from 'nanostores'
 
+import { runInTerminal } from '@/app/right-sidebar/store'
 import {
   cancelOAuthSession,
   getGlobalModelOptions,
@@ -582,6 +583,7 @@ export async function startProviderOAuth(provider: OAuthProvider, ctx: Onboardin
 
   if (provider.flow === 'external') {
     setFlow({ status: 'external_pending', provider, copied: false })
+    runInTerminal(provider.cli_command)
 
     return
   }
@@ -723,6 +725,14 @@ export async function copyExternalCommand() {
 
   const id = flow.provider.id
   await copyAndFlash(flow.provider.cli_command, f => f.status === 'external_pending' && f.provider.id === id)
+}
+
+export function runExternalSigninCommand() {
+  const { flow } = $desktopOnboarding.get()
+
+  if (flow.status === 'external_pending') {
+    runInTerminal(flow.provider.cli_command)
+  }
 }
 
 export async function recheckExternalSignin(ctx: OnboardingContext) {

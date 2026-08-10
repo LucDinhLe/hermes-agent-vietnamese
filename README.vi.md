@@ -19,7 +19,8 @@ Bộ cài cộng đồng hiện chưa có chứng thư ký số thương mại. 
 ## Đăng nhập mô hình
 
 - **OpenAI Codex:** đăng nhập bằng tài khoản ChatGPT của bạn qua luồng mã thiết bị. Một số tài khoản cần bật xác thực mã thiết bị trong phần bảo mật ChatGPT.
-- **Claude:** đăng nhập Claude Code bằng tài khoản của bạn. Anthropic có thể yêu cầu bật Extra Usage cho ứng dụng bên thứ ba.
+- **Claude Pro / Max:** chọn **Claude Pro / Max (qua Claude Code)** rồi đăng nhập bằng cửa sổ chính thức của Claude Code. Hermes không đọc hoặc lưu mã OAuth của Claude. Cầu nối chỉ chạy khi Claude Code xác nhận đang dùng tài khoản Claude chính chủ và Extra Usage đang tắt, nhờ đó tránh vô tình chuyển sang tính phí API ngoài gói.
+- **Claude API:** tùy chọn Anthropic API riêng vẫn có sẵn cho người muốn thanh toán theo mức sử dụng; đây là nhà cung cấp khác với Claude Pro / Max.
 - **Gemini:** dùng khóa API do chính bạn tạo tại [Google AI Studio](https://aistudio.google.com/apikey). Gói Gemini trên web không tự động cấp quyền API.
 - **Nhà cung cấp khác:** Hermes hỗ trợ OpenRouter, Nous Portal và nhiều dịch vụ tương thích khác.
 
@@ -37,6 +38,7 @@ Gỡ ứng dụng trong **Settings → Apps → Installed apps** của Windows. 
 
 - Bản phát hành chính: Windows x64.
 - Giao diện Desktop đã được Việt hóa; nội dung do mô hình tạo phụ thuộc ngôn ngữ bạn yêu cầu.
+- Claude Pro / Max hiện hỗ trợ trò chuyện trực tiếp trong Desktop. Công cụ, agent nền và lịch chạy của Claude Code chưa được chuyển thành công cụ Hermes trong bản đầu tiên.
 - Đây là bản cộng đồng không chính thức và không được Nous Research bảo chứng.
 
 ## Dành cho người đóng góp

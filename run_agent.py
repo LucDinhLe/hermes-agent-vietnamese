@@ -5218,6 +5218,22 @@ class AIAgent:
         """
         if client is None:
             return
+        # Subprocess-backed clients own a child process rather than a TLS
+        # socket pool. Their explicit abort hook is thread-safe and is the only
+        # way to unblock a worker waiting on stdout after the user presses Stop.
+        subprocess_abort = getattr(client, "abort_from_any_thread", None)
+        if callable(subprocess_abort):
+            with self._openai_client_lock():
+                cache = self._request_client_cache_ref()
+                if cache["client"] is client:
+                    cache["poisoned"] = True
+            subprocess_abort()
+            logger.info(
+                "Subprocess client aborted (%s, shared=False) %s",
+                reason,
+                self._client_log_context(),
+            )
+            return
         # A pool whose sockets were shut down from a stranger thread must
         # never be reused: poison the cache slot so the owner-thread close
         # discards it and the next create builds a fresh client.

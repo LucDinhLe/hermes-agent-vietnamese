@@ -9696,27 +9696,23 @@ def _anthropic_oauth_status() -> Dict[str, Any]:
 
 
 def _claude_code_only_status() -> Dict[str, Any]:
-    """Surface Claude Code CLI credentials as their own provider entry.
-
-    Independent of the Anthropic entry above so users can see whether their
-    Claude Code subscription tokens are actively flowing into Hermes even
-    when they also have a separate Hermes-managed PKCE login.
-    """
+    """Read non-secret subscription status from the official Claude CLI."""
     try:
-        from agent.anthropic_adapter import read_claude_code_credentials
-        creds = read_claude_code_credentials()
-    except Exception:
-        creds = None
-    if creds and creds.get("accessToken"):
-        return {
-            "logged_in": True,
-            "source": "claude_code_cli",
-            "source_label": "~/.claude/.credentials.json",
-            "token_preview": _truncate_token(creds.get("accessToken")),
-            "expires_at": creds.get("expiresAt"),
-            "has_refresh_token": bool(creds.get("refreshToken")),
-        }
-    return {"logged_in": False, "source": None}
+        from agent.claude_code_client import probe_claude_code_auth
+
+        status = probe_claude_code_auth()
+    except Exception as exc:
+        return {"logged_in": False, "source": "claude_code_cli", "error": str(exc)}
+    return {
+        "logged_in": bool(status.get("logged_in")),
+        "installed": bool(status.get("installed")),
+        "source": "claude_code_cli",
+        "source_label": status.get("source_label") or "Claude Code CLI",
+        "token_preview": None,
+        "expires_at": None,
+        "has_refresh_token": False,
+        "error": status.get("error"),
+    }
 
 
 def _copilot_acp_status() -> Dict[str, Any]:
@@ -9806,9 +9802,8 @@ _OAUTH_PROVIDER_CATALOG: tuple[Dict[str, Any], ...] = (
         "docs_url": "https://docs.github.com/en/copilot",
         "status_fn": _copilot_acp_status,
     },
-    # ── Anthropic / Claude entries sit at the bottom: the API-key path
-    # first, then the subscription OAuth path (which only works with extra
-    # usage credits on top of a Claude Max plan — see disclaimer in name).
+    # ── Anthropic / Claude entries sit at the bottom: metered API first,
+    # then the official Claude Code subscription process bridge.
     {
         "id": "anthropic",
         "name": "Anthropic API Key",
@@ -9819,10 +9814,10 @@ _OAUTH_PROVIDER_CATALOG: tuple[Dict[str, Any], ...] = (
     },
     {
         "id": "claude-code",
-        "name": "Anthropic OAuth: Required Extra Usage Credits to Use Subscription",
+        "name": "Claude Pro / Max (qua Claude Code)",
         "flow": "external",
-        "cli_command": "claude setup-token",
-        "docs_url": "https://docs.claude.com/en/docs/claude-code",
+        "cli_command": "claude auth login",
+        "docs_url": "https://docs.anthropic.com/en/docs/claude-code",
         "status_fn": _claude_code_only_status,
     },
 )
@@ -9933,19 +9928,13 @@ def _oauth_provider_disconnect_command(provider: Dict[str, Any]) -> Optional[str
     instead hand the GUI a command it can *run in the embedded terminal* — the
     user sees exactly what executes, and Hermes then stops resolving the token.
 
-    Claude Code has no scriptable logout (only the interactive ``/logout``), so
-    we remove the credential the same way logout does: the macOS Keychain entry
-    (``Claude Code-credentials``) and/or the ``~/.claude/.credentials.json``
-    file — the two sources ``read_claude_code_credentials()`` consults. Returns
-    None for providers we can't safely clear (the GUI shows a manual hint).
+    Claude Code owns its credential store, so Hermes delegates sign-out to the
+    official CLI rather than deleting credential files or keychain entries.
     """
     if provider.get("flow") != "external":
         return None
     if provider.get("id") == "claude-code":
-        rm_file = "rm -f ~/.claude/.credentials.json"
-        if sys.platform == "darwin":
-            return f'security delete-generic-password -s "Claude Code-credentials" 2>/dev/null; {rm_file}'
-        return rm_file
+        return "claude auth logout"
     return None
 
 
@@ -9960,6 +9949,19 @@ def _oauth_provider_disconnect_hint(provider: Dict[str, Any], status: Dict[str, 
     if status.get("source") == "env_var":
         return "Remove the API key from Settings → Keys instead."
     return None
+
+
+def _oauth_provider_login_command(provider: Dict[str, Any], status: Dict[str, Any]) -> str:
+    """Return the visible terminal command for an external provider login."""
+    command = str(provider.get("cli_command") or "")
+    if provider.get("id") != "claude-code" or status.get("installed") is not False:
+        return command
+    if sys.platform == "win32":
+        return (
+            "npm.cmd install --global @anthropic-ai/claude-code; "
+            "if ($LASTEXITCODE -eq 0) { claude.cmd auth login }"
+        )
+    return "npm install --global @anthropic-ai/claude-code && claude auth login"
 
 
 def _build_oauth_catalog() -> list[Dict[str, Any]]:
@@ -10046,7 +10048,7 @@ async def list_oauth_providers(profile: Optional[str] = None):
                     "id": p["id"],
                     "name": p["name"],
                     "flow": p["flow"],
-                    "cli_command": p["cli_command"],
+                    "cli_command": _oauth_provider_login_command(p, status),
                     "docs_url": p["docs_url"],
                     "disconnect_hint": disconnect_hint,
                     "disconnect_command": _oauth_provider_disconnect_command(p),

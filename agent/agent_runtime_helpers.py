@@ -2260,6 +2260,18 @@ def create_openai_client(agent, client_kwargs: dict, *, reason: str, shared: boo
     # copy locks the contract so future transport/keepalive work can't reintroduce
     # the same class of bug.
     client_kwargs = dict(client_kwargs)
+    if agent.provider == "claude-code" or str(client_kwargs.get("base_url", "")).startswith("claude-code://"):
+        from agent.claude_code_client import ClaudeCodeClient
+
+        client = ClaudeCodeClient(**client_kwargs)
+        _ra().logger.info(
+            "Claude Code subscription client created (%s, shared=%s) %s",
+            reason,
+            shared,
+            agent._client_log_context(),
+        )
+        return client
+
     ssl_ca_cert = client_kwargs.pop("ssl_ca_cert", None)
     ssl_verify_cfg = client_kwargs.pop("ssl_verify", None)
     httpx_verify = resolve_httpx_verify(ca_bundle=ssl_ca_cert, ssl_verify=ssl_verify_cfg)

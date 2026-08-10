@@ -515,7 +515,8 @@ _PROVIDER_ALIASES = {
     "minimax-china": "minimax-cn",
     "minimax_cn": "minimax-cn",
     "claude": "anthropic",
-    "claude-code": "anthropic",
+    "claude-code": "claude-code",
+    "claude-pro": "claude-code",
     "github": "copilot",
     "github-copilot": "copilot",
     "github-model": "copilot",
@@ -6589,6 +6590,19 @@ def resolve_provider_client(
             logger.debug("resolve_provider_client: %s (%s)", provider, final_model)
             return (_to_async_client(client, final_model, is_vision=is_vision) if async_mode
                     else (client, final_model))
+        if provider == "claude-code":
+            if async_mode:
+                logger.debug("Claude Code is synchronous; auxiliary async mode is unavailable")
+                return None, None
+            from agent.claude_code_client import ClaudeCodeClient
+
+            client = ClaudeCodeClient(
+                api_key=str(creds.get("api_key", "")),
+                base_url=str(creds.get("base_url", "")),
+                command=str(creds.get("command", "")) or None,
+                args=list(creds.get("args") or []),
+            )
+            return client, (final_model or "haiku")
         if provider not in _LOGGED_UNSUPPORTED_EXTPROC_KEYS:
             _LOGGED_UNSUPPORTED_EXTPROC_KEYS.add(provider)
             logger.debug("resolve_provider_client: external-process provider %s not "

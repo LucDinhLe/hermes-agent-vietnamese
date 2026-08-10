@@ -524,14 +524,29 @@ def test_oauth_catalog_marks_external_providers_not_disconnectable():
     assert "provider's CLI" in providers["qwen-oauth"]["disconnect_hint"]
     assert providers["qwen-oauth"]["disconnect_command"] is None
 
-    # Claude Code: still not API-disconnectable, but we hand the GUI a runnable
-    # command (clears the keychain entry / credentials file) so it can offer a
-    # one-click "run in terminal" disconnect.
+    # Claude Code: Hermes delegates sign-out to the official CLI and never
+    # deletes or opens its credential store.
     assert providers["claude-code"]["flow"] == "external"
     assert providers["claude-code"]["disconnectable"] is False
     assert providers["claude-code"]["disconnect_hint"]
     cmd = providers["claude-code"]["disconnect_command"]
-    assert cmd and ".claude/.credentials.json" in cmd
+    assert cmd == "claude auth logout"
+
+
+def test_missing_claude_cli_gets_install_then_login_command(monkeypatch):
+    from hermes_cli import web_server
+
+    monkeypatch.setattr(
+        web_server,
+        "_claude_code_only_status",
+        lambda: {"logged_in": False, "installed": False, "source": "claude_code_cli"},
+    )
+    entry = next(p for p in web_server._OAUTH_PROVIDER_CATALOG if p["id"] == "claude-code")
+    status = web_server._claude_code_only_status()
+    command = web_server._oauth_provider_login_command(entry, status)
+
+    assert "@anthropic-ai/claude-code" in command
+    assert "auth login" in command
 
 
 def test_external_oauth_disconnect_rejected_before_auth_mutation(monkeypatch):
@@ -693,7 +708,5 @@ def test_status_falls_through_to_generic_dispatcher_for_catalog_only_provider():
     assert out["token_preview"] and "sk-future-secret-token-xyz" not in out["token_preview"]
     assert out["expires_at"] == "2026-12-01T00:00:00Z"
     assert out["has_refresh_token"] is True
-
-
 
 

@@ -220,6 +220,7 @@ def _xai_curated_models() -> list[str]:
 
 _PROVIDER_MODELS: dict[str, list[str]] = {
     "moa": ["default"],
+    "claude-code": ["sonnet", "opus", "haiku"],
     "nous": [
         # Anthropic
         "anthropic/claude-fable-5",
@@ -1120,7 +1121,8 @@ CANONICAL_PROVIDERS: list[ProviderEntry] = [
     ProviderEntry("moa",            "Mixture of Agents",        "Mixture of Agents (named presets; aggregator acts after reference models)"),
     ProviderEntry("novita",         "NovitaAI",                 "NovitaAI (Cloud: Model API, Agent Sandbox, GPU Cloud)"),
     ProviderEntry("lmstudio",       "LM Studio",                "LM Studio (Local desktop app with built-in model server)"),
-    ProviderEntry("anthropic",      "Anthropic",                "Anthropic (Claude models via API key or Claude Code)"),
+    ProviderEntry("anthropic",      "Anthropic API",            "Anthropic (Claude models via metered API key)"),
+    ProviderEntry("claude-code",    "Claude Pro / Max",         "Claude Pro / Max (official Claude Code process; subscription limits)"),
     ProviderEntry("openai-codex",   "OpenAI Codex",             "OpenAI Codex (Codex CLI via ChatGPT subscription or API key)"),
     ProviderEntry("openai-api",     "OpenAI API",               "OpenAI API (api.openai.com, API key)"),
     ProviderEntry("alibaba",        "Qwen Cloud",               "Qwen Cloud / DashScope (Qwen + multi-provider)"),
@@ -1321,7 +1323,8 @@ _PROVIDER_ALIASES = {
     "minimax-global": "minimax-oauth",
     "minimax_oauth": "minimax-oauth",
     "claude": "anthropic",
-    "claude-code": "anthropic",
+    "claude-code": "claude-code",
+    "claude-pro": "claude-code",
     "deep-seek": "deepseek",
     "opencode": "opencode-zen",
     "zen": "opencode-zen",

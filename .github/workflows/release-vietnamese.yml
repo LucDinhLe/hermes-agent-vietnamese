@@ -95,7 +95,11 @@ jobs:
 
           Bản cộng đồng dành cho Windows x64. Giao diện mặc định là tiếng Việt.
 
-          Sau khi cài, mỗi người đăng nhập OpenAI Codex, Claude, Gemini hoặc nhà cung cấp khác bằng tài khoản của chính mình. Bản dựng không chứa tài khoản hay khóa API của người đóng gói.
+          Sau khi cài, mỗi người đăng nhập OpenAI Codex, Claude Pro/Max, Gemini hoặc nhà cung cấp khác bằng tài khoản của chính mình. Bản dựng không chứa tài khoản, mã OAuth hay khóa API của người đóng gói.
+
+          ### Claude Pro / Max
+
+          Chọn **Claude Pro / Max (qua Claude Code)** trong Hermes và đăng nhập bằng luồng chính thức của Claude Code. Cầu nối không đọc mã OAuth và sẽ từ chối chạy nếu Extra Usage đang bật, nhằm tránh phát sinh phí API ngoài gói. Phạm vi bản đầu tiên là trò chuyện trực tiếp trong Desktop.
 
           Windows có thể cảnh báo SmartScreen vì bộ cài cộng đồng chưa có chứng thư ký số thương mại. Hãy đối chiếu SHA-256 trong SHA256SUMS.txt.
 

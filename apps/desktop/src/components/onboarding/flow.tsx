@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Loader } from '@/components/ui/loader'
 import { getGlobalModelOptions } from '@/hermes'
 import { useI18n } from '@/i18n'
-import { ExternalLink, Loader2 } from '@/lib/icons'
+import { ExternalLink, Loader2, Terminal } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import {
   cancelOnboardingFlow,
@@ -17,6 +17,7 @@ import {
   type OnboardingContext,
   type OnboardingFlow,
   recheckExternalSignin,
+  runExternalSigninCommand,
   setOnboardingCode,
   setOnboardingModel,
   submitOnboardingCode
@@ -101,6 +102,10 @@ export function FlowPanel({
       <Step title={t.onboarding.signInWith(title)}>
         <p className="text-sm text-muted-foreground">{t.onboarding.externalPending(title)}</p>
         <CodeBlock copied={flow.copied} onCopy={() => void copyExternalCommand()} text={flow.provider.cli_command} />
+        <Button className="w-fit" onClick={runExternalSigninCommand} variant="outline">
+          <Terminal className="size-4" />
+          {t.onboarding.signInWith(title)}
+        </Button>
         <FlowFooter
           left={
             flow.provider.docs_url ? (

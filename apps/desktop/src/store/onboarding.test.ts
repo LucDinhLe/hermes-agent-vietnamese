@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { $terminalInjection, $terminalTakeover } from '@/app/right-sidebar/store'
 import * as notifications from '@/store/notifications'
 import type { OAuthProvider } from '@/types/hermes'
 
@@ -10,6 +11,7 @@ import {
   refreshOnboarding,
   requestDesktopOnboarding,
   saveOnboardingLocalEndpoint,
+  startProviderOAuth,
   submitOnboardingCode
 } from './onboarding'
 
@@ -23,6 +25,32 @@ function provider(id: string, name = id): OAuthProvider {
     status: { logged_in: false }
   }
 }
+
+function externalProvider(id: string, command: string): OAuthProvider {
+  return {
+    ...provider(id),
+    cli_command: command,
+    flow: 'external'
+  }
+}
+
+describe('external provider sign-in', () => {
+  beforeEach(() => {
+    $desktopOnboarding.set(baseState())
+    $terminalInjection.set(null)
+    $terminalTakeover.set(false)
+  })
+
+  it('opens the visible terminal with the official provider command', async () => {
+    const claude = externalProvider('claude-code', 'claude auth login')
+
+    await startProviderOAuth(claude, onboardingContext(emptyOpenRouterGateway()))
+
+    expect($desktopOnboarding.get().flow).toMatchObject({ status: 'external_pending', provider: claude })
+    expect($terminalTakeover.get()).toBe(true)
+    expect($terminalInjection.get()).toBe('claude auth login')
+  })
+})
 
 function baseState(overrides: Partial<DesktopOnboardingState> = {}): DesktopOnboardingState {
   return {
