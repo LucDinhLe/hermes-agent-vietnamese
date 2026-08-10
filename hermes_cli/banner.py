@@ -783,7 +783,11 @@ def build_welcome_banner(console: "Console", model: str, cwd: str,
     try:
         behind = get_update_result(timeout=0.5)
         if behind is not None and behind != 0:
-            from hermes_cli.config import get_managed_update_command, recommended_update_command
+            from hermes_cli.config import (
+                detect_install_method,
+                get_project_root,
+                recommended_update_command,
+            )
             if behind > 0:
                 commits_word = "commit" if behind == 1 else "commits"
                 right_lines.append(
@@ -794,10 +798,9 @@ def build_welcome_banner(console: "Console", model: str, cwd: str,
                 # UPDATE_AVAILABLE_NO_COUNT: nix-built hermes; we know an update
                 # exists but not by how much, and we don't know how the user
                 # installed it (nix run, profile, system flake, home-manager).
-                managed_cmd = get_managed_update_command()
                 line = "[bold yellow]⚠ update available[/]"
-                if managed_cmd:
-                    line += f"[dim yellow] — run [bold]{managed_cmd}[/bold][/]"
+                if detect_install_method(get_project_root()) == "nix":
+                    line += f"[dim yellow] — run [bold]{recommended_update_command()}[/bold][/]"
                 right_lines.append(line)
     except Exception:
         pass  # Never break the banner over an update check

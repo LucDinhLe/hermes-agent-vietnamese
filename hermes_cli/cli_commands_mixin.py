@@ -3465,10 +3465,15 @@ class CLICommandsMixin:
         prompt_toolkit cleans up terminal modes).  Returns ``False`` / falsy
         when cancelled.
         """
-        from hermes_cli.config import is_managed, format_managed_message
+        from hermes_cli.config import (
+            detect_install_method,
+            recommended_update_command_for_method,
+        )
 
-        if is_managed():
-            print(f"  ✗ {format_managed_message('update Hermes Agent')}")
+        method = detect_install_method()
+        if method not in {"git", "unknown"}:
+            print(f"  ✗ `hermes update` does not apply to this install ({method}).")
+            print(f"    Update with: {recommended_update_command_for_method(method)}")
             return False
 
         # Use the prompt_toolkit-native modal so the confirmation panel

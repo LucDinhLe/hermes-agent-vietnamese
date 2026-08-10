@@ -20,7 +20,7 @@ COMMIT = "ab" * 20
 def _write_build_info(root, **overrides):
     info = {"commit": COMMIT, "tag": "v0.1.0", "distribution": "desktop-app"}
     info.update(overrides)
-    (root / ".hermes_build_info.json").write_text(json.dumps(info))
+    (root / "install-stamp.json").write_text(json.dumps(info))
 
 
 @pytest.fixture

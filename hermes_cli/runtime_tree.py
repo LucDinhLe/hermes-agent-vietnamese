@@ -6,7 +6,7 @@ The install model has two axes (design:
 * A tree with ``.git`` is a **git checkout**: ``hermes update`` owns it.
   The checkout's existence IS the fact; no manifest records it.
 * A tree without ``.git`` is **sealed**: something external replaces it
-  wholesale. The build stamp (``.hermes_build_info.json``) names that
+  wholesale. The build stamp (``install-stamp.json``) names that
   steward in its ``distribution`` field: ``desktop-app`` (the embedded
   desktop bundle), ``docker``, ``nix``, or a future package manager.
 
@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-BUILD_INFO_NAME = ".hermes_build_info.json"
+BUILD_INFO_NAME = "install-stamp.json"
 
 STEWARD_DESKTOP = "desktop-app"
 STEWARD_DOCKER = "docker"
@@ -227,6 +227,33 @@ def is_managed_install_root(path: Path) -> bool:
         except OSError:
             continue
     return False
+
+
+# Stewards install_method() reports as-is. An unknown steward value (a newer
+# package manager read by older code) reports "unknown" so consumers do not
+# branch on an enum member they never heard of.
+_KNOWN_STEWARDS = frozenset({STEWARD_DESKTOP, STEWARD_DOCKER, STEWARD_NIX})
+
+
+def install_method(project_root: Path) -> str:
+    """Derive the install method of the tree at ``project_root``.
+
+    Everything comes from the tree itself — the stamp for sealed trees,
+    ``.git`` plus location for checkouts. No stored method flags.
+
+    * sealed tree, stamp ``distribution`` known → that steward
+      (``docker``, ``nix``, ``desktop-app``)
+    * ``.git`` at a managed install root → ``git`` (`hermes update` owns it)
+    * ``.git`` anywhere else → ``source`` (somebody's working tree;
+      update refuses and points at ``git pull``)
+    * neither → ``unknown``
+    """
+    tree = runtime_tree(project_root)
+    if isinstance(tree, Sealed):
+        return tree.steward if tree.steward in _KNOWN_STEWARDS else "unknown"
+    if is_managed_install_root(tree.root):
+        return "git"
+    return "source"
 
 
 def resolve_update_channel(config: Optional[dict] = None) -> str:

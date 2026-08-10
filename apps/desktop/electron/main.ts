@@ -12332,7 +12332,7 @@ ipcMain.handle('hermes:version', () => ({
 // 'nix' and 'bundled' installs only ever remove user data, with app removal
 // handed to the steward (Nix tooling / Apps & Features / Trash / delete the
 // AppImage). The Python uninstaller enforces the same rule independently
-// from its own build stamp (.hermes_build_info.json), so the renderer can
+// from its own build stamp (install-stamp.json), so the renderer can
 // never talk a managed install into deleting code.
 
 function uninstallVenvPython() {

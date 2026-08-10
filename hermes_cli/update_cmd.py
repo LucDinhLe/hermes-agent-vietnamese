@@ -2381,8 +2381,13 @@ def _cmd_update_check(branch: str = "main", *, branch_explicit: bool = False):
         print(format_docker_update_message())
         sys.exit(1)
 
-    if method in {"nix", "nixos"}:
+    if method == "nix":
         print(recommended_update_command_for_method(method))
+        sys.exit(1)
+
+    if method == "source":
+        print("✗ This is a source checkout, not the managed install.")
+        print("  Check it like any working tree: git fetch && git status")
         sys.exit(1)
 
     git_dir = _m().PROJECT_ROOT / ".git"
@@ -3980,7 +3985,7 @@ def _eject_embedded_bundle(bundle_repo_root: Path, tag_label: str) -> int:
     the installer badly (no PATH setup, no config templates, no system
     checks). This downloads the official Hermes Setup app from the website
     and launches it pinned to the EXACT commit this bundle was built from
-    (.hermes_build_info.json), so the ejected source checkout matches the
+    (install-stamp.json), so the ejected source checkout matches the
     code the user runs. Setup then performs a normal source install at
     ~/.hermes/hermes-agent AND builds a source-managed desktop app from it
     — that app replaces the embedded one. Network is required.
@@ -4002,7 +4007,9 @@ def _eject_embedded_bundle(bundle_repo_root: Path, tag_label: str) -> int:
     # The exact commit of this bundle. The tag is the display label; the
     # pin itself must be a commit sha because tags can be re-pointed but
     # the sha names what this bundle actually runs.
-    build_info = _read_json_or_none(bundle_repo_root / ".hermes_build_info.json") or {}
+    from hermes_cli.runtime_tree import read_build_info
+
+    build_info = read_build_info(bundle_repo_root)
     commit = str(build_info.get("commit") or "")
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         print("\u2717 An eject is not possible. The bundle's build info has no valid commit.")
@@ -4134,6 +4141,7 @@ def cmd_update_eject(args) -> int:
         CHANNEL_STABLE,
         STEWARD_DESKTOP,
         GitCheckout,
+        read_build_info,
         runtime_tree,
     )
 
@@ -4170,7 +4178,7 @@ def cmd_update_eject(args) -> int:
         print(f"\u26a0 --channel {channel} does not apply to this eject.")
         print("  After the install, set it with: hermes update --eject --channel " + channel)
 
-    build_info = _read_json_or_none(Path(project_root) / ".hermes_build_info.json") or {}
+    build_info = read_build_info(Path(project_root))
     tag_label = str(build_info.get("tag") or build_info.get("displayVersion") or "this release")
     return _eject_embedded_bundle(Path(project_root), tag_label)
 
@@ -4210,37 +4218,9 @@ def _cmd_update_impl(args, gateway_mode: bool):
             logger.debug("Could not read updates.non_interactive_local_changes: %s", exc)
             discard_local_changes = False
 
-    # Guard: `hermes update` stashes local changes and moves the checkout
-    # to the update branch. That is correct at a managed install root (the
-    # installer created it to be updated) and rude anywhere else — a dev
-    # worktree on a feature branch would get yanked to main. Ask first;
-    # refuse when nobody can answer. --yes skips the question. The guard
-    # is a courtesy: an unclassifiable PROJECT_ROOT skips it and keeps the
-    # historical behavior.
-    from hermes_cli.runtime_tree import is_managed_install_root
-
-    try:
-        project_root = Path(_m().PROJECT_ROOT)
-        _guard_applies = (
-            (project_root / ".git").exists() and not is_managed_install_root(project_root)
-        )
-    except (TypeError, OSError):
-        _guard_applies = False
-    if _guard_applies:
-        print(f"⚠ This is a git checkout at {project_root},")
-        print("  not the managed install. `hermes update` will stash local")
-        print("  changes and move this checkout to the update branch.")
-        print("  If this is your working tree, use `git pull` instead.")
-        if assume_yes:
-            print("  Continuing (--yes).")
-        elif gateway_mode or not (sys.stdin.isatty() and sys.stdout.isatty()):
-            print("✗ Refused: no terminal to confirm on. Re-run with --yes to force.")
-            sys.exit(3)
-        else:
-            answer = input("  Update this checkout anyway? [y/N] ").strip().lower()
-            if answer not in ("y", "yes"):
-                print("✗ Update canceled. The checkout is untouched.")
-                sys.exit(3)
+    # Off-path source checkouts never reach this point: cmd_update refuses
+    # them up front (install method "source" — a .git tree outside the
+    # managed install roots) and points at `git pull`.
 
     print("⚕ Updating Hermes Agent...")
     print()

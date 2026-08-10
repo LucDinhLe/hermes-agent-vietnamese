@@ -9175,14 +9175,8 @@ def cmd_update(args):
     from hermes_cli.config import (
         detect_install_method,
         format_docker_update_message,
-        is_managed,
-        managed_error,
         recommended_update_command_for_method,
     )
-
-    if is_managed():
-        managed_error("update Hermes Agent")
-        return
 
     # Docker users can't ``git pull`` — the image excludes ``.git`` from
     # the build context.  Bail with a friendly explanation pointing at
@@ -9195,8 +9189,18 @@ def cmd_update(args):
         print(format_docker_update_message())
         sys.exit(1)
 
-    if install_method in {"nix", "nixos"}:
+    if install_method == "nix":
         print(recommended_update_command_for_method(install_method))
+        sys.exit(1)
+
+    # A random source checkout (a .git tree outside the managed install
+    # roots) is somebody's working tree. `hermes update` would stash local
+    # changes and yank it to the update branch — refuse and point at git.
+    # --eject on a source tree is also a no-op, so refuse before it too.
+    if install_method == "source":
+        print(f"✗ This is a git checkout at {PROJECT_ROOT},")
+        print("  not the managed install. Update it like any working tree:")
+        print("    git pull")
         sys.exit(1)
 
     # --eject runs BEFORE the bundled-install refusal below. The eject

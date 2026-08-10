@@ -4161,14 +4161,14 @@ async def update_hermes():
             "update_command": recommended_update_command_for_method(install_method),
         }
 
-    if install_method in {"nix", "nixos"}:
+    if install_method in {"nix", "source"}:
         message = recommended_update_command_for_method(install_method)
         _record_completed_action("hermes-update", message, exit_code=1)
         return {
             "ok": False,
             "pid": None,
             "name": "hermes-update",
-            "error": "nix_update_unsupported",
+            "error": "nix_update_unsupported" if install_method == "nix" else "source_update_unsupported",
             "message": message,
             "update_command": message,
         }
@@ -4267,7 +4267,7 @@ async def check_hermes_update(force: bool = False):
     ``POST /api/hermes/update`` actually runs ``hermes update``.
 
     Returns:
-        install_method: 'git' | 'docker' | 'nix' | 'nixos' | 'unknown'
+        install_method: 'git' | 'source' | 'docker' | 'nix' | 'desktop-app' | 'unknown'
         current_version: installed Hermes version string
         behind: commits behind upstream (>=1), 0 if up to date,
                 -1 if behind by an unknown count, or null if the

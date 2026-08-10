@@ -2,13 +2,14 @@
 
 ``.dockerignore`` excludes ``.git``, so ``git rev-parse HEAD`` fails inside
 the published image. CI writes ``install-stamp.json`` before ``docker build``
-(scripts/write_install_stamp.py), and a late Dockerfile layer moves it to the
-canonical ``/opt/hermes/.hermes_build_info.json``. ``hermes dump`` reads the
+(scripts/write_install_stamp.py) and it is COPY'd to the canonical
+``/opt/hermes/install-stamp.json``. ``hermes dump`` reads the
 commit from that stamp through ``hermes_cli.version_info``.
 
 A local ``docker build`` (the ``built_image`` fixture in
-``tests/docker/conftest.py``) has no stamp. In that case ``hermes dump``
-falls back to ``(unknown)``.
+``tests/docker/conftest.py``) has no CI stamp — only the Dockerfile's
+distribution-only fallback, whose all-zero commit version_info skips. In
+that case ``hermes dump`` falls back to ``(unknown)``.
 
 This test asserts both cases:
 
@@ -53,7 +54,7 @@ def _read_stamp_commit_from_image(image: str) -> str | None:
     r = subprocess.run(
         [
             "docker", "run", "--rm", "--entrypoint", "cat", image,
-            "/opt/hermes/.hermes_build_info.json",
+            "/opt/hermes/install-stamp.json",
         ],
         capture_output=True, text=True, timeout=30,
     )

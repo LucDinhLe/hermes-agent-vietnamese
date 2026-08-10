@@ -1146,9 +1146,11 @@ def _wal_reset_repair_hint() -> str:
         cmd = recommended_update_command_for_method(method)
         if method in {"git", "unknown"}:
             return f"Hermes-managed installs can repair the embedded runtime with `{cmd}`"
+        if method == "source":
+            return "source checkouts can repair the runtime by re-running their venv setup"
         if method == "docker":
             return f"update the container image with `{cmd}`"
-        # nix/nixos
+        # nix
         return cmd
     except Exception:
         pass

@@ -521,7 +521,9 @@ def test_client_resource_classification_is_bounded():
     assert client_architecture("aarch64") == "arm64"
     assert client_architecture("armv7l") == "arm"
     assert client_install_method("Homebrew") == "homebrew"
-    assert client_install_method("nix") == "nixos"
+    assert client_install_method("nix") == "nix"
+    assert client_install_method("desktop-app") == "desktop-app"
+    assert client_install_method("source") == "source"
 
     assert client_resource(
         "",

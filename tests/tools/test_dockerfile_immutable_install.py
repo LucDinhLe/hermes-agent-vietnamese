@@ -39,27 +39,22 @@ def test_dockerfile_does_not_chown_install_trees_to_hermes() -> None:
         )
 
 
-def test_dockerfile_bakes_code_scoped_install_method_stamp() -> None:
-    """The 'docker' install-method stamp is baked next to the code.
+def test_dockerfile_guarantees_code_scoped_install_stamp() -> None:
+    """The image always carries /opt/hermes/install-stamp.json.
 
-    detect_install_method() reads the code-scoped stamp
-    (/opt/hermes/.install_method) first; baking it at build time keeps the
-    published image self-identifying as 'docker' WITHOUT writing into the
-    shared $HERMES_HOME data volume (which a host install may also use).
-    The stamp is created by root in the shim-wiring RUN block; the hermes
-    user can't modify it (go-w from the --chmod on the source COPY).
+    detect_install_method() reads the stamp's ``distribution`` field from
+    the code tree; keeping it code-scoped self-identifies the image as
+    'docker' WITHOUT writing into the shared $HERMES_HOME data volume
+    (which a host install may also use). CI COPYs a full-provenance stamp;
+    a local build without CI must get the distribution-only fallback.
     """
     text = _dockerfile_text()
-    assert "printf 'docker\\n' > /opt/hermes/.install_method" in text
+    assert 'printf \'{"schemaVersion":2,"commit":"0000000000000000000000000000000000000000","distribution":"docker","source":"fallback"}\\n\'' in text
+    assert "if [ ! -f /opt/hermes/install-stamp.json ]" in text
 
-    # The stamp must be in the RUN block that wires the exec shim.
-    shim_block = re.search(
-        r"RUN mkdir -p /opt/hermes/bin && \\\n"
-        r"(?:.*\\\n)+?"
-        r"\s+printf 'docker\\n' > /opt/hermes/\.install_method",
-        text,
-    )
-    assert shim_block, "install-method stamp must be in the shim-wiring RUN block"
+    # The legacy stamps must not come back.
+    assert ".install_method" not in text
+    assert ".hermes_build_info.json" not in text
 
 
 def test_dockerfile_redirects_lazy_installs_to_durable_target() -> None:

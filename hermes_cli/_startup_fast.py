@@ -163,21 +163,42 @@ def read_openai_version() -> str | None:
 
 
 def read_install_method() -> str | None:
-    """Read the installer's ``.install_method`` stamp, if present.
+    """Derive the install method with stdlib-only probes.
 
-    Only the stamp (step 1 of ``config.detect_install_method``'s resolution
-    order) — the managed/git/pip fallbacks need heavier imports and stay on
-    the slow path. On the fast path home ambiguity is already excluded:
+    Mirrors ``config.detect_install_method`` (which delegates to
+    ``runtime_tree.install_method``) cheaply: the code-scoped
+    ``install-stamp.json`` names the steward of a sealed tree; a ``.git``
+    tree is ``git`` at the managed install roots and ``source`` elsewhere.
+    On the fast path home ambiguity is already excluded:
     ``container_mode_may_be_active()`` bails to the slow path whenever a
     non-default profile might redirect HERMES_HOME.
     """
-    stamp = os.path.join(_resolved_home(), ".install_method")
+    import json
+
+    root = project_root_str()
     try:
-        with open(stamp, encoding="utf-8") as handle:
-            method = handle.read().strip().lower()
-        return method or None
-    except OSError:
+        with open(os.path.join(root, "install-stamp.json"), encoding="utf-8") as handle:
+            distribution = json.load(handle).get("distribution")
+        if isinstance(distribution, str) and distribution:
+            return distribution
+    except (OSError, ValueError, AttributeError):
+        pass
+
+    if not os.path.exists(os.path.join(root, ".git")):
         return None
+
+    resolved_root = os.path.realpath(root)
+    managed_roots = (
+        os.path.join(_resolved_home(), "hermes-agent"),
+        os.path.join("/usr/local/lib", "hermes-agent"),
+    )
+    for managed in managed_roots:
+        try:
+            if resolved_root == os.path.realpath(managed):
+                return "git"
+        except OSError:
+            continue
+    return "source"
 
 
 def print_fast_version_info() -> None:

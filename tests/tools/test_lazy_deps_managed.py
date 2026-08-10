@@ -1,9 +1,10 @@
-"""Managed-install guard in :func:`tools.lazy_deps.ensure` (#48628).
+"""Read-only-install guard in :func:`tools.lazy_deps.ensure` (#48628).
 
-A package-manager install (NixOS, and anything else shipping Hermes from a
-read-only store) cannot receive lazy pip installs: the venv's site-packages
-lives in the store, so the uv -> pip -> ensurepip ladder burns ~15s
-bootstrapping ensurepip only to fail. ``ensure()`` must fail fast instead.
+A read-only site-packages (any nix build — the venv lives in the
+immutable store) cannot receive lazy pip installs: the uv -> pip ->
+ensurepip ladder burns ~15s bootstrapping ensurepip only to fail.
+``ensure()`` probes writability directly and must fail fast instead —
+no install-method inference involved.
 """
 
 import pytest
@@ -37,14 +38,14 @@ def _no_installer(monkeypatch):
     monkeypatch.setattr(lazy_deps.subprocess, "run", _boom)
 
 
-def test_nixos_install_fails_fast_without_touching_the_installer(monkeypatch):
-    monkeypatch.setattr("hermes_cli.config.get_managed_system", lambda: "nixos")
+def test_readonly_install_fails_fast_without_touching_the_installer(monkeypatch):
+    monkeypatch.setattr(lazy_deps, "_site_packages_writable", lambda: False)
     _no_installer(monkeypatch)
 
     with pytest.raises(FeatureUnavailable) as excinfo:
         lazy_deps.ensure(FEATURE, prompt=False)
 
-    assert "nixos" in excinfo.value.reason
+    assert "read-only" in excinfo.value.reason
     # refresh_active_features classifies by this prefix — anything else is
     # reported to the user as a hard failure instead of a skip.
     assert excinfo.value.reason.startswith("unsupported ")
@@ -52,7 +53,7 @@ def test_nixos_install_fails_fast_without_touching_the_installer(monkeypatch):
 
 def test_reason_is_classified_as_skipped_not_failed(monkeypatch):
     """The wording contract with refresh_active_features, pinned directly."""
-    monkeypatch.setattr("hermes_cli.config.get_managed_system", lambda: "nixos")
+    monkeypatch.setattr(lazy_deps, "_site_packages_writable", lambda: False)
 
     with pytest.raises(FeatureUnavailable) as excinfo:
         lazy_deps.ensure(FEATURE, prompt=False)
@@ -62,41 +63,42 @@ def test_reason_is_classified_as_skipped_not_failed(monkeypatch):
     )
 
 
-def test_unmanaged_install_is_not_blocked_by_the_guard(monkeypatch):
-    """On a normal pip install the guard must be transparent."""
-    monkeypatch.setattr("hermes_cli.config.get_managed_system", lambda: None)
+def test_writable_install_is_not_blocked_by_the_guard(monkeypatch):
+    """On a normal writable venv the guard must be transparent."""
+    monkeypatch.setattr(lazy_deps, "_site_packages_writable", lambda: True)
 
     with pytest.raises(FeatureUnavailable) as excinfo:
         lazy_deps.ensure(FEATURE, prompt=False)
 
-    # Whatever stops the install here, it must NOT be the managed guard.
-    assert "managed installs" not in excinfo.value.reason
+    # Whatever stops the install here, it must NOT be the read-only guard.
+    assert "read-only installs" not in excinfo.value.reason
 
 
 def test_durable_install_target_overrides_the_guard(monkeypatch, tmp_path):
-    """The container deployment sets HERMES_MANAGED *and* a writable target.
+    """A configured writable target means lazy installs legitimately work.
 
-    Dockerfile sets HERMES_LAZY_INSTALL_TARGET and the NixOS container module
-    passes HERMES_MANAGED=true; blocking there would break that deployment.
+    Dockerfile and the NixOS container module set
+    HERMES_LAZY_INSTALL_TARGET; blocking there would break that deployment
+    even though the venv itself is sealed.
     """
-    monkeypatch.setattr("hermes_cli.config.get_managed_system", lambda: "nixos")
+    monkeypatch.setattr(lazy_deps, "_site_packages_writable", lambda: False)
     monkeypatch.setattr(lazy_deps, "_lazy_install_target", lambda: tmp_path)
 
     with pytest.raises(FeatureUnavailable) as excinfo:
         lazy_deps.ensure(FEATURE, prompt=False)
 
-    assert "nixos" not in excinfo.value.reason.lower(), (
-        "durable-target installs must not be blocked by the managed guard"
+    assert "read-only installs" not in excinfo.value.reason, (
+        "durable-target installs must not be blocked by the read-only guard"
     )
 
 
 def test_platform_unsupported_takes_precedence(monkeypatch):
-    """A platform-specific reason is more actionable than 'managed install'.
+    """A platform-specific reason is more actionable than 'read-only install'.
 
     Also required for consistency: refresh_active_features pre-checks
     _unsupported_feature_reason before calling ensure().
     """
-    monkeypatch.setattr("hermes_cli.config.get_managed_system", lambda: "nixos")
+    monkeypatch.setattr(lazy_deps, "_site_packages_writable", lambda: False)
     monkeypatch.setattr(
         lazy_deps, "_unsupported_feature_reason", lambda _f: "unsupported on win32"
     )
@@ -107,14 +109,17 @@ def test_platform_unsupported_takes_precedence(monkeypatch):
     assert excinfo.value.reason == "unsupported on win32"
 
 
-def test_unreadable_config_fails_open(monkeypatch):
-    """A broken config must not block installs on a normal pip install."""
-    def _raise():
-        raise RuntimeError("config unreadable")
+def test_probe_errs_toward_writable(monkeypatch):
+    """A broken probe must not block installs on a normal venv.
 
-    monkeypatch.setattr("hermes_cli.config.get_managed_system", _raise)
+    _site_packages_writable itself returns True when sysconfig/os.access
+    misbehave; the install ladder reports real write failures with context.
+    """
+    import sysconfig
 
-    with pytest.raises(FeatureUnavailable) as excinfo:
-        lazy_deps.ensure(FEATURE, prompt=False)
+    def _raise(*_a, **_kw):
+        raise OSError("probe broke")
 
-    assert "managed" not in excinfo.value.reason.lower()
+    monkeypatch.setattr(sysconfig, "get_paths", _raise)
+
+    assert lazy_deps._site_packages_writable() is True

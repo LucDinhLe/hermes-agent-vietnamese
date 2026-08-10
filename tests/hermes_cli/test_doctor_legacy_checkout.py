@@ -23,7 +23,7 @@ def embedded_context(tmp_path, monkeypatch):
     """Running tree = sealed desktop-app; legacy checkout at the managed root."""
     bundle = tmp_path / "bundle" / "repo"
     bundle.mkdir(parents=True)
-    (bundle / ".hermes_build_info.json").write_text(
+    (bundle / "install-stamp.json").write_text(
         json.dumps({"commit": "a" * 40, "distribution": "desktop-app"})
     )
     import hermes_cli.main as hermes_main

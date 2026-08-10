@@ -29,7 +29,7 @@ class TestRuntimeTree:
         assert isinstance(runtime_tree(tmp_path), GitCheckout)
 
     def test_a_gitless_tree_is_sealed_with_the_stamped_steward(self, tmp_path):
-        (tmp_path / ".hermes_build_info.json").write_text(
+        (tmp_path / "install-stamp.json").write_text(
             json.dumps({"commit": "a" * 40, "distribution": "desktop-app"})
         )
         tree = runtime_tree(tmp_path)
@@ -42,7 +42,7 @@ class TestRuntimeTree:
         assert tree.steward == "unknown"
 
     def test_a_corrupt_stamp_degrades_to_unknown(self, tmp_path):
-        (tmp_path / ".hermes_build_info.json").write_text("{not json")
+        (tmp_path / "install-stamp.json").write_text("{not json")
         tree = runtime_tree(tmp_path)
         assert isinstance(tree, Sealed)
         assert tree.steward == "unknown"

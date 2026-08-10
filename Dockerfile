@@ -41,19 +41,21 @@ RUN apt-get -o Acquire::Retries=3 update && \
     make install
 
 # ---------- Install stamp stages ----------
-# CI pre-builds install-stamp.json (scripts/write_install_stamp.py) with full
-# git provenance before `docker build`. The stamp is COPY'd into the image
-# so version_info.py can read it at runtime — .dockerignore excludes .git,
-# so no commit is resolvable inside the image.
+# CI pre-builds install-stamp.json (scripts/write_install_stamp.py,
+# --distribution docker) with full git provenance before `docker build`.
+# The stamp is COPY'd into the image so version_info.py and
+# detect_install_method() can read it at runtime — .dockerignore excludes
+# .git, so no commit is resolvable inside the image, and the stamp's
+# `distribution` field is the only install-method marker the image carries.
 #
-# The stamp arrives via the bulk `COPY . .` below as /opt/hermes/install-stamp.json.
-# A late RUN moves it to the canonical
-# .hermes_build_info.json path so a stamp change does not invalidate the docker cache for
-# the expensive build layers above — only the final metadata layer
-# changes when the stamp changes.
+# The stamp arrives via the bulk `COPY . .` below as
+# /opt/hermes/install-stamp.json — already at its canonical, code-scoped
+# path. It lives next to the code (NOT in $HERMES_HOME) so a host install
+# sharing the bind-mounted data volume can never read the container's
+# provenance as its own.
 #
-# If the file is absent (local `docker build` without CI), the mv is
-# a no-op and runtime falls through to "unknown" source with no crash.
+# If the file is absent (local `docker build` without CI), runtime falls
+# through to "unknown" provenance with no crash.
 
 # ---------- Base image ----------
 FROM ghcr.io/astral-sh/uv:0.11.6-python3.13-trixie@sha256:b3c543b6c4f23a5f2df22866bd7857e5d304b67a564f4feab6ac22044dde719b AS uv_source
@@ -307,29 +309,25 @@ COPY --link --chmod=a+rX,go-w . .
 # resolution or downloads.
 RUN uv pip install --no-cache-dir --no-deps -e "."
 
-# Wire the exec shim and install-method stamp.  Files under /opt/hermes are
+# Wire the exec shim.  Files under /opt/hermes are
 # already root-owned (COPY, uv sync, npm install all run as root) and
 # read-only for the hermes user (go-w from the --chmod above).
 
 USER root
 RUN mkdir -p /opt/hermes/bin && \
     cp /opt/hermes/docker/hermes-exec-shim.sh /opt/hermes/bin/hermes && \
-    chmod 0755 /opt/hermes/bin/hermes && \
-    printf 'docker\n' > /opt/hermes/.install_method
+    chmod 0755 /opt/hermes/bin/hermes
 
-# Move the pre-built install stamp (if CI provided one) to the canonical
-# path. Placed late so a stamp change does not invalidate the docker cache for
-# the expensive build layers above — only this final layer re-runs.
-# If install-stamp.json is absent (local build without CI), this is a no-op.
-RUN if [ -f /opt/hermes/install-stamp.json ] && grep -q '"commit"' /opt/hermes/install-stamp.json; then \
-        mv /opt/hermes/install-stamp.json /opt/hermes/.hermes_build_info.json; \
+# Guarantee the code-scoped install stamp exists. CI COPY'd a full-provenance
+# install-stamp.json in the bulk COPY above; a local build without CI gets a
+# minimal fallback so detect_install_method() still reads `docker` from the
+# `distribution` field. The stamp lives next to the code (NOT in $HERMES_HOME,
+# a shared data volume that may be bind-mounted from a host that has its own
+# install) — see hermes_cli/runtime_tree.py.
+RUN if [ ! -f /opt/hermes/install-stamp.json ]; then \
+        printf '{"schemaVersion":2,"commit":"0000000000000000000000000000000000000000","distribution":"docker","source":"fallback"}\n' \
+            > /opt/hermes/install-stamp.json; \
     fi
-# The ``.install_method`` stamp is baked next to the running code (the install
-# tree), NOT into $HERMES_HOME. $HERMES_HOME (/opt/data) is a shared data
-# volume that is commonly bind-mounted from the host and even shared with a
-# host-side Desktop/CLI install; stamping it at boot used to clobber that
-# host install's marker and wrongly block its ``hermes update``. A code-scoped
-# stamp is read first by detect_install_method() and is immune to the share.
 # Start as root so the s6-overlay stage2 hook can usermod/groupmod and chown
 # the data volume. Each supervised service then drops to the hermes user via
 # `s6-setuidgid hermes` in its run script. If HERMES_UID is unset, services

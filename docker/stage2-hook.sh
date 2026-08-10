@@ -395,19 +395,13 @@ as_hermes mkdir -p \
     "$HERMES_HOME/platforms/pairing" \
     "$HERMES_HOME/lazy-packages"
 
-# --- Install-method stamp ---
-# The 'docker' stamp is baked into the immutable install tree at
-# /opt/hermes/.install_method (see Dockerfile), NOT written here into
-# $HERMES_HOME. detect_install_method() reads the code-scoped stamp first.
-#
-# Why we no longer stamp $HERMES_HOME: it is a shared DATA volume, commonly
-# bind-mounted from the host (~/.hermes:/opt/data) and sometimes shared with a
-# host-side Desktop/CLI install. Stamping 'docker' here clobbered that host
-# install's marker, so its in-app updater read 'docker' and refused to run
-# 'hermes update'. To heal homes already poisoned by older images, remove a
-# stale 'docker' stamp from $HERMES_HOME if one is present (the host install's
-# own installer re-creates its code-scoped stamp; a genuine container relies on
-# the baked /opt/hermes stamp, so deleting the data-dir copy is safe).
+# --- Legacy home-scoped stamp cleanup ---
+# Install provenance is code-scoped now (/opt/hermes/install-stamp.json;
+# see hermes_cli/runtime_tree.py) and nothing reads $HERMES_HOME/.install_method
+# anymore. Older images DID stamp 'docker' into $HERMES_HOME on every boot —
+# and $HERMES_HOME is a shared data volume, commonly bind-mounted from the
+# host (~/.hermes:/opt/data) and sometimes shared with a host-side
+# Desktop/CLI install. Remove the stale marker so those homes end up clean.
 if [ -f "$HERMES_HOME/.install_method" ]; then
     stamped="$(tr -d '[:space:]' < "$HERMES_HOME/.install_method" 2>/dev/null || true)"
     if [ "$stamped" = "docker" ]; then

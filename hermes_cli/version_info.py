@@ -4,7 +4,7 @@
 suffix only when it can prove the number of commits since that release.
 
 Resolution order:
-1. Install stamp (``.hermes_build_info.json``) — written at build time by
+1. Install stamp (``install-stamp.json``) — written at build time by
    ``scripts/write_install_stamp.py`` for every packager (Docker, Nix, and
    the desktop app). The stamp is authoritative
    for packaged builds.
@@ -34,7 +34,7 @@ class VersionInfo:
     source: Literal["build", "ci", "docker", "fallback", "git", "local", "nix", "unknown"]
     dirty: bool = False
     commit_date: int | None = None
-    distribution: Literal["docker", "nix"] | None = None
+    distribution: Literal["docker", "nix", "desktop-app"] | None = None
 
 
 def _derived_version(base_version: str, distance: int | None, dirty: bool = False) -> str:
@@ -91,7 +91,9 @@ def _resolve_stamp_file() -> Path | None:
         p = Path(override)
         return p if p.is_file() else None
     # Source/Docker: next to the code root.
-    p = Path(__file__).parent.parent / ".hermes_build_info.json"
+    from hermes_cli.runtime_tree import BUILD_INFO_NAME
+
+    p = Path(__file__).parent.parent / BUILD_INFO_NAME
     return p if p.is_file() else None
 
 
@@ -129,7 +131,7 @@ def _stamp_version_info() -> VersionInfo | None:
         else "build"
     )
     distribution = data.get("distribution")
-    if distribution not in {"docker", "nix"}:
+    if distribution not in {"docker", "nix", "desktop-app"}:
         distribution = None
 
     commit_date = data.get("commitDate")

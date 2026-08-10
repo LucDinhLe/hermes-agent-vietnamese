@@ -345,7 +345,7 @@ function stageRepo(tag, outDir) {
   run("uv", [
     "run", "--no-project", "--python", "3",
     path.join(repoDir, "scripts", "write_install_stamp.py"),
-    "--output", path.join(repoDir, ".hermes_build_info.json"),
+    "--output", path.join(repoDir, "install-stamp.json"),
     "--commit", commit,
     "--commit-date", commitDate,
     "--base-version", tag.slice(1),

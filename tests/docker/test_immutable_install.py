@@ -1,12 +1,12 @@
-"""Runtime smoke tests for Docker immutable install tree and install-method stamp.
+"""Runtime smoke tests for Docker immutable install tree and install stamp.
 
 Build the real image and verify at runtime:
 
   1. /opt/hermes is not writable by the hermes user (immutable install tree)
   2. PYTHONDONTWRITEBYTECODE and HERMES_DISABLE_LAZY_INSTALLS are set
-  3. /opt/hermes/.install_method contains "docker" (code-scoped stamp)
-  4. $HERMES_HOME/.install_method is NOT stamped as "docker" by stage2
-  5. A stale "docker" stamp in $HERMES_HOME is healed (removed) on boot
+  3. /opt/hermes/install-stamp.json exists with distribution "docker"
+  4. A stale legacy "docker" .install_method in $HERMES_HOME is healed
+     (removed) on boot
 """
 from __future__ import annotations
 
@@ -74,6 +74,22 @@ def test_hermes_disable_lazy_installs_and_dont_write_bytecode(
     )
 
 
+
+
+def test_code_scoped_stamp_identifies_docker(
+    built_image: str, container_name: str,
+) -> None:
+    """/opt/hermes/install-stamp.json must say distribution "docker"."""
+    start_container(built_image, container_name)
+
+    r = docker_exec_sh(
+        container_name,
+        "cat /opt/hermes/install-stamp.json",
+        timeout=10,
+    )
+    assert '"distribution":"docker"' in r.stdout.replace(" ", ""), (
+        f"install-stamp.json must carry distribution=docker: {r.stdout}"
+    )
 
 
 def test_stale_docker_stamp_in_home_is_healed_on_boot(

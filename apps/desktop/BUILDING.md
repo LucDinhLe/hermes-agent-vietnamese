@@ -16,7 +16,7 @@ The installer contains:
 - `uv` and a CPython interpreter for the target architecture.
 - A ready `site-packages` tree, built from the lockfile.
 - A Node runtime and the prebuilt JS surfaces (ui-tui, dashboard SPA).
-- A build stamp (`.hermes_build_info.json`) that records the tag, the commit,
+- A build stamp (`install-stamp.json`) that records the tag, the commit,
   and the distribution (`desktop-app`).
 
 The app runs the backend directly from its own resources. This is the

@@ -48,7 +48,7 @@ let
   releaseRevCountMatch = if releaseRevCountLine == null then null else builtins.match ".*= ([0-9]+)" releaseRevCountLine;
   releaseRevCount = if releaseRevCountMatch == null then null else builtins.fromJSON (builtins.elemAt releaseRevCountMatch 0);
 
-  # Install stamp values — written to .hermes_build_info.json so the Python
+  # Install stamp values — written to install-stamp.json so the Python
   # runtime (CLI, TUI) reads one file instead of env vars or .git probes.
   stampDistance = if revCount != null && releaseRevCount != null then lib.trivial.max 0 (revCount - releaseRevCount) else null;
   stampDisplayVersion =
@@ -201,7 +201,7 @@ stdenv.mkDerivation (finalAttrs: {
     # Write the canonical install stamp. version_info.py reads this at
     # runtime instead of probing env vars or .git — one file, one source
     # of truth for the Python runtime (CLI, TUI).
-    cat > $out/share/hermes-agent/.hermes_build_info.json <<STAMP
+    cat > $out/share/hermes-agent/install-stamp.json <<STAMP
     {"schemaVersion":2,"commit":${builtins.toJSON rev},"commitDate":${builtins.toJSON lastModified},"branch":${builtins.toJSON branch},"baseVersion":"${version}","displayVersion":"${stampDisplayVersion}","distance":${builtins.toJSON stampDistance},"dirty":${if dirty then "true" else "false"},"source":"nix","distribution":"nix"}
     STAMP
 
@@ -218,7 +218,7 @@ stdenv.mkDerivation (finalAttrs: {
           --set HERMES_TUI_DIR $out/ui-tui \
           --set HERMES_PYTHON ${hermesVenv}/bin/python3 \
           --set HERMES_NODE ${lib.getExe hermesNpmLib.nodejs} \
-          --set HERMES_BUILD_INFO $out/share/hermes-agent/.hermes_build_info.json${lib.optionalString (extraPythonPackages != [ ]) " \\
+          --set HERMES_BUILD_INFO $out/share/hermes-agent/install-stamp.json${lib.optionalString (extraPythonPackages != [ ]) " \\
           --suffix PYTHONPATH : \"${pythonPath}\""}
       '')
       [

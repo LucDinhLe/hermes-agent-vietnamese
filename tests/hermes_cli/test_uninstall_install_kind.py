@@ -61,7 +61,7 @@ def _fake_project_root(monkeypatch, tmp_path: Path, *, git: bool, distribution: 
     if git:
         (root / ".git").mkdir()
     if distribution is not None:
-        (root / ".hermes_build_info.json").write_text(json.dumps({"distribution": distribution}))
+        (root / "install-stamp.json").write_text(json.dumps({"distribution": distribution}))
     monkeypatch.setattr(un, "get_project_root", lambda: root)
     return root
 
@@ -163,7 +163,7 @@ def test_run_data_uninstall_removes_electron_userdata(monkeypatch, tmp_path):
 def test_run_data_uninstall_works_on_sealed_trees(monkeypatch, tmp_path):
     # The whole point of the data mode: no code-removal gate applies.
     home = _make_home(tmp_path)
-    (home / "hermes-agent" / ".hermes_build_info.json").write_text(json.dumps({"distribution": "nix"}))
+    (home / "hermes-agent" / "install-stamp.json").write_text(json.dumps({"distribution": "nix"}))
     monkeypatch.setattr(un, "get_hermes_home", lambda: home)
     import hermes_cli.gui_uninstall as gu
 

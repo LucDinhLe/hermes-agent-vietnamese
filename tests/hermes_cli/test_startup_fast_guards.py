@@ -97,10 +97,15 @@ def test_fast_version_parity_on_termux(tmp_path):
     assert "Traceback" not in result.stderr
 
 
-def test_fast_version_reports_install_method_stamp(tmp_path):
+def test_fast_version_reports_derived_install_method(tmp_path):
+    """The fast path derives the method from the code tree it runs from.
+
+    The test subprocess runs from this repo checkout, which sits outside
+    the managed install roots (HERMES_HOME points at a tmp dir) — so a
+    .git tree there must report "source".
+    """
     home = tmp_path / ".hermes"
     home.mkdir()
-    (home / ".install_method").write_text("git\n", encoding="utf-8")
     result = _run_version({"HERMES_HOME": str(home), "TERMUX_VERSION": ""})
     assert result.returncode == 0, result.stderr
-    assert "Install method: git" in result.stdout
+    assert "Install method: source" in result.stdout
