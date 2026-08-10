@@ -280,6 +280,19 @@ jobs:
           fi
           node scripts/build-bundled-desktop.mjs --tag="$HERMES_BUNDLE_TAG"
 
+      # Every native binary in the unpacked app must match the target
+      # arch. Wrong-arch binaries run FINE on the runners (Windows-on-ARM
+      # and Rosetta emulate x64 silently) and ship broken or slow — an
+      # x64 pip launcher shim inside the arm64 payload made it into a
+      # release exactly this way. The audit fails the job and names the
+      # offending files before anything uploads.
+      - name: Audit bundle architecture
+        shell: bash
+        run: |
+          MATRIX_LABEL="${{ matrix.label }}"
+          node apps/desktop/scripts/audit-bundle-arch.mjs \
+            --arch="${MATRIX_LABEL##*-}" --root=apps/desktop/release
+
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
