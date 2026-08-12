@@ -7,7 +7,7 @@
 **Bản địa hóa cộng đồng giúp người Việt không thạo tiếng Anh có thể cài đặt, cấu hình và sử dụng Hermes Agent dễ dàng hơn.**
 
 <p align="center">
-  <a href="https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-4"><img src="https://img.shields.io/badge/Bản_thử_nghiệm-Windows_%7C_macOS_%7C_Linux-F97316?style=for-the-badge" alt="Tải bản thử nghiệm đa nền tảng"></a>
+  <a href="https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-5"><img src="https://img.shields.io/badge/Bản_thử_nghiệm-Windows_%7C_macOS_%7C_Linux-F97316?style=for-the-badge" alt="Tải bản thử nghiệm đa nền tảng"></a>
   <a href="README.vi.md"><img src="https://img.shields.io/badge/Hướng_dẫn-Tiếng_Việt-DC2626?style=for-the-badge" alt="Hướng dẫn tiếng Việt"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/Giấy_phép-MIT-16A34A?style=for-the-badge" alt="Giấy phép MIT"></a>
 </p>
@@ -25,7 +25,7 @@ Bản cộng đồng hiện cung cấp:
 - Cơ chế đăng nhập bằng tài khoản AI của từng người. Bộ cài không chứa tài khoản, khóa API hoặc dữ liệu của người đóng gói.
 
 - 👉 **[Đọc hướng dẫn và chọn đúng bộ cài](README.vi.md)**
-- 👉 **[Tải bản thử nghiệm đa nền tảng](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-4)**
+- 👉 **[Tải bản thử nghiệm đa nền tảng](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-5)**
 - 👉 **[Báo lỗi hoặc đề xuất bản dịch](https://github.com/LucDinhLe/hermes-agent-vietnamese/issues)**
 
 ## Hermes có thể làm gì?
@@ -45,7 +45,7 @@ Tài liệu kỹ thuật đầy đủ của dự án gốc nằm tại [hermes-a
 
 ## Cài đặt nhanh
 
-1. Mở [bản thử nghiệm đa nền tảng hiện tại](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-4).
+1. Mở [bản thử nghiệm đa nền tảng hiện tại](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-5).
 2. Chọn tệp đúng với hệ điều hành và kiến trúc máy.
 3. Đối chiếu mã SHA-256 nếu hệ điều hành hiện cảnh báo.
 4. Cài ứng dụng, chọn nhà cung cấp mô hình rồi đăng nhập bằng tài khoản của bạn.
