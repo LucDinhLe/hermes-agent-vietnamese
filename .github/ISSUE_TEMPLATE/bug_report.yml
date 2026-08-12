@@ -1,83 +1,84 @@
-name: "🐛 Bug Report"
-description: Report a bug — something that's broken, crashes, or behaves incorrectly.
-title: "[Bug]: "
-labels: ["bug"]
+name: '🐛 Báo lỗi'
+description: Báo ứng dụng bị hỏng, văng hoặc hoạt động không đúng.
+title: '[Lỗi]: '
+labels: ['bug']
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a bug! Please fill out the sections below so we can reproduce and fix it quickly.
+        Cảm ơn bạn đã báo lỗi. Vui lòng cung cấp đủ thông tin để chúng tôi có thể tái hiện và xử lý nhanh hơn.
 
-        **Before submitting**, please:
-        - [ ] Search [existing issues](https://github.com/NousResearch/hermes-agent/issues) to avoid duplicates
-        - [ ] Update to the latest version (`hermes update`) and confirm the bug still exists
-        - [ ] Run `hermes debug share` and paste the links below (see Debug Report section)
+        **Trước khi gửi:**
+        - [ ] Tìm trong [các lỗi đã được báo](https://github.com/LucDinhLe/hermes-agent-vietnamese/issues) để tránh trùng lặp
+        - [ ] Cập nhật lên bản mới nhất và xác nhận lỗi vẫn còn
+        - [ ] Nếu có thể, chạy `hermes debug share --local`, xóa thông tin nhạy cảm rồi dán phần liên quan vào Báo cáo chẩn đoán
 
   - type: textarea
     id: description
     attributes:
-      label: Bug Description
-      description: A clear description of what's broken. Include error messages, tracebacks, or screenshots if relevant.
+      label: Mô tả lỗi
+      description: Mô tả rõ phần bị lỗi. Kèm thông báo lỗi, truy vết hoặc ảnh chụp màn hình nếu có.
       placeholder: |
-        What happened? What did you expect to happen instead?
+        Điều gì đã xảy ra? Bạn mong đợi ứng dụng hoạt động thế nào?
     validations:
       required: true
 
   - type: textarea
     id: reproduction
     attributes:
-      label: Steps to Reproduce
-      description: Minimal steps to trigger the bug. The more specific, the faster we can fix it.
+      label: Các bước tái hiện
+      description: Các bước ngắn nhất làm lỗi xuất hiện. Thông tin càng cụ thể thì việc sửa càng nhanh.
       placeholder: |
-        1. Run `hermes chat`
-        2. Send the message "..."
-        3. Agent calls tool X
-        4. Error appears: ...
+        1. Mở Hermes
+        2. Gửi nội dung "..."
+        3. AI agent gọi công cụ X
+        4. Lỗi xuất hiện: ...
     validations:
       required: true
 
   - type: textarea
     id: expected
     attributes:
-      label: Expected Behavior
-      description: What should have happened instead?
+      label: Kết quả mong đợi
+      description: Ứng dụng lẽ ra phải hoạt động thế nào?
     validations:
       required: true
 
   - type: textarea
     id: actual
     attributes:
-      label: Actual Behavior
-      description: What actually happened? Include full error output if available.
+      label: Kết quả thực tế
+      description: Điều gì thực sự xảy ra? Dán toàn bộ thông báo lỗi nếu có.
     validations:
       required: true
 
   - type: dropdown
     id: component
     attributes:
-      label: Affected Component
-      description: Which part of Hermes is affected?
+      label: Thành phần bị ảnh hưởng
+      description: Phần nào của Hermes gặp lỗi?
       multiple: true
       options:
-        - CLI (interactive chat)
+        - Giao diện Desktop
+        - CLI (trò chuyện trong dòng lệnh)
         - Gateway (Telegram/Discord/Slack/WhatsApp)
-        - Setup / Installation
-        - Tools (terminal, file ops, web, code execution, etc.)
-        - Skills (skill loading, skill hub, skill guard)
-        - Agent Core (conversation loop, context compression, memory)
-        - Configuration (config.yaml, .env, hermes setup)
-        - Other
+        - Thiết lập / Cài đặt
+        - Công cụ (terminal, tệp, web, thực thi mã, v.v.)
+        - Kỹ năng (tải kỹ năng, Skills Hub, kiểm soát kỹ năng)
+        - Lõi AI agent (hội thoại, nén ngữ cảnh, bộ nhớ)
+        - Cấu hình (config.yaml, .env, hermes setup)
+        - Khác
     validations:
       required: true
 
   - type: dropdown
     id: platform
     attributes:
-      label: Messaging Platform (if gateway-related)
-      description: Which platform adapter is affected?
+      label: Nền tảng nhắn tin (nếu liên quan Gateway)
+      description: Nền tảng nào bị ảnh hưởng?
       multiple: true
       options:
-        - N/A (CLI only)
+        - Không áp dụng
         - Telegram
         - Discord
         - Slack
@@ -86,27 +87,22 @@ body:
   - type: textarea
     id: debug-report
     attributes:
-      label: Debug Report
+      label: Báo cáo chẩn đoán
       description: |
-        Run `hermes debug share` from your terminal and paste the links it prints here.
-        This uploads your system info, config, and recent logs to a paste service automatically.
+        Ưu tiên chạy `hermes debug share --local`, kiểm tra và xóa khóa API, mã OAuth, đường dẫn riêng tư hoặc dữ liệu cá nhân trước khi dán phần liên quan vào đây.
 
-        If you're in an interactive chat session, you can also use the `/debug` slash command — it does the same thing.
-
-        If the upload fails, run `hermes debug share --local` and paste the output directly.
+        Chỉ dùng `hermes debug share` khi bạn hiểu nội dung nào sẽ được tải lên dịch vụ chia sẻ văn bản. Không đăng bí mật trong issue công khai.
       placeholder: |
         Report   https://paste.rs/abc123
         agent.log   https://paste.rs/def456
         gateway.log   https://paste.rs/ghi789
       render: shell
-    validations:
-      required: true
 
   - type: input
     id: os
     attributes:
-      label: Operating System
-      description: e.g. Ubuntu 24.04, macOS 15.2, Windows 11
+      label: Hệ điều hành
+      description: Ví dụ Ubuntu 24.04, macOS 15.2 hoặc Windows 11
       placeholder: Ubuntu 24.04
     validations:
       required: true
@@ -114,33 +110,33 @@ body:
   - type: input
     id: python-version
     attributes:
-      label: Python Version
-      description: Output of `python --version`
-      placeholder: "3.11.9"
+      label: Phiên bản Python
+      description: Kết quả của lệnh `python --version`
+      placeholder: '3.11.9'
 
   - type: input
     id: hermes-version
     attributes:
-      label: Hermes Version
-      description: Output of `hermes version`
-      placeholder: "2.1.0"
+      label: Phiên bản Hermes
+      description: Kết quả của lệnh `hermes version`
+      placeholder: '2.1.0'
 
   - type: textarea
     id: logs
     attributes:
-      label: Additional Logs / Traceback (optional)
+      label: Nhật ký / truy vết bổ sung (không bắt buộc)
       description: |
-        The debug report above covers most logs. Use this field for any extra error output, 
-        tracebacks, or screenshots not captured by `hermes debug share`.
+        Báo cáo chẩn đoán phía trên đã có phần lớn nhật ký. Dùng ô này cho thông báo lỗi,
+        truy vết hoặc ảnh chụp chưa có trong kết quả `hermes debug share`.
       render: shell
 
   - type: textarea
     id: root-cause
     attributes:
-      label: Root Cause Analysis (optional)
+      label: Phân tích nguyên nhân gốc (không bắt buộc)
       description: |
-        If you've dug into the code and identified the root cause, share it here.
-        Include file paths, line numbers, and code snippets if possible. This massively speeds up fixes.
+        Nếu bạn đã xem mã nguồn và xác định được nguyên nhân, hãy chia sẻ tại đây.
+        Nêu đường dẫn tệp, số dòng và đoạn mã nếu có thể.
       placeholder: |
         The bug is in `gateway/run.py` line 949. `len(history)` counts session_meta entries
         but `agent_messages` was built from filtered history...
@@ -148,8 +144,8 @@ body:
   - type: textarea
     id: proposed-fix
     attributes:
-      label: Proposed Fix (optional)
-      description: If you have a fix in mind (or a PR ready), describe it here.
+      label: Cách sửa đề xuất (không bắt buộc)
+      description: Nếu bạn đã nghĩ ra cách sửa hoặc có sẵn pull request, hãy mô tả tại đây.
       placeholder: |
         Replace `.get()` with `.pop()` on line 289 of `gateway/platforms/base.py`
         to actually clear the pending message after retrieval.
@@ -157,6 +153,6 @@ body:
   - type: checkboxes
     id: pr-ready
     attributes:
-      label: Are you willing to submit a PR for this?
+      label: Bạn có muốn tự sửa và gửi pull request không?
       options:
-        - label: I'd like to fix this myself and submit a PR
+        - label: Tôi muốn tự sửa lỗi này và gửi pull request
