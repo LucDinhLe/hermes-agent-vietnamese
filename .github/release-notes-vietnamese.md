@@ -9,7 +9,13 @@ Bản cộng đồng đa nền tảng với giao diện tiếng Việt mặc đ�
 - **Mac dùng chip Apple:** `Hermes-Vietnamese-macOS-Apple-Silicon.dmg`
 - **Linux:** chọn `x64` hoặc `arm64`; ưu tiên `.deb` cho Ubuntu/Debian, `.rpm` cho Fedora/RHEL và `.AppImage` khi cần bản chạy độc lập.
 
-Mỗi người đăng nhập OpenAI Codex, Claude Pro/Max, Gemini hoặc nhà cung cấp khác bằng tài khoản của chính mình. Bản dựng không chứa tài khoản, mã OAuth, khóa API hoặc dữ liệu trò chuyện của người đóng gói.
+Mỗi người đăng nhập OpenAI Codex hoặc Claude Pro/Max bằng tài khoản của chính mình. Gemini dùng khóa API Google AI Studio của chính người dùng. Bản dựng không chứa tài khoản, mã OAuth, khóa API hoặc dữ liệu trò chuyện của người đóng gói.
+
+### Cải thiện trong bản vá này
+
+- Danh mục model luôn hiện nút mở rộng và số model của từng nhà cung cấp, kể cả khi nhóm đang thu gọn.
+- Claude Pro/Max hiển thị rõ ba lựa chọn `Sonnet`, `Opus` và `Haiku` sau khi mở rộng.
+- Gemini được ghi rõ là kết nối qua `Google AI Studio (API)`, tránh nhầm với gói thuê bao Gemini hoặc OAuth của Gemini CLI.
 
 ### Bảo mật khi cài
 

@@ -14,6 +14,7 @@ import subprocess
 import threading
 import uuid
 from collections import deque
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Iterator
 
@@ -60,7 +61,23 @@ def resolve_claude_command(command: str | None = None) -> str:
         or os.getenv("HERMES_CLAUDE_CODE_COMMAND", "").strip()
         or "claude"
     )
-    return shutil.which(requested) or requested
+    resolved = shutil.which(requested)
+    if resolved:
+        return resolved
+
+    # The official native installer puts Claude in ~/.local/bin. Desktop
+    # processes launched from Explorer/Finder often inherit a smaller PATH
+    # than an interactive terminal, so a working `claude` command can appear
+    # missing to the Hermes gateway. Only add this fallback for the default
+    # command; explicit overrides must remain authoritative.
+    if not command and not os.getenv("HERMES_CLAUDE_CODE_COMMAND", "").strip():
+        names = ("claude.exe", "claude") if os.name == "nt" else ("claude",)
+        for name in names:
+            candidate = Path.home() / ".local" / "bin" / name
+            if candidate.is_file() and (os.name == "nt" or os.access(candidate, os.X_OK)):
+                return str(candidate)
+
+    return requested
 
 
 def probe_claude_code_auth(command: str | None = None, *, timeout: float = 15.0) -> dict[str, Any]:

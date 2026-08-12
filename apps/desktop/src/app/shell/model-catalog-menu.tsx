@@ -363,6 +363,7 @@ export function ModelCatalogMenu({
             return (
               <DropdownMenuGroup className="py-0.5" key={slug}>
                 <DropdownMenuItem
+                  aria-expanded={!collapsed}
                   className="group/label flex w-full items-center gap-1 px-2 pb-0.5 pt-0.5 text-[0.625rem] font-semibold uppercase tracking-wider text-(--ui-text-tertiary) cursor-pointer !bg-transparent focus:!bg-transparent"
                   onSelect={event => {
                     event.preventDefault()
@@ -373,8 +374,11 @@ export function ModelCatalogMenu({
                   <span className="truncate">
                     <HighlightMatches query={search} text={group.provider.name} />
                   </span>
+                  <span aria-hidden className="shrink-0 font-mono font-normal normal-case tracking-normal">
+                    · {group.families.length}
+                  </span>
                   <DisclosureCaret
-                    className="shrink-0 text-(--ui-text-tertiary) opacity-0 transition group-hover/label:opacity-100"
+                    className="shrink-0 text-(--ui-text-tertiary)"
                     open={!collapsed}
                     size="0.625rem"
                   />

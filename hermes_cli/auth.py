@@ -275,7 +275,7 @@ PROVIDER_REGISTRY: Dict[str, ProviderConfig] = {
     ),
     "gemini": ProviderConfig(
         id="gemini",
-        name="Google AI Studio",
+        name="Google AI Studio (API)",
         auth_type="api_key",
         inference_base_url="https://generativelanguage.googleapis.com/v1beta",
         api_key_env_vars=("GOOGLE_API_KEY", "GEMINI_API_KEY"),

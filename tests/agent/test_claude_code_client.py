@@ -81,6 +81,17 @@ def test_subscription_environment_does_not_leak_other_provider_or_gateway_secret
     assert "TELEGRAM_BOT_TOKEN" not in env
 
 
+def test_resolve_claude_command_finds_native_user_install_outside_path(monkeypatch, tmp_path):
+    native = tmp_path / ".local" / "bin" / ("claude.exe" if bridge.os.name == "nt" else "claude")
+    native.parent.mkdir(parents=True)
+    native.write_text("", encoding="utf-8")
+    native.chmod(0o755)
+    monkeypatch.setattr(bridge.shutil, "which", lambda *_: None)
+    monkeypatch.setattr(bridge.Path, "home", lambda: tmp_path)
+
+    assert bridge.resolve_claude_command() == str(native)
+
+
 def test_auth_probe_accepts_only_first_party_claude_subscription(monkeypatch):
     completed = type(
         "Completed",
