@@ -8,7 +8,7 @@ Mã nguồn gốc thuộc Nous Research và được phân phối theo giấy ph
 
 ## Bắt đầu nhanh
 
-1. Mở [bản thử nghiệm đa nền tảng hiện tại](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-4).
+1. Mở [bản thử nghiệm đa nền tảng hiện tại](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-5).
 2. Chọn tệp đúng hệ điều hành và kiến trúc theo bảng bên dưới.
 3. Đối chiếu mã SHA-256 nếu hệ điều hành hiện cảnh báo.
 4. Cài ứng dụng, chọn nhà cung cấp mô hình và đăng nhập bằng tài khoản của bạn.
@@ -36,7 +36,7 @@ Dự án Hermes gốc chưa công bố ngưỡng RAM, CPU và dung lượng tr�
 
 ## Cài đặt trên Windows
 
-1. Mở [bản thử nghiệm đa nền tảng hiện tại](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-4).
+1. Mở [bản thử nghiệm đa nền tảng hiện tại](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-5).
 2. Tải bộ cài `x64` hoặc `arm64` đúng với **Loại hệ thống** của máy.
 3. Chạy bộ cài và mở Hermes.
 4. Ở lần mở đầu tiên, chờ Hermes tải môi trường chạy. Quá trình này cần Internet và có thể mất vài phút.
