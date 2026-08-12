@@ -66,19 +66,38 @@ test('requires both macOS Apple Silicon distribution files', () => {
   )
 })
 
-test('requires AppImage, deb and rpm for each Linux architecture', () => {
-  const { outputDir, releaseDir } = fixture()
-  for (const extension of ['.AppImage', '.deb', '.rpm']) {
-    writeArtifact(releaseDir, `Hermes-0.17.0-linux-arm64${extension}`)
+test('maps electron-builder Linux architecture names for every package format', () => {
+  const fixtures = [
+    {
+      arch: 'x64',
+      sourceNames: [
+        'Hermes-0.17.0-linux-x86_64.AppImage',
+        'Hermes-0.17.0-linux-amd64.deb',
+        'Hermes-0.17.0-linux-x86_64.rpm'
+      ]
+    },
+    {
+      arch: 'arm64',
+      sourceNames: [
+        'Hermes-0.17.0-linux-arm64.AppImage',
+        'Hermes-0.17.0-linux-arm64.deb',
+        'Hermes-0.17.0-linux-aarch64.rpm'
+      ]
+    }
+  ]
+
+  for (const { arch, sourceNames } of fixtures) {
+    const { outputDir, releaseDir } = fixture()
+    for (const sourceName of sourceNames) writeArtifact(releaseDir, sourceName)
+
+    const result = collectCommunityArtifacts({ arch, outputDir, platform: 'linux', releaseDir })
+
+    assert.deepEqual(result.copied.map(file => path.basename(file)).sort(), [
+      `Hermes-Vietnamese-Linux-${arch}.AppImage`,
+      `Hermes-Vietnamese-Linux-${arch}.deb`,
+      `Hermes-Vietnamese-Linux-${arch}.rpm`
+    ])
   }
-
-  const result = collectCommunityArtifacts({ arch: 'arm64', outputDir, platform: 'linux', releaseDir })
-
-  assert.deepEqual(result.copied.map(file => path.basename(file)).sort(), [
-    'Hermes-Vietnamese-Linux-arm64.AppImage',
-    'Hermes-Vietnamese-Linux-arm64.deb',
-    'Hermes-Vietnamese-Linux-arm64.rpm'
-  ])
 })
 
 test('combined checksums are deterministic and exclude checksum files', () => {
