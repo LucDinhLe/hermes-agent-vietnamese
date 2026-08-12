@@ -122,6 +122,7 @@ export function ModelVisibilityDialog({
                 <div className="py-0.5" key={provider.slug}>
                   <div className="flex items-center gap-2 px-3 pb-0.5 pt-1">
                     <button
+                      aria-expanded={!collapsed}
                       className="group/label flex w-full items-center gap-1 pb-0.5 pt-0.5 text-left text-[0.625rem] font-semibold uppercase tracking-wider text-(--ui-text-tertiary) hover:bg-transparent"
                       onClick={() => toggleCollapsedProvider(provider.slug)}
                       type="button"
@@ -129,8 +130,11 @@ export function ModelVisibilityDialog({
                       <span className="min-w-0 truncate">
                         <HighlightMatches query={search} text={provider.name} />
                       </span>
+                      <span aria-hidden className="shrink-0 font-mono font-normal normal-case tracking-normal">
+                        · {allFamilies.length}
+                      </span>
                       <DisclosureCaret
-                        className="shrink-0 opacity-0 transition group-hover/label:opacity-100"
+                        className="shrink-0"
                         open={!collapsed}
                         size="0.625rem"
                       />

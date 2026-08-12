@@ -83,7 +83,7 @@ export const PROVIDER_GROUPS: ProviderPrefix[] = [
   {
     prefix: 'GOOGLE_',
     name: 'Gemini',
-    description: 'Google AI Studio (Gemini 1.5 / 2.0 / 2.5)',
+    description: 'Google AI Studio API (Gemini)',
     docsUrl: 'https://aistudio.google.com/app/apikey',
     priority: 4
   },
