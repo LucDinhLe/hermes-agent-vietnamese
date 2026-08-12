@@ -50,6 +50,68 @@ describe('external provider sign-in', () => {
     expect($terminalTakeover.get()).toBe(true)
     expect($terminalInjection.get()).toBe('claude auth login')
   })
+
+  it('selects an already signed-in external provider without reopening login', async () => {
+    const claude = {
+      ...externalProvider('claude-code', 'claude auth login'),
+      name: 'Claude Pro / Max',
+      status: { logged_in: true }
+    }
+    const calls: { body?: unknown; path: string }[] = []
+
+    installApiMock(async ({ body, path }: { body?: unknown; path: string }) => {
+      calls.push({ body, path })
+
+      if (path.startsWith('/api/model/options')) {
+        return {
+          providers: [{ name: 'Claude Pro / Max', slug: 'claude-code', models: ['sonnet', 'opus', 'haiku'] }]
+        }
+      }
+
+      if (path.startsWith('/api/model/recommended-default?')) {
+        return { provider: 'claude-code', model: 'sonnet' }
+      }
+
+      if (path === '/api/model/set') {
+        return { ok: true, provider: 'claude-code', model: 'sonnet', gateway_tools: [] }
+      }
+
+      throw new Error(`unexpected api path: ${path}`)
+    })
+
+    const requestGateway: OnboardingContext['requestGateway'] = async (method, params) => {
+      if (method === 'reload.env') {
+        return {} as never
+      }
+
+      if (method === 'setup.status') {
+        return { provider_configured: true } as never
+      }
+
+      if (method === 'setup.runtime_check') {
+        expect(params).toEqual({ provider: 'claude-code' })
+
+        return { ok: true, provider: 'claude-code' } as never
+      }
+
+      throw new Error(`unexpected gateway method: ${method}`)
+    }
+
+    await startProviderOAuth(claude, onboardingContext(requestGateway))
+
+    expect($terminalTakeover.get()).toBe(false)
+    expect($terminalInjection.get()).toBeNull()
+    expect($desktopOnboarding.get().flow).toMatchObject({
+      status: 'confirming_model',
+      providerSlug: 'claude-code',
+      currentModel: 'sonnet'
+    })
+    expect(calls.find(call => call.path === '/api/model/set')?.body).toMatchObject({
+      scope: 'main',
+      provider: 'claude-code',
+      model: 'sonnet'
+    })
+  })
 })
 
 function baseState(overrides: Partial<DesktopOnboardingState> = {}): DesktopOnboardingState {
