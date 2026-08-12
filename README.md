@@ -52,6 +52,8 @@ Tài liệu kỹ thuật đầy đủ của dự án gốc nằm tại [hermes-a
 
 Hướng dẫn riêng cho Windows, macOS, Linux, SmartScreen và Gatekeeper được trình bày trong [README tiếng Việt](README.vi.md).
 
+Người chỉ muốn cài Hermes CLI trên Windows có thể dùng trình cài PowerShell của dự án tại [`scripts/install.ps1`](scripts/install.ps1). Người dùng ứng dụng Desktop tiếng Việt nên ưu tiên bộ cài trên trang Bản phát hành để có đúng giao diện và cơ chế cập nhật của bản cộng đồng.
+
 ## Tài khoản và chi phí mô hình
 
 Hermes là phần mềm AI agent, không phải một gói mô hình AI miễn phí. Mỗi người tự đăng nhập hoặc cung cấp khóa API của nhà cung cấp mình chọn:
