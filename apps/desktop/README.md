@@ -83,7 +83,7 @@ npm run dist:linux   # AppImage + deb + rpm
 npm run pack         # unpacked app under release/ (no installer)
 ```
 
-Installers are built and uploaded to GitHub Releases manually. macOS/Windows signing & notarization happen automatically when the relevant credentials are present in the environment (`CSC_LINK` / `CSC_KEY_PASSWORD` / `APPLE_*` for macOS, `WIN_CSC_*` for Windows).
+Installers are built and uploaded to GitHub Releases manually. macOS signing and notarization happen automatically when `CSC_LINK` / `CSC_KEY_PASSWORD` / `APPLE_*` are present. Windows packages in this checkout remain unsigned: `signAndEditExecutable` is deliberately disabled because the winCodeSign extraction path fails on ordinary Windows machines without symlink privileges. A future Windows signing lane must call the system `signtool` directly and verify the resulting signatures before publication.
 
 ### How it works
 

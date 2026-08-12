@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { listPackage } from '@electron/asar'
 
 import PACKAGE_JSON from '../package.json' with { type: 'json' }
+import { packagedAppDirectoryName } from './packaged-layout.mjs'
 
 const MODE = process.argv[2] || 'help'
 const ARCH = process.arch === 'arm64' ? 'arm64' : 'x64'
@@ -19,7 +20,7 @@ const PLATFORM = process.platform
 // launch via install.ps1 / install.sh, per the Phase 1 thin-installer flow).
 const APP = (() => {
   if (PLATFORM === 'darwin') {
-    const appPath = path.join(RELEASE_ROOT, `mac-${ARCH}`, 'Hermes.app')
+    const appPath = path.join(RELEASE_ROOT, packagedAppDirectoryName(PLATFORM, ARCH), 'Hermes.app')
     return {
       appPath,
       binary: path.join(appPath, 'Contents', 'MacOS', 'Hermes'),
@@ -29,7 +30,7 @@ const APP = (() => {
     }
   }
   if (PLATFORM === 'win32') {
-    const unpacked = path.join(RELEASE_ROOT, 'win-unpacked')
+    const unpacked = path.join(RELEASE_ROOT, packagedAppDirectoryName(PLATFORM, ARCH))
     return {
       appPath: unpacked,
       binary: path.join(unpacked, 'Hermes.exe'),
@@ -39,7 +40,7 @@ const APP = (() => {
     }
   }
   // linux unpacked layout matches windows but with different binary name
-  const unpacked = path.join(RELEASE_ROOT, 'linux-unpacked')
+  const unpacked = path.join(RELEASE_ROOT, packagedAppDirectoryName(PLATFORM, ARCH))
   return {
     appPath: unpacked,
     binary: path.join(unpacked, 'Hermes'),
@@ -109,9 +110,7 @@ function ensurePlatformBuilds() {
   if (PLATFORM === 'darwin') return
   if (PLATFORM === 'win32') return
   if (PLATFORM === 'linux') return
-  die(
-    `Desktop bundle validation is only wired for darwin / win32 / linux; platform=${PLATFORM} is not supported.`
-  )
+  die(`Desktop bundle validation is only wired for darwin / win32 / linux; platform=${PLATFORM} is not supported.`)
 }
 
 function ensurePackagedApp() {
@@ -300,9 +299,7 @@ function validateBundle() {
   // to fail loudly rather than re-introduce the 400MB delta we just removed.
   const staleFactoryMarker = path.join(APP.resourcesPath, 'hermes-agent', 'hermes_cli', 'main.py')
   if (exists(staleFactoryMarker)) {
-    die(
-      `Thin-installer regression: factory-payload file should NOT be in the package: ${staleFactoryMarker}`
-    )
+    die(`Thin-installer regression: factory-payload file should NOT be in the package: ${staleFactoryMarker}`)
   }
 
   // Positive assertion: install-stamp.json carries a sane commit + branch
@@ -341,18 +338,14 @@ function validateBundle() {
         `${native.prebuildsDir} nor ${native.buildReleaseDir} exists`
     )
   }
-  const nodeBinaries = nativeBinaryDirs.flatMap(dir =>
-    fs.readdirSync(dir).filter(name => name.endsWith('.node'))
-  )
+  const nodeBinaries = nativeBinaryDirs.flatMap(dir => fs.readdirSync(dir).filter(name => name.endsWith('.node')))
   if (nodeBinaries.length === 0) {
     die(`No .node native binaries found in: ${nativeBinaryDirs.join(', ')}`)
   }
   // Darwin requires a runtime-execed spawn-helper alongside pty.node; missing
   // it manifests as "ENOENT: spawn-helper" on first pty.spawn() call.
   if (PLATFORM === 'darwin') {
-    const spawnHelper = nativeBinaryDirs
-      .map(dir => path.join(dir, 'spawn-helper'))
-      .find(exists)
+    const spawnHelper = nativeBinaryDirs.map(dir => path.join(dir, 'spawn-helper')).find(exists)
     if (!spawnHelper) {
       die(`Missing node-pty spawn-helper (required on darwin) in: ${nativeBinaryDirs.join(', ')}`)
     }

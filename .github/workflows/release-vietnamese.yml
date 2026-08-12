@@ -1,4 +1,4 @@
-name: Phát hành Hermes tiếng Việt cho Windows
+name: Phát hành Hermes tiếng Việt đa nền tảng
 
 on:
   push:
@@ -7,27 +7,36 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Nhãn phát hành, ví dụ vi-v0.20.0-1'
+        description: 'Nhãn phát hành, ví dụ vi-v0.20.0-4'
         required: true
         type: string
+      prerelease:
+        description: 'Đánh dấu là bản thử nghiệm'
+        default: true
+        required: true
+        type: boolean
+
+concurrency:
+  group: hermes-vietnamese-release-${{ github.ref }}-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  windows:
-    name: Kiểm thử, đóng gói và phát hành
-    runs-on: windows-latest
-    timeout-minutes: 60
+  verify:
+    name: Kiểm tra mã nguồn và hợp đồng phát hành
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0, Node 24
         with:
-          node-version: 26
+          node-version: 24
           cache: npm
 
       - name: Cài npm 12
@@ -41,73 +50,179 @@ jobs:
       - name: Kiểm toán thư viện đi vào ứng dụng
         run: npm audit --omit=optional --audit-level=high
 
-      - name: Kiểm thử phần phân phối cộng đồng
-        run: npm run --prefix apps/desktop test:desktop:platforms -- scripts/community-distribution.test.mjs electron/bootstrap-runner.test.ts electron/update-remote.test.ts
+      - name: Kiểm thử hợp đồng phân phối cộng đồng
+        run: >-
+          npm run --prefix apps/desktop test:desktop:platforms --
+          scripts/community-distribution.test.mjs
+          scripts/collect-community-artifacts.test.mjs
+          scripts/packaged-layout.test.mjs
+          electron/bootstrap-runner.test.ts
+          electron/update-remote.test.ts
 
       - name: Kiểm thử giao diện và ngôn ngữ
-        run: npm run --prefix apps/desktop test:ui -- src/i18n/languages.test.ts src/i18n/context.test.tsx
+        run: >-
+          npm run --prefix apps/desktop test:ui --
+          src/i18n/languages.test.ts
+          src/i18n/context.test.tsx
+          src/components/bilingual-quick-toggle.test.tsx
+          src/app/chat/session-draft-title.test.tsx
 
       - name: Kiểm tra kiểu dữ liệu
         run: npm run --prefix apps/desktop typecheck
 
-      - name: Đóng gói bộ cài Windows
-        run: npm run --prefix apps/desktop dist:win:nsis
+  build:
+    name: Đóng gói ${{ matrix.label }}
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: windows-x64
+            label: Windows x64
+            runner: windows-2025
+            platform: win32
+            arch: x64
+            command: dist:win:x64
+          - id: windows-arm64
+            label: Windows ARM64
+            runner: windows-11-arm
+            platform: win32
+            arch: arm64
+            command: dist:win:arm64
+          - id: macos-arm64
+            label: macOS Apple Silicon
+            runner: macos-15
+            platform: darwin
+            arch: arm64
+            command: dist:mac:arm64
+          - id: linux-x64
+            label: Linux x64
+            runner: ubuntu-24.04
+            platform: linux
+            arch: x64
+            command: dist:linux:x64
+          - id: linux-arm64
+            label: Linux ARM64
+            runner: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+            command: dist:linux:arm64
 
-      - name: Chuẩn hóa tệp phát hành
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
-          $installer = Get-ChildItem apps/desktop/release -Filter 'Hermes-*-win-*.exe' | Select-Object -First 1
-          if (-not $installer) { throw 'Không tìm thấy bộ cài NSIS' }
-          Copy-Item $installer.FullName release-assets/Hermes-Vietnamese-Windows-x64-Setup.exe
-          Compress-Archive -Path apps/desktop/release/win-unpacked/* -DestinationPath release-assets/Hermes-Vietnamese-Windows-x64-Portable.zip -Force
-          Get-ChildItem release-assets -File |
-            ForEach-Object {
-              $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-              "$hash  $($_.Name)"
-            } | Set-Content release-assets/SHA256SUMS.txt -Encoding utf8
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0, Node 24
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Cài npm 12
+        run: npm install --global npm@12
+
+      - name: Cài phụ thuộc đúng kiến trúc
+        uses: ./.github/actions/retry
+        with:
+          command: npm ci
+
+      - name: Kiểm thử đường đóng gói theo hệ điều hành
+        run: >-
+          npm run --prefix apps/desktop test:desktop:platforms --
+          electron/bootstrap-runner.test.ts
+          electron/update-remote.test.ts
+
+      - name: Đóng gói
+        env:
+          CSC_LINK: ${{ matrix.platform == 'darwin' && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.platform == 'darwin' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          APPLE_API_KEY: ${{ matrix.platform == 'darwin' && secrets.APPLE_API_KEY || '' }}
+          APPLE_API_KEY_ID: ${{ matrix.platform == 'darwin' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ matrix.platform == 'darwin' && secrets.APPLE_API_ISSUER || '' }}
+        run: npm run --prefix apps/desktop ${{ matrix.command }}
+
+      - name: Kiểm tra cấu trúc gói đã đóng
+        env:
+          HERMES_DESKTOP_SKIP_BUILD: '1'
+        run: npm run --prefix apps/desktop test:desktop:all
+
+      - name: Chuẩn hóa tên tệp và tạo mã SHA-256
+        run: >-
+          node apps/desktop/scripts/collect-community-artifacts.mjs collect
+          ${{ matrix.platform }}
+          ${{ matrix.arch }}
+          apps/desktop/release
+          release-assets
 
       - name: Lưu bản dựng
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
         with:
-          name: hermes-vietnamese-windows
+          name: hermes-vietnamese-${{ matrix.id }}
           path: release-assets/*
+          if-no-files-found: error
           retention-days: 30
+
+  release:
+    name: Gom gói và tạo GitHub Release
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
+
+      - name: Tải toàn bộ gói cài
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1, Node 24
+        with:
+          pattern: hermes-vietnamese-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Tạo bảng SHA-256 chung
+        run: node apps/desktop/scripts/collect-community-artifacts.mjs checksums release-assets SHA256SUMS.txt
 
       - name: Xác định nhãn phát hành
         id: release
-        shell: pwsh
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
-          $tag = if ('${{ github.event_name }}' -eq 'push') { '${{ github.ref_name }}' } else { '${{ inputs.tag }}' }
-          if ($tag -notmatch '^vi-v[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$') {
-            throw "Nhãn không hợp lệ: $tag"
-          }
-          "tag=$tag" >> $env:GITHUB_OUTPUT
+          tag="$REF_NAME"
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="$INPUT_TAG"
+          fi
+          if [[ ! "$tag" =~ ^vi-v[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$ ]]; then
+            echo "Nhãn không hợp lệ: $tag" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-      - name: Tạo GitHub Release
-        shell: pwsh
+      - name: Tạo hoặc cập nhật GitHub Release
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          PRERELEASE: ${{ inputs.prerelease || false }}
         run: |
-          @'
-          ## Hermes Agent tiếng Việt
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Bản phát hành $RELEASE_TAG đã tồn tại. Hãy dùng nhãn mới; không ghi đè tệp đã công bố." >&2
+            exit 1
+          fi
 
-          Bản cộng đồng dành cho Windows x64. Giao diện mặc định là tiếng Việt.
+          prerelease_flag=()
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "$PRERELEASE" == "true" ]]; then
+            prerelease_flag=(--prerelease)
+          fi
 
-          Sau khi cài, mỗi người đăng nhập OpenAI Codex, Claude Pro/Max, Gemini hoặc nhà cung cấp khác bằng tài khoản của chính mình. Bản dựng không chứa tài khoản, mã OAuth hay khóa API của người đóng gói.
-
-          ### Claude Pro / Max
-
-          Chọn **Claude Pro / Max (qua Claude Code)** trong Hermes và đăng nhập bằng luồng chính thức của Claude Code. Cầu nối không đọc mã OAuth và sẽ từ chối chạy nếu Extra Usage đang bật, nhằm tránh phát sinh phí API ngoài gói. Phạm vi bản đầu tiên là trò chuyện trực tiếp trong Desktop.
-
-          Windows có thể cảnh báo SmartScreen vì bộ cài cộng đồng chưa có chứng thư ký số thương mại. Hãy đối chiếu SHA-256 trong SHA256SUMS.txt.
-
-          Xem hướng dẫn đầy đủ trong README.vi.md.
-          '@ | Set-Content release-notes.md -Encoding utf8
-
-          if (gh release view $env:RELEASE_TAG 2>$null) {
-            gh release upload $env:RELEASE_TAG release-assets/* --clobber
-          } else {
-            gh release create $env:RELEASE_TAG release-assets/* --title "Hermes tiếng Việt $env:RELEASE_TAG" --notes-file release-notes.md --target '${{ github.sha }}'
-          }
+          gh release create "$RELEASE_TAG" release-assets/* \
+            --title "Hermes tiếng Việt $RELEASE_TAG" \
+            --notes-file .github/release-notes-vietnamese.md \
+            --target "${{ github.sha }}" \
+            "${prerelease_flag[@]}"
