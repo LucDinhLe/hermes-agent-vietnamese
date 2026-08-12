@@ -10,6 +10,7 @@
 import { PixelEggSprite } from '@/components/pet/pixel-egg-sprite'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
+import { useI18n } from '@/i18n'
 
 interface PetEggHatchProps {
   subtitle?: string
@@ -23,12 +24,13 @@ interface PetEggHatchProps {
  * return together, so a count would just snap 0→100).
  */
 export function PetProgress({ done, total }: { done?: number; total?: number }) {
+  const { locale } = useI18n()
   const determinate = typeof done === 'number' && typeof total === 'number' && total > 0
 
   return (
     <Progress
       animated
-      aria-label="Hatching progress"
+      aria-label={locale === 'vi' ? 'Tiến độ tạo thú cưng' : 'Hatching progress'}
       className="bg-[color-mix(in_srgb,var(--ui-accent)_15%,transparent)]"
       fillClassName="bg-(--ui-accent)"
       indeterminate={!determinate}
@@ -39,6 +41,8 @@ export function PetProgress({ done, total }: { done?: number; total?: number }) 
 }
 
 export function PetEggHatch({ subtitle, onCancel, cancelLabel }: PetEggHatchProps) {
+  const { t } = useI18n()
+
   return (
     <div className="flex flex-col items-center justify-center gap-3">
       <div className="flex flex-col items-center">
@@ -56,7 +60,7 @@ export function PetEggHatch({ subtitle, onCancel, cancelLabel }: PetEggHatchProp
 
       {onCancel && (
         <Button onClick={onCancel} size="xs" variant="text">
-          {cancelLabel ?? 'Cancel'}
+          {cancelLabel ?? t.common.cancel}
         </Button>
       )}
     </div>

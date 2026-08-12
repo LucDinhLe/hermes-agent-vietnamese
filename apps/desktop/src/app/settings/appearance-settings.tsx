@@ -108,7 +108,7 @@ function MarketplaceThemeResults({
   installs: ReadonlyMap<string, DesktopTheme>
   onInstalled: (name: string) => void
 }) {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const copy = t.commandCenter.installTheme
   const debounced = useDebounced(query.trim(), 300)
   const [installingId, setInstallingId] = useState<string | null>(null)
@@ -161,7 +161,7 @@ function MarketplaceThemeResults({
 
   const header = (
     <p className="mb-2 mt-4 text-[length:var(--conversation-caption-font-size)] font-medium text-(--ui-text-tertiary)">
-      From the VS Code Marketplace
+      {locale === 'vi' ? 'Từ VS Code Marketplace' : 'From the VS Code Marketplace'}
     </p>
   )
 
@@ -245,7 +245,7 @@ function MarketplaceThemeResults({
 }
 
 export function AppearanceSettings() {
-  const { t, isSavingLocale } = useI18n()
+  const { locale, t, isSavingLocale } = useI18n()
   const { themeName, mode, resolvedMode, availableThemes, setTheme, setMode } = useTheme()
   const toolViewMode = useStore($toolViewMode)
   const zoomPercent = useStore($zoomPercent)
@@ -325,7 +325,11 @@ export function AppearanceSettings() {
                   <input
                     className="w-full rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) px-3 py-1.5 text-[length:var(--conversation-caption-font-size)] outline-none placeholder:text-(--ui-text-tertiary) focus:border-(--ui-stroke-secondary)"
                     onChange={event => setQuery(event.target.value)}
-                    placeholder="Search your themes or the VS Code Marketplace…"
+                    placeholder={
+                      locale === 'vi'
+                        ? 'Tìm trong chủ đề đã cài hoặc VS Code Marketplace…'
+                        : 'Search your themes or the VS Code Marketplace…'
+                    }
                     spellCheck={false}
                     value={query}
                   />
@@ -337,7 +341,8 @@ export function AppearanceSettings() {
                   {filteredThemes.length === 0 ? (
                     needle ? (
                       <p className="text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
-                        No installed themes match "{query.trim()}".
+                        {locale === 'vi' ? 'Không có chủ đề đã cài nào khớp' : 'No installed themes match'} "
+                        {query.trim()}".
                       </p>
                     ) : null
                   ) : (

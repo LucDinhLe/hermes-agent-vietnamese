@@ -491,6 +491,15 @@ export interface Translations {
       active: string
       takenBy: string
       invalidShortcut: string
+      window?: {
+        ariaLabel: string
+        placeholder: string
+        disconnectedPlaceholder: string
+        sendTo: string
+        targetSession: string
+        currentChat: string
+        newSession: string
+      }
     }
     credentials: {
       pasteKey: string
@@ -1565,6 +1574,22 @@ export interface Translations {
     projectEmpty: string
     noSessions: string
     noFilterMatches: string
+    filterMenu?: {
+      ariaLabel: string
+      grouping: string
+      ordering: string
+      show: string
+      filters: string
+      status: string
+      pullRequest: string
+      project: string
+      archived: string
+      resetDefaults: string
+      expandAll: string
+      collapseAll: string
+      markAllRead: string
+      options: Record<string, string>
+    }
     projects: {
       sectionLabel: string
       home: string

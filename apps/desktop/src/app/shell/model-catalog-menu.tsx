@@ -116,7 +116,7 @@ export function ModelCatalogMenu({
   profile = 'default',
   sessionId = null
 }: ModelCatalogMenuProps) {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const copy = t.shell.modelMenu
   const closeMenu = useContext(ModelMenuCloseContext)
   const [search, setSearch] = useState('')
@@ -474,7 +474,9 @@ export function ModelCatalogMenu({
       {shownMoaPresets.length > 0 ? (
         <div className={cn(quietRows)}>
           <DropdownMenuSeparator className="mx-0" />
-          <DropdownMenuLabel className={dropdownMenuSectionLabel}>MoA presets</DropdownMenuLabel>
+          <DropdownMenuLabel className={dropdownMenuSectionLabel}>
+            {locale === 'vi' ? 'Cấu hình MoA' : 'MoA presets'}
+          </DropdownMenuLabel>
           {shownMoaPresets.map(preset => {
             const isCurrentMoa = current.provider === 'moa' && current.model === preset
 

@@ -56,6 +56,20 @@ function monthlyCapRowForSpent(spent: string) {
 }
 
 describe('deriveBillingView', () => {
+  it('localizes fixed billing copy while preserving plan and card names', () => {
+    const view = deriveBillingView(okBilling(postTrainBillingState), okSubscription(postTrainSubscriptionState), 'vi')
+
+    expect(view.summary).toContainEqual({ label: 'Gói', value: 'Pro · $20/tháng' })
+    expect(view.paymentRow).toMatchObject({ title: 'Phương thức thanh toán' })
+    expect(view.paymentRow?.value).toContain('Visa')
+    expect(view.refillRow).toMatchObject({ pill: { label: 'Tắt' }, title: 'Nạp thêm khi số dư thấp' })
+    expect(view.usageRows.map(row => row.title)).toEqual([
+      'Tín dụng trong gói',
+      'Tín dụng đã nạp',
+      'Hạn mức chi tiêu tháng'
+    ])
+  })
+
   it('derives the deployed-today shape with fail-open disabled charge controls', () => {
     const view = deriveBillingView(okBilling(todayBillingState), okSubscription(todaySubscriptionState))
 
