@@ -81,8 +81,17 @@ export function collectCommunityArtifacts({ arch, outputDir, platform, releaseDi
     copied.push(copyArtifact(findArtifact(releaseDir, 'mac', arch, '.zip'), outputDir, `${prefix}.zip`))
   } else {
     const prefix = `Hermes-Vietnamese-Linux-${arch}`
-    for (const extension of ['.AppImage', '.deb', '.rpm']) {
-      copied.push(copyArtifact(findArtifact(releaseDir, 'linux', arch, extension), outputDir, `${prefix}${extension}`))
+    const artifactArches = arch === 'x64'
+      ? { '.AppImage': 'x86_64', '.deb': 'amd64', '.rpm': 'x86_64' }
+      : { '.AppImage': 'arm64', '.deb': 'arm64', '.rpm': 'aarch64' }
+    for (const [extension, artifactArch] of Object.entries(artifactArches)) {
+      copied.push(
+        copyArtifact(
+          findArtifact(releaseDir, 'linux', artifactArch, extension),
+          outputDir,
+          `${prefix}${extension}`
+        )
+      )
     }
   }
 
