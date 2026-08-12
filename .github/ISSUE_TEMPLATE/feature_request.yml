@@ -1,85 +1,84 @@
-name: "✨ Feature Request"
-description: Suggest a new feature or improvement.
-title: "[Feature]: "
-labels: ["enhancement"]
+name: '✨ Đề xuất tính năng'
+description: Đề xuất tính năng mới hoặc cách cải thiện Hermes tiếng Việt.
+title: '[Tính năng]: '
+labels: ['enhancement']
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for the suggestion! Before submitting, please consider:
+        Cảm ơn bạn đã góp ý. Trước khi gửi, vui lòng cân nhắc:
 
-        - **Is this a new skill?** Most capabilities should be [skills, not tools](https://github.com/NousResearch/hermes-agent/blob/main/CONTRIBUTING.md#should-it-be-a-skill-or-a-tool). If it's a specialized integration (crypto, NFT, niche SaaS), it belongs on the Skills Hub, not bundled.
-        - **Search [existing issues](https://github.com/NousResearch/hermes-agent/issues)** — someone may have already proposed this.
+        - **Đây có phải một kỹ năng mới?** Phần lớn khả năng mới nên được triển khai dưới dạng kỹ năng thay vì thêm vào công cụ lõi.
+        - **Tìm trong [các đề xuất hiện có](https://github.com/LucDinhLe/hermes-agent-vietnamese/issues)** để tránh trùng lặp.
 
   - type: textarea
     id: problem
     attributes:
-      label: Problem or Use Case
-      description: What problem does this solve? What are you trying to do that you can't today?
+      label: Vấn đề hoặc tình huống sử dụng
+      description: Tính năng này giải quyết vấn đề gì? Hiện bạn chưa thể làm việc gì?
       placeholder: |
-        I'm trying to use Hermes with [provider/platform/workflow] but currently
-        there's no way to...
+        Tôi muốn dùng Hermes với [nhà cung cấp/nền tảng/quy trình] nhưng hiện chưa thể...
     validations:
       required: true
 
   - type: textarea
     id: solution
     attributes:
-      label: Proposed Solution
-      description: How do you think this should work? Be as specific as you can — CLI flags, config options, UI behavior.
+      label: Giải pháp đề xuất
+      description: Bạn muốn tính năng hoạt động thế nào? Hãy mô tả cụ thể về câu lệnh, cấu hình hoặc hành vi giao diện.
       placeholder: |
-        Add a `--foo` flag to `hermes chat` that enables...
-        Or: Add a config key `bar.baz` that controls...
+        Thêm tùy chọn `--foo` vào `hermes chat` để...
+        Hoặc thêm khóa cấu hình `bar.baz` để kiểm soát...
     validations:
       required: true
 
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives Considered
-      description: What other approaches did you consider? Why is the proposed solution better?
+      label: Phương án khác đã cân nhắc
+      description: Bạn đã cân nhắc cách nào khác? Vì sao giải pháp đề xuất phù hợp hơn?
 
   - type: dropdown
     id: type
     attributes:
-      label: Feature Type
+      label: Loại tính năng
       options:
-        - New tool
-        - New bundled skill
-        - CLI improvement
-        - Gateway / messaging improvement
-        - Configuration option
-        - Performance / reliability
-        - Developer experience (tests, docs, CI)
-        - Other
+        - Công cụ mới
+        - Kỹ năng tích hợp mới
+        - Cải thiện CLI
+        - Cải thiện Gateway / nhắn tin
+        - Tùy chọn cấu hình
+        - Hiệu năng / độ ổn định
+        - Trải nghiệm nhà phát triển (kiểm thử, tài liệu, CI)
+        - Khác
     validations:
       required: true
 
   - type: dropdown
     id: scope
     attributes:
-      label: Scope
-      description: How big is this change?
+      label: Phạm vi
+      description: Thay đổi này lớn đến mức nào?
       options:
-        - Small (single file, < 50 lines)
-        - Medium (few files, < 300 lines)
-        - Large (new module or significant refactor)
+        - Nhỏ (một tệp, dưới 50 dòng)
+        - Vừa (một vài tệp, dưới 300 dòng)
+        - Lớn (mô-đun mới hoặc tái cấu trúc đáng kể)
 
   - type: checkboxes
     id: pr-ready
     attributes:
-      label: Contribution
+      label: Đóng góp
       options:
-        - label: I'd like to implement this myself and submit a PR
+        - label: Tôi muốn tự triển khai và gửi pull request
 
   - type: textarea
     id: debug-report
     attributes:
-      label: Debug Report (optional)
+      label: Báo cáo chẩn đoán (không bắt buộc)
       description: |
-        If this feature request is related to a problem you're experiencing, run `hermes debug share` and paste the links here.
-        In an interactive chat session, you can use `/debug` instead.
-        This helps us understand your environment and any related logs.
+        Nếu đề xuất liên quan đến một lỗi bạn đang gặp, hãy chạy `hermes debug share` và dán liên kết vào đây.
+        Trong phiên trò chuyện tương tác, bạn có thể dùng `/debug`.
+        Thông tin này giúp chúng tôi hiểu môi trường và nhật ký liên quan.
       placeholder: |
         Report   https://paste.rs/abc123
       render: shell

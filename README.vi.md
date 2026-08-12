@@ -1,18 +1,27 @@
 # Hermes Agent tiếng Việt
 
-Đây là bản Việt hóa cộng đồng của [Hermes Agent](https://github.com/NousResearch/hermes-agent), dành cho Windows, macOS và Linux.
+Đây là bản địa hóa cộng đồng của [Hermes Agent](https://github.com/NousResearch/hermes-agent), dành cho người Việt muốn sử dụng AI agent dễ dàng hơn dù không thạo tiếng Anh.
 
-Giao diện Desktop mặc định dùng tiếng Việt. Người dùng vẫn có thể đổi sang các ngôn ngữ khác trong phần Cài đặt. Mã nguồn gốc thuộc Nous Research và được phân phối theo giấy phép MIT.
+Giao diện Desktop mặc định dùng tiếng Việt và có nút chuyển nhanh **VI/EN**. Người dùng vẫn có thể đổi ngôn ngữ trong phần Cài đặt. Tên model, tên riêng, thương hiệu, giao thức và câu lệnh được giữ nguyên để tránh sai lệch kỹ thuật.
+
+Mã nguồn gốc thuộc Nous Research và được phân phối theo giấy phép MIT. Đây là bản cộng đồng không chính thức, không được Nous Research, OpenAI, Anthropic hoặc Google bảo chứng. Mỗi người dùng đăng nhập bằng tài khoản hoặc khóa API của chính mình; bộ cài không kèm tài khoản AI trả phí.
+
+## Bắt đầu nhanh
+
+1. Mở [bản thử nghiệm đa nền tảng hiện tại](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-4).
+2. Chọn tệp đúng hệ điều hành và kiến trúc theo bảng bên dưới.
+3. Đối chiếu mã SHA-256 nếu hệ điều hành hiện cảnh báo.
+4. Cài ứng dụng, chọn nhà cung cấp mô hình và đăng nhập bằng tài khoản của bạn.
 
 ## Chọn đúng bộ cài
 
-| Hệ điều hành             | Kiến trúc     | Tệp nên tải                                       | Trạng thái                               |
-| ------------------------ | ------------- | ------------------------------------------------- | ---------------------------------------- |
-| Windows 10/11            | x64           | `Hermes-Vietnamese-Windows-x64-Setup.exe`         | Chính                                    |
-| Windows 10/11            | ARM64         | `Hermes-Vietnamese-Windows-arm64-Setup.exe`       | Chính; runner build còn ở Public Preview |
-| macOS 12 trở lên         | Apple Silicon | `Hermes-Vietnamese-macOS-Apple-Silicon.dmg`       | Chính                                    |
-| Ubuntu/Linux tương thích | x64           | `.deb`, `.rpm` hoặc `.AppImage` có hậu tố `x64`   | Chính                                    |
-| Ubuntu/Linux tương thích | ARM64         | `.deb`, `.rpm` hoặc `.AppImage` có hậu tố `arm64` | Chính; runner build còn ở Public Preview |
+| Hệ điều hành             | Kiến trúc     | Tệp nên tải                                       | Trạng thái                                    |
+| ------------------------ | ------------- | ------------------------------------------------- | --------------------------------------------- |
+| Windows 10/11            | x64           | `Hermes-Vietnamese-Windows-x64-Setup.exe`         | Thử nghiệm cộng đồng                          |
+| Windows 10/11            | ARM64         | `Hermes-Vietnamese-Windows-arm64-Setup.exe`       | Thử nghiệm; runner build còn ở Public Preview |
+| macOS 12 trở lên         | Apple Silicon | `Hermes-Vietnamese-macOS-Apple-Silicon.dmg`       | Thử nghiệm cộng đồng                          |
+| Ubuntu/Linux tương thích | x64           | `.deb`, `.rpm` hoặc `.AppImage` có hậu tố `x64`   | Thử nghiệm cộng đồng                          |
+| Ubuntu/Linux tương thích | ARM64         | `.deb`, `.rpm` hoặc `.AppImage` có hậu tố `arm64` | Thử nghiệm; runner build còn ở Public Preview |
 
 Hermes chính thức ưu tiên macOS dùng Apple Silicon. Mac Intel không nằm trong phạm vi hỗ trợ của bản cộng đồng này. Windows 32-bit và Linux ARM 32-bit cũng không được đóng gói.
 
@@ -27,7 +36,7 @@ Dự án Hermes gốc chưa công bố ngưỡng RAM, CPU và dung lượng tr�
 
 ## Cài đặt trên Windows
 
-1. Mở trang [Bản phát hành](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/latest).
+1. Mở [bản thử nghiệm đa nền tảng hiện tại](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-4).
 2. Tải bộ cài `x64` hoặc `arm64` đúng với **Loại hệ thống** của máy.
 3. Chạy bộ cài và mở Hermes.
 4. Ở lần mở đầu tiên, chờ Hermes tải môi trường chạy. Quá trình này cần Internet và có thể mất vài phút.
