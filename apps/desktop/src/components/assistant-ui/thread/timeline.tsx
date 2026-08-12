@@ -2,6 +2,7 @@ import { useAui, useAuiState } from '@assistant-ui/react'
 import { type FC, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { usePaneVisible } from '@/components/pane-shell/pane-visibility'
+import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
 
@@ -151,6 +152,8 @@ export const ThreadTimeline: FC = () => {
 /** Derived prompt rail for a VISIBLE surface. Split out so the hook body — and
  *  the transcript subscription it opens — never runs for a background tab. */
 const ActiveThreadTimeline: FC = () => {
+  const { locale } = useI18n()
+
   // Cheap in the selector, expensive only when it changes: the ids alone tell
   // us whether the RAIL changed. Prompt text is immutable once sent, and an
   // edit rewinds the transcript (dropping every id after it) and re-appends a
@@ -321,7 +324,7 @@ const ActiveThreadTimeline: FC = () => {
 
   return (
     <div
-      aria-label="Conversation timeline"
+      aria-label={locale === 'vi' ? 'Dòng thời gian cuộc trò chuyện' : 'Conversation timeline'}
       className="group/timeline pointer-events-auto absolute right-0 top-1/2 z-40 flex -translate-y-1/2 flex-col items-end"
       data-slot="thread-timeline"
       data-suppress-pane-reveal=""

@@ -2423,6 +2423,24 @@ def list_authenticated_providers(
                 has_creds = has_vertex_credentials()
             except Exception as exc:
                 logger.debug("Vertex credential check failed: %s", exc)
+        elif overlay.auth_type == "external_process":
+            # External-process providers (Claude Code, Copilot ACP) keep
+            # credentials in their own official CLI instead of Hermes's auth
+            # store. Query that CLI-backed status directly so a signed-in
+            # provider gets a real picker row with its curated models. Without
+            # this, inventory falls through to an unconfigured skeleton whose
+            # model list is empty, even though Settings says "connected".
+            try:
+                from hermes_cli.auth import get_external_process_provider_status
+
+                external_status = get_external_process_provider_status(hermes_slug)
+                has_creds = bool(external_status.get("logged_in"))
+            except Exception as exc:
+                logger.debug(
+                    "External provider status check failed for %s: %s",
+                    hermes_slug,
+                    exc,
+                )
         elif overlay.extra_env_vars:
             has_creds = any(os.environ.get(ev) for ev in overlay.extra_env_vars)
         # Also check api_key_env_vars from PROVIDER_REGISTRY for api_key auth_type

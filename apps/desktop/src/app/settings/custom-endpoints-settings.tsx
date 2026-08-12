@@ -10,6 +10,7 @@ import {
   saveCustomEndpoint,
   validateCustomEndpoint
 } from '@/hermes'
+import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { Check, Globe, Loader2, Plus, Save, Trash2, Zap } from '@/lib/icons'
 import { cn } from '@/lib/utils'
@@ -75,6 +76,8 @@ function toPayload(form: EndpointForm, models?: string[]): CustomEndpointUpdate 
 }
 
 export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: CustomEndpointsSettingsProps) {
+  const { locale, t } = useI18n()
+  const isVi = locale === 'vi'
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -108,7 +111,7 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
           setDiscoveredModels(current.models)
         }
       } catch (err) {
-        notifyError(err, 'Could not load custom endpoints')
+        notifyError(err, isVi ? 'Không thể tải máy chủ tùy chỉnh' : 'Could not load custom endpoints')
       } finally {
         if (!cancelled) {
           setLoading(false)
@@ -121,7 +124,7 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [isVi])
 
   async function handleSave() {
     try {
@@ -141,9 +144,9 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
 
       triggerHaptic('success')
       onConfigSaved?.()
-      notify({ kind: 'success', message: 'Custom endpoint saved.' })
+      notify({ kind: 'success', message: isVi ? 'Đã lưu máy chủ tùy chỉnh.' : 'Custom endpoint saved.' })
     } catch (err) {
-      notifyError(err, 'Save failed')
+      notifyError(err, isVi ? 'Lưu thất bại' : 'Save failed')
     } finally {
       setSaving(false)
     }
@@ -163,17 +166,21 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
         notify({
           kind: 'success',
           message: response.models.length
-            ? `Endpoint is reachable. Found ${response.models.length} models.`
-            : 'Endpoint is reachable.'
+            ? isVi
+              ? `Đã kết nối. Tìm thấy ${response.models.length} model.`
+              : `Endpoint is reachable. Found ${response.models.length} models.`
+            : isVi
+              ? 'Đã kết nối tới máy chủ.'
+              : 'Endpoint is reachable.'
         })
       } else {
         notify({
           kind: response.reachable ? 'warning' : 'error',
-          message: response.message || 'Endpoint validation failed.'
+          message: response.message || (isVi ? 'Kiểm tra máy chủ thất bại.' : 'Endpoint validation failed.')
         })
       }
     } catch (err) {
-      notifyError(err, 'Validation failed')
+      notifyError(err, isVi ? 'Kiểm tra thất bại' : 'Validation failed')
     } finally {
       setTesting(false)
     }
@@ -188,14 +195,14 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
       onMainModelChanged?.(response.provider, response.model)
       triggerHaptic('success')
     } catch (err) {
-      notifyError(err, 'Activation failed')
+      notifyError(err, isVi ? 'Kích hoạt thất bại' : 'Activation failed')
     } finally {
       setActivating(null)
     }
   }
 
   async function handleDelete(endpoint: CustomEndpoint) {
-    if (!window.confirm(`Delete ${endpoint.name}?`)) {
+    if (!window.confirm(isVi ? `Xóa ${endpoint.name}?` : `Delete ${endpoint.name}?`)) {
       return
     }
 
@@ -212,7 +219,7 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
       onConfigSaved?.()
       triggerHaptic('success')
     } catch (err) {
-      notifyError(err, 'Delete failed')
+      notifyError(err, isVi ? 'Xóa thất bại' : 'Delete failed')
     } finally {
       setDeleting(null)
     }
@@ -229,7 +236,11 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
     <SettingsContent>
       <div className="space-y-6">
         <section>
-          <SectionHeading icon={Globe} meta={`${endpoints.length}`} title="Custom Endpoints" />
+          <SectionHeading
+            icon={Globe}
+            meta={`${endpoints.length}`}
+            title={isVi ? 'Máy chủ tùy chỉnh' : 'Custom Endpoints'}
+          />
           <div className="divide-y divide-border/40 rounded-md border border-border/50">
             {endpoints.length ? (
               endpoints.map(endpoint => (
@@ -247,7 +258,7 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
                       {endpoint.is_current && (
                         <Pill tone="primary">
                           <Check className="size-3" />
-                          Active
+                          {isVi ? 'Đang dùng' : 'Active'}
                         </Pill>
                       )}
                       {endpoint.source === 'direct-config' && <Pill>config.yaml</Pill>}
@@ -257,7 +268,9 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
                     </div>
                     <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
                       <span>{endpoint.model}</span>
-                      {endpoint.has_api_key && <span>{endpoint.api_key_preview ?? 'API key set'}</span>}
+                      {endpoint.has_api_key && (
+                        <span>{endpoint.api_key_preview ?? (isVi ? 'Đã đặt khóa API' : 'API key set')}</span>
+                      )}
                     </div>
                   </button>
                   <div className="flex items-center gap-2 sm:justify-end">
@@ -268,7 +281,7 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
                       variant="outline"
                     >
                       {activating === endpoint.id ? <Loader2 className="animate-spin" /> : <Zap />}
-                      Use
+                      {isVi ? 'Dùng' : 'Use'}
                     </Button>
                     {endpoint.source !== 'direct-config' && (
                       <Button
@@ -276,7 +289,7 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
                         disabled={deleting === endpoint.id}
                         onClick={() => void handleDelete(endpoint)}
                         size="icon-sm"
-                        title="Delete endpoint"
+                        title={isVi ? 'Xóa máy chủ' : 'Delete endpoint'}
                         variant="ghost"
                       >
                         {deleting === endpoint.id ? <Loader2 className="animate-spin" /> : <Trash2 />}
@@ -286,17 +299,25 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
                 </div>
               ))
             ) : (
-              <EmptyState description="Add an OpenAI-compatible endpoint below." title="No custom endpoints" />
+              <EmptyState
+                description={
+                  isVi ? 'Thêm máy chủ tương thích OpenAI bên dưới.' : 'Add an OpenAI-compatible endpoint below.'
+                }
+                title={isVi ? 'Chưa có máy chủ tùy chỉnh' : 'No custom endpoints'}
+              />
             )}
           </div>
         </section>
 
         <section>
-          <SectionHeading icon={Plus} title={form.id ? 'Edit Endpoint' : 'Add Endpoint'} />
+          <SectionHeading
+            icon={Plus}
+            title={form.id ? (isVi ? 'Sửa máy chủ' : 'Edit Endpoint') : isVi ? 'Thêm máy chủ' : 'Add Endpoint'}
+          />
           <div className="grid gap-3 rounded-md border border-border/50 p-3">
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="grid gap-1.5 text-xs text-muted-foreground">
-                Name
+                {isVi ? 'Tên' : 'Name'}
                 <Input
                   onChange={event => setForm(current => ({ ...current, name: event.target.value }))}
                   placeholder="Axet Proxy"
@@ -304,7 +325,7 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
                 />
               </label>
               <label className="grid gap-1.5 text-xs text-muted-foreground">
-                Provider ID
+                {isVi ? 'ID nhà cung cấp' : 'Provider ID'}
                 <Input
                   onChange={event => setForm(current => ({ ...current, id: event.target.value }))}
                   placeholder="axet-proxy"
@@ -313,7 +334,7 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
               </label>
             </div>
             <label className="grid gap-1.5 text-xs text-muted-foreground">
-              Endpoint URL
+              {isVi ? 'URL máy chủ' : 'Endpoint URL'}
               <Input
                 onChange={event => setForm(current => ({ ...current, baseUrl: event.target.value }))}
                 placeholder="http://127.0.0.1:8081/v1"
@@ -322,7 +343,7 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
             </label>
             <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem]">
               <label className="grid gap-1.5 text-xs text-muted-foreground">
-                Default Model
+                {isVi ? 'Model mặc định' : 'Default Model'}
                 <Input
                   list="custom-endpoint-models"
                   onChange={event => setForm(current => ({ ...current, model: event.target.value }))}
@@ -336,20 +357,26 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
                 </datalist>
               </label>
               <label className="grid gap-1.5 text-xs text-muted-foreground">
-                Context
+                {isVi ? 'Ngữ cảnh' : 'Context'}
                 <Input
                   inputMode="numeric"
                   onChange={event => setForm(current => ({ ...current, contextLength: event.target.value }))}
-                  placeholder="Auto"
+                  placeholder={isVi ? 'Tự động' : 'Auto'}
                   value={form.contextLength}
                 />
               </label>
             </div>
             <label className="grid gap-1.5 text-xs text-muted-foreground">
-              API Key
+              {isVi ? 'Khóa API' : 'API Key'}
               <Input
                 onChange={event => setForm(current => ({ ...current, apiKey: event.target.value }))}
-                placeholder={form.id ? 'Leave blank to keep current key' : 'Optional'}
+                placeholder={
+                  form.id
+                    ? isVi
+                      ? 'Để trống để giữ khóa hiện tại'
+                      : 'Leave blank to keep current key'
+                    : t.settings.credentials.optional
+                }
                 type="password"
                 value={form.apiKey}
               />
@@ -360,14 +387,14 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
                   checked={form.makeDefault}
                   onCheckedChange={checked => setForm(current => ({ ...current, makeDefault: checked === true }))}
                 />
-                Use for new chats
+                {isVi ? 'Dùng cho phiên mới' : 'Use for new chats'}
               </label>
               <label className="flex items-center gap-2">
                 <Checkbox
                   checked={form.discoverModels}
                   onCheckedChange={checked => setForm(current => ({ ...current, discoverModels: checked === true }))}
                 />
-                Discover models
+                {isVi ? 'Tự tìm model' : 'Discover models'}
               </label>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -377,11 +404,11 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
                 variant="outline"
               >
                 {testing ? <Loader2 className="animate-spin" /> : <Zap />}
-                Test
+                {isVi ? 'Kiểm tra' : 'Test'}
               </Button>
               <Button disabled={saving || !canSave} onClick={() => void handleSave()}>
                 {saving ? <Loader2 className="animate-spin" /> : <Save />}
-                Save
+                {t.common.save}
               </Button>
               <Button
                 className={cn(!form.id && 'hidden')}
@@ -392,7 +419,7 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
                 type="button"
                 variant="ghost"
               >
-                New endpoint
+                {isVi ? 'Máy chủ mới' : 'New endpoint'}
               </Button>
             </div>
           </div>

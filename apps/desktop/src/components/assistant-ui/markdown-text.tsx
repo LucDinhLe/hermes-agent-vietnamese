@@ -14,6 +14,7 @@ import { ExpandableBlock } from '@/components/chat/expandable-block'
 import { PreviewAttachment } from '@/components/chat/preview-attachment'
 import { chunkByLines, SyntaxHighlighter } from '@/components/chat/shiki-highlighter'
 import { ZoomableImage } from '@/components/chat/zoomable-image'
+import { useI18n } from '@/i18n'
 import { detectArtifact } from '@/lib/artifact-detect'
 import { normalizeExternalUrl, openExternalLink, PrettyLink } from '@/lib/external-link'
 import { createMemoizedMathPlugin } from '@/lib/katex-memo'
@@ -114,14 +115,19 @@ function useOpenMediaFile(path: string) {
 }
 
 function OpenMediaFailedNote({ name }: { name: string }) {
+  const { locale } = useI18n()
+
   return (
     <span className="mt-1 block text-xs text-muted-foreground">
-      Couldn&apos;t fetch {name} from the gateway (missing, unreadable, or too large).
+      {locale === 'vi'
+        ? `Không thể tải ${name} từ cổng (tệp bị thiếu, không đọc được hoặc quá lớn).`
+        : `Couldn't fetch ${name} from the gateway (missing, unreadable, or too large).`}
     </span>
   )
 }
 
 function OpenMediaButton({ kind, path }: { kind: 'audio' | 'video'; path: string }) {
+  const { locale } = useI18n()
   const { open, openFailed } = useOpenMediaFile(path)
 
   return (
@@ -131,7 +137,7 @@ function OpenMediaButton({ kind, path }: { kind: 'audio' | 'video'; path: string
         onClick={open}
         type="button"
       >
-        Open {kind} file
+        {locale === 'vi' ? `Mở tệp ${kind === 'audio' ? 'âm thanh' : 'video'}` : `Open ${kind} file`}
       </button>
       {openFailed && <OpenMediaFailedNote name={mediaName(path)} />}
     </span>
@@ -326,6 +332,7 @@ export function MarkdownImage(props: ComponentProps<'img'>) {
 }
 
 function MarkdownImageContent({ className, src, alt, ...props }: ComponentProps<'img'>) {
+  const { locale } = useI18n()
   const rawSrc = typeof src === 'string' ? src : ''
   const [resolvedSrc, setResolvedSrc] = useState(() => (rawSrc && isInlineMediaSrc(rawSrc) ? rawSrc : ''))
   const [failed, setFailed] = useState(false)
@@ -368,9 +375,9 @@ function MarkdownImageContent({ className, src, alt, ...props }: ComponentProps<
   if (failed) {
     return (
       <span className="my-2 block text-sm text-muted-foreground">
-        Couldn&apos;t load {name}.{' '}
+        {locale === 'vi' ? `Không thể tải ${name}. ` : `Couldn't load ${name}. `}
         <button className="ref font-medium text-foreground" onClick={open} type="button">
-          Open image
+          {locale === 'vi' ? 'Mở hình ảnh' : 'Open image'}
         </button>
         {openFailed && <OpenMediaFailedNote name={name} />}
       </span>
@@ -378,7 +385,11 @@ function MarkdownImageContent({ className, src, alt, ...props }: ComponentProps<
   }
 
   if (!resolvedSrc) {
-    return <span className="my-2 block text-sm text-muted-foreground">Loading {name}...</span>
+    return (
+      <span className="my-2 block text-sm text-muted-foreground">
+        {locale === 'vi' ? `Đang tải ${name}...` : `Loading ${name}...`}
+      </span>
+    )
   }
 
   // The width cap belongs on the container, not the <img>: a percentage

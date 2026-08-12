@@ -3,6 +3,7 @@ import { type FC, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
+import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { Plus } from '@/lib/icons'
 import { cn } from '@/lib/utils'
@@ -31,56 +32,61 @@ const CELL_TINTS = [
 const cellTint = (emoji: string) => CELL_TINTS[(emoji.codePointAt(0) ?? 0) % CELL_TINTS.length]
 
 /** The full emoji picker, revealed behind the quick row's "+". Headless — styled here. */
-const FullEmojiPicker: FC<{ onSelect: (emoji: string) => void }> = ({ onSelect }) => (
-  <EmojiPicker.Root
-    className="flex h-72 w-76 flex-col"
-    emojibaseUrl={EMOJIBASE_URL}
-    onEmojiSelect={emoji => onSelect(emoji.emoji)}
-  >
-    {/* Borderless, underline-on-focus — the app's SearchField idiom (DESIGN.md),
+const FullEmojiPicker: FC<{ onSelect: (emoji: string) => void }> = ({ onSelect }) => {
+  const { locale } = useI18n()
+  const isVi = locale === 'vi'
+
+  return (
+    <EmojiPicker.Root
+      className="flex h-72 w-76 flex-col"
+      emojibaseUrl={EMOJIBASE_URL}
+      onEmojiSelect={emoji => onSelect(emoji.emoji)}
+    >
+      {/* Borderless, underline-on-focus — the app's SearchField idiom (DESIGN.md),
         not a boxed search bar. Search matches labels AND emojibase tags
         ("lol" → 😂), which frimousse handles natively. */}
-    <EmojiPicker.Search
-      autoFocus
-      className="mx-1 border-b border-(--ui-stroke-tertiary) bg-transparent px-1 pb-1 text-sm outline-hidden focus:border-(--ui-stroke-secondary)"
-      placeholder="Search…"
-    />
-    <EmojiPicker.Viewport className="relative flex-1 outline-hidden">
-      <EmojiPicker.Loading className="absolute inset-0 grid place-items-center text-xs text-(--ui-text-tertiary)">
-        Loading emoji…
-      </EmojiPicker.Loading>
-      <EmojiPicker.Empty className="absolute inset-0 grid place-items-center text-xs text-(--ui-text-tertiary)">
-        No emoji found.
-      </EmojiPicker.Empty>
-      <EmojiPicker.List
-        className="select-none pb-1"
-        components={{
-          CategoryHeader: ({ category, ...props }) => (
-            <div
-              className="bg-(--ui-bg-elevated) px-1.5 pt-2 pb-1 text-[0.6875rem] text-(--ui-text-tertiary)"
-              {...props}
-            >
-              {category.label}
-            </div>
-          ),
-          Emoji: ({ emoji, ...props }) => (
-            <button
-              className={cn('grid size-8 shrink-0 place-items-center rounded-md text-lg', cellTint(emoji.emoji))}
-              {...props}
-            >
-              {emoji.emoji}
-            </button>
-          ),
-          Row: ({ children, ...props }) => (
-            <div className="flex px-1" {...props}>
-              {children}
-            </div>
-          )
-        }}
+      <EmojiPicker.Search
+        autoFocus
+        className="mx-1 border-b border-(--ui-stroke-tertiary) bg-transparent px-1 pb-1 text-sm outline-hidden focus:border-(--ui-stroke-secondary)"
+        placeholder={isVi ? 'Tìm kiếm…' : 'Search…'}
       />
-    </EmojiPicker.Viewport>
-  </EmojiPicker.Root>
-)
+      <EmojiPicker.Viewport className="relative flex-1 outline-hidden">
+        <EmojiPicker.Loading className="absolute inset-0 grid place-items-center text-xs text-(--ui-text-tertiary)">
+          {isVi ? 'Đang tải emoji…' : 'Loading emoji…'}
+        </EmojiPicker.Loading>
+        <EmojiPicker.Empty className="absolute inset-0 grid place-items-center text-xs text-(--ui-text-tertiary)">
+          {isVi ? 'Không tìm thấy emoji.' : 'No emoji found.'}
+        </EmojiPicker.Empty>
+        <EmojiPicker.List
+          className="select-none pb-1"
+          components={{
+            CategoryHeader: ({ category, ...props }) => (
+              <div
+                className="bg-(--ui-bg-elevated) px-1.5 pt-2 pb-1 text-[0.6875rem] text-(--ui-text-tertiary)"
+                {...props}
+              >
+                {category.label}
+              </div>
+            ),
+            Emoji: ({ emoji, ...props }) => (
+              <button
+                className={cn('grid size-8 shrink-0 place-items-center rounded-md text-lg', cellTint(emoji.emoji))}
+                {...props}
+              >
+                {emoji.emoji}
+              </button>
+            ),
+            Row: ({ children, ...props }) => (
+              <div className="flex px-1" {...props}>
+                {children}
+              </div>
+            )
+          }}
+        />
+      </EmojiPicker.Viewport>
+    </EmojiPicker.Root>
+  )
+}
 
 /**
  * The reaction picker — six quick emoji, then "+" for the full set.
@@ -97,6 +103,7 @@ export const ReactionPicker: FC<{
   open: boolean
   selected?: string
 }> = ({ align = 'end', children, onOpenChange, onSelect, open, selected }) => {
+  const { locale } = useI18n()
   const [expanded, setExpanded] = useState(false)
 
   return (
@@ -141,7 +148,12 @@ export const ReactionPicker: FC<{
                 {emoji}
               </Button>
             ))}
-            <Button aria-label="More emoji" onClick={() => setExpanded(true)} size="icon-sm" variant="ghost">
+            <Button
+              aria-label={locale === 'vi' ? 'Thêm emoji' : 'More emoji'}
+              onClick={() => setExpanded(true)}
+              size="icon-sm"
+              variant="ghost"
+            >
               <Plus />
             </Button>
           </>
@@ -164,6 +176,9 @@ export const ReactionBadge: FC<{
   onRetract?: () => void
   reactions: MessageReaction[]
 }> = ({ className, onRetract, reactions }) => {
+  const { locale } = useI18n()
+  const isVi = locale === 'vi'
+
   if (!reactions.length) {
     return null
   }
@@ -176,7 +191,7 @@ export const ReactionBadge: FC<{
       {reactions.map(reaction =>
         reaction.author === 'user' && onRetract ? (
           <button
-            aria-label={`Remove ${reaction.emoji} reaction`}
+            aria-label={isVi ? `Gỡ cảm xúc ${reaction.emoji}` : `Remove ${reaction.emoji} reaction`}
             className="reaction-pop cursor-pointer leading-none transition-transform hover:scale-110 active:scale-95"
             key={`${reaction.author}-${reaction.emoji}`}
             onClick={event => {
@@ -197,7 +212,7 @@ export const ReactionBadge: FC<{
           <span
             className="reaction-pop leading-none"
             key={`${reaction.author}-${reaction.emoji}`}
-            title="Reacted by Hermes"
+            title={isVi ? 'Hermes đã bày tỏ cảm xúc' : 'Reacted by Hermes'}
           >
             {reaction.emoji}
           </span>

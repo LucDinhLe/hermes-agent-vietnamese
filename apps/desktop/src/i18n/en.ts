@@ -595,7 +595,16 @@ export const en: Translations = {
       shortcutDesc: 'Needs at least one modifier, e.g. CommandOrControl+Shift+Space.',
       active: 'Shortcut is active.',
       takenBy: 'Another app already uses this shortcut — pick a different one.',
-      invalidShortcut: 'Not a valid shortcut. Include at least one modifier key.'
+      invalidShortcut: 'Not a valid shortcut. Include at least one modifier key.',
+      window: {
+        ariaLabel: 'Quick Entry',
+        placeholder: 'Ask Hermes…',
+        disconnectedPlaceholder: 'Not connected — open Hermes to reconnect',
+        sendTo: 'Send to',
+        targetSession: 'Target session',
+        currentChat: 'Current chat',
+        newSession: 'New session'
+      }
     },
     credentials: {
       pasteKey: 'Paste key',
@@ -1870,6 +1879,41 @@ export const en: Translations = {
     projectEmpty: 'No sessions yet',
     noSessions: 'No sessions yet',
     noFilterMatches: 'No sessions match these filters',
+    filterMenu: {
+      ariaLabel: 'Filters',
+      grouping: 'Grouping',
+      ordering: 'Ordering',
+      show: 'Show',
+      filters: 'Filters',
+      status: 'Status',
+      pullRequest: 'Pull request',
+      project: 'Project',
+      archived: 'Archived',
+      resetDefaults: 'Reset to defaults',
+      expandAll: 'Expand all',
+      collapseAll: 'Collapse all',
+      markAllRead: 'Mark all as read',
+      options: {
+        updated: 'Updated',
+        project: 'Project',
+        status: 'Status',
+        created: 'Created',
+        tokens: 'Tokens',
+        cost: 'Cost',
+        manual: 'Manual',
+        pr: 'PR',
+        profile: 'Profile',
+        open: 'Open',
+        draft: 'Draft',
+        merged: 'Merged',
+        closed: 'Closed',
+        none: 'No PR',
+        'needs-input': 'Needs input',
+        working: 'Working',
+        unread: 'Unread',
+        idle: 'Idle'
+      }
+    },
     projects: {
       sectionLabel: 'Projects',
       home: 'Home',

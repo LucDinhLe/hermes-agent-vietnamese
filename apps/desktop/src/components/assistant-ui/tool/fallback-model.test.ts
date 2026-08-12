@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import { setRuntimeI18nLocale } from '@/i18n'
 
@@ -20,6 +20,10 @@ const part = (overrides: Partial<ToolPart>): ToolPart => ({
   toolName: 'vision_analyze',
   type: 'tool-call',
   ...overrides
+})
+
+beforeEach(() => {
+  setRuntimeI18nLocale('en')
 })
 
 afterEach(() => {
@@ -391,7 +395,7 @@ describe('clampForDisplay', () => {
 
     expect(clamped.length).toBeLessThan(oversized.length)
     expect(clamped.startsWith('x'.repeat(MAX_TOOL_RENDER_CHARS))).toBe(true)
-    expect(clamped).toContain('5,000 more characters truncated')
+    expect(clamped).toContain(`${5_000..toLocaleString()} more characters truncated`)
     expect(clamped).toContain('Copy')
   })
 })

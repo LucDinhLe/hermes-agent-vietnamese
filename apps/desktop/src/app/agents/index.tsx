@@ -10,6 +10,7 @@ import { GlyphSpinner } from '@/components/ui/glyph-spinner'
 import { type Translations, useI18n } from '@/i18n'
 import { compactNumber } from '@/lib/format'
 import { AlertCircle, CheckCircle2 } from '@/lib/icons'
+import { localizedAgentActivity } from '@/lib/localized-agent-activity'
 import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
 import {
@@ -272,7 +273,7 @@ function StreamLine({
   parentRunning: boolean
   rowKey: string
 }) {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const enterRef = useEnterAnimation(parentRunning, `subagent-stream:${rowKey}`)
   const isMono = entry.kind === 'tool'
   const tone = entry.isError ? 'text-destructive' : STREAM_TONE[entry.kind]
@@ -281,7 +282,7 @@ function StreamLine({
     <div className="flex min-w-0 items-baseline gap-2 text-[0.72rem] leading-relaxed" ref={enterRef}>
       <span className="flex h-[0.95rem] shrink-0 items-center">{streamGlyph(entry)}</span>
       <span className={cn('min-w-0 flex-1 wrap-anywhere', tone, isMono && 'font-mono text-[0.69rem]')}>
-        {entry.text}
+        {localizedAgentActivity(entry.text, locale)}
         {active ? (
           <GlyphSpinner
             ariaLabel={t.agents.streaming}

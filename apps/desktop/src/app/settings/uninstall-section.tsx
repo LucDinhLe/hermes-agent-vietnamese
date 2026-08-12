@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import type { DesktopUninstallMode, DesktopUninstallSummary } from '@/global'
+import { useI18n } from '@/i18n'
 import { AlertTriangle, Loader2, Trash2 } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 
@@ -46,6 +47,8 @@ const OPTIONS: ModeOption[] = [
 ]
 
 export function UninstallSection() {
+  const { locale, t } = useI18n()
+  const isVi = locale === 'vi'
   const [summary, setSummary] = useState<DesktopUninstallSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [pending, setPending] = useState<DesktopUninstallMode | null>(null)
@@ -92,7 +95,37 @@ export function UninstallSection() {
   // Gate the agent-removing options on whether an agent is actually present.
   // A future lite client that ships without the bundled agent shows GUI-only.
   const agentInstalled = summary?.agent_installed ?? false
-  const visibleOptions = OPTIONS.filter(opt => agentInstalled || !opt.needsAgent)
+
+  const localizedOptions: ModeOption[] = isVi
+    ? [
+        {
+          mode: 'gui',
+          title: 'Chỉ gỡ giao diện Chat',
+          description: 'Gỡ ứng dụng Desktop này. AI agent Hermes, cấu hình và các cuộc trò chuyện vẫn được giữ lại.',
+          consequence: 'giao diện Chat Desktop (ứng dụng này và dữ liệu riêng của ứng dụng)',
+          needsAgent: false
+        },
+        {
+          mode: 'lite',
+          title: 'Gỡ giao diện và AI agent, giữ dữ liệu',
+          description:
+            'Gỡ ứng dụng và AI agent Hermes, nhưng giữ cấu hình, cuộc trò chuyện và thông tin bí mật để cài lại sau.',
+          consequence: 'giao diện Chat và AI agent Hermes (cấu hình, cuộc trò chuyện và thông tin bí mật vẫn được giữ)',
+          needsAgent: true
+        },
+        {
+          mode: 'full',
+          title: 'Gỡ toàn bộ Hermes',
+          description:
+            'Gỡ ứng dụng, AI agent và toàn bộ dữ liệu người dùng gồm cấu hình, cuộc trò chuyện, tác vụ định kỳ, thông tin bí mật và nhật ký.',
+          consequence:
+            'TOÀN BỘ giao diện Chat, AI agent Hermes, cấu hình, cuộc trò chuyện, thông tin bí mật và nhật ký',
+          needsAgent: true
+        }
+      ]
+    : OPTIONS
+
+  const visibleOptions = localizedOptions.filter(opt => agentInstalled || !opt.needsAgent)
 
   const handleConfirm = async () => {
     if (!pending) {
@@ -106,7 +139,9 @@ export function UninstallSection() {
       const result = await bridge.run(pending)
 
       if (!result.ok) {
-        setError(result.message || result.error || 'Uninstall could not start.')
+        setError(
+          result.message || result.error || (isVi ? 'Không thể bắt đầu gỡ cài đặt.' : 'Uninstall could not start.')
+        )
         setRunning(false)
         setPending(null)
       }
@@ -118,43 +153,48 @@ export function UninstallSection() {
     }
   }
 
-  const pendingOption = OPTIONS.find(opt => opt.mode === pending) ?? null
+  const pendingOption = localizedOptions.find(opt => opt.mode === pending) ?? null
 
   return (
     <div className="mx-auto mt-8 w-full max-w-2xl">
-      <SectionHeading icon={AlertTriangle} title="Danger zone" />
+      <SectionHeading icon={AlertTriangle} title={isVi ? 'Khu vực nguy hiểm' : 'Danger zone'} />
 
       <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3">
         {loading ? (
           <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
             <Loader2 className="size-3.5 animate-spin" />
-            Checking what&apos;s installed…
+            {isVi ? 'Đang kiểm tra thành phần đã cài…' : "Checking what's installed…"}
           </div>
         ) : pendingOption ? (
           <div>
-            <p className="text-sm font-medium text-destructive">Confirm uninstall</p>
+            <p className="text-sm font-medium text-destructive">{isVi ? 'Xác nhận gỡ cài đặt' : 'Confirm uninstall'}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              This removes {pendingOption.consequence}. This can&apos;t be undone.
+              {isVi ? 'Thao tác này sẽ gỡ ' : 'This removes '}
+              {pendingOption.consequence}. {isVi ? 'Không thể hoàn tác.' : "This can't be undone."}
             </p>
             {summary?.running_app_path && (
-              <p className="mt-1 font-mono text-[0.68rem] text-muted-foreground/60">App: {summary.running_app_path}</p>
+              <p className="mt-1 font-mono text-[0.68rem] text-muted-foreground/60">
+                {isVi ? 'Ứng dụng:' : 'App:'} {summary.running_app_path}
+              </p>
             )}
             {error && <p className="mt-2 text-xs text-destructive">{error}</p>}
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <Button disabled={running} onClick={() => void handleConfirm()} size="sm" variant="destructive">
                 {running && <Loader2 className="size-3 animate-spin" />}
-                {running ? 'Uninstalling…' : 'Yes, uninstall'}
+                {running ? (isVi ? 'Đang gỡ…' : 'Uninstalling…') : isVi ? 'Đồng ý, gỡ cài đặt' : 'Yes, uninstall'}
               </Button>
               <Button disabled={running} onClick={() => setPending(null)} size="sm" variant="text">
-                Cancel
+                {t.common.cancel}
               </Button>
             </div>
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            <p className="text-sm font-medium">Uninstall Hermes</p>
+            <p className="text-sm font-medium">{isVi ? 'Gỡ cài đặt Hermes' : 'Uninstall Hermes'}</p>
             <p className="text-xs text-muted-foreground">
-              Choose how much to remove. The app closes to finish the job; reopen the installer any time to come back.
+              {isVi
+                ? 'Chọn mức cần gỡ. Ứng dụng sẽ đóng để hoàn tất; bạn có thể mở lại trình cài đặt bất cứ lúc nào.'
+                : 'Choose how much to remove. The app closes to finish the job; reopen the installer any time to come back.'}
             </p>
             <div className="mt-1 flex flex-col gap-2">
               {visibleOptions.map(opt => (

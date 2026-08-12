@@ -1,4 +1,5 @@
 from hermes_cli import auth
+from hermes_cli.model_switch import list_authenticated_providers
 from hermes_cli.models import provider_model_ids
 from hermes_cli.providers import get_provider, normalize_provider
 
@@ -29,3 +30,21 @@ def test_external_credentials_never_return_real_secret(monkeypatch):
     assert creds["provider"] == "claude-code"
     assert creds["base_url"] == "claude-code://local"
     assert creds["api_key"] == "claude-code-subscription"
+
+
+def test_signed_in_claude_code_is_selectable_with_models(monkeypatch):
+    monkeypatch.setattr("agent.models_dev.fetch_models_dev", lambda: {})
+    monkeypatch.setattr(
+        auth,
+        "get_external_process_provider_status",
+        lambda provider_id: {
+            "installed": True,
+            "logged_in": provider_id == "claude-code",
+        },
+    )
+
+    rows = list_authenticated_providers(current_provider="openai-codex")
+
+    claude = next(row for row in rows if row["slug"] == "claude-code")
+    assert claude["models"] == ["sonnet", "opus", "haiku"]
+    assert claude["total_models"] == 3

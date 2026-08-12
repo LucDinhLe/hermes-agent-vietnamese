@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 
+import type { Locale } from '@/i18n'
 import { fmtDate } from '@/lib/time'
 
 import type { BillingRefusal, BillingResult } from './api'
@@ -30,7 +31,7 @@ const BILLING_QUERY_OPTIONS = {
 } as const
 
 export interface BillingSummaryItemView {
-  label: 'Auto-refill' | 'Balance' | 'Plan'
+  label: string
   tone?: 'muted' | 'primary'
   value: string
 }
@@ -172,12 +173,15 @@ export function useSubscriptionState(enabled = true) {
 
 export function deriveBillingView(
   stateResult?: BillingResult<BillingStateResponse>,
-  subscriptionResult?: BillingResult<SubscriptionStateResponse>
+  subscriptionResult?: BillingResult<SubscriptionStateResponse>,
+  locale: Locale = 'en'
 ): BillingView {
+  const isVi = locale === 'vi'
+
   if (!stateResult) {
     return {
       status: 'loading',
-      summary: emptySummary(),
+      summary: emptySummary(isVi),
       tiers: [],
       usageRows: []
     }
@@ -185,9 +189,9 @@ export function deriveBillingView(
 
   if (!stateResult.ok) {
     return {
-      notice: refusalNotice(stateResult.refusal),
+      notice: refusalNotice(stateResult.refusal, isVi),
       status: 'refusal',
-      summary: emptySummary(),
+      summary: emptySummary(isVi),
       tiers: [],
       usageRows: []
     }
@@ -199,12 +203,17 @@ export function deriveBillingView(
   if (!billing.logged_in || subscription?.logged_in === false) {
     return {
       notice: {
-        action: { label: 'Open portal ↗', url: billing.portal_url ?? subscription?.portal_url ?? FALLBACK_PORTAL_URL },
-        message: 'Run /portal in the TUI or open the Nous portal to connect your account.',
-        title: 'Connect your Nous account'
+        action: {
+          label: isVi ? 'Mở Nous Portal ↗' : 'Open portal ↗',
+          url: billing.portal_url ?? subscription?.portal_url ?? FALLBACK_PORTAL_URL
+        },
+        message: isVi
+          ? 'Chạy /portal trong TUI hoặc mở Nous Portal để kết nối tài khoản.'
+          : 'Run /portal in the TUI or open the Nous portal to connect your account.',
+        title: isVi ? 'Kết nối tài khoản Nous' : 'Connect your Nous account'
       },
       status: 'logged_out',
-      summary: emptySummary(),
+      summary: emptySummary(isVi),
       tiers: [],
       usageRows: []
     }
@@ -217,26 +226,34 @@ export function deriveBillingView(
   // Computed once and threaded to both the card (caption + undo) and the grid
   // (Scheduled marker), so the two never disagree about what's pending.
   const pending = pendingTransition(subscription?.current)
-  const tiers = derivePlanTiers(subscription, billing.portal_url, capable, pending)
+  const tiers = derivePlanTiers(subscription, billing.portal_url, capable, pending, isVi)
 
   return {
-    notice: noCardNotice(billing),
-    paymentRow: paymentMethodRow(billing),
-    plan: derivePlanCard(billing, subscription, subscriptionResult, tiers, capable, pending),
-    refillRow: autoReloadRow(billing),
+    notice: noCardNotice(billing, isVi),
+    paymentRow: paymentMethodRow(billing, isVi),
+    plan: derivePlanCard(billing, subscription, subscriptionResult, tiers, capable, pending, isVi),
+    refillRow: autoReloadRow(billing, isVi),
     status: 'normal',
     summary: [
-      { label: 'Balance', value: displayBalance(billing) },
-      { label: 'Plan', value: displayPlan(subscription, billing.usage) },
+      { label: isVi ? 'Số dư' : 'Balance', value: displayBalance(billing) },
+      { label: isVi ? 'Gói' : 'Plan', value: displayPlan(subscription, billing.usage, isVi) },
       {
-        label: 'Auto-refill',
+        label: isVi ? 'Tự động nạp thêm' : 'Auto-refill',
         tone: billing.auto_reload?.enabled ? 'primary' : billing.auto_reload ? 'muted' : undefined,
-        value: billing.auto_reload ? (billing.auto_reload.enabled ? 'Enabled' : 'Off') : EMPTY_BILLING_VALUE
+        value: billing.auto_reload
+          ? billing.auto_reload.enabled
+            ? isVi
+              ? 'Đã bật'
+              : 'Enabled'
+            : isVi
+              ? 'Tắt'
+              : 'Off'
+          : EMPTY_BILLING_VALUE
       }
     ],
     tiers,
-    topupRow: buyCreditsRow(billing),
-    usageRows: deriveUsageRows(billing, subscription)
+    topupRow: buyCreditsRow(billing, isVi),
+    usageRows: deriveUsageRows(billing, subscription, isVi)
   }
 }
 
@@ -289,20 +306,20 @@ export function formatBillingDate(value?: null | string): string {
   return fmtDate.format(date)
 }
 
-function emptySummary(): BillingSummaryItemView[] {
+function emptySummary(isVi: boolean): BillingSummaryItemView[] {
   return [
-    { label: 'Balance', value: EMPTY_BILLING_VALUE },
-    { label: 'Plan', value: EMPTY_BILLING_VALUE },
-    { label: 'Auto-refill', value: EMPTY_BILLING_VALUE }
+    { label: isVi ? 'Số dư' : 'Balance', value: EMPTY_BILLING_VALUE },
+    { label: isVi ? 'Gói' : 'Plan', value: EMPTY_BILLING_VALUE },
+    { label: isVi ? 'Tự động nạp thêm' : 'Auto-refill', value: EMPTY_BILLING_VALUE }
   ]
 }
 
-function refusalNotice(refusal: BillingRefusal): BillingNoticeView {
-  const resolved = resolveRefusal(refusal)
+function refusalNotice(refusal: BillingRefusal, isVi: boolean): BillingNoticeView {
+  const resolved = resolveRefusal(refusal, isVi ? 'vi' : 'en')
   const portalUrl = resolved.action.type === 'portal' ? resolved.action.url : undefined
 
   return {
-    action: portalUrl ? { label: 'Open portal ↗', url: portalUrl } : undefined,
+    action: portalUrl ? { label: isVi ? 'Mở Nous Portal ↗' : 'Open portal ↗', url: portalUrl } : undefined,
     message: resolved.message,
     title: resolved.title,
     tone: 'warn'
@@ -312,15 +329,20 @@ function refusalNotice(refusal: BillingRefusal): BillingNoticeView {
 // A logged-in account with no card can't buy credits or manage auto-refill, and
 // every one of those controls disables silently — so lead the page with a single
 // warn banner that names the blocker and links straight to the fix.
-function noCardNotice(billing: BillingStateResponse): BillingNoticeView | undefined {
+function noCardNotice(billing: BillingStateResponse, isVi: boolean): BillingNoticeView | undefined {
   if (billing.card) {
     return undefined
   }
 
   return {
-    action: { label: 'Add card ↗', url: billing.portal_url ?? FALLBACK_PORTAL_BILLING_URL },
-    message: 'Buying top-up credits and auto-refill stay disabled until a card is on file. Add one on the portal.',
-    title: 'No payment method on file',
+    action: {
+      label: isVi ? 'Thêm thẻ ↗' : 'Add card ↗',
+      url: billing.portal_url ?? FALLBACK_PORTAL_BILLING_URL
+    },
+    message: isVi
+      ? 'Mua tín dụng và tự động nạp thêm sẽ bị tắt cho đến khi bạn thêm thẻ trong Nous Portal.'
+      : 'Buying top-up credits and auto-refill stay disabled until a card is on file. Add one on the portal.',
+    title: isVi ? 'Chưa có phương thức thanh toán' : 'No payment method on file',
     tone: 'warn'
   }
 }
@@ -348,10 +370,12 @@ function plansCapable(
 
 // Monthly credits are dollars; NAS sends a bare decimal string. Never render a
 // bare number — always "$110 credits/mo" (mirrors the retired subscriptionTierChips).
-function creditsPerMonthDisplay(monthlyCredits: null | string): string | undefined {
+function creditsPerMonthDisplay(monthlyCredits: null | string, isVi: boolean): string | undefined {
   const credits = Number((monthlyCredits ?? '').replace(/,/g, ''))
 
-  return Number.isFinite(credits) && credits > 0 ? `$${credits.toLocaleString('en-US')} credits/mo` : undefined
+  return Number.isFinite(credits) && credits > 0
+    ? `$${credits.toLocaleString('en-US')} ${isVi ? 'tín dụng/tháng' : 'credits/mo'}`
+    : undefined
 }
 
 /**
@@ -384,7 +408,8 @@ function derivePlanCard(
   subscriptionResult: BillingResult<SubscriptionStateResponse> | undefined,
   tiers: BillingPlanTierView[],
   capable: boolean,
-  pending: PendingPlanTransition | undefined
+  pending: PendingPlanTransition | undefined,
+  isVi: boolean
 ): BillingPlanCardView {
   const current = subscription?.current
   const tierName = current?.tier_name ?? billing.usage?.plan_name ?? 'Free'
@@ -395,14 +420,24 @@ function derivePlanCard(
   const unavailable = subscriptionResult ? !subscriptionResult.ok : false
 
   const caption = unavailable
-    ? 'Subscription details are unavailable; opening the portal is still available.'
+    ? isVi
+      ? 'Chưa thể tải chi tiết gói; bạn vẫn có thể mở Nous Portal.'
+      : 'Subscription details are unavailable; opening the portal is still available.'
     : pending
       ? pending.kind === 'downgrade'
-        ? `Changes to ${pending.tierName} on ${pending.when}.`
-        : `Cancels on ${pending.when}.`
+        ? isVi
+          ? `Sẽ chuyển sang ${pending.tierName} vào ${pending.when}.`
+          : `Changes to ${pending.tierName} on ${pending.when}.`
+        : isVi
+          ? `Sẽ hủy vào ${pending.when}.`
+          : `Cancels on ${pending.when}.`
       : current
-        ? `Renews ${renewal}`
-        : 'No active subscription — paid models draw down top-up credits.'
+        ? isVi
+          ? `Gia hạn vào ${renewal}`
+          : `Renews ${renewal}`
+        : isVi
+          ? 'Chưa có gói đăng ký đang hoạt động — các model trả phí sẽ dùng tín dụng đã nạp.'
+          : 'No active subscription — paid models draw down top-up credits.'
 
   // Actionable = a paid tier above (upgrade) or an in-app downgrade below the current
   // one. Ticket 11 counts downgrades (they act in-app, so they carry no `action`); a
@@ -410,14 +445,20 @@ function derivePlanCard(
   const hasActionableTier = tiers.some(tier => tier.state === 'upgrade' || tier.state === 'downgrade')
 
   if (capable && hasActionableTier) {
-    return { action: { label: current ? 'Change plan' : 'View plans' }, caption, pending, price, tierName }
+    return {
+      action: { label: current ? (isVi ? 'Đổi gói' : 'Change plan') : isVi ? 'Xem các gói' : 'View plans' },
+      caption,
+      pending,
+      price,
+      tierName
+    }
   }
 
   return {
     caption,
     // No in-app action → always hand off to the portal so the user isn't stranded.
     link: {
-      label: 'Adjust plan ↗',
+      label: isVi ? 'Điều chỉnh gói ↗' : 'Adjust plan ↗',
       url: buildManageSubscriptionUrl(subscription, subscription?.portal_url ?? billing.portal_url)
     },
     pending,
@@ -471,7 +512,8 @@ function derivePlanTiers(
   subscription: null | SubscriptionStateResponse,
   fallbackPortalUrl: null | string,
   capable: boolean,
-  pending: PendingPlanTransition | undefined
+  pending: PendingPlanTransition | undefined,
+  isVi: boolean
 ): BillingPlanTierView[] {
   if (!capable || !subscription) {
     return []
@@ -503,7 +545,7 @@ function derivePlanTiers(
 
   return gridTiers.map((tier): BillingPlanTierView => {
     const base: BillingPlanTierBase = {
-      creditsDisplay: creditsPerMonthDisplay(tier.monthly_credits),
+      creditsDisplay: creditsPerMonthDisplay(tier.monthly_credits, isVi),
       name: tier.name,
       priceDisplay: tier.dollars_per_month_display,
       tierId: tier.tier_id
@@ -529,13 +571,16 @@ function derivePlanTiers(
 
     return {
       ...base,
-      action: { label: 'Choose ↗', url: buildManageSubscriptionUrl(subscription, manageBase, tier.tier_id) },
+      action: {
+        label: isVi ? 'Chọn ↗' : 'Choose ↗',
+        url: buildManageSubscriptionUrl(subscription, manageBase, tier.tier_id)
+      },
       state: 'upgrade'
     }
   })
 }
 
-function paymentMethodRow(billing: BillingStateResponse): BillingAccountRowView {
+function paymentMethodRow(billing: BillingStateResponse, isVi: boolean): BillingAccountRowView {
   const portalUrl = billing.portal_url ?? FALLBACK_PORTAL_BILLING_URL
   const card = billing.card
 
@@ -544,52 +589,58 @@ function paymentMethodRow(billing: BillingStateResponse): BillingAccountRowView 
     // it. The reason (buys/auto-refill are blocked) already leads the page as a
     // notice, so the row stays a bare call-to-action with no redundant status text.
     return {
-      action: { label: 'Add payment method', url: portalUrl },
+      action: { label: isVi ? 'Thêm phương thức thanh toán' : 'Add payment method', url: portalUrl },
       description: '',
       id: 'payment_method',
-      title: 'Payment method'
+      title: isVi ? 'Phương thức thanh toán' : 'Payment method'
     }
   }
 
   return {
-    action: { label: 'Update', url: portalUrl },
-    description: 'Manage the card used for top-ups and subscription renewals.',
+    action: { label: isVi ? 'Cập nhật' : 'Update', url: portalUrl },
+    description: isVi
+      ? 'Quản lý thẻ dùng để nạp tín dụng và gia hạn gói.'
+      : 'Manage the card used for top-ups and subscription renewals.',
     id: 'payment_method',
-    title: 'Payment method',
-    value: `${capitalize(card.brand)} •••• ${card.last4}${provenanceSuffix(card.resolved_via)}`
+    title: isVi ? 'Phương thức thanh toán' : 'Payment method',
+    value: `${capitalize(card.brand)} •••• ${card.last4}${provenanceSuffix(card.resolved_via, isVi)}`
   }
 }
 
-function buyCreditsRow(billing: BillingStateResponse): BillingAccountRowView {
+function buyCreditsRow(billing: BillingStateResponse, isVi: boolean): BillingAccountRowView {
   if (!billing.card) {
     // The no-card blocker is already spelled out by the page-level warn banner
     // (noCardNotice); repeating it here — emoji and all — just clutters the row,
     // so keep the plain "what buying does" line and let the controls sit disabled.
     return {
-      action: { disabled: true, label: 'Buy' },
+      action: { disabled: true, label: isVi ? 'Mua' : 'Buy' },
       chips: billing.charge_presets.map(amount => ({ disabled: true, label: formatMoney(amount) })),
-      description: 'A single charge on your card, added to your balance today.',
+      description: isVi
+        ? 'Khoản thanh toán một lần bằng thẻ và được cộng ngay vào số dư.'
+        : 'A single charge on your card, added to your balance today.',
       id: 'buy_credits',
-      title: 'Buy credits now'
+      title: isVi ? 'Mua tín dụng ngay' : 'Buy credits now'
     }
   }
 
-  const disabledReason = buyCreditsDisabledReason(billing)
+  const disabledReason = buyCreditsDisabledReason(billing, isVi)
 
   if (disabledReason) {
     return {
       description: disabledReason,
       id: 'buy_credits',
-      title: 'Buy credits now'
+      title: isVi ? 'Mua tín dụng ngay' : 'Buy credits now'
     }
   }
 
   return {
-    action: { disabled: true, label: 'Buy' },
+    action: { disabled: true, label: isVi ? 'Mua' : 'Buy' },
     chips: billing.charge_presets.map(amount => ({ disabled: true, label: formatMoney(amount) })),
-    description: 'A single charge on your card, added to your balance today.',
+    description: isVi
+      ? 'Khoản thanh toán một lần bằng thẻ và được cộng ngay vào số dư.'
+      : 'A single charge on your card, added to your balance today.',
     id: 'buy_credits',
-    title: 'Buy credits now'
+    title: isVi ? 'Mua tín dụng ngay' : 'Buy credits now'
   }
 }
 
@@ -598,27 +649,27 @@ function buyCreditsRow(billing: BillingStateResponse): BillingAccountRowView {
 // this with the disambiguating "Charges $X … below $Y." sentence (spec §8).
 const AUTO_REFILL_GENERIC = 'Keep your balance topped up when it drops below your threshold.'
 
-function autoReloadRow(billing: BillingStateResponse): BillingAccountRowView {
+function autoReloadRow(billing: BillingStateResponse, isVi: boolean): BillingAccountRowView {
   const autoReload = billing.auto_reload
 
   if (!autoReload) {
     return {
-      action: { disabled: true, label: 'Manage' },
-      caption: 'Manage auto-refill from the portal.',
-      description: AUTO_REFILL_GENERIC,
+      action: { disabled: true, label: isVi ? 'Quản lý' : 'Manage' },
+      caption: isVi ? 'Quản lý tự động nạp thêm trong Nous Portal.' : 'Manage auto-refill from the portal.',
+      description: isVi ? 'Tự động nạp thêm khi số dư thấp hơn ngưỡng của bạn.' : AUTO_REFILL_GENERIC,
       id: 'auto_reload',
       pill: { label: EMPTY_BILLING_VALUE, tone: 'muted' },
-      title: 'Refill when low'
+      title: isVi ? 'Nạp thêm khi số dư thấp' : 'Refill when low'
     }
   }
 
   if (!autoReload.enabled) {
     return {
-      caption: 'Turn on auto-refill from the portal',
-      description: AUTO_REFILL_GENERIC,
+      caption: isVi ? 'Bật tự động nạp thêm trong Nous Portal' : 'Turn on auto-refill from the portal',
+      description: isVi ? 'Tự động nạp thêm khi số dư thấp hơn ngưỡng của bạn.' : AUTO_REFILL_GENERIC,
       id: 'auto_reload',
-      pill: { label: 'Off', tone: 'muted' },
-      title: 'Refill when low'
+      pill: { label: isVi ? 'Tắt' : 'Off', tone: 'muted' },
+      title: isVi ? 'Nạp thêm khi số dư thấp' : 'Refill when low'
     }
   }
 
@@ -626,16 +677,18 @@ function autoReloadRow(billing: BillingStateResponse): BillingAccountRowView {
   // the default enabled path below — the same treatment as a canonical card.
   if (autoReload.card?.kind === 'distinct') {
     const { brand, last4 } = autoReload.card
-    const cardLabel = brand && last4 ? `${capitalize(brand)} ••${last4}` : 'a different card'
+    const cardLabel = brand && last4 ? `${capitalize(brand)} ••${last4}` : isVi ? 'một thẻ khác' : 'a different card'
     const portalUrl = billing.portal_url ?? FALLBACK_PORTAL_BILLING_URL
 
     return {
-      action: { label: 'Reconcile ↗', url: portalUrl },
-      caption: `Auto-refill charges ${cardLabel} — reconcile on the portal`,
-      description: AUTO_REFILL_GENERIC,
+      action: { label: isVi ? 'Đồng bộ ↗' : 'Reconcile ↗', url: portalUrl },
+      caption: isVi
+        ? `Tự động nạp thêm đang dùng ${cardLabel} — hãy đồng bộ trong Nous Portal`
+        : `Auto-refill charges ${cardLabel} — reconcile on the portal`,
+      description: isVi ? 'Tự động nạp thêm khi số dư thấp hơn ngưỡng của bạn.' : AUTO_REFILL_GENERIC,
       id: 'auto_reload',
-      pill: { label: 'Enabled', tone: 'primary' },
-      title: 'Refill when low'
+      pill: { label: isVi ? 'Đã bật' : 'Enabled', tone: 'primary' },
+      title: isVi ? 'Nạp thêm khi số dư thấp' : 'Refill when low'
     }
   }
 
@@ -643,22 +696,25 @@ function autoReloadRow(billing: BillingStateResponse): BillingAccountRowView {
   const threshold = autoReload.threshold_display || formatMoney(autoReload.threshold_usd)
 
   return {
-    action: { label: 'Manage' },
+    action: { label: isVi ? 'Quản lý' : 'Manage' },
     // Numbers live in the first sentence (spec §8); the swap region below carries
     // the editable fields, so no redundant caption here.
-    description: `Charges ${reloadTo} automatically when your balance falls below ${threshold}.`,
+    description: isVi
+      ? `Tự động nạp ${reloadTo} khi số dư thấp hơn ${threshold}.`
+      : `Charges ${reloadTo} automatically when your balance falls below ${threshold}.`,
     id: 'auto_reload',
     // The only row that edits in place — AutoReloadRow keys its swap layout off this
     // flag rather than sniffing the action label.
     manageInApp: true,
-    pill: { label: 'Enabled', tone: 'primary' },
-    title: 'Refill when low'
+    pill: { label: isVi ? 'Đã bật' : 'Enabled', tone: 'primary' },
+    title: isVi ? 'Nạp thêm khi số dư thấp' : 'Refill when low'
   }
 }
 
 function deriveUsageRows(
   billing: BillingStateResponse,
-  subscription: null | SubscriptionStateResponse
+  subscription: null | SubscriptionStateResponse,
+  isVi: boolean
 ): BillingUsageRowView[] {
   const rows: BillingUsageRowView[] = []
   const current = subscription?.current
@@ -671,8 +727,12 @@ function deriveUsageRows(
   const subscriptionValue =
     remaining != null && monthly != null
       ? remaining < 0
-        ? `${formatMoney(0)} of ${formatMoney(monthly)} left · ${formatMoney(Math.abs(remaining))} over`
-        : `${formatMoney(remaining)} of ${formatMoney(monthly)} left`
+        ? isVi
+          ? `Còn ${formatMoney(0)} / ${formatMoney(monthly)} · vượt ${formatMoney(Math.abs(remaining))}`
+          : `${formatMoney(0)} of ${formatMoney(monthly)} left · ${formatMoney(Math.abs(remaining))} over`
+        : isVi
+          ? `Còn ${formatMoney(remaining)} / ${formatMoney(monthly)}`
+          : `${formatMoney(remaining)} of ${formatMoney(monthly)} left`
       : (usage?.subscription_remaining_display ?? usage?.plan_bar?.remaining_display ?? EMPTY_BILLING_VALUE)
 
   const remainingFraction = remaining != null && monthly != null && monthly > 0 ? remaining / monthly : null
@@ -681,16 +741,16 @@ function deriveUsageRows(
     bar:
       remainingFraction != null
         ? {
-            label: 'Subscription credits remaining',
+            label: isVi ? 'Tín dụng gói còn lại' : 'Subscription credits remaining',
             state: remainingFraction <= 0.1 ? 'danger' : 'ok',
             tone: 'subscription',
             track: remaining != null && remaining <= 0 ? 'danger' : undefined,
             value: clamp01(remainingFraction)
           }
         : undefined,
-    caption: `Resets ${formatBillingDate(current?.cycle_ends_at ?? usage?.renews_at)}`,
+    caption: `${isVi ? 'Đặt lại vào' : 'Resets'} ${formatBillingDate(current?.cycle_ends_at ?? usage?.renews_at)}`,
     id: 'subscription_credits',
-    title: 'Subscription credits',
+    title: isVi ? 'Tín dụng trong gói' : 'Subscription credits',
     value: subscriptionValue
   })
 
@@ -699,9 +759,9 @@ function deriveUsageRows(
   // No bar: top-ups have no denominator (the wire carries only the current
   // balance, and the pool is open-ended), so a fill fraction would be fiction.
   rows.push({
-    caption: 'Does not expire',
+    caption: isVi ? 'Không hết hạn' : 'Does not expire',
     id: 'topup_credits',
-    title: 'Top-up credits',
+    title: isVi ? 'Tín dụng đã nạp' : 'Top-up credits',
     value: topupValue
   })
 
@@ -711,22 +771,31 @@ function deriveUsageRows(
     const limit = parseAmount(cap.limit_usd)
     const spent = parseAmount(cap.spent_this_month_usd) ?? 0
     const usedFraction = limit != null && limit > 0 ? spent / limit : null
-    const value = `${cap.spent_display || formatMoney(spent)} of ${cap.limit_display || formatMoney(limit)} used`
+
+    const value = isVi
+      ? `Đã dùng ${cap.spent_display || formatMoney(spent)} / ${cap.limit_display || formatMoney(limit)}`
+      : `${cap.spent_display || formatMoney(spent)} of ${cap.limit_display || formatMoney(limit)} used`
 
     rows.push({
       bar:
         usedFraction != null
           ? {
-              label: 'Monthly spend cap used',
+              label: isVi ? 'Hạn mức chi tiêu tháng đã dùng' : 'Monthly spend cap used',
               state: usedFraction >= 0.9 ? 'danger' : 'ok',
               tone: 'cap',
               track: usedFraction >= 1 ? 'danger' : undefined,
               value: clamp01(usedFraction)
             }
           : undefined,
-      caption: cap.is_default_ceiling ? 'Default ceiling' : 'Monthly remote spending',
+      caption: cap.is_default_ceiling
+        ? isVi
+          ? 'Hạn mức mặc định'
+          : 'Default ceiling'
+        : isVi
+          ? 'Chi tiêu từ xa theo tháng'
+          : 'Monthly remote spending',
       id: 'monthly_cap',
-      title: 'Monthly spend cap',
+      title: isVi ? 'Hạn mức chi tiêu tháng' : 'Monthly spend cap',
       value
     })
   }
@@ -738,7 +807,11 @@ function displayBalance(billing: BillingStateResponse): string {
   return nonEmpty(billing.balance_display) ?? formatMoney(billing.balance_usd)
 }
 
-function displayPlan(subscription: null | SubscriptionStateResponse, usage?: UsageModelData): string {
+function displayPlan(
+  subscription: null | SubscriptionStateResponse,
+  usage: UsageModelData | undefined,
+  isVi: boolean
+): string {
   const current = subscription?.current
   const tier = current?.tier_name ?? usage?.plan_name
 
@@ -748,7 +821,7 @@ function displayPlan(subscription: null | SubscriptionStateResponse, usage?: Usa
 
   const price = findCurrentTier(subscription)?.dollars_per_month_display
 
-  return price ? `${tier} · ${price}/mo` : tier
+  return price ? `${tier} · ${price}/${isVi ? 'tháng' : 'mo'}` : tier
 }
 
 function topupCreditsValue(billing: BillingStateResponse, usage?: UsageModelData): string {
@@ -760,34 +833,38 @@ function topupCreditsValue(billing: BillingStateResponse, usage?: UsageModelData
   )
 }
 
-function buyCreditsDisabledReason(billing: BillingStateResponse): null | string {
+function buyCreditsDisabledReason(billing: BillingStateResponse, isVi: boolean): null | string {
+  const locale = isVi ? 'vi' : 'en'
+
   if (!billing.is_admin) {
-    return resolveRefusal({ kind: 'role_required', message: '' }).message
+    return resolveRefusal({ kind: 'role_required', message: '' }, locale).message
   }
 
   if (!billing.cli_billing_enabled) {
-    return resolveRefusal({ kind: 'cli_billing_disabled', message: '', portalUrl: billing.portal_url ?? undefined })
-      .message
+    return resolveRefusal(
+      { kind: 'cli_billing_disabled', message: '', portalUrl: billing.portal_url ?? undefined },
+      locale
+    ).message
   }
 
   if (!billing.can_charge) {
-    return resolveRefusal({ kind: 'remote_spending_disabled', message: '', portalUrl: billing.portal_url ?? undefined })
-      .message
+    return resolveRefusal(
+      { kind: 'remote_spending_disabled', message: '', portalUrl: billing.portal_url ?? undefined },
+      locale
+    ).message
   }
 
   return null
 }
 
-function provenanceSuffix(resolvedVia?: null | string): string {
+function provenanceSuffix(resolvedVia: null | string | undefined, isVi: boolean): string {
   if (!resolvedVia) {
     return ''
   }
 
-  const labels: Record<string, string> = {
-    autoRefill: 'auto-refill card',
-    customerDefault: 'customer default',
-    subPin: 'subscription card'
-  }
+  const labels: Record<string, string> = isVi
+    ? { autoRefill: 'thẻ tự động nạp', customerDefault: 'thẻ mặc định', subPin: 'thẻ đăng ký' }
+    : { autoRefill: 'auto-refill card', customerDefault: 'customer default', subPin: 'subscription card' }
 
   return ` - ${labels[resolvedVia] ?? resolvedVia}`
 }

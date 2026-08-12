@@ -582,6 +582,22 @@ export async function startProviderOAuth(provider: OAuthProvider, ctx: Onboardin
   clearPoll()
 
   if (provider.flow === 'external') {
+    // The official CLI may already be signed in. In that case, selecting the
+    // provider means "use it now", not "open another login terminal". Resolve
+    // and persist its default model immediately, then show model confirmation.
+    if (provider.status?.logged_in) {
+      setFlow({ status: 'success', provider })
+      await completeWithModelConfirm(ctx, provider.name, [provider.id], reason =>
+        setFlow({
+          status: 'error',
+          provider,
+          message: providerResolutionFailure(reason)
+        })
+      )
+
+      return
+    }
+
     setFlow({ status: 'external_pending', provider, copied: false })
     runInTerminal(provider.cli_command)
 

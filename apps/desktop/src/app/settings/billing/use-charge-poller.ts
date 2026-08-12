@@ -7,6 +7,8 @@ import {
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useRef, useState } from 'react'
 
+import { type Locale, useI18n } from '@/i18n'
+
 import type { BillingApi, BillingRefusal } from './api'
 import { useBillingApi } from './api'
 import { resolveRefusal } from './errors'
@@ -43,6 +45,7 @@ export interface ChargePollClock {
 }
 
 export interface ChargePollOptions extends ChargePollClock {
+  locale?: Locale
   portalUrl?: null | string
 }
 
@@ -68,6 +71,7 @@ export async function pollChargeSettlement(
 ): Promise<ChargeFlowOutcome> {
   const sleep = opts.sleep ?? defaultSleep
   const now = opts.now ?? Date.now
+  const isVi = opts.locale === 'vi'
   const observed: { refusal?: BillingRefusal; status?: BillingChargeStatusResponse } = {}
 
   const settlement = await driveChargeSettlement({
@@ -96,51 +100,60 @@ export async function pollChargeSettlement(
       return {
         amountUsd: settlement.status.amount_usd,
         kind: 'success',
-        message: settlement.status.amount_usd ? `$${settlement.status.amount_usd} added.` : 'Credits added.'
+        message: settlement.status.amount_usd
+          ? isVi
+            ? `Đã nạp $${settlement.status.amount_usd}.`
+            : `$${settlement.status.amount_usd} added.`
+          : isVi
+            ? 'Đã nạp tín dụng.'
+            : 'Credits added.'
       }
 
     case 'failed':
       return {
         action: { type: 'retry' },
         kind: 'failure',
-        message: renderChargeFailed(settlement.status.reason),
+        message: renderChargeFailed(settlement.status.reason, isVi),
         retryFreshKey: true,
-        title: 'Charge failed'
+        title: isVi ? 'Giao dịch thất bại' : 'Charge failed'
       }
     case 'ambiguous': {
       if (settlement.status && refusalPolicy(settlement.error).ambiguousMidPoll) {
         const refusal = observed.refusal ?? refusalFromStatus(settlement.error, settlement.status)
-        const resolved = resolveRefusal(refusal)
+        const resolved = resolveRefusal(refusal, opts.locale)
         const portalUrl = resolved.action.type === 'portal' ? resolved.action.url : refusal.portalUrl
 
         return {
           kind: 'ambiguous',
-          message: `${resolved.message} Your last charge's outcome is unconfirmed - check your balance/history before retrying.`,
+          message: `${resolved.message} ${isVi ? 'Chưa xác nhận được kết quả giao dịch gần nhất — hãy kiểm tra số dư/lịch sử trước khi thử lại.' : "Your last charge's outcome is unconfirmed - check your balance/history before retrying."}`,
           portalUrl: portalUrl ?? opts.portalUrl ?? undefined,
-          title: 'Charge outcome unconfirmed'
+          title: isVi ? 'Chưa xác nhận được kết quả giao dịch' : 'Charge outcome unconfirmed'
         }
       }
 
       return {
         kind: 'failure',
-        message: observed.refusal?.message || 'Could not check the charge.',
+        message: observed.refusal?.message || (isVi ? 'Không thể kiểm tra giao dịch.' : 'Could not check the charge.'),
         retryFreshKey: true,
-        title: 'Could not check charge'
+        title: isVi ? 'Không thể kiểm tra giao dịch' : 'Could not check charge'
       }
     }
 
     case 'refused':
       return {
         kind: 'failure',
-        message: observed.refusal?.message || settlement.status.message || 'Could not check the charge.',
+        message:
+          observed.refusal?.message ||
+          settlement.status.message ||
+          (isVi ? 'Không thể kiểm tra giao dịch.' : 'Could not check the charge.'),
         retryFreshKey: true,
-        title: 'Could not check charge'
+        title: isVi ? 'Không thể kiểm tra giao dịch' : 'Could not check charge'
       }
 
     case 'cancelled':
 
     case 'timed_out':
-      return timeoutOutcome(observed.status?.ok ? (observed.status.portal_url ?? opts.portalUrl) : opts.portalUrl)
+      return timeoutOutcome(observed.status?.ok ? (observed.status.portal_url ?? opts.portalUrl) : opts.portalUrl, isVi)
   }
 }
 
@@ -173,6 +186,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function useChargeFlow() {
+  const { locale } = useI18n()
+  const isVi = locale === 'vi'
   const api = useBillingApi()
   const queryClient = useQueryClient()
   const [phase, setPhase] = useState<ChargeFlowPhase>('idle')
@@ -206,7 +221,7 @@ export function useChargeFlow() {
       const chargeResult = await api.charge(amountUsd, idempotencyKey)
 
       if (!chargeResult.ok) {
-        const resolved = resolveRefusal(chargeResult.refusal)
+        const resolved = resolveRefusal(chargeResult.refusal, locale)
 
         const action =
           resolved.action.type === 'portal'
@@ -239,9 +254,11 @@ export function useChargeFlow() {
       if (!chargeId) {
         setOutcome({
           kind: 'failure',
-          message: 'The billing service accepted the request but did not return a charge id.',
+          message: isVi
+            ? 'Dịch vụ thanh toán đã nhận yêu cầu nhưng không trả về mã giao dịch.'
+            : 'The billing service accepted the request but did not return a charge id.',
           retryFreshKey: true,
-          title: 'Charge could not be tracked'
+          title: isVi ? 'Không thể theo dõi giao dịch' : 'Charge could not be tracked'
         })
         setPhaseState('done')
 
@@ -251,6 +268,7 @@ export function useChargeFlow() {
       setPhaseState('polling')
 
       const pollOutcome = await pollChargeSettlement(api, chargeId, {
+        locale,
         portalUrl: chargeResult.data.portal_url
       })
 
@@ -261,7 +279,7 @@ export function useChargeFlow() {
         void queryClient.invalidateQueries({ queryKey: ['billing', 'state'] })
       }
     },
-    [api, queryClient, setPhaseState]
+    [api, isVi, locale, queryClient, setPhaseState]
   )
 
   return { outcome, phase, reset, start }
@@ -271,27 +289,37 @@ function shouldReuseIdempotencyKey(refusal: BillingRefusal): boolean {
   return retryableSendKinds.has(refusal.kind)
 }
 
-function timeoutOutcome(portalUrl?: null | string): ChargeFlowOutcome {
+function timeoutOutcome(portalUrl: null | string | undefined, isVi: boolean): ChargeFlowOutcome {
   return {
     kind: 'ambiguous',
-    message: 'Charge may still settle. Check the portal before retrying.',
+    message: isVi
+      ? 'Giao dịch có thể vẫn đang xử lý. Hãy kiểm tra Nous Portal trước khi thử lại.'
+      : 'Charge may still settle. Check the portal before retrying.',
     portalUrl: portalUrl ?? undefined,
-    title: 'Still processing after 5 minutes'
+    title: isVi ? 'Vẫn đang xử lý sau 5 phút' : 'Still processing after 5 minutes'
   }
 }
 
-function renderChargeFailed(reason?: null | string): string {
+function renderChargeFailed(reason: null | string | undefined, isVi: boolean): string {
   switch ((reason || '').trim()) {
     case 'authentication_required':
-      return 'Your bank requires verification (3DS). Complete it on the portal to finish this purchase.'
+      return isVi
+        ? 'Ngân hàng yêu cầu xác minh (3DS). Hãy hoàn tất trong Nous Portal để kết thúc giao dịch.'
+        : 'Your bank requires verification (3DS). Complete it on the portal to finish this purchase.'
 
     case 'payment_method_expired':
-      return 'Your card has expired. Update it on the portal.'
+      return isVi
+        ? 'Thẻ đã hết hạn. Hãy cập nhật trong Nous Portal.'
+        : 'Your card has expired. Update it on the portal.'
 
     case 'card_declined':
-      return 'Your card was declined. Try another card on the portal.'
+      return isVi
+        ? 'Thẻ bị từ chối. Hãy thử thẻ khác trong Nous Portal.'
+        : 'Your card was declined. Try another card on the portal.'
 
     default:
-      return `The charge didn't go through (${reason || 'processing_error'}).`
+      return isVi
+        ? `Giao dịch không thành công (${reason || 'processing_error'}).`
+        : `The charge didn't go through (${reason || 'processing_error'}).`
   }
 }

@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { useI18n } from '@/i18n'
+import { en } from '@/i18n/en'
 import { desktopGit } from '@/lib/desktop-git'
 import { cn } from '@/lib/utils'
 import {
@@ -136,6 +137,7 @@ function OptionRadio({ option }: { option: Option }) {
 
 export function SidebarFilterMenu({ className }: { className?: string }) {
   const { t } = useI18n()
+  const copy = t.sidebar.filterMenu ?? en.sidebar.filterMenu!
   const grouping = useStore($sidebarGrouping)
   const ordering = useStore($sidebarOrdering)
   const rowMeta = useStore($sidebarRowMeta)
@@ -157,12 +159,16 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
   // been explicitly shut.
   const projectsCollapsed = projects.length > 0 && projects.every(project => nodeOpen[project.id] === false)
 
-  const groupingLabel = GROUPINGS.find(option => option.id === grouping)?.label
+  const localizeOptions = <T extends string>(options: Option<T>[]): Option<T>[] =>
+    options.map(option => ({ ...option, label: copy.options[option.id] ?? option.label }))
+
+  const groupings = localizeOptions(GROUPINGS)
+  const groupingLabel = groupings.find(option => option.id === grouping)?.label
 
   // Two options are conditional: dragging a row is what picks manual, so it
   // only appears as a way back out once there's a hand-picked order to leave;
   // and cost is hidden until some session actually reports spend.
-  const orderings = ORDERINGS.filter(option => {
+  const orderings = localizeOptions(ORDERINGS).filter(option => {
     if (option.id === 'manual') {
       return ordering === 'manual'
     }
@@ -170,7 +176,7 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
     return option.id !== 'cost' || hasCost || ordering === 'cost'
   })
 
-  const rowMetaOptions = ROW_META.filter(option => {
+  const rowMetaOptions = localizeOptions(ROW_META).filter(option => {
     if (option.id === 'cost') {
       return hasCost || rowMeta.includes('cost')
     }
@@ -182,7 +188,7 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          aria-label="Filters"
+          aria-label={copy.ariaLabel}
           className={cn(
             className,
             'data-[state=open]:bg-(--ui-control-active-background) data-[state=open]:text-foreground data-[state=open]:opacity-100',
@@ -203,7 +209,7 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
         <DropdownMenuGroup>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger hideChevron>
-              Grouping
+              {copy.grouping}
               <span className="ml-auto flex items-center gap-1 pl-4 text-(--ui-text-tertiary)">
                 {groupingLabel}
                 <Codicon name="chevron-right" size="1rem" />
@@ -214,7 +220,7 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
                 onValueChange={value => setSidebarGrouping(value as SidebarGrouping)}
                 value={grouping}
               >
-                {GROUPINGS.map(option => (
+                {groupings.map(option => (
                   <OptionRadio key={option.id} option={option} />
                 ))}
               </DropdownMenuRadioGroup>
@@ -222,7 +228,7 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
           </DropdownMenuSub>
 
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger>Ordering</DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger>{copy.ordering}</DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               <DropdownMenuRadioGroup
                 onValueChange={value => setSidebarOrdering(value as SidebarOrdering)}
@@ -236,7 +242,7 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
           </DropdownMenuSub>
 
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger>Show</DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger>{copy.show}</DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               {rowMetaOptions.map(option => (
                 <OptionCheckbox
@@ -253,12 +259,12 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
         <DropdownMenuSeparator />
 
         <DropdownMenuGroup>
-          <DropdownMenuLabel>Filters</DropdownMenuLabel>
+          <DropdownMenuLabel>{copy.filters}</DropdownMenuLabel>
 
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger>Status</DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger>{copy.status}</DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
-              {STATUS_FILTERS.map(option => (
+              {localizeOptions(STATUS_FILTERS).map(option => (
                 <OptionCheckbox
                   checked={statusFilter.includes(option.id)}
                   key={option.id}
@@ -273,9 +279,9 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
               this submenu never appears rather than filtering everything out. */}
           {prAvailable && (
             <DropdownMenuSub>
-              <DropdownMenuSubTrigger>Pull request</DropdownMenuSubTrigger>
+              <DropdownMenuSubTrigger>{copy.pullRequest}</DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
-                {PR_FILTERS.map(option => (
+                {localizeOptions(PR_FILTERS).map(option => (
                   <OptionCheckbox
                     checked={prFilter.includes(option.id)}
                     key={option.id}
@@ -289,7 +295,7 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
 
           {projects.length > 1 && (
             <DropdownMenuSub>
-              <DropdownMenuSubTrigger>Project</DropdownMenuSubTrigger>
+              <DropdownMenuSubTrigger>{copy.project}</DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="max-h-80 overflow-y-auto">
                 {projects.map(project => (
                   <OptionCheckbox
@@ -311,12 +317,12 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
           <OptionCheckbox
             checked={showArchived}
             onCheck={() => setSidebarShowArchived(!showArchived)}
-            option={{ id: 'archived', label: 'Archived' }}
+            option={{ id: 'archived', label: copy.archived }}
           />
 
           {/* One way back rather than two near-identical ones: this drops the
               grouping and sort too, which "clear filters" left behind. */}
-          {viewCustomized && <DropdownMenuItem onSelect={resetSidebarView}>Reset to defaults</DropdownMenuItem>}
+          {viewCustomized && <DropdownMenuItem onSelect={resetSidebarView}>{copy.resetDefaults}</DropdownMenuItem>}
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />
@@ -334,11 +340,11 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
               )
             }
           >
-            {projectsCollapsed ? 'Expand all' : 'Collapse all'}
+            {projectsCollapsed ? copy.expandAll : copy.collapseAll}
           </DropdownMenuItem>
         )}
         <DropdownMenuItem disabled={unreadIds.length === 0} onSelect={markAllSessionsRead}>
-          Mark all as read
+          {copy.markAllRead}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

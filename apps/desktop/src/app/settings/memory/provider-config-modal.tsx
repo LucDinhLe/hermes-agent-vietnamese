@@ -12,6 +12,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { saveMemoryProviderConfig } from '@/hermes'
+import { useI18n } from '@/i18n'
 import { ExternalLink, Loader2, Save, SlidersHorizontal } from '@/lib/icons'
 import { notify, notifyError } from '@/store/notifications'
 import { $activeGatewayProfile } from '@/store/profile'
@@ -57,6 +58,8 @@ export function ProviderConfigModal({
   onOpenChange: (open: boolean) => void
   onSaved: () => Promise<void> | void
 }) {
+  const { locale, t } = useI18n()
+  const isVi = locale === 'vi'
   const activeProfile = useStore($activeGatewayProfile)
   const [values, setValues] = useState<Record<string, string>>({})
   const [seeded, setSeeded] = useState<Record<string, string>>({})
@@ -79,11 +82,15 @@ export function ProviderConfigModal({
 
     try {
       await saveMemoryProviderConfig(provider, edited)
-      notify({ kind: 'success', title: `${config.label} saved`, message: 'Memory provider configuration updated.' })
+      notify({
+        kind: 'success',
+        title: isVi ? `Đã lưu ${config.label}` : `${config.label} saved`,
+        message: isVi ? 'Đã cập nhật cấu hình nhà cung cấp bộ nhớ.' : 'Memory provider configuration updated.'
+      })
       await onSaved()
       onOpenChange(false)
     } catch (err) {
-      notifyError(err, `Failed to save ${config.label} settings`)
+      notifyError(err, isVi ? `Không thể lưu cài đặt ${config.label}` : `Failed to save ${config.label} settings`)
     } finally {
       setSaving(false)
     }
@@ -93,10 +100,16 @@ export function ProviderConfigModal({
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent bodyClassName="dt-portal-scrollbar" className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle icon={SlidersHorizontal}>{config.label} — full configuration</DialogTitle>
+          <DialogTitle icon={SlidersHorizontal}>
+            {config.label} — {isVi ? 'cấu hình đầy đủ' : 'full configuration'}
+          </DialogTitle>
           <DialogDescription>
-            Every {config.label} option for the <span className="font-medium">{activeProfile}</span> profile. Blank
-            fields fall back to the resolved host or built-in default.
+            {isVi ? 'Tất cả tùy chọn ' : 'Every '}
+            {config.label} {isVi ? 'cho hồ sơ ' : 'option for the '}
+            <span className="font-medium">{activeProfile}</span>
+            {isVi
+              ? '. Trường để trống sẽ dùng giá trị từ máy chủ hoặc giá trị mặc định tích hợp.'
+              : ' profile. Blank fields fall back to the resolved host or built-in default.'}
           </DialogDescription>
           {config.docs_url && (
             <a
@@ -109,7 +122,7 @@ export function ProviderConfigModal({
               rel="noreferrer"
               target="_blank"
             >
-              {config.label} configuration reference
+              {isVi ? `Tài liệu cấu hình ${config.label}` : `${config.label} configuration reference`}
               <ExternalLink className="size-3" />
             </a>
           )}
@@ -145,12 +158,12 @@ export function ProviderConfigModal({
         <DialogFooter>
           <DialogClose asChild>
             <Button size="sm" type="button" variant="ghost">
-              Cancel
+              {t.common.cancel}
             </Button>
           </DialogClose>
           <Button disabled={saving} onClick={() => void save()} size="sm">
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save />}
-            Save changes
+            {isVi ? 'Lưu thay đổi' : 'Save changes'}
           </Button>
         </DialogFooter>
       </DialogContent>
