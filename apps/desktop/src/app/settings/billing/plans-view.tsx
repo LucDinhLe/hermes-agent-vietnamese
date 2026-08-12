@@ -95,7 +95,7 @@ function DowngradeConfirm({ flow, tier }: { flow: DowngradeFlow; tier: BillingPl
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         {phase.kind === 'previewFailed' ? (
           <Button disabled={busy} onClick={flow.retryPreview} size="sm" type="button">
-            {t.common.retry}
+            {isVi ? 'Thử lại' : 'Try again'}
           </Button>
         ) : canConfirm ? (
           <Button disabled={busy} onClick={() => void flow.confirm()} size="sm" type="button">
@@ -104,7 +104,9 @@ function DowngradeConfirm({ flow, tier }: { flow: DowngradeFlow; tier: BillingPl
                 ? 'Đang lên lịch…'
                 : 'Scheduling…'
               : phase.kind === 'scheduleFailed'
-                ? t.common.retry
+                ? isVi
+                  ? 'Thử lại'
+                  : 'Try again'
                 : isVi
                   ? 'Xác nhận hạ gói'
                   : 'Confirm downgrade'}

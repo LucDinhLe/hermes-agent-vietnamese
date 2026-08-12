@@ -254,7 +254,7 @@ function BuyCreditsOutcome({
   onRetry: () => void
   outcome: ReturnType<typeof useChargeFlow>['outcome']
 }) {
-  const { locale, t } = useI18n()
+  const { locale } = useI18n()
   const isVi = locale === 'vi'
   const stepUp = useStepUpFlow()
 
@@ -305,7 +305,7 @@ function BuyCreditsOutcome({
       </span>
       {outcome.action?.type === 'retry' && (
         <Button onClick={onRetry} size="sm" type="button" variant="outline">
-          {t.common.retry}
+          {isVi ? 'Thử lại' : 'Try again'}
         </Button>
       )}
       {outcome.action?.type === 'step_up' && <StepUpInlineAction flow={stepUp} />}

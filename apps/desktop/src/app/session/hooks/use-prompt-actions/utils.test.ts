@@ -1,6 +1,7 @@
 import type { AppendMessage } from '@assistant-ui/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { setRuntimeI18nLocale } from '@/i18n'
 import type { ChatMessage } from '@/lib/chat-messages'
 
 import {
@@ -21,6 +22,10 @@ import {
   visibleUserOrdinal,
   withSessionNotFoundResume
 } from './utils'
+
+beforeEach(() => {
+  setRuntimeI18nLocale('en')
+})
 
 describe('isSessionIdCandidate', () => {
   it('accepts the timestamped and hex id forms', () => {
@@ -434,7 +439,7 @@ describe('renderRpcResult', () => {
   describe('session.usage', () => {
     it('formats calls / input / output / total with thousands separators', () => {
       expect(renderRpcResult({ calls: 12, input: 1_234_567, output: 89_012, total: 1_323_579 }, 'usage')).toBe(
-        'Usage: 12 calls · 1,234,567 in / 89,012 out · 1,323,579 total'
+        `Usage: ${12..toLocaleString()} calls · ${1_234_567..toLocaleString()} in / ${89_012..toLocaleString()} out · ${1_323_579..toLocaleString()} total`
       )
     })
 
