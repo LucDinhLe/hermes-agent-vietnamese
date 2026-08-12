@@ -135,14 +135,25 @@ jobs:
           electron/bootstrap-runner.test.ts
           electron/update-remote.test.ts
 
-      - name: Đóng gói
-        env:
-          CSC_LINK: ${{ matrix.platform == 'darwin' && secrets.MAC_CSC_LINK || '' }}
-          CSC_KEY_PASSWORD: ${{ matrix.platform == 'darwin' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
-          APPLE_API_KEY: ${{ matrix.platform == 'darwin' && secrets.APPLE_API_KEY || '' }}
-          APPLE_API_KEY_ID: ${{ matrix.platform == 'darwin' && secrets.APPLE_API_KEY_ID || '' }}
-          APPLE_API_ISSUER: ${{ matrix.platform == 'darwin' && secrets.APPLE_API_ISSUER || '' }}
+      - name: Đóng gói Windows hoặc Linux
+        if: matrix.platform != 'darwin'
         run: npm run --prefix apps/desktop ${{ matrix.command }}
+
+      - name: Đóng gói macOS
+        if: matrix.platform == 'darwin'
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          if [[ -z "${CSC_LINK:-}" ]]; then
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+          fi
+          npm run --prefix apps/desktop ${{ matrix.command }}
 
       - name: Kiểm tra cấu trúc gói đã đóng
         env:
