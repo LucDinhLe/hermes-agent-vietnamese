@@ -2,7 +2,7 @@
 
 ## Mục đích của dự án
 
-Hermes Agent tiếng Việt là một **dự án Happy cho người Việt**, được thực hiện nhằm giúp người dùng Việt, đặc biệt là người gặp rào cản tiếng Anh, tiếp cận và sử dụng Hermes Agent thuận tiện hơn.
+Hermes Agent tiếng Việt là một **dự án cá nhân, độc lập**, được thực hiện nhằm giúp người dùng Việt, đặc biệt là người gặp rào cản tiếng Anh, tiếp cận và sử dụng Hermes Agent thuận tiện hơn.
 
 Dự án bổ sung lớp Việt hóa, hướng dẫn sử dụng, đóng gói đa nền tảng và các điều chỉnh tương thích phục vụ người dùng Việt. Đây là một bản cộng đồng không chính thức và không được Nous Research, OpenAI, Anthropic hoặc Google bảo chứng.
 
@@ -31,7 +31,7 @@ Hermes được cung cấp theo giấy phép MIT với nguyên trạng phần m�
 
 Người dùng cần xem lại kết quả, yêu cầu quyền và hậu quả trước khi cho AI agent thực hiện thao tác quan trọng. Trong phạm vi pháp luật cho phép và theo giấy phép MIT, tác giả cùng chủ sở hữu bản quyền không chịu trách nhiệm đối với khiếu nại, thiệt hại hoặc nghĩa vụ phát sinh từ phần mềm hay việc sử dụng phần mềm.
 
-## Phạm vi trách nhiệm của dự án Happy
+## Phạm vi trách nhiệm của người duy trì bản cộng đồng
 
 Những người duy trì bản cộng đồng chịu trách nhiệm tiếp nhận phản hồi liên quan đến bản dịch tiếng Việt, tài liệu, bộ cài, quy trình phát hành và các điều chỉnh tương thích do bản cộng đồng bổ sung.
 

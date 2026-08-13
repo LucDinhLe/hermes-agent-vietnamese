@@ -6,7 +6,7 @@
 
 **Bản địa hóa cộng đồng giúp người Việt không thạo tiếng Anh có thể cài đặt, cấu hình và sử dụng Hermes Agent dễ dàng hơn.**
 
-Đây là một **dự án Happy cho người Việt**, được thực hiện nhằm hỗ trợ người dùng Việt tiếp cận và sử dụng Hermes Agent thuận tiện hơn.
+Đây là một **dự án cá nhân, độc lập**, được thực hiện nhằm hỗ trợ người dùng Việt tiếp cận và sử dụng Hermes Agent thuận tiện hơn.
 
 <p align="center">
   <a href="https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-5"><img src="https://img.shields.io/badge/Bản_thử_nghiệm-Windows_%7C_macOS_%7C_Linux-F97316?style=for-the-badge" alt="Tải bản thử nghiệm đa nền tảng"></a>
