@@ -8,10 +8,10 @@ Bản cộng đồng đa nền tảng với giao diện tiếng Việt mặc đ�
 
 | Máy đang dùng           | Tải trực tiếp                                                                                                                                               |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows 10/11 x64       | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Windows-x64-Setup.exe)           |
-| Windows 10/11 ARM64     | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Windows-arm64-Setup.exe)       |
-| Mac chip Apple M-series | [Bộ cài macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
-| Mac chip Intel          | [Bộ cài macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-macOS-Intel.dmg)                 |
+| Windows 10/11 x64       | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-9/Hermes-Vietnamese-Windows-x64-Setup.exe)           |
+| Windows 10/11 ARM64     | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-9/Hermes-Vietnamese-Windows-arm64-Setup.exe)       |
+| Mac chip Apple M-series | [Bộ cài macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-9/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
+| Mac chip Intel          | [Bộ cài macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-9/Hermes-Vietnamese-macOS-Intel.dmg)                 |
 | Ubuntu/Debian           | [Chọn `.deb` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                                  |
 | Fedora/RHEL             | [Chọn `.rpm` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                                  |
 | Linux khác              | [Chọn `.AppImage` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                             |
@@ -31,7 +31,7 @@ Mỗi người đăng nhập OpenAI Codex hoặc Claude Pro/Max bằng tài kho�
 ### Cải thiện trong bản vá này
 
 - Màn **Kết nối model** hiện ngay ba lựa chọn phổ biến theo thứ tự: `OpenAI OAuth (ChatGPT)`, `Claude Pro / Max (qua Claude Code)` và `Google Gemini (khóa API)`.
-- Nous Portal, OpenRouter, Fireworks và các dịch vụ còn lại được chuyển xuống mục **Nhà cung cấp khác**; không còn dẫn người mới vào trang chọn gói Nous trước khi thấy các kết nối đang có.
+- Toàn bộ kết nối tài khoản, khóa API và endpoint cục bộ được hiện trực tiếp trong danh sách; nhà cung cấp mới từ lõi Hermes sẽ tự xuất hiện.
 - Bấm Gemini sẽ mở trực tiếp form khóa API và chọn sẵn Google AI Studio, giúp phân biệt rõ với gói thuê bao Gemini trên web.
 - Thiết lập lần đầu được trình bày thành ba bước: cài đặt và chọn ngôn ngữ, kết nối model, bắt đầu giao việc.
 - Người dùng không cần mở Terminal, chạy lệnh hoặc sửa tệp cấu hình để hoàn tất thiết lập; Terminal tích hợp trong Hermes vẫn được giữ nguyên.
@@ -39,8 +39,8 @@ Mỗi người đăng nhập OpenAI Codex hoặc Claude Pro/Max bằng tài kho�
 - Windows ưu tiên tải `uv` từ wheel PyPI chính thức, kiểm tra SHA-256 trước khi chạy để giảm lỗi Smart App Control trong quá trình bootstrap.
 - Trình cài Windows bật hỗ trợ đường dẫn dài chỉ trong tiến trình bootstrap, tránh lỗi `Filename too long` mà không thay đổi cấu hình Git toàn máy.
 - Danh mục model luôn hiện nút mở rộng và số model của từng nhà cung cấp, kể cả khi nhóm đang thu gọn.
-- Claude Pro/Max hiển thị rõ ba lựa chọn `Sonnet`, `Opus` và `Haiku` sau khi mở rộng.
-- Gemini được ghi rõ là kết nối qua `Google AI Studio (API)`, tránh nhầm với gói thuê bao Gemini hoặc OAuth của Gemini CLI.
+- Claude Pro/Max hiển thị tên model cụ thể: `claude-sonnet-5`, `claude-fable-5`, `claude-opus-5`, `claude-opus-4-8` và `claude-haiku-4-5`.
+- Gemini được ghi rõ là kết nối qua Google AI Studio API key hoặc Google Vertex AI. Hermes không dùng lại OAuth của Gemini CLI vì điều khoản Google không cho phần mềm bên thứ ba dùng luồng đó.
 
 ### Bảo mật khi cài
 
