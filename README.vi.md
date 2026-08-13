@@ -8,6 +8,8 @@ Giao diện Desktop mặc định dùng tiếng Việt và có nút chuyển nha
 
 Mã nguồn gốc thuộc Nous Research và được phân phối theo giấy phép MIT. Đây là bản cộng đồng không chính thức, không được Nous Research, OpenAI, Anthropic hoặc Google bảo chứng. Giấy phép, thuật toán, kiến trúc và các tính năng lõi của Hermes vẫn được giữ theo dự án gốc. Bản cộng đồng bổ sung lớp Việt hóa, tài liệu, đóng gói đa nền tảng và các điều chỉnh tương thích cho người dùng Việt.
 
+Dự án đang xin chương trình ký mã miễn phí cho phần mềm mã nguồn mở. Trạng thái hiện tại, phạm vi ký và vai trò phê duyệt được công bố trong [Code signing policy](CODE_SIGNING_POLICY.md). Các bản phát hành hiện tại vẫn chưa được ký số.
+
 Mỗi người dùng đăng nhập bằng tài khoản hoặc khóa API của chính mình; bộ cài không kèm tài khoản AI trả phí.
 
 ## Bắt đầu nhanh

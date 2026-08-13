@@ -8,6 +8,8 @@
 
 Đây là một **dự án cá nhân, độc lập**, được thực hiện nhằm hỗ trợ người dùng Việt tiếp cận và sử dụng Hermes Agent thuận tiện hơn.
 
+Dự án đang xin chương trình ký mã miễn phí cho phần mềm mã nguồn mở. Trạng thái hiện tại, phạm vi ký và vai trò phê duyệt được công bố trong [Code signing policy](CODE_SIGNING_POLICY.md). Các bản phát hành hiện tại vẫn chưa được ký số.
+
 <p align="center">
   <a href="https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-5"><img src="https://img.shields.io/badge/Bản_thử_nghiệm-Windows_%7C_macOS_%7C_Linux-F97316?style=for-the-badge" alt="Tải bản thử nghiệm đa nền tảng"></a>
   <a href="README.vi.md"><img src="https://img.shields.io/badge/Hướng_dẫn-Tiếng_Việt-DC2626?style=for-the-badge" alt="Hướng dẫn tiếng Việt"></a>
