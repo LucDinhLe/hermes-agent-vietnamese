@@ -8,10 +8,10 @@ Bản cộng đồng đa nền tảng với giao diện tiếng Việt mặc đ�
 
 | Máy đang dùng           | Tải trực tiếp                                                                                                                                               |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows 10/11 x64       | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-10/Hermes-Vietnamese-Windows-x64-Setup.exe)           |
-| Windows 10/11 ARM64     | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-10/Hermes-Vietnamese-Windows-arm64-Setup.exe)       |
-| Mac chip Apple M-series | [Bộ cài macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-10/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
-| Mac chip Intel          | [Bộ cài macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-10/Hermes-Vietnamese-macOS-Intel.dmg)                 |
+| Windows 10/11 x64       | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-11/Hermes-Vietnamese-Windows-x64-Setup.exe)           |
+| Windows 10/11 ARM64     | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-11/Hermes-Vietnamese-Windows-arm64-Setup.exe)       |
+| Mac chip Apple M-series | [Bộ cài macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-11/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
+| Mac chip Intel          | [Bộ cài macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-11/Hermes-Vietnamese-macOS-Intel.dmg)                 |
 | Ubuntu/Debian           | [Chọn `.deb` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                                  |
 | Fedora/RHEL             | [Chọn `.rpm` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                                  |
 | Linux khác              | [Chọn `.AppImage` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                             |
@@ -30,6 +30,7 @@ Mỗi người đăng nhập OpenAI Codex hoặc Claude Pro/Max bằng tài kho�
 
 ### Cải thiện trong bản vá này
 
+- Các tiêu đề giữ chỗ `NEW SESSION` do bản cũ đã lưu nay hiển thị thành `Phiên mới` khi dùng tiếng Việt, không sửa nội dung do người dùng tự đặt.
 - Khi nâng cấp ứng dụng, bản Desktop nay tự đồng bộ lõi Hermes đi kèm đúng một lần; lịch sử, cấu hình và thông tin đăng nhập cục bộ được giữ nguyên.
 - Trình cập nhật Windows không còn dừng nhầm chính ứng dụng Hermes trong bước làm mới môi trường chạy.
 - Quá trình cập nhật hiện bằng tiếng Việt ngay cả khi dịch vụ nền chưa khởi động, không quay lại màn chọn thiết lập và không cần Terminal.
