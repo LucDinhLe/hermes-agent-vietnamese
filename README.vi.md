@@ -1,4 +1,4 @@
-# Hướng dẫn cài đặt và kết nối Hermes Agent tiếng Việt
+# Hướng dẫn cài đặt và kết nối Hermes Vietnamese
 
 Tài liệu này dành cho người muốn cài Hermes bằng giao diện, kết nối tài khoản AI của mình và bắt đầu giao việc mà không cần dùng dòng lệnh.
 
@@ -35,17 +35,50 @@ Chọn model mặc định, vào không gian làm việc và nhập mục tiêu 
 
 ## Chọn đúng bộ cài
 
-| Hệ điều hành     | Kiến trúc      | Tệp nên tải                                 |
-| ---------------- | -------------- | ------------------------------------------- |
-| Windows 10/11    | x64            | `Hermes-Vietnamese-Windows-x64-Setup.exe`   |
-| Windows 10/11    | ARM64          | `Hermes-Vietnamese-Windows-arm64-Setup.exe` |
-| macOS 12 trở lên | Apple Silicon  | `Hermes-Vietnamese-macOS-Apple-Silicon.dmg` |
-| macOS 12 trở lên | Intel x64      | `Hermes-Vietnamese-macOS-Intel.dmg`         |
-| Ubuntu/Debian    | x64 hoặc ARM64 | Tệp `.deb` đúng kiến trúc                   |
-| Fedora/RHEL      | x64 hoặc ARM64 | Tệp `.rpm` đúng kiến trúc                   |
-| Linux khác       | x64 hoặc ARM64 | Tệp `.AppImage` đúng kiến trúc              |
+| Hệ điều hành     | Kiến trúc     | Tải trực tiếp                                                                                                                                                              |
+| ---------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows 10/11    | x64           | [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Windows-x64-Setup.exe)     |
+| Windows 10/11    | ARM64         | [Hermes-Vietnamese-Windows-arm64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Windows-arm64-Setup.exe) |
+| macOS 12 trở lên | Apple Silicon | [Hermes-Vietnamese-macOS-Apple-Silicon.dmg](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
+| macOS 12 trở lên | Intel x64     | [Hermes-Vietnamese-macOS-Intel.dmg](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-macOS-Intel.dmg)                 |
+| Ubuntu/Debian    | x64           | [Hermes-Vietnamese-Linux-x64.deb](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Linux-x64.deb)                     |
+| Ubuntu/Debian    | ARM64         | [Hermes-Vietnamese-Linux-arm64.deb](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Linux-arm64.deb)                 |
+| Fedora/RHEL      | x64           | [Hermes-Vietnamese-Linux-x64.rpm](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Linux-x64.rpm)                     |
+| Fedora/RHEL      | ARM64         | [Hermes-Vietnamese-Linux-arm64.rpm](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Linux-arm64.rpm)                 |
+| Linux khác       | x64           | [Hermes-Vietnamese-Linux-x64.AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Linux-x64.AppImage)           |
+| Linux khác       | ARM64         | [Hermes-Vietnamese-Linux-arm64.AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Linux-arm64.AppImage)       |
 
 Windows 32-bit và Linux ARM 32-bit không được đóng gói.
+
+## Kiểm tra máy có phù hợp không
+
+### Máy Windows
+
+1. Nhấn `Windows + I` để mở **Cài đặt**.
+2. Chọn **Hệ thống → Giới thiệu**.
+3. Xem hai dòng sau:
+   - **Phiên bản Windows:** cần Windows 10 hoặc Windows 11.
+   - **Loại hệ thống:** `x64-based processor` thì tải x64; `ARM-based processor` thì tải ARM64.
+
+Nếu Loại hệ thống ghi hệ điều hành 32-bit hoặc bộ xử lý x86, máy chưa phù hợp với bộ cài hiện tại.
+
+### Máy Mac
+
+1. Mở menu ** → About This Mac/Giới thiệu về máy Mac**.
+2. Xem phiên bản macOS và loại chip:
+   - Cần **macOS 12 Monterey trở lên**.
+   - Dòng **Chip** bắt đầu bằng `Apple M` thì tải Apple Silicon.
+   - Dòng **Processor** ghi `Intel` thì tải bản Intel.
+
+### Máy Linux
+
+1. Mở **Settings → About/Giới thiệu** và tìm mục **Architecture/OS type**.
+2. Đối chiếu:
+   - `x86_64` hoặc `amd64` → tải x64.
+   - `aarch64` hoặc `arm64` → tải ARM64.
+3. Nếu giao diện không hiện kiến trúc, mở Terminal và chạy `uname -m`.
+
+Linux 32-bit như `i386`, `i686`, `armv7` chưa được hỗ trợ. Bản cộng đồng ưu tiên Ubuntu 24.04 trở lên; bản phân phối khác có thể cần cài thêm thư viện hệ thống.
 
 ### Yêu cầu hệ thống
 

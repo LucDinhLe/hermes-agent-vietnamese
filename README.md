@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/banner.png" alt="Hermes Agent tiếng Việt" width="100%">
+  <img src="assets/banner.png" alt="Hermes Vietnamese" width="100%">
 </p>
 
-# Hermes Agent tiếng Việt ☤
+# Hermes Vietnamese
 
 **Bản cộng đồng giúp người Việt cài đặt, kết nối model và sử dụng Hermes Agent dễ dàng hơn, kể cả khi không thạo tiếng Anh.**
 
@@ -11,7 +11,7 @@ Hermes là một AI agent có thể làm việc với tệp, dòng lệnh, trìn
 Đây là **dự án cá nhân, độc lập và không chính thức** do [Lê Đình Lực](https://github.com/LucDinhLe) duy trì vì mục tiêu cộng đồng. Dự án không được Nous Research, OpenAI, Anthropic hoặc Google bảo chứng.
 
 <p align="center">
-  <a href="https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-8"><img src="https://img.shields.io/badge/Tải_bản_vi--v0.20.0--8-Windows_%7C_macOS_%7C_Linux-F97316?style=for-the-badge" alt="Tải Hermes tiếng Việt"></a>
+  <a href="https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-8"><img src="https://img.shields.io/badge/Tải_bản_vi--v0.20.0--8-Windows_%7C_macOS_%7C_Linux-F97316?style=for-the-badge" alt="Tải Hermes Vietnamese"></a>
   <a href="README.vi.md"><img src="https://img.shields.io/badge/Hướng_dẫn-Cài_đặt_%26_kết_nối-DC2626?style=for-the-badge" alt="Hướng dẫn cài đặt và kết nối"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/Giấy_phép-MIT-16A34A?style=for-the-badge" alt="Giấy phép MIT"></a>
 </p>
@@ -28,17 +28,26 @@ Mở [trang phát hành vi-v0.20.0-8](https://github.com/LucDinhLe/hermes-agent-
 
 Người dùng không cần mở Terminal, chạy lệnh hay sửa tệp cấu hình. Lần cài đầu cần Internet và có thể mất vài phút vì Hermes phải tải môi trường chạy cùng các thành phần cần thiết.
 
-| Máy đang dùng           | Tệp nên tải                                       |
-| ----------------------- | ------------------------------------------------- |
-| Windows 10/11 x64       | `Hermes-Vietnamese-Windows-x64-Setup.exe`         |
-| Windows 10/11 ARM64     | `Hermes-Vietnamese-Windows-arm64-Setup.exe`       |
-| Mac chip Apple M-series | `Hermes-Vietnamese-macOS-Apple-Silicon.dmg`       |
-| Mac Intel               | `Hermes-Vietnamese-macOS-Intel.dmg`               |
-| Ubuntu/Debian           | Tệp `.deb` đúng kiến trúc `x64` hoặc `arm64`      |
-| Fedora/RHEL             | Tệp `.rpm` đúng kiến trúc `x64` hoặc `arm64`      |
-| Linux khác              | Tệp `.AppImage` đúng kiến trúc `x64` hoặc `arm64` |
+| Máy đang dùng                | Tải trực tiếp                                                                                                                                               |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows 10/11, chip x64      | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Windows-x64-Setup.exe)           |
+| Windows 10/11, chip ARM64    | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Windows-arm64-Setup.exe)       |
+| Mac dùng chip Apple M-series | [Bộ cài macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
+| Mac dùng chip Intel          | [Bộ cài macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-macOS-Intel.dmg)                 |
+| Ubuntu/Debian x64            | [Gói Linux x64 `.deb`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Linux-x64.deb)                 |
+| Ubuntu/Debian ARM64          | [Gói Linux ARM64 `.deb`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Linux-arm64.deb)             |
+| Fedora/RHEL x64              | [Gói Linux x64 `.rpm`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Linux-x64.rpm)                 |
+| Fedora/RHEL ARM64            | [Gói Linux ARM64 `.rpm`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Linux-arm64.rpm)             |
+| Linux khác x64               | [Gói Linux x64 `.AppImage`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Linux-x64.AppImage)       |
+| Linux khác ARM64             | [Gói Linux ARM64 `.AppImage`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Linux-arm64.AppImage)   |
 
-Hướng dẫn riêng cho từng hệ điều hành và cách xử lý SmartScreen/Gatekeeper nằm trong [hướng dẫn tiếng Việt](README.vi.md#cài-đặt-chi-tiết).
+### Kiểm tra máy trước khi tải
+
+- **Windows:** nhấn `Windows + I` → **Hệ thống → Giới thiệu**. Máy cần Windows 10/11 bản 64-bit. Dòng **Loại hệ thống** ghi `x64-based processor` thì tải x64; ghi `ARM-based processor` thì tải ARM64.
+- **macOS:** mở menu ** → About This Mac/Giới thiệu về máy Mac**. Máy cần macOS 12 trở lên. Dòng **Chip** bắt đầu bằng `Apple M` thì tải Apple Silicon; dòng **Processor** ghi `Intel` thì tải bản Intel.
+- **Linux:** mở **Settings → About** để xem kiến trúc. `x86_64` tương ứng x64; `aarch64` hoặc `arm64` tương ứng ARM64. Nếu giao diện không hiển thị, có thể chạy `uname -m` trong Terminal.
+
+Xem thêm [hướng dẫn kiểm tra cấu hình, cài đặt và xử lý SmartScreen/Gatekeeper](README.vi.md#kiểm-tra-máy-có-phù-hợp-không).
 
 ### Bước 2. Kết nối model
 

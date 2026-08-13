@@ -1,4 +1,4 @@
-## Hermes Agent tiếng Việt
+## Hermes Vietnamese
 
 Bản cộng đồng đa nền tảng với giao diện tiếng Việt mặc định và nút chuyển nhanh VI/EN. Tên model, thương hiệu, giao thức, câu lệnh và nội dung do AI agent sinh ra được giữ nguyên.
 

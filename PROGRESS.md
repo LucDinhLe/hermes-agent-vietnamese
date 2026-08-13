@@ -2,6 +2,8 @@
 
 ## Cập nhật 2026-08-13 — viết lại tài liệu công khai
 
+- Chuẩn hóa tên hiển thị thành **Hermes Vietnamese**, bỏ biểu tượng trang trí sau tên.
+- Thêm link tải trực tiếp cho từng hệ điều hành và kiến trúc, cùng hướng dẫn kiểm tra phiên bản hệ điều hành, chip x64/ARM64, Apple Silicon/Intel trước khi tải.
 - Viết lại README trang chủ theo hành trình ba bước: tải và cài, kết nối model, bắt đầu giao việc.
 - Cập nhật toàn bộ liên kết tải sang `vi-v0.20.0-8` và bảng chọn đúng bộ cài cho sáu nền tảng.
 - Viết lại hướng dẫn tiếng Việt chi tiết cho Windows, macOS, Linux; ChatGPT OAuth; Claude Pro/Max qua Claude Code; Gemini bằng khóa Google AI Studio; nhà cung cấp khác và model cục bộ.
