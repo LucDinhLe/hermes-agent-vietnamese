@@ -116,7 +116,9 @@ fill/shadow), `ghost`, `link`, `text` (boxless quiet inline — "Cancel",
 **Sizes:** `default`, `xs`, `sm`, `lg`, `inline` (flush, zero box — for buttons
 that sit inside a heading/sentence; replaces `h-auto px-0 py-0`), `micro`
 (status-stack/table-footers), and the icon family `icon` / `icon-xs` /
-`icon-sm` / `icon-lg` / `icon-titlebar`.
+`icon-sm` / `icon-lg` / `icon-pane` / `icon-titlebar`. Pane-strip and titlebar
+controls use a 32px pointer target with a 16px glyph; keep those readable chrome
+sizes in the shared variants instead of shrinking them at call sites.
 
 **Tooltips only when hover teaches something new.** `<Tip>` is for discovery,
 not a tax on every icon. Ask: does hover reveal something the user cannot

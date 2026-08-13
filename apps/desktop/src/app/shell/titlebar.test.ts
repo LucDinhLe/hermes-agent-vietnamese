@@ -1,11 +1,20 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  TITLEBAR_CONTROL_HEIGHT,
   TITLEBAR_CONTROL_OFFSET_X,
   TITLEBAR_EDGE_INSET,
   TITLEBAR_FALLBACK_WINDOW_BUTTON_X,
+  TITLEBAR_ICON_SIZE,
   titlebarControlsPosition
 } from './titlebar'
+
+describe('titlebar control accessibility', () => {
+  it('uses a readable glyph and a 32px pointer target', () => {
+    expect(TITLEBAR_ICON_SIZE).toBeGreaterThanOrEqual(16)
+    expect(TITLEBAR_CONTROL_HEIGHT).toBeGreaterThanOrEqual(32)
+  })
+})
 
 describe('titlebarControlsPosition', () => {
   it('offsets controls from visible traffic lights', () => {
