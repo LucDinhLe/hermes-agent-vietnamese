@@ -220,7 +220,18 @@ def _xai_curated_models() -> list[str]:
 
 _PROVIDER_MODELS: dict[str, list[str]] = {
     "moa": ["default"],
-    "claude-code": ["sonnet", "opus", "haiku"],
+    # Use concrete Claude Code model IDs so the desktop picker tells users
+    # exactly which model family/version they are selecting. Claude Code also
+    # accepts moving aliases such as ``sonnet`` and ``opus``, but those aliases
+    # hide the actual version and make account/plan availability hard to
+    # understand. Availability remains controlled by the user's Claude account.
+    "claude-code": [
+        "claude-sonnet-5",
+        "claude-fable-5",
+        "claude-opus-5",
+        "claude-opus-4-8",
+        "claude-haiku-4-5",
+    ],
     "nous": [
         # Anthropic
         "anthropic/claude-fable-5",

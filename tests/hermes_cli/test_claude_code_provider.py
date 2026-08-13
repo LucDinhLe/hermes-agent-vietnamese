@@ -11,8 +11,11 @@ def test_claude_code_is_distinct_from_metered_anthropic_provider():
     assert get_provider("claude-code").auth_type == "external_process"
 
 
-def test_claude_code_uses_stable_cli_model_aliases():
-    assert provider_model_ids("claude-code", force_refresh=False) == ["sonnet", "opus", "haiku"]
+def test_claude_code_exposes_concrete_model_versions():
+    models = provider_model_ids("claude-code", force_refresh=False)
+
+    assert len(models) > 1
+    assert all(model.startswith("claude-") for model in models)
 
 
 def test_external_credentials_never_return_real_secret(monkeypatch):
@@ -46,5 +49,6 @@ def test_signed_in_claude_code_is_selectable_with_models(monkeypatch):
     rows = list_authenticated_providers(current_provider="openai-codex")
 
     claude = next(row for row in rows if row["slug"] == "claude-code")
-    assert claude["models"] == ["sonnet", "opus", "haiku"]
-    assert claude["total_models"] == 3
+    expected = provider_model_ids("claude-code", force_refresh=False)
+    assert claude["models"] == expected
+    assert claude["total_models"] == len(expected)

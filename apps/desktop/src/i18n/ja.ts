@@ -2158,6 +2158,8 @@ export const ja = defineLocale({
     lookingUpProviders: 'プロバイダーを検索中...',
     collapse: '折りたたむ',
     otherProviders: 'その他のプロバイダー',
+    apiKeyProviders: 'API キー、クラウド、ローカルプロバイダー',
+    apiKeyProviderPitch: 'お持ちの API キーで接続します。',
     haveApiKey: 'API キーをお持ちです',
     chooseLater: '後でプロバイダーを選択します',
     recommended: '推奨',

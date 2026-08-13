@@ -57,7 +57,7 @@ Màn **Kết nối model** hiện ngay ba lựa chọn phổ biến, theo thứ 
 2. **Claude Pro / Max (qua Claude Code)** dùng tài khoản Claude Pro hoặc Max của bạn.
 3. **Google Gemini (khóa API)** dùng khóa tạo tại Google AI Studio.
 
-Nous Portal, OpenRouter, Fireworks, Anthropic API và các dịch vụ khác nằm dưới mục **Nhà cung cấp khác**. Bạn cũng có thể chọn **Tôi sẽ chọn nhà cung cấp sau** để vào ứng dụng trước.
+Ngay bên dưới là toàn bộ kết nối tài khoản và khóa API mà bản Hermes đang cài hỗ trợ. Danh sách tự lấy từ lõi Hermes nên các nhà cung cấp mới sẽ xuất hiện mà không cần sửa riêng giao diện tiếng Việt. Bạn cũng có thể chọn **Tôi sẽ chọn nhà cung cấp sau** để vào ứng dụng trước.
 
 | Lựa chọn          | Bạn cần có                                       | Cách tính phí                                                                                  |
 | ----------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
@@ -67,7 +67,7 @@ Nous Portal, OpenRouter, Fireworks, Anthropic API và các dịch vụ khác n�
 | Anthropic API     | Khóa API Anthropic                               | Tính phí API riêng, không dùng chung gói Claude Pro/Max                                        |
 | Nhà cung cấp khác | Tài khoản hoặc khóa tương ứng                    | Theo chính sách của dịch vụ bạn chọn                                                           |
 
-Hermes không tặng kèm gói model trả phí. Mỗi người tự đăng nhập tài khoản hoặc nhập khóa API của mình. Xem thao tác từng bước tại [Kết nối ChatGPT, Claude và Gemini](README.vi.md#kết-nối-chatgpt-claude-và-gemini).
+Hermes không tặng kèm gói model trả phí. Mỗi người tự đăng nhập tài khoản hoặc nhập khóa API của mình. Gemini dùng Google AI Studio API key hoặc Google Vertex AI; Hermes không dùng OAuth của Gemini CLI vì [điều khoản Gemini CLI không cho phần mềm bên thứ ba dùng lại dịch vụ qua OAuth này](https://github.com/google-gemini/gemini-cli/blob/main/docs/resources/tos-privacy.md). Xem thao tác từng bước tại [Kết nối ChatGPT, Claude và Gemini](README.vi.md#kết-nối-chatgpt-claude-và-gemini).
 
 ### Bước 3. Bắt đầu giao việc
 
@@ -80,14 +80,14 @@ Chọn model mặc định rồi giao một mục tiêu bằng tiếng Việt ho
 
 ## Hermes có thể làm gì?
 
-| Khả năng              | Mô tả                                                                                                     |
-| --------------------- | --------------------------------------------------------------------------------------------------------- |
-| Làm việc với máy tính | Đọc và sửa tệp, chạy lệnh, duyệt web và thực thi mã theo quyền người dùng cấp.                            |
-| Bộ nhớ và kỹ năng     | Ghi nhớ qua nhiều phiên, tìm lại hội thoại và tạo hoặc cải thiện kỹ năng từ trải nghiệm.                  |
-| Nhiều nhà cung cấp AI | Kết nối ChatGPT, Claude Pro/Max, Gemini API, Nous Portal, OpenRouter và nhiều điểm cuối tương thích khác. |
-| Tự động hóa           | Tạo lịch chạy, giao việc cho AI agent phụ và gửi kết quả tới các kênh đã cấu hình.                        |
-| Nền tảng nhắn tin     | Có thể kết nối Telegram, Discord, Slack, WhatsApp và các nền tảng khác qua Gateway.                       |
-| Nhiều môi trường chạy | Hỗ trợ máy cá nhân, Docker, SSH và một số môi trường máy chủ từ xa.                                       |
+| Khả năng              | Mô tả                                                                                                                         |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Làm việc với máy tính | Đọc và sửa tệp, chạy lệnh, duyệt web và thực thi mã theo quyền người dùng cấp.                                                |
+| Bộ nhớ và kỹ năng     | Ghi nhớ qua nhiều phiên, tìm lại hội thoại và tạo hoặc cải thiện kỹ năng từ trải nghiệm.                                      |
+| Nhiều nhà cung cấp AI | Kết nối ChatGPT, Claude Pro/Max, Gemini API, Nous Portal, OpenRouter, Bedrock, Vertex AI và nhiều điểm cuối tương thích khác. |
+| Tự động hóa           | Tạo lịch chạy, giao việc cho AI agent phụ và gửi kết quả tới các kênh đã cấu hình.                                            |
+| Nền tảng nhắn tin     | Có thể kết nối Telegram, Discord, Slack, WhatsApp và các nền tảng khác qua Gateway.                                           |
+| Nhiều môi trường chạy | Hỗ trợ máy cá nhân, Docker, SSH và một số môi trường máy chủ từ xa.                                                           |
 
 Tài liệu kỹ thuật đầy đủ của dự án gốc nằm tại [hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/).
 

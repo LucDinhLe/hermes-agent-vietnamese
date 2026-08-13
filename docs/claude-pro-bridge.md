@@ -12,6 +12,8 @@ Let a Hermes Desktop user run direct-chat requests through the official Claude C
 4. Hermes verifies the account only by running `claude auth status` and accepting `authMethod=claude.ai` with `apiProvider=firstParty`.
 5. Hermes starts `claude -p` for chat turns and translates Claude's documented stream-JSON output into the existing chat stream.
 
+The model picker uses concrete Claude Code model IDs instead of moving aliases so the user can see the selected version. Claude Code remains the authority for account availability and rejects models the signed-in plan cannot use.
+
 ## Security and billing boundaries
 
 - Hermes never reads Claude Code credential files, OS keychain entries, or OAuth tokens.
@@ -23,7 +25,7 @@ Let a Hermes Desktop user run direct-chat requests through the official Claude C
 
 ## Runtime behavior
 
-- Models exposed by this provider are the stable Claude Code aliases `sonnet`, `opus`, and `haiku`.
+- The curated model list uses concrete IDs for Claude Sonnet 5, Fable 5, Opus 5, Opus 4.8, and Haiku 4.5.
 - A bridge instance owns one Claude session. Its first turn starts a session; later turns resume that session.
 - On a restored Hermes conversation, the first Claude turn receives the Hermes transcript so context can be rehydrated without storing a second credential or token mapping.
 - Stop/cancel terminates only the active Claude child process.

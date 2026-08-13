@@ -2379,6 +2379,8 @@ export const en: Translations = {
     lookingUpProviders: 'Looking up providers...',
     collapse: 'Collapse',
     otherProviders: 'Other providers',
+    apiKeyProviders: 'API key, cloud, and local providers',
+    apiKeyProviderPitch: 'Connect with your own API key.',
     haveApiKey: 'I have an API key',
     chooseLater: "I'll choose a provider later",
     recommended: 'Recommended',

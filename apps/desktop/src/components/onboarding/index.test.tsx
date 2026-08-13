@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { $desktopOnboarding, type DesktopOnboardingState, type OnboardingContext } from '@/store/onboarding'
 import type { OAuthProvider } from '@/types/hermes'
 
-import { Picker } from '.'
+import { buildApiKeyCatalog, Picker } from '.'
 
 function provider(id: string, name = id): OAuthProvider {
   return {
@@ -70,9 +70,25 @@ describe('onboarding Picker', () => {
     expect(screen.getByText('Google Gemini (API key)')).toBeTruthy()
     expect(screen.getByText('Nous Portal')).toBeTruthy()
     expect(screen.getByText('Fireworks AI')).toBeTruthy()
+    expect(screen.getByText('OpenRouter')).toBeTruthy()
+    expect(screen.getByText('OpenAI')).toBeTruthy()
+    expect(screen.getByText('xAI Grok')).toBeTruthy()
+    expect(screen.getByText('Local / custom endpoint')).toBeTruthy()
     expect(screen.getByText('Anthropic API Key')).toBeTruthy()
     expect(screen.queryByText('Recommended')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Other providers' })).toBeNull()
+  })
+
+  it('adds every pasteable API provider from the backend catalog', () => {
+    const options = buildApiKeyCatalog([
+      { auth_type: 'api_key', key_env: 'DEEPSEEK_API_KEY', models: [], name: 'DeepSeek', slug: 'deepseek' },
+      { auth_type: 'oauth_external', models: [], name: 'Account OAuth', slug: 'account-oauth' },
+      { auth_type: 'api_key', models: [], name: 'Missing key metadata', slug: 'missing-key' }
+    ])
+
+    expect(options.some(option => option.id === 'deepseek')).toBe(true)
+    expect(options.some(option => option.id === 'account-oauth')).toBe(false)
+    expect(options.some(option => option.id === 'missing-key')).toBe(false)
   })
 
   it('keeps ChatGPT, Claude Pro, and Gemini ahead of Nous regardless of backend order', () => {

@@ -27,7 +27,7 @@ Tài liệu này dành cho người muốn cài Hermes bằng giao diện, kết
 
 ### Bước 2. Kết nối model
 
-Màn kết nối hiện ngay ChatGPT, Claude Pro/Max và Gemini. Chọn một dịch vụ, đăng nhập hoặc nhập khóa của chính bạn. Bạn cũng có thể chọn **Tôi sẽ chọn nhà cung cấp sau**.
+Màn kết nối hiện ngay ChatGPT, Claude Pro/Max và Gemini. Các kết nối tài khoản, khóa API và endpoint cục bộ khác xuất hiện trực tiếp trong danh sách cuộn bên dưới. Chọn một dịch vụ, đăng nhập hoặc nhập khóa của chính bạn. Bạn cũng có thể chọn **Tôi sẽ chọn nhà cung cấp sau**.
 
 ### Bước 3. Bắt đầu giao việc
 
@@ -139,7 +139,9 @@ Phù hợp khi bạn có gói Claude Pro/Max và muốn dùng cầu nối chính
 1. Chọn **Claude Pro / Max (qua Claude Code)**.
 2. Hermes mở luồng đăng nhập của Claude Code.
 3. Đăng nhập tài khoản Claude chính chủ và hoàn tất xác nhận.
-4. Quay lại Hermes, mở nhóm Claude trong danh sách model và chọn `Sonnet`, `Opus` hoặc `Haiku` nếu tài khoản hỗ trợ.
+4. Quay lại Hermes, mở nhóm Claude trong danh sách model và chọn một phiên bản cụ thể mà tài khoản hỗ trợ: `claude-sonnet-5`, `claude-fable-5`, `claude-opus-5`, `claude-opus-4-8` hoặc `claude-haiku-4-5`.
+
+Hermes hiển thị tên đầy đủ để bạn biết chính xác mình đang chọn model nào. Danh sách model có thể rộng hơn quyền thực tế của từng gói; Claude Code sẽ từ chối model mà tài khoản chưa được cấp thay vì âm thầm chuyển sang Anthropic API.
 
 Cầu nối không sao chép hoặc lưu mã OAuth Claude vào kho xác thực riêng của Hermes. Cơ chế bảo vệ yêu cầu Extra Usage ở trạng thái tắt hoặc bị từ chối; nếu không xác minh được, kết nối sẽ dừng để tránh vô tình chuyển sang mức dùng tính thêm.
 
@@ -156,11 +158,23 @@ Phù hợp khi bạn có khóa Google AI Studio. Gói Gemini trên web không t�
 
 Khóa Gemini chịu hạn mức miễn phí hoặc phương thức thanh toán của dự án Google AI Studio tương ứng.
 
+Hermes chưa cung cấp nút đăng nhập tài khoản Google theo kiểu ChatGPT hoặc Claude. Gemini CLI chính thức có luồng đăng nhập Google riêng, nhưng [điều khoản Gemini CLI](https://github.com/google-gemini/gemini-cli/blob/main/docs/resources/tos-privacy.md) cấm phần mềm bên thứ ba truy cập dịch vụ nền của Gemini CLI bằng OAuth đó. Dự án giữ hai đường tích hợp hợp lệ:
+
+- **Google AI Studio** bằng API key, phù hợp cho đa số người dùng cá nhân.
+- **Google Vertex AI** bằng tài khoản dịch vụ hoặc Application Default Credentials của dự án Google Cloud, phù hợp cho tổ chức và hạ tầng GCP.
+
 ### Nhà cung cấp khác và model cục bộ
 
-Dưới mục **Nhà cung cấp khác**, Hermes còn hỗ trợ Nous Portal, OpenRouter, Fireworks, Anthropic API và nhiều điểm cuối tương thích khác. Mỗi dịch vụ có tài khoản, giới hạn và cách tính phí riêng.
+Màn kết nối lấy danh mục trực tiếp từ lõi Hermes. Tùy phiên bản, các lựa chọn gồm:
 
-Nếu đã chạy một máy chủ model tương thích OpenAI trên máy, chọn **Tôi có khóa API → Local / custom endpoint**, nhập địa chỉ điểm cuối và khóa nếu máy chủ yêu cầu. Bộ cài hiện không nhúng sẵn một model nặng để chạy ngoại tuyến.
+- **Đăng nhập tài khoản:** Nous Portal, OpenAI Codex/ChatGPT, Claude Pro/Max qua Claude Code, Qwen Code, MiniMax, xAI Grok và GitHub Copilot ACP.
+- **Khóa API:** Fireworks, OpenRouter, OpenAI API, Anthropic API, Google AI Studio, xAI, Qwen/DashScope, DeepSeek, GLM/Z.AI, Kimi, MiniMax, NVIDIA NIM, Hugging Face, NovitaAI, StepFun, Arcee, Vercel AI Gateway, DeepInfra, Upstage và các nhà cung cấp tương thích khác.
+- **Model cục bộ hoặc tự lưu trữ:** LM Studio, Ollama và endpoint tương thích OpenAI.
+- **Hạ tầng nâng cao:** AWS Bedrock và Google Vertex AI. Hai lựa chọn này cần hồ sơ AWS hoặc tệp tài khoản dịch vụ Google nên được cấu hình tại **Cài đặt → Nhà cung cấp → API** sau khi vào ứng dụng.
+
+Mỗi dịch vụ có tài khoản, giới hạn và cách tính phí riêng.
+
+Nếu đã chạy một máy chủ model tương thích OpenAI trên máy, chọn **Local / custom endpoint**, nhập địa chỉ điểm cuối và khóa nếu máy chủ yêu cầu. Bộ cài hiện không nhúng sẵn một model nặng để chạy ngoại tuyến.
 
 ## Đổi hoặc thêm nhà cung cấp sau khi cài
 

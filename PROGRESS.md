@@ -1,5 +1,14 @@
 # Tiến độ
 
+## Cập nhật 2026-08-13 — mở đầy đủ kết nối và tên model Claude
+
+- Màn **Kết nối model** hiển thị trực tiếp toàn bộ luồng đăng nhập tài khoản mà backend cung cấp và toàn bộ nhà cung cấp có thể thiết lập bằng khóa API; không còn giấu danh mục khóa sau nút phụ.
+- Danh mục khóa được sinh từ nguồn nhà cung cấp lõi, tự nhận thêm nhà cung cấp mới và loại đúng các luồng OAuth, tiến trình ngoài hoặc cấu hình thiếu biến xác thực.
+- AWS Bedrock và Google Vertex AI tiếp tục được cấu hình tại **Cài đặt → Nhà cung cấp → API** vì cần nhiều trường cấu hình chuyên biệt.
+- Claude Code dùng tên model cụ thể: Sonnet 5, Fable 5, Opus 5, Opus 4.8 và Haiku 4.5; quyền sử dụng thực tế vẫn do tài khoản Claude quyết định.
+- Tài liệu giải thích rõ Gemini dùng Google AI Studio API key hoặc Vertex AI. Không tích hợp lại OAuth của Gemini CLI vì điều khoản của Google cấm phần mềm bên thứ ba dùng luồng đó.
+- Xác minh: 7/7 kiểm thử onboarding đạt, 4/4 kiểm thử Claude Code provider đạt, Desktop typecheck đạt.
+
 ## Cập nhật 2026-08-13 — viết lại tài liệu công khai
 
 - Chuyển thông tin độc lập của dự án sang cách diễn đạt trung tính, tránh dùng cụm “không được bảo chứng” ở phần mở đầu.

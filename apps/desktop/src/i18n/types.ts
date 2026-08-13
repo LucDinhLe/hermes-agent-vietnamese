@@ -1979,6 +1979,8 @@ export interface Translations {
     lookingUpProviders: string
     collapse: string
     otherProviders: string
+    apiKeyProviders: string
+    apiKeyProviderPitch: string
     haveApiKey: string
     chooseLater: string
     recommended: string

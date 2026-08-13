@@ -2523,6 +2523,8 @@ export const zh: Translations = {
     lookingUpProviders: '正在查找提供方...',
     collapse: '收起',
     otherProviders: '其他提供方',
+    apiKeyProviders: 'API 密钥、云端和本地提供方',
+    apiKeyProviderPitch: '使用你自己的 API 密钥连接。',
     haveApiKey: '我有 API 密钥',
     chooseLater: '稍后再选择提供方',
     recommended: '推荐',

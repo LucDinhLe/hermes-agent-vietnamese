@@ -2090,6 +2090,8 @@ export const zhHant = defineLocale({
     lookingUpProviders: '正在查詢提供方...',
     collapse: '收合',
     otherProviders: '其他提供方',
+    apiKeyProviders: 'API 金鑰、雲端與本機提供方',
+    apiKeyProviderPitch: '使用您自己的 API 金鑰連線。',
     haveApiKey: '我有 API 金鑰',
     chooseLater: '稍後再選擇提供方',
     recommended: '建議',

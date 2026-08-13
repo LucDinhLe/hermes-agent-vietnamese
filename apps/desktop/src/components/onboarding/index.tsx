@@ -30,13 +30,7 @@ import {
 import type { ModelOptionProvider, OAuthProvider } from '@/types/hermes'
 
 import { DocsLink, FlowPanel, Status } from './flow'
-import {
-  FireworksProviderRow,
-  KeyProviderRow,
-  OpenRouterProviderRow,
-  ProviderRow,
-  sortProviders
-} from './providers'
+import { KeyProviderRow, ProviderRow, sortProviders } from './providers'
 
 export {
   FeaturedProviderRow,
@@ -114,6 +108,39 @@ const API_KEY_OPTIONS: ApiKeyOption[] = [
 // other api_key provider is appended with a generic "paste {KEY}" affordance.
 // OAuth / external providers are intentionally excluded here — they go through
 // the OAuth picker / sign-in flow, not a pasted key.
+export function buildApiKeyCatalog(rows: ModelOptionProvider[]): ApiKeyOption[] {
+  const derived: ApiKeyOption[] = []
+  const seenEnv = new Set<string>(API_KEY_OPTIONS.map(o => o.envKey))
+
+  for (const row of rows) {
+    // Only api_key providers can be activated with a pasted key. Skip OAuth /
+    // external / managed flows and anything missing an env var to write to.
+    if (row.auth_type && row.auth_type !== 'api_key') {
+      continue
+    }
+
+    const envKey = row.key_env
+
+    if (!envKey || seenEnv.has(envKey)) {
+      continue
+    }
+
+    seenEnv.add(envKey)
+    derived.push({
+      id: row.slug,
+      name: row.name,
+      envKey,
+      docsUrl: ''
+    })
+  }
+
+  // Curated first (recommended order), then the rest alphabetically so the
+  // long tail is scannable.
+  derived.sort((a, b) => a.name.localeCompare(b.name))
+
+  return [...API_KEY_OPTIONS, ...derived]
+}
+
 function useApiKeyCatalog(): ApiKeyOption[] {
   const [rows, setRows] = useState<ModelOptionProvider[]>([])
 
@@ -139,40 +166,7 @@ function useApiKeyCatalog(): ApiKeyOption[] {
     }
   }, [])
 
-  return useMemo(() => {
-    const curatedByEnv = new Map(API_KEY_OPTIONS.map(o => [o.envKey, o]))
-    const derived: ApiKeyOption[] = []
-    const seenEnv = new Set<string>(API_KEY_OPTIONS.map(o => o.envKey))
-
-    for (const row of rows) {
-      // Only api_key providers can be activated with a pasted key. Skip OAuth /
-      // external / managed flows and anything missing an env var to write to.
-      if (row.auth_type && row.auth_type !== 'api_key') {
-        continue
-      }
-
-      const envKey = row.key_env
-
-      if (!envKey || seenEnv.has(envKey)) {
-        continue
-      }
-
-      seenEnv.add(envKey)
-      derived.push({
-        id: row.slug,
-        name: row.name,
-        envKey,
-        description: `Direct API access to ${row.name}.`,
-        docsUrl: ''
-      })
-    }
-
-    // Curated first (recommended order), then the rest alphabetically so the
-    // long tail is scannable.
-    derived.sort((a, b) => a.name.localeCompare(b.name))
-
-    return [...API_KEY_OPTIONS.filter(o => curatedByEnv.has(o.envKey)), ...derived]
-  }, [rows])
+  return useMemo(() => buildApiKeyCatalog(rows), [rows])
 }
 
 // Exit choreography, mirroring the gateway "connecting" overlay's timing:
@@ -507,18 +501,30 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
         {optional.map(provider => (
           <ProviderRow key={provider.id} onSelect={select} provider={provider} />
         ))}
-        <FireworksProviderRow onClick={() => openKeyForm('FIREWORKS_API_KEY')} />
-        <OpenRouterProviderRow onClick={() => openKeyForm('OPENROUTER_API_KEY')} />
+        {apiKeyOptions.length > 1 ? (
+          <p className="px-3 pt-2 text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            {t.onboarding.apiKeyProviders}
+          </p>
+        ) : null}
+        {apiKeyOptions
+          .filter(option => option.envKey !== 'GEMINI_API_KEY')
+          .map(option => (
+            <KeyProviderRow
+              key={option.envKey}
+              onClick={() => openKeyForm(option.envKey)}
+              pitch={t.onboarding.apiKeyOptions[option.id]?.description ?? t.onboarding.apiKeyProviderPitch}
+              title={option.name}
+            />
+          ))}
       </div>
-      <div className="flex items-center justify-between gap-3 pt-1">
-        {/* First run only: let the user defer the choice and land in the app.
-            In manual mode the overlay already has a close affordance, so the
-            "choose later" escape would be redundant — hide it. */}
-        {manual ? <span /> : <ChooseLaterLink />}
-        <Button className="-mr-2 font-medium" onClick={() => openKeyForm()} size="xs" type="button" variant="text">
-          {t.onboarding.haveApiKey}
-        </Button>
-      </div>
+      {/* First run only: let the user defer the choice and land in the app.
+          In manual mode the overlay already has a close affordance, so the
+          "choose later" escape would be redundant — hide it. */}
+      {manual ? null : (
+        <div className="flex items-center gap-3 pt-1">
+          <ChooseLaterLink />
+        </div>
+      )}
     </div>
   )
 }

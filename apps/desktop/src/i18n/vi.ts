@@ -2397,6 +2397,8 @@ export const vi: Translations = {
     lookingUpProviders: 'Đang tìm nhà cung cấp...',
     collapse: 'Thu gọn',
     otherProviders: 'Nhà cung cấp khác',
+    apiKeyProviders: 'Khóa API, dịch vụ đám mây và model cục bộ',
+    apiKeyProviderPitch: 'Kết nối bằng khóa API riêng của bạn.',
     haveApiKey: 'Tôi có khóa API',
     chooseLater: 'Tôi sẽ chọn nhà cung cấp sau',
     recommended: 'Khuyên dùng',
