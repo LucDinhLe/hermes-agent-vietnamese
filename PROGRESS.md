@@ -2,6 +2,8 @@
 
 ## Cập nhật 2026-08-13 — viết lại tài liệu công khai
 
+- Chuyển thông tin độc lập của dự án sang cách diễn đạt trung tính, tránh dùng cụm “không được bảo chứng” ở phần mở đầu.
+- Ghi đúng trạng thái ký số: hồ sơ SignPath Foundation đã nộp và đang chờ xét duyệt; ký số là xác minh nhà phát hành, không phải giấy phép sử dụng của Microsoft hoặc Apple.
 - Chuẩn hóa tên hiển thị thành **Hermes Vietnamese**, bỏ biểu tượng trang trí sau tên.
 - Thêm link tải trực tiếp cho từng hệ điều hành và kiến trúc, cùng hướng dẫn kiểm tra phiên bản hệ điều hành, chip x64/ARM64, Apple Silicon/Intel trước khi tải.
 - Viết lại README trang chủ theo hành trình ba bước: tải và cài, kết nối model, bắt đầu giao việc.

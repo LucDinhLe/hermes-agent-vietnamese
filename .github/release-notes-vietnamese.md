@@ -44,7 +44,9 @@ Mỗi người đăng nhập OpenAI Codex hoặc Claude Pro/Max bằng tài kho�
 
 ### Bảo mật khi cài
 
-Đối chiếu tệp đã tải với `SHA256SUMS.txt`. Nếu bản phát hành chưa được ký số, Windows SmartScreen hoặc macOS Gatekeeper có thể cảnh báo. Đây là giới hạn của bản cộng đồng chưa có chứng thư phát hành, không phải bằng chứng rằng cảnh báo nên bị bỏ qua. Chỉ tiếp tục khi mã SHA-256 khớp và tệp được tải từ kho chính thức này.
+Dự án đã nộp hồ sơ tham gia chương trình ký mã nguồn mở của SignPath Foundation và đang chờ xét duyệt. Trong thời gian chờ, Windows SmartScreen hoặc macOS Gatekeeper có thể cảnh báo vì tệp chưa có chữ ký số xác minh nhà phát hành. Đây không phải kết luận rằng Microsoft hoặc Apple đã từ chối dự án hay phần mềm không được phép cài.
+
+Đối chiếu tệp đã tải với `SHA256SUMS.txt` và chỉ tiếp tục khi mã SHA-256 khớp với tệp từ kho chính thức này. Chứng thư ký mã dùng để xác minh nguồn phát hành; nó không phải giấy phép sử dụng phần mềm do Microsoft hoặc Apple cấp.
 
 Xem trạng thái, phạm vi ký và vai trò phê duyệt trong [Code signing policy](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/CODE_SIGNING_POLICY.md). Chỉ các bản phát hành ghi rõ trạng thái ký mới được xem là đã ký số.
 

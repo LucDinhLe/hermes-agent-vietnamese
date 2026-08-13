@@ -2,7 +2,9 @@
 
 ## Trạng thái
 
-Dự án đang nộp hồ sơ xin chương trình ký mã miễn phí dành cho phần mềm mã nguồn mở. Các bản phát hành hiện tại vẫn **chưa được ký số**. Người dùng chỉ nên xem một tệp là đã được ký khi trang phát hành tương ứng ghi rõ trạng thái ký và chữ ký số của tệp xác minh thành công.
+Dự án đã nộp hồ sơ xin chương trình ký mã miễn phí dành cho phần mềm mã nguồn mở của SignPath Foundation và đang chờ xét duyệt. Trong thời gian chờ, các bản phát hành hiện tại chưa có chữ ký số xác minh nhà phát hành. Người dùng chỉ nên xem một tệp là đã được ký khi trang phát hành tương ứng ghi rõ trạng thái ký và chữ ký số của tệp xác minh thành công.
+
+Chứng thư ký mã dùng để xác minh nguồn phát hành và tính toàn vẹn của tệp. Đây không phải giấy phép sử dụng phần mềm của Microsoft hoặc Apple. Trạng thái hiện tại cũng không có nghĩa hai công ty này đã từ chối dự án. Windows SmartScreen đánh giá cả chữ ký và uy tín của tệp; macOS Gatekeeper sử dụng Developer ID cùng quy trình notarization riêng của Apple.
 
 Khi hồ sơ được chấp thuận, dự án sẽ ghi nhận chương trình theo tuyên bố chính thức: **Free code signing provided by SignPath.io, certificate by SignPath Foundation**.
 

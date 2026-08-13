@@ -8,7 +8,7 @@
 
 Hermes là một AI agent có thể làm việc với tệp, dòng lệnh, trình duyệt, bộ nhớ, kỹ năng và lịch tự động. Bản này bổ sung giao diện Việt/Anh, quy trình thiết lập ba bước và bộ cài cho Windows, macOS, Linux. Không gian làm việc, Terminal tích hợp, thuật toán và tính năng lõi của Hermes vẫn được giữ theo dự án gốc.
 
-Đây là **dự án cá nhân, độc lập và không chính thức** do [Lê Đình Lực](https://github.com/LucDinhLe) duy trì vì mục tiêu cộng đồng. Dự án không được Nous Research, OpenAI, Anthropic hoặc Google bảo chứng.
+Đây là **dự án cá nhân vì cộng đồng** do [Lê Đình Lực](https://github.com/LucDinhLe) duy trì, phát triển từ Hermes Agent theo giấy phép MIT. Người dùng kết nối bằng tài khoản hoặc API key do từng dịch vụ cung cấp; dự án này tập trung vào Việt hóa, đóng gói và giúp người Việt thực hiện việc đó dễ dàng hơn.
 
 <p align="center">
   <a href="https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-8"><img src="https://img.shields.io/badge/Tải_bản_vi--v0.20.0--8-Windows_%7C_macOS_%7C_Linux-F97316?style=for-the-badge" alt="Tải Hermes Vietnamese"></a>
@@ -97,11 +97,13 @@ Tài liệu kỹ thuật đầy đủ của dự án gốc nằm tại [hermes-a
 
 Khi bạn gửi yêu cầu tới một nhà cung cấp AI hoặc dịch vụ mạng, nội dung cần thiết sẽ được dịch vụ đã chọn xử lý theo điều khoản và chính sách quyền riêng tư của họ. AI agent có thể chạy lệnh và thao tác với tệp trong phạm vi được cấp, vì vậy hãy đọc yêu cầu quyền trước khi chấp thuận và kiểm tra kết quả trước các thao tác quan trọng.
 
-## Cảnh báo bộ cài chưa ký số
+## Trạng thái ký số của bộ cài
 
-Dự án đang xin chương trình ký mã miễn phí dành cho phần mềm mã nguồn mở. Các bản phát hành hiện tại vẫn **chưa được ký số**, nên Windows SmartScreen hoặc macOS Gatekeeper có thể cảnh báo.
+Dự án **đã nộp hồ sơ và đang chờ xét duyệt** chương trình ký mã miễn phí dành cho phần mềm mã nguồn mở của SignPath Foundation. Trong thời gian chờ, các bản phát hành hiện tại chưa có chữ ký số xác minh nhà phát hành, nên Windows SmartScreen hoặc macOS Gatekeeper có thể cảnh báo.
 
-Chỉ tải từ [trang phát hành chính thức của kho này](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases) và đối chiếu mã trong `SHA256SUMS.txt` trước khi cài. Không tắt cơ chế bảo mật của hệ điều hành trên toàn máy. Xem [chính sách ký mã](CODE_SIGNING_POLICY.md) và [hướng dẫn xử lý cảnh báo](README.vi.md#cảnh-báo-bảo-mật-khi-cài).
+Đây là trạng thái kỹ thuật tạm thời trong quá trình hoàn thiện ký số, không có nghĩa Microsoft hoặc Apple đã từ chối dự án hay phần mềm không được phép cài. Chứng thư ký mã dùng để xác minh nguồn phát hành; nó không phải giấy phép sử dụng phần mềm do Microsoft hoặc Apple cấp.
+
+Chỉ tải từ [trang phát hành chính thức của kho này](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases) và đối chiếu mã trong `SHA256SUMS.txt` trước khi cài. Không tắt cơ chế bảo mật của hệ điều hành trên toàn máy. Xem [chính sách ký mã](CODE_SIGNING_POLICY.md) và [hướng dẫn xử lý cảnh báo](README.vi.md#trạng-thái-ký-số-và-cảnh-báo-khi-cài).
 
 ## Cập nhật và giữ phần tiếng Việt
 

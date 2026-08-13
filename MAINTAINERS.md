@@ -22,4 +22,4 @@ Kho này là một bản cộng đồng độc lập phát triển từ [NousRes
 - Không đưa tài khoản, mã OAuth, khóa API hay dữ liệu người dùng vào mã nguồn và bộ cài.
 - Không ghi đè một bản phát hành đã công bố. Bản sửa lỗi phải dùng nhãn mới.
 - Mọi bản đa nền tảng phải đi qua quy trình build và kiểm tra tương ứng trước khi phát hành.
-- Công khai giới hạn hiện tại, đặc biệt là trạng thái chưa ký số của bộ cài Windows và macOS.
+- Công khai trạng thái hồ sơ ký mã đang chờ xét duyệt và tình trạng chữ ký thực tế của từng bộ cài Windows, macOS.

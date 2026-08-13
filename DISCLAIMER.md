@@ -4,7 +4,7 @@
 
 Hermes Agent tiếng Việt là một **dự án cá nhân, độc lập**, được thực hiện nhằm giúp người dùng Việt, đặc biệt là người gặp rào cản tiếng Anh, tiếp cận và sử dụng Hermes Agent thuận tiện hơn.
 
-Dự án bổ sung lớp Việt hóa, hướng dẫn sử dụng, đóng gói đa nền tảng và các điều chỉnh tương thích phục vụ người dùng Việt. Đây là một bản cộng đồng không chính thức và không được Nous Research, OpenAI, Anthropic hoặc Google bảo chứng.
+Dự án bổ sung lớp Việt hóa, hướng dẫn sử dụng, đóng gói đa nền tảng và các điều chỉnh tương thích phục vụ người dùng Việt. Đây là bản cộng đồng do một cá nhân duy trì, không phải bản phát hành chính thức của Nous Research, OpenAI, Anthropic hoặc Google. Cách xác định này nhằm làm rõ chủ thể duy trì và phạm vi hỗ trợ của dự án.
 
 ## Phần thuộc Hermes Agent gốc
 

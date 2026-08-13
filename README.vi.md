@@ -4,7 +4,7 @@ Tài liệu này dành cho người muốn cài Hermes bằng giao diện, kết
 
 > **Bản hiện tại:** [vi-v0.20.0-8](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-8)
 >
-> **Trạng thái:** pre-release cộng đồng, chưa ký số
+> **Trạng thái:** pre-release cộng đồng, đã nộp hồ sơ và đang chờ xét duyệt ký số
 >
 > **Nền tảng:** Windows x64/ARM64, macOS Apple Silicon/Intel, Linux x64/ARM64
 
@@ -100,7 +100,7 @@ Hermes gốc chưa công bố một cấu hình tối thiểu bắt buộc cho m
 4. Khởi động Hermes, chọn ngôn ngữ rồi chọn cài trên máy.
 5. Giữ kết nối Internet trong lần chuẩn bị đầu tiên. Tốc độ phụ thuộc mạng và máy; quá trình có thể lâu hơn vài phút vì phải tải môi trường chạy.
 
-Nếu Windows chặn bộ cài, đọc mục [Cảnh báo bảo mật khi cài](#cảnh-báo-bảo-mật-khi-cài) trước khi tiếp tục.
+Nếu Windows chặn bộ cài, đọc mục [Trạng thái ký số và cảnh báo khi cài](#trạng-thái-ký-số-và-cảnh-báo-khi-cài) trước khi tiếp tục.
 
 ### macOS
 
@@ -198,9 +198,11 @@ Bạn có thể giữ nhiều kết nối và chuyển model khi làm việc. T�
 - Kiểm tra mạng và hạn mức tài khoản.
 - Vào Cài đặt nhà cung cấp, ngắt rồi kết nối lại nếu thông tin xác thực đã hết hạn.
 
-## Cảnh báo bảo mật khi cài
+## Trạng thái ký số và cảnh báo khi cài
 
-Các bản phát hành hiện tại chưa được ký số. Windows SmartScreen hoặc macOS Gatekeeper có thể cảnh báo vì hệ điều hành chưa xác minh được nhà phát hành.
+Dự án đã nộp hồ sơ tham gia chương trình ký mã miễn phí dành cho phần mềm nguồn mở của SignPath Foundation và đang chờ xét duyệt. Trong thời gian chờ, các bản phát hành hiện tại chưa có chữ ký số xác minh nhà phát hành. Windows SmartScreen hoặc macOS Gatekeeper vì thế có thể hiển thị cảnh báo.
+
+Trạng thái này không có nghĩa Microsoft hoặc Apple đã từ chối dự án hay phần mềm không được phép cài. Ký số giúp hệ điều hành xác minh nguồn phát hành và tính toàn vẹn của tệp; nó không phải giấy phép sử dụng phần mềm do Microsoft hoặc Apple cấp.
 
 Trước khi tiếp tục:
 
@@ -209,7 +211,7 @@ Trước khi tiếp tục:
 3. Đối chiếu mã SHA-256 của tệp đã tải.
 4. Chỉ chọn **Thông tin thêm → Vẫn chạy** trên Windows hoặc **Open Anyway** trên macOS khi mã khớp.
 
-Cảnh báo chưa ký số không tự chứng minh tệp an toàn hoặc nguy hiểm. Mã băm và nguồn tải giúp bạn xác minh tệp có đúng với bản GitHub đã công bố hay không. Dự án đang xin chương trình ký mã miễn phí cho phần mềm nguồn mở; trạng thái được cập nhật tại [Code signing policy](CODE_SIGNING_POLICY.md).
+Cảnh báo trong thời gian chờ ký số không tự chứng minh tệp an toàn hoặc nguy hiểm. Mã băm và nguồn tải giúp bạn xác minh tệp có đúng với bản GitHub đã công bố hay không. Trạng thái hồ sơ được cập nhật tại [Code signing policy](CODE_SIGNING_POLICY.md).
 
 ## Riêng tư và dữ liệu
 
@@ -240,7 +242,7 @@ Gỡ ứng dụng không tự động xóa thư mục dữ liệu nhằm tránh 
 
 ## Phạm vi dự án và miễn trừ trách nhiệm
 
-Đây là bản cộng đồng không chính thức được phát triển từ [Hermes Agent](https://github.com/NousResearch/hermes-agent) theo giấy phép MIT. Giấy phép, thuật toán, kiến trúc và tính năng lõi vẫn theo dự án gốc. Bản cộng đồng bổ sung lớp Việt hóa, tài liệu, đóng gói đa nền tảng và điều chỉnh tương thích cho người dùng Việt.
+Đây là bản cộng đồng độc lập được phát triển từ [Hermes Agent](https://github.com/NousResearch/hermes-agent) theo giấy phép MIT. Giấy phép, thuật toán, kiến trúc và tính năng lõi vẫn theo dự án gốc. Bản cộng đồng bổ sung lớp Việt hóa, tài liệu, đóng gói đa nền tảng và điều chỉnh tương thích cho người dùng Việt.
 
 Hermes được cung cấp theo nguyên trạng, không kèm cam kết bảo hành. Kết quả AI có thể sai; hệ thống, model và dịch vụ bên thứ ba có thể thay đổi hoặc gián đoạn. Người dùng chịu trách nhiệm kiểm tra kết quả, quyền đã cấp và hậu quả của các thao tác đã chấp thuận.
 
