@@ -1986,7 +1986,7 @@ export interface Translations {
     featuredPitch: string
     fireworksPitch: string
     openRouterPitch: string
-    apiKeyOptions: Record<string, { short: string; description: string }>
+    apiKeyOptions: Record<string, { title?: string; short: string; description: string }>
     backToSignIn: string
     getKey: string
     replaceCurrent: string

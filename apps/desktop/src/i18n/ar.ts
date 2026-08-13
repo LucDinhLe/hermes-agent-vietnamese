@@ -1955,8 +1955,9 @@ export const ar = defineLocale({
         description: 'وصول مباشر إلى نماذج OpenAI.'
       },
       gemini: {
+        title: 'Google Gemini (مفتاح API)',
         short: 'نماذج Gemini',
-        description: 'وصول مباشر إلى نماذج Google Gemini.'
+        description: 'استخدم مفتاح API من Google AI Studio للوصول إلى نماذج Gemini.'
       },
       xai: {
         short: 'نماذج Grok',

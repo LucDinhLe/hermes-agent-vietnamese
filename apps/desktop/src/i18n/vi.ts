@@ -2414,7 +2414,11 @@ export const vi: Translations = {
         description: 'Truy cập hàng trăm model qua một khóa API. Phù hợp cho lần cài đặt đầu tiên.'
       },
       openai: { short: 'Các model GPT', description: 'Truy cập trực tiếp các model OpenAI.' },
-      gemini: { short: 'Gemini', description: 'Truy cập trực tiếp các model Google Gemini.' },
+      gemini: {
+        title: 'Google Gemini (khóa API)',
+        short: 'Gemini',
+        description: 'Dùng khóa API từ Google AI Studio để truy cập các model Gemini.'
+      },
       xai: { short: 'Các model Grok', description: 'Truy cập trực tiếp các model xAI Grok.' },
       local: {
         short: 'Tự lưu trữ',

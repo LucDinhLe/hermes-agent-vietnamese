@@ -1,5 +1,15 @@
 # Tiến độ
 
+## Cập nhật 2026-08-13 — ưu tiên kết nối tài khoản sẵn có
+
+- Nhánh: `fix/provider-first-onboarding`, bắt đầu từ `origin/main` tại `5bfbbc2ad`.
+- Màn **Kết nối model** hiện trực tiếp theo thứ tự: ChatGPT OAuth, Claude Pro/Max, Google Gemini bằng khóa API; Nous Portal và các dịch vụ khác nằm dưới **Nhà cung cấp khác**.
+- Bỏ nhãn **Đề xuất** và cơ chế ẩn các nhà cung cấp phía sau Nous Portal.
+- Gemini được ghi rõ là luồng Google AI Studio/API key trong toàn bộ locale; bấm vào sẽ mở form khóa API với Gemini được chọn sẵn.
+- Xác minh: 32/32 kiểm thử onboarding+i18n đạt; 7/7 kiểm thử onboarding trực tiếp đạt; typecheck đạt; lint không có lỗi (chỉ còn cảnh báo có sẵn ở tệp khác).
+- Bản Windows unpacked đã đóng gói thành công. Smoke test trực tiếp trên bản dev tách biệt xác nhận đúng thứ tự, đúng tiếng Việt và đúng hành vi bấm Gemini.
+- Cửa sổ thử dùng `HERMES_HOME` và user-data riêng, không đọc hoặc sửa hồ sơ Hermes chính.
+
 ## Mục tiêu hiện tại
 
 Hợp nhất thiết lập Desktop lần đầu thành ba bước trên Windows, macOS và Linux, đồng thời giữ nguyên giao diện và tính năng lõi Hermes sau khi thiết lập.

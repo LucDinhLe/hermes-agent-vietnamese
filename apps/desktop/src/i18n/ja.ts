@@ -2175,7 +2175,11 @@ export const ja = defineLocale({
         description: '1 つのキーで数百のモデルをホスト。新規インストールのデフォルトとして最適。'
       },
       openai: { short: 'GPT クラスのモデル', description: 'OpenAI モデルへの直接アクセス。' },
-      gemini: { short: 'Gemini モデル', description: 'Google Gemini モデルへの直接アクセス。' },
+      gemini: {
+        title: 'Google Gemini（API キー）',
+        short: 'Gemini モデル',
+        description: 'Google AI Studio の API キーで Gemini モデルに接続します。'
+      },
       xai: { short: 'Grok モデル', description: 'xAI Grok モデルへの直接アクセス。' },
       local: {
         short: 'セルフホスト',
