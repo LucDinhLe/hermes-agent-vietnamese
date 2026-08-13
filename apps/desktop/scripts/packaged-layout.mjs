@@ -10,7 +10,7 @@ export function packagedAppDirectoryName(platform, arch) {
   }
 
   if (platform === 'darwin') {
-    return `mac-${arch}`
+    return arch === 'x64' ? 'mac' : 'mac-arm64'
   }
 
   const platformName = platform === 'win32' ? 'win' : 'linux'
