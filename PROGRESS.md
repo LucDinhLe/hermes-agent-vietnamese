@@ -1,5 +1,14 @@
 # Tiến độ
 
+## Cập nhật 2026-08-13 — viết lại tài liệu công khai
+
+- Viết lại README trang chủ theo hành trình ba bước: tải và cài, kết nối model, bắt đầu giao việc.
+- Cập nhật toàn bộ liên kết tải sang `vi-v0.20.0-8` và bảng chọn đúng bộ cài cho sáu nền tảng.
+- Viết lại hướng dẫn tiếng Việt chi tiết cho Windows, macOS, Linux; ChatGPT OAuth; Claude Pro/Max qua Claude Code; Gemini bằng khóa Google AI Studio; nhà cung cấp khác và model cục bộ.
+- Bổ sung bảng phân biệt tài khoản/gói thuê bao/API, xử lý lỗi thường gặp, cảnh báo chưa ký số, cập nhật, sao lưu và gỡ cài đặt.
+- Giữ rõ cam kết: **Thông tin đăng nhập và dữ liệu của mỗi người được lưu riêng trên máy của mình.**
+- Cập nhật mẫu ghi chú phát hành theo luồng kết nối mới. Các liên kết nội bộ đã được kiểm tra, Prettier và `git diff --check` đều đạt.
+
 ## Cập nhật 2026-08-13 — ưu tiên kết nối tài khoản sẵn có
 
 - Nhánh: `fix/provider-first-onboarding`, bắt đầu từ `origin/main` tại `5bfbbc2ad`.

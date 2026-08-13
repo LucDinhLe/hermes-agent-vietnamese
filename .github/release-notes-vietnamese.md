@@ -18,6 +18,9 @@ Mỗi người đăng nhập OpenAI Codex hoặc Claude Pro/Max bằng tài kho�
 
 ### Cải thiện trong bản vá này
 
+- Màn **Kết nối model** hiện ngay ba lựa chọn phổ biến theo thứ tự: `OpenAI OAuth (ChatGPT)`, `Claude Pro / Max (qua Claude Code)` và `Google Gemini (khóa API)`.
+- Nous Portal, OpenRouter, Fireworks và các dịch vụ còn lại được chuyển xuống mục **Nhà cung cấp khác**; không còn dẫn người mới vào trang chọn gói Nous trước khi thấy các kết nối đang có.
+- Bấm Gemini sẽ mở trực tiếp form khóa API và chọn sẵn Google AI Studio, giúp phân biệt rõ với gói thuê bao Gemini trên web.
 - Thiết lập lần đầu được trình bày thành ba bước: cài đặt và chọn ngôn ngữ, kết nối model, bắt đầu giao việc.
 - Người dùng không cần mở Terminal, chạy lệnh hoặc sửa tệp cấu hình để hoàn tất thiết lập; Terminal tích hợp trong Hermes vẫn được giữ nguyên.
 - macOS Intel x64 có gói riêng bên cạnh Apple Silicon; Windows và Linux tiếp tục có bản x64/ARM64.
@@ -33,4 +36,4 @@ Mỗi người đăng nhập OpenAI Codex hoặc Claude Pro/Max bằng tài kho�
 
 Xem trạng thái, phạm vi ký và vai trò phê duyệt trong [Code signing policy](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/CODE_SIGNING_POLICY.md). Chỉ các bản phát hành ghi rõ trạng thái ký mới được xem là đã ký số.
 
-Xem yêu cầu hệ thống, hướng dẫn cài đặt và giới hạn hỗ trợ trong `README.vi.md`. Phạm vi miễn trừ đối với hệ thống, thuật toán và giấy phép Hermes được giải thích bằng tiếng Việt trong `DISCLAIMER.md`; văn bản có hiệu lực vẫn là `LICENSE`.
+Xem [hướng dẫn cài đặt và kết nối bằng tiếng Việt](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md). Phạm vi miễn trừ đối với hệ thống, thuật toán và giấy phép Hermes được giải thích trong [DISCLAIMER.md](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/DISCLAIMER.md); văn bản có hiệu lực vẫn là `LICENSE`.

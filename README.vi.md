@@ -1,125 +1,222 @@
-# Hermes Agent tiếng Việt
+# Hướng dẫn cài đặt và kết nối Hermes Agent tiếng Việt
 
-Đây là bản địa hóa cộng đồng của [Hermes Agent](https://github.com/NousResearch/hermes-agent), dành cho người Việt muốn sử dụng AI agent dễ dàng hơn dù không thạo tiếng Anh.
+Tài liệu này dành cho người muốn cài Hermes bằng giao diện, kết nối tài khoản AI của mình và bắt đầu giao việc mà không cần dùng dòng lệnh.
 
-Đây là một **dự án cá nhân, độc lập**, được thực hiện nhằm hỗ trợ người dùng Việt tiếp cận và sử dụng Hermes Agent thuận tiện hơn.
+> **Bản hiện tại:** [vi-v0.20.0-8](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-8)
+>
+> **Trạng thái:** pre-release cộng đồng, chưa ký số
+>
+> **Nền tảng:** Windows x64/ARM64, macOS Apple Silicon/Intel, Linux x64/ARM64
 
-Giao diện Desktop mặc định dùng tiếng Việt và có nút chuyển nhanh **VI/EN**. Người dùng vẫn có thể đổi ngôn ngữ trong phần Cài đặt. Tên model, tên riêng, thương hiệu, giao thức và câu lệnh được giữ nguyên để tránh sai lệch kỹ thuật.
+## Trước khi cài
 
-Mã nguồn gốc thuộc Nous Research và được phân phối theo giấy phép MIT. Đây là bản cộng đồng không chính thức, không được Nous Research, OpenAI, Anthropic hoặc Google bảo chứng. Giấy phép, thuật toán, kiến trúc và các tính năng lõi của Hermes vẫn được giữ theo dự án gốc. Bản cộng đồng bổ sung lớp Việt hóa, tài liệu, đóng gói đa nền tảng và các điều chỉnh tương thích cho người dùng Việt.
+- Lần mở đầu tiên cần Internet để tải môi trường chạy của Hermes.
+- Bạn cần tài khoản ChatGPT, Claude Pro/Max, khóa API Gemini hoặc một nhà cung cấp AI khác. Bộ cài không kèm tài khoản model trả phí.
+- Hãy tải đúng kiến trúc của máy và đối chiếu `SHA256SUMS.txt` nếu hệ điều hành hiện cảnh báo.
+- Giao diện mặc định dùng tiếng Việt và có nút chuyển nhanh **VI/EN**. Tên model, thương hiệu, giao thức và câu lệnh được giữ nguyên để tránh sai lệch kỹ thuật.
 
-Dự án đang xin chương trình ký mã miễn phí cho phần mềm mã nguồn mở. Trạng thái hiện tại, phạm vi ký và vai trò phê duyệt được công bố trong [Code signing policy](CODE_SIGNING_POLICY.md). Các bản phát hành hiện tại vẫn chưa được ký số.
+## Cài nhanh trong ba bước
 
-Mỗi người dùng đăng nhập bằng tài khoản hoặc khóa API của chính mình; bộ cài không kèm tài khoản AI trả phí.
+### Bước 1. Tải về và cài đặt
 
-## Bắt đầu nhanh
+1. Mở [trang phát hành vi-v0.20.0-8](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-8).
+2. Tải đúng tệp theo bảng bên dưới.
+3. Mở bộ cài và khởi động Hermes.
+4. Chọn **Tiếng Việt** hoặc **English**.
+5. Chọn cài Hermes trên máy và chờ ứng dụng hoàn tất chuẩn bị.
 
-1. **Tải về và cài đặt:** chọn đúng gói bên dưới, mở ứng dụng và chọn English hoặc Tiếng Việt.
-2. **Kết nối model:** đăng nhập OAuth, nhập khóa API hoặc kết nối model cục bộ qua điểm cuối tương thích OpenAI.
-3. **Bắt đầu giao việc:** xác nhận model mặc định và vào không gian làm việc Hermes đầy đủ.
+### Bước 2. Kết nối model
 
-Bạn không cần mở Terminal, chạy lệnh hay sửa tệp cấu hình để hoàn tất thiết lập lần đầu. Terminal tích hợp vẫn được giữ nguyên để AI agent thực hiện công việc sau khi cài đặt.
+Màn kết nối hiện ngay ChatGPT, Claude Pro/Max và Gemini. Chọn một dịch vụ, đăng nhập hoặc nhập khóa của chính bạn. Bạn cũng có thể chọn **Tôi sẽ chọn nhà cung cấp sau**.
+
+### Bước 3. Bắt đầu giao việc
+
+Chọn model mặc định, vào không gian làm việc và nhập mục tiêu đầu tiên. Terminal tích hợp, công cụ, bộ nhớ và các tính năng lõi Hermes vẫn được giữ nguyên sau thiết lập.
 
 ## Chọn đúng bộ cài
 
-| Hệ điều hành             | Kiến trúc     | Tệp nên tải                                       | Trạng thái                                    |
-| ------------------------ | ------------- | ------------------------------------------------- | --------------------------------------------- |
-| Windows 10/11            | x64           | `Hermes-Vietnamese-Windows-x64-Setup.exe`         | Thử nghiệm cộng đồng                          |
-| Windows 10/11            | ARM64         | `Hermes-Vietnamese-Windows-arm64-Setup.exe`       | Thử nghiệm; runner build còn ở Public Preview |
-| macOS 12 trở lên         | Apple Silicon | `Hermes-Vietnamese-macOS-Apple-Silicon.dmg`       | Thử nghiệm cộng đồng                          |
-| macOS 12 trở lên         | Intel x64     | `Hermes-Vietnamese-macOS-Intel.dmg`               | Thử nghiệm cộng đồng                          |
-| Ubuntu/Linux tương thích | x64           | `.deb`, `.rpm` hoặc `.AppImage` có hậu tố `x64`   | Thử nghiệm cộng đồng                          |
-| Ubuntu/Linux tương thích | ARM64         | `.deb`, `.rpm` hoặc `.AppImage` có hậu tố `arm64` | Thử nghiệm; runner build còn ở Public Preview |
+| Hệ điều hành     | Kiến trúc      | Tệp nên tải                                 |
+| ---------------- | -------------- | ------------------------------------------- |
+| Windows 10/11    | x64            | `Hermes-Vietnamese-Windows-x64-Setup.exe`   |
+| Windows 10/11    | ARM64          | `Hermes-Vietnamese-Windows-arm64-Setup.exe` |
+| macOS 12 trở lên | Apple Silicon  | `Hermes-Vietnamese-macOS-Apple-Silicon.dmg` |
+| macOS 12 trở lên | Intel x64      | `Hermes-Vietnamese-macOS-Intel.dmg`         |
+| Ubuntu/Debian    | x64 hoặc ARM64 | Tệp `.deb` đúng kiến trúc                   |
+| Fedora/RHEL      | x64 hoặc ARM64 | Tệp `.rpm` đúng kiến trúc                   |
+| Linux khác       | x64 hoặc ARM64 | Tệp `.AppImage` đúng kiến trúc              |
 
-Hermes ưu tiên macOS dùng Apple Silicon; bản cộng đồng vẫn đóng gói riêng cho Mac Intel x64 để người dùng máy tương thích có thể cài. Windows 32-bit và Linux ARM 32-bit không được đóng gói.
+Windows 32-bit và Linux ARM 32-bit không được đóng gói.
 
 ### Yêu cầu hệ thống
 
-- **Windows:** Windows 10 hoặc 11 bản 64-bit. Vào **Cài đặt → Hệ thống → Giới thiệu → Loại hệ thống** để xem máy dùng x64 hay ARM64.
-- **macOS:** macOS 12 trở lên, máy dùng chip Apple M-series hoặc Intel x64.
-- **Linux:** ưu tiên Ubuntu 24.04 trở lên. Các bản phân phối có `glibc`, `systemd` và cấu trúc thư mục FHS có khả năng tương thích; cần `git`, `curl`, `xz-utils` và bộ công cụ biên dịch C/C++ cho lần cài môi trường chạy.
-- **Kết nối mạng:** bắt buộc ở lần mở đầu tiên để Hermes tải môi trường chạy và để đăng nhập nhà cung cấp AI.
+- **Windows:** Windows 10 hoặc 11 bản 64-bit.
+- **macOS:** macOS 12 trở lên, chip Apple M-series hoặc Intel x64.
+- **Linux:** ưu tiên Ubuntu 24.04 trở lên. Một số bản phân phối khác có thể cần `git`, `curl`, `xz-utils`, `glibc`, `systemd` và bộ công cụ biên dịch C/C++.
+- **Khuyến nghị thực tế:** RAM 8 GB, CPU 4 luồng và còn trống ít nhất 4 GB cho môi trường chạy cùng dữ liệu cơ bản.
+- **Model cục bộ:** cần cấu hình riêng tùy model và thường yêu cầu nhiều RAM hoặc GPU hơn.
 
-Dự án Hermes gốc chưa công bố ngưỡng RAM, CPU và dung lượng trống bắt buộc. Bản cộng đồng khuyến nghị thực tế **RAM 8 GB, CPU 4 luồng và còn trống 4 GB** để cài môi trường chạy cùng dữ liệu cơ bản. Đây là mức khuyến nghị vận hành, chưa phải cam kết tối thiểu đã được đo kiểm. Nếu chạy model cục bộ, cấu hình phụ thuộc từng model và thường cao hơn đáng kể.
+Hermes gốc chưa công bố một cấu hình tối thiểu bắt buộc cho mọi cách sử dụng. Các thông số trên là mức khuyến nghị vận hành của bản cộng đồng.
 
-## Cài đặt trên Windows
+## Cài đặt chi tiết
 
-1. Mở [bản thử nghiệm đa nền tảng hiện tại](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-5).
-2. Tải bộ cài `x64` hoặc `arm64` đúng với **Loại hệ thống** của máy.
-3. Chạy bộ cài và mở Hermes.
-4. Ở lần mở đầu tiên, chờ Hermes tải môi trường chạy. Quá trình này cần Internet và có thể mất vài phút.
-5. Chọn nhà cung cấp mô hình rồi đăng nhập bằng tài khoản của chính bạn.
+### Windows
 
-### Cảnh báo SmartScreen
+1. Vào **Cài đặt → Hệ thống → Giới thiệu → Loại hệ thống** để xem máy là x64 hay ARM64.
+2. Tải tệp Setup tương ứng từ [trang phát hành](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-8).
+3. Mở bộ cài và hoàn tất các bước trên màn hình.
+4. Khởi động Hermes, chọn ngôn ngữ rồi chọn cài trên máy.
+5. Giữ kết nối Internet trong lần chuẩn bị đầu tiên. Tốc độ phụ thuộc mạng và máy; quá trình có thể lâu hơn vài phút vì phải tải môi trường chạy.
 
-Bộ cài cộng đồng hiện chưa có chứng thư ký số thương mại. Windows có thể hiện cảnh báo SmartScreen. Kiểm tra mã SHA-256 trong tệp **SHA256SUMS.txt** của cùng bản phát hành, sau đó chọn **Thông tin thêm** → **Vẫn chạy** nếu mã khớp.
+Nếu Windows chặn bộ cài, đọc mục [Cảnh báo bảo mật khi cài](#cảnh-báo-bảo-mật-khi-cài) trước khi tiếp tục.
 
-## Cài đặt trên macOS
+### macOS
 
-1. Tải **Hermes-Vietnamese-macOS-Apple-Silicon.dmg** cho chip Apple M-series hoặc **Hermes-Vietnamese-macOS-Intel.dmg** cho Mac Intel.
-2. Mở tệp DMG và kéo Hermes vào thư mục **Applications**.
+1. Chọn `Apple-Silicon.dmg` cho chip M-series hoặc `Intel.dmg` cho Mac Intel.
+2. Mở DMG và kéo Hermes vào thư mục **Applications**.
 3. Mở Hermes từ Applications.
-4. Nếu Gatekeeper cảnh báo vì bản cộng đồng chưa được ký/công chứng, hãy đối chiếu SHA-256 trước. Sau đó nhấp phải vào Hermes → **Open**, hoặc vào **System Settings → Privacy & Security → Open Anyway**.
+4. Chọn ngôn ngữ, chọn cài trên máy và chờ chuẩn bị môi trường chạy.
 
-Không dùng lệnh xóa thuộc tính bảo mật trên toàn bộ ứng dụng. Cảnh báo Gatekeeper sẽ hết đúng cách khi bản phát hành có chứng thư Apple Developer ID và được Apple công chứng.
+Nếu Gatekeeper cảnh báo, hãy kiểm tra SHA-256 rồi nhấp phải vào Hermes → **Open**. Bạn cũng có thể vào **System Settings → Privacy & Security → Open Anyway**. Không chạy lệnh xóa thuộc tính bảo mật cho toàn bộ ứng dụng.
 
-## Cài đặt trên Linux
+### Linux
 
-Chọn một trong ba định dạng đúng kiến trúc:
+- **Ubuntu/Debian:** mở tệp `.deb` bằng trình Cài đặt phần mềm.
+- **Fedora/RHEL:** mở tệp `.rpm` bằng trình quản lý phần mềm.
+- **AppImage:** vào Thuộc tính của tệp, cho phép chạy như chương trình rồi mở trực tiếp.
 
-- **Ubuntu/Debian:** mở tệp `.deb` bằng trình Cài đặt phần mềm của hệ thống.
-- **Fedora/RHEL:** mở tệp `.rpm` bằng trình quản lý phần mềm của hệ thống.
-- **AppImage:** bật quyền cho phép chạy trong phần Thuộc tính của tệp rồi mở trực tiếp.
+Nếu AppImage không mở, kiểm tra FUSE theo hướng dẫn của bản phân phối hoặc dùng gói `.deb`/`.rpm`. Linux không có một cơ chế cập nhật Electron chung cho mọi bản phân phối, vì vậy hãy tải bản mới hoặc cập nhật qua trình quản lý gói tương ứng.
 
-Thay `x64` bằng `arm64` khi dùng máy Linux ARM64. Nếu AppImage không mở, kiểm tra FUSE theo hướng dẫn của bản phân phối hoặc dùng gói `.deb`/`.rpm` thay thế.
+## Kết nối ChatGPT, Claude và Gemini
 
-## Đăng nhập mô hình
+### ChatGPT qua OpenAI OAuth
 
-- **OpenAI Codex:** đăng nhập bằng tài khoản ChatGPT của bạn qua luồng mã thiết bị. Một số tài khoản cần bật xác thực mã thiết bị trong phần bảo mật ChatGPT.
-- **Claude Pro / Max:** chọn **Claude Pro / Max (qua Claude Code)** rồi đăng nhập bằng cửa sổ chính thức của Claude Code. Hermes không đọc hoặc lưu mã OAuth của Claude. Cầu nối chỉ chạy khi Claude Code xác nhận đang dùng tài khoản Claude chính chủ và Extra Usage đang tắt, nhờ đó tránh vô tình chuyển sang tính phí API ngoài gói.
-- **Claude API:** tùy chọn Anthropic API riêng vẫn có sẵn cho người muốn thanh toán theo mức sử dụng; đây là nhà cung cấp khác với Claude Pro / Max.
-- **Gemini:** dùng khóa API do chính bạn tạo tại [Google AI Studio](https://aistudio.google.com/apikey). Gói Gemini trên web không tự động cấp quyền API.
-- **Nhà cung cấp khác:** Hermes hỗ trợ OpenRouter, Nous Portal và nhiều dịch vụ tương thích khác.
+Phù hợp khi bạn muốn dùng quyền Codex trong tài khoản ChatGPT của mình.
 
-**Thông tin đăng nhập và dữ liệu của mỗi người được lưu riêng trên máy của mình.** Bộ cài không chứa tài khoản, khóa API, mã OAuth hay dữ liệu trò chuyện của người đóng gói. Dự án cộng đồng này không vận hành máy chủ tập trung để thu thập thông tin đăng nhập của người dùng.
+1. Tại bước **Kết nối model**, chọn **OpenAI OAuth (ChatGPT)**.
+2. Hermes mở trang xác minh của OpenAI trong trình duyệt.
+3. Đăng nhập đúng tài khoản ChatGPT và xác nhận mã thiết bị khi được yêu cầu.
+4. Quay lại Hermes. Ứng dụng sẽ tự kiểm tra kết nối và hiển thị model được tài khoản hỗ trợ.
 
-Khi bạn chủ động cấu hình hoặc sử dụng một tính năng có kết nối mạng, dữ liệu cần thiết có thể được chuyển tới dịch vụ đã chọn. Các dịch vụ đó có thể gồm nhà cung cấp AI, công cụ web và tìm kiếm, trình duyệt, nền tảng nhắn tin, GitHub và nguồn phụ thuộc công khai. Việc xử lý dữ liệu chịu điều khoản và chính sách quyền riêng tư của từng dịch vụ.
+Nếu OpenAI báo chưa cho phép xác thực mã thiết bị, mở phần **Cài đặt bảo mật** của ChatGPT, bật tính năng xác thực mã thiết bị cho Codex rồi thử lại. Quyền truy cập và giới hạn sử dụng phụ thuộc gói ChatGPT cùng chính sách hiện hành của OpenAI.
 
-## Cập nhật
+### Claude Pro hoặc Max qua Claude Code
 
-Bản này cài backend và nhận cập nhật từ kho **LucDinhLe/hermes-agent-vietnamese**. Mã mới từ dự án gốc sẽ được xem xét, kiểm thử rồi đồng bộ vào bản cộng đồng để tránh làm mất phần Việt hóa.
+Phù hợp khi bạn có gói Claude Pro/Max và muốn dùng cầu nối chính thức của Claude Code cho hội thoại trực tiếp.
 
-Linux không có cơ chế cập nhật Electron tích hợp chung cho mọi bản phân phối. Người dùng Linux nên tải bản mới hoặc cập nhật qua trình quản lý gói tương ứng.
+1. Chọn **Claude Pro / Max (qua Claude Code)**.
+2. Hermes mở luồng đăng nhập của Claude Code.
+3. Đăng nhập tài khoản Claude chính chủ và hoàn tất xác nhận.
+4. Quay lại Hermes, mở nhóm Claude trong danh sách model và chọn `Sonnet`, `Opus` hoặc `Haiku` nếu tài khoản hỗ trợ.
 
-## Gỡ cài đặt và dữ liệu
+Cầu nối không sao chép hoặc lưu mã OAuth Claude vào kho xác thực riêng của Hermes. Cơ chế bảo vệ yêu cầu Extra Usage ở trạng thái tắt hoặc bị từ chối; nếu không xác minh được, kết nối sẽ dừng để tránh vô tình chuyển sang mức dùng tính thêm.
 
-Gỡ ứng dụng trong **Settings → Apps → Installed apps** của Windows. Hermes còn giữ môi trường chạy và dữ liệu người dùng trong **%LOCALAPPDATA%\hermes** để tránh mất lịch sử ngoài ý muốn. Chỉ xóa thư mục đó khi bạn chắc chắn không cần dữ liệu cũ.
+Phạm vi hiện tại tập trung vào hội thoại trực tiếp trong Desktop. Công cụ, agent nền và lịch chạy của Claude Code chưa tự động trở thành công cụ Hermes. Người muốn dùng Anthropic API theo mức sử dụng có thể chọn **Anthropic API Key**; đây là tài khoản thanh toán riêng, không dùng chung quyền lợi Claude Pro/Max.
 
-Trên macOS/Linux, dữ liệu mặc định nằm trong `~/.hermes`. Xóa ứng dụng không tự động xóa thư mục này, nên tài khoản, phiên và bộ nhớ không bị mất ngoài ý muốn.
+### Google Gemini bằng khóa API
 
-## Miễn trừ trách nhiệm đối với Hermes
+Phù hợp khi bạn có khóa Google AI Studio. Gói Gemini trên web không tự động cấp quyền API.
 
-Hermes được cung cấp theo giấy phép MIT với nguyên trạng phần mềm, không kèm cam kết bảo hành. Dự án cộng đồng không bảo đảm hệ thống luôn hoạt động liên tục, thuật toán hoặc kết quả AI luôn chính xác, hay mọi nhà cung cấp bên thứ ba luôn duy trì tính năng, model và chính sách hiện tại.
+1. Mở [Google AI Studio](https://aistudio.google.com/apikey) và tạo khóa API bằng tài khoản Google của bạn.
+2. Trong Hermes, chọn **Google Gemini (khóa API)**.
+3. Dán khóa vào ô được yêu cầu rồi chọn **Kết nối**.
+4. Chọn model Gemini từ danh sách sau khi Hermes xác nhận khóa hợp lệ.
 
-Người dùng chịu trách nhiệm xem lại kết quả, yêu cầu quyền và hậu quả của các thao tác đã chấp thuận. Trong phạm vi pháp luật cho phép và theo nội dung giấy phép MIT, các tác giả cùng chủ sở hữu bản quyền không chịu trách nhiệm đối với khiếu nại, thiệt hại hoặc nghĩa vụ phát sinh từ phần mềm hay việc sử dụng phần mềm.
+Khóa Gemini chịu hạn mức miễn phí hoặc phương thức thanh toán của dự án Google AI Studio tương ứng.
 
-Bản giải thích tiếng Việt tại [MIỄN TRỪ TRÁCH NHIỆM](DISCLAIMER.md) giúp người dùng hiểu phạm vi áp dụng. Nội dung này không thay thế, mở rộng hoặc sửa đổi [giấy phép MIT gốc](LICENSE).
+### Nhà cung cấp khác và model cục bộ
 
-## Phạm vi hỗ trợ
+Dưới mục **Nhà cung cấp khác**, Hermes còn hỗ trợ Nous Portal, OpenRouter, Fireworks, Anthropic API và nhiều điểm cuối tương thích khác. Mỗi dịch vụ có tài khoản, giới hạn và cách tính phí riêng.
 
-- Bản phát hành: Windows x64/ARM64, macOS Apple Silicon/Intel và Linux x64/ARM64.
-- Giao diện Desktop đã được Việt hóa; nội dung do mô hình tạo phụ thuộc ngôn ngữ bạn yêu cầu.
-- Claude Pro / Max hiện hỗ trợ trò chuyện trực tiếp trong Desktop. Công cụ, agent nền và lịch chạy của Claude Code chưa được chuyển thành công cụ Hermes trong bản đầu tiên.
-- Đây là bản cộng đồng không chính thức và không được Nous Research bảo chứng.
+Nếu đã chạy một máy chủ model tương thích OpenAI trên máy, chọn **Tôi có khóa API → Local / custom endpoint**, nhập địa chỉ điểm cuối và khóa nếu máy chủ yêu cầu. Bộ cài hiện không nhúng sẵn một model nặng để chạy ngoại tuyến.
 
-## Dành cho người đóng góp
+## Đổi hoặc thêm nhà cung cấp sau khi cài
 
-Các thay đổi chính nằm tại:
+1. Mở **Cài đặt** trong Hermes.
+2. Vào mục **Model/Nhà cung cấp**.
+3. Chọn nhà cung cấp muốn thêm, đăng nhập hoặc nhập khóa.
+4. Mở danh sách model ở thanh trạng thái để chọn model mặc định.
 
-- **apps/desktop/src/i18n/vi.ts**
-- **apps/desktop/src/i18n/languages.ts**
-- **scripts/install.ps1** và **scripts/install.sh**
-- **.github/workflows/release-vietnamese.yml**
-- **docs/community-release.md**
+Bạn có thể giữ nhiều kết nối và chuyển model khi làm việc. Tên model cùng khả năng thực tế phụ thuộc dữ liệu mà nhà cung cấp trả về tại thời điểm sử dụng.
 
-Trước khi phát hành, chạy kiểm thử giao diện, kiểm tra kiểu TypeScript, build trên đúng hệ điều hành/kiến trúc, xác minh cấu trúc gói và quét bí mật trong phần thay đổi.
+## Xử lý lỗi kết nối thường gặp
+
+### ChatGPT cứ quay lại màn xác minh
+
+- Đảm bảo đang đăng nhập đúng tài khoản ChatGPT.
+- Bật xác thực mã thiết bị trong cài đặt bảo mật nếu OpenAI yêu cầu.
+- Đóng trang xác minh cũ, chọn lại **OpenAI OAuth (ChatGPT)** để lấy mã mới.
+
+### Claude đăng nhập xong nhưng không có model
+
+- Kiểm tra Claude Code đã xác nhận đăng nhập thành công.
+- Đảm bảo tài khoản có gói Pro hoặc Max đang hoạt động.
+- Tắt Extra Usage nếu cầu nối báo không thể xác minh mức dùng.
+- Mở lại Cài đặt model hoặc khởi động lại Hermes để làm mới danh sách.
+
+### Gemini báo khóa không hợp lệ
+
+- Tạo khóa tại Google AI Studio, không dùng mật khẩu Google hay mã đăng nhập Gemini web.
+- Kiểm tra khóa thuộc đúng dự án và API tương ứng đang khả dụng.
+- Xóa khoảng trắng ở đầu hoặc cuối khóa trước khi kết nối.
+
+### Không thấy model sau khi kết nối
+
+- Mở danh sách model và mở rộng nhóm nhà cung cấp.
+- Kiểm tra mạng và hạn mức tài khoản.
+- Vào Cài đặt nhà cung cấp, ngắt rồi kết nối lại nếu thông tin xác thực đã hết hạn.
+
+## Cảnh báo bảo mật khi cài
+
+Các bản phát hành hiện tại chưa được ký số. Windows SmartScreen hoặc macOS Gatekeeper có thể cảnh báo vì hệ điều hành chưa xác minh được nhà phát hành.
+
+Trước khi tiếp tục:
+
+1. Chỉ tải tệp từ [GitHub Releases của kho này](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases).
+2. Tải `SHA256SUMS.txt` trong cùng bản phát hành.
+3. Đối chiếu mã SHA-256 của tệp đã tải.
+4. Chỉ chọn **Thông tin thêm → Vẫn chạy** trên Windows hoặc **Open Anyway** trên macOS khi mã khớp.
+
+Cảnh báo chưa ký số không tự chứng minh tệp an toàn hoặc nguy hiểm. Mã băm và nguồn tải giúp bạn xác minh tệp có đúng với bản GitHub đã công bố hay không. Dự án đang xin chương trình ký mã miễn phí cho phần mềm nguồn mở; trạng thái được cập nhật tại [Code signing policy](CODE_SIGNING_POLICY.md).
+
+## Riêng tư và dữ liệu
+
+**Thông tin đăng nhập và dữ liệu của mỗi người được lưu riêng trên máy của mình.** Bộ cài không chứa tài khoản, khóa API, mã OAuth hoặc dữ liệu trò chuyện của người đóng gói. Dự án không vận hành máy chủ tập trung để thu thập thông tin đăng nhập.
+
+Khi bạn chủ động dùng một nhà cung cấp AI, công cụ web, trình duyệt, nền tảng nhắn tin hoặc dịch vụ mạng, dữ liệu cần thiết sẽ được dịch vụ đó xử lý theo điều khoản và chính sách quyền riêng tư riêng. Không đăng khóa API, mã OAuth, nội dung riêng tư hoặc log chứa bí mật vào issue công khai.
+
+## Cập nhật, sao lưu và gỡ cài đặt
+
+### Cập nhật
+
+Bản cộng đồng nhận mã và bản phát hành từ `LucDinhLe/hermes-agent-vietnamese`. Các thay đổi từ Hermes Agent gốc được rà soát và kiểm thử trước khi đồng bộ để hạn chế làm mất phần Việt hóa.
+
+Tài khoản, phiên làm việc, cấu hình và bộ nhớ nằm trong thư mục dữ liệu người dùng, tách khỏi bộ cài. Cập nhật không chủ động xóa các dữ liệu này.
+
+### Sao lưu
+
+- **Windows:** dữ liệu chính thường nằm trong `%LOCALAPPDATA%\hermes`.
+- **macOS/Linux:** dữ liệu mặc định nằm trong `~/.hermes`.
+
+Đóng Hermes trước khi sao chép thư mục dữ liệu. Không chia sẻ bản sao lưu công khai vì có thể chứa lịch sử, cấu hình hoặc thông tin xác thực.
+
+### Gỡ cài đặt
+
+Trên Windows, mở **Settings → Apps → Installed apps** rồi gỡ Hermes. Trên macOS, xóa ứng dụng khỏi Applications. Trên Linux, gỡ bằng trình quản lý gói hoặc xóa AppImage.
+
+Gỡ ứng dụng không tự động xóa thư mục dữ liệu nhằm tránh mất lịch sử ngoài ý muốn. Chỉ xóa thư mục dữ liệu khi bạn chắc chắn không cần tài khoản, phiên và bộ nhớ cũ.
+
+## Phạm vi dự án và miễn trừ trách nhiệm
+
+Đây là bản cộng đồng không chính thức được phát triển từ [Hermes Agent](https://github.com/NousResearch/hermes-agent) theo giấy phép MIT. Giấy phép, thuật toán, kiến trúc và tính năng lõi vẫn theo dự án gốc. Bản cộng đồng bổ sung lớp Việt hóa, tài liệu, đóng gói đa nền tảng và điều chỉnh tương thích cho người dùng Việt.
+
+Hermes được cung cấp theo nguyên trạng, không kèm cam kết bảo hành. Kết quả AI có thể sai; hệ thống, model và dịch vụ bên thứ ba có thể thay đổi hoặc gián đoạn. Người dùng chịu trách nhiệm kiểm tra kết quả, quyền đã cấp và hậu quả của các thao tác đã chấp thuận.
+
+Xem [LICENSE](LICENSE), [miễn trừ trách nhiệm bằng tiếng Việt](DISCLAIMER.md) và [chính sách bảo mật](SECURITY.md).
+
+## Cần hỗ trợ?
+
+- [Báo lỗi hoặc đề xuất bản dịch](https://github.com/LucDinhLe/hermes-agent-vietnamese/issues)
+- [Xem các bản phát hành](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases)
+- [Đọc tài liệu kỹ thuật Hermes gốc](https://hermes-agent.nousresearch.com/docs/)
+
+Khi báo lỗi, hãy cho biết hệ điều hành, kiến trúc máy, bước bị lỗi và ảnh chụp thông báo. Hãy che địa chỉ email, khóa API, mã OAuth và dữ liệu cá nhân trước khi đăng.
