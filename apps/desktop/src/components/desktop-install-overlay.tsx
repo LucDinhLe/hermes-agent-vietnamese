@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { BrandMark } from '@/components/brand-mark'
+import { FirstRunJourney } from '@/components/first-run-journey'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { ErrorIcon } from '@/components/ui/error-state'
@@ -408,6 +409,8 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
             </div>
           </div>
 
+          <FirstRunJourney activeStep={1} className="mt-6" showLanguage />
+
           <div className="mt-6 grid gap-3 sm:grid-cols-2">
             <button
               className="rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) p-4 text-left transition hover:bg-(--chrome-action-hover)"
@@ -469,10 +472,9 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
     )
   }
 
-  // Unsupported-platform branch: macOS/Linux packaged builds hit this when
-  // there's no Hermes Agent installed yet and we can't drive install.sh
-  // (no stage protocol equivalent yet). Show a copy-paste install command
-  // and the docs URL; user runs it from Terminal and relaunches the app.
+  // Compatibility for an older Electron main process that can still emit the
+  // retired unsupported-platform event. Current builds drive install.sh on
+  // macOS/Linux, so never send the user to Terminal from this recovery path.
   if (state.unsupportedPlatform) {
     const ups = state.unsupportedPlatform
     const platformLabel = ups.platform === 'darwin' ? 'macOS' : ups.platform === 'linux' ? 'Linux' : ups.platform
@@ -483,32 +485,7 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
           <h2 className="text-xl font-semibold tracking-tight">{copy.oneTimeTitle}</h2>
           <p className="mt-2 text-sm text-muted-foreground">{copy.unsupportedDesc(platformLabel)}</p>
 
-          <div className="mt-4">
-            <div className="mb-1.5 text-xs font-medium text-muted-foreground">{copy.installCommand}</div>
-            <pre className="overflow-x-auto rounded-md border border-(--stroke-nous) px-3 py-2.5 font-mono text-[12px]">
-              <code>{ups.installCommand}</code>
-            </pre>
-            <div className="mt-2 flex items-center gap-2">
-              <Button
-                onClick={() => {
-                  void navigator.clipboard?.writeText(ups.installCommand).catch(() => {})
-                }}
-                size="sm"
-                variant="secondary"
-              >
-                {copy.copyCommand}
-              </Button>
-              <Button
-                onClick={() => {
-                  window.hermesDesktop?.openExternal?.(ups.docsUrl)
-                }}
-                size="sm"
-                variant="ghost"
-              >
-                {copy.viewDocs}
-              </Button>
-            </div>
-          </div>
+          <FirstRunJourney activeStep={1} className="mt-6" showLanguage />
 
           <div className="mt-6 flex items-center justify-between pt-2">
             <span className="text-xs text-muted-foreground">
@@ -519,8 +496,15 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
                 <Globe className="size-4" />
                 {copy.connectExistingShort}
               </Button>
-              <Button onClick={() => window.location.reload()} size="sm" variant="default">
-                {copy.retryAfterRun}
+              <Button
+                onClick={async () => {
+                  await window.hermesDesktop?.resetBootstrap?.()
+                  window.location.reload()
+                }}
+                size="sm"
+                variant="default"
+              >
+                {copy.reloadRetry}
               </Button>
             </div>
           </div>
@@ -549,8 +533,9 @@ export function DesktopInstallOverlay({ enabled = true }: DesktopInstallOverlayP
   return (
     <div className="fixed inset-0 z-(--z-setup) flex items-center justify-center bg-background/90 backdrop-blur-md p-4">
       <div className="flex w-full max-w-2xl max-h-[90vh] flex-col rounded-xl border border-(--stroke-nous) bg-card shadow-nous">
+        <FirstRunJourney activeStep={1} className="flex-shrink-0 px-8 pt-8" showLanguage />
         {/* Header -- always visible, never scrolls */}
-        <div className="flex flex-shrink-0 items-start gap-4 p-8 pb-4">
+        <div className="flex flex-shrink-0 items-start gap-4 px-8 pt-6 pb-4">
           {!failed && <BrandMark className="size-11 shrink-0" />}
           <div className="min-w-0">
             <h2 className="text-xl font-semibold tracking-tight">

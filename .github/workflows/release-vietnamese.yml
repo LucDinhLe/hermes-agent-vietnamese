@@ -64,6 +64,9 @@ jobs:
           npm run --prefix apps/desktop test:ui --
           src/i18n/languages.test.ts
           src/i18n/context.test.tsx
+          src/components/first-run-journey.test.tsx
+          src/components/desktop-install-overlay.test.tsx
+          src/components/onboarding/index.test.tsx
           src/components/bilingual-quick-toggle.test.tsx
           src/app/chat/session-draft-title.test.tsx
 
@@ -95,6 +98,12 @@ jobs:
             platform: darwin
             arch: arm64
             command: dist:mac:arm64
+          - id: macos-x64
+            label: macOS Intel
+            runner: macos-15-intel
+            platform: darwin
+            arch: x64
+            command: dist:mac:x64
           - id: linux-x64
             label: Linux x64
             runner: ubuntu-24.04
@@ -134,6 +143,20 @@ jobs:
           npm run --prefix apps/desktop test:desktop:platforms --
           electron/bootstrap-runner.test.ts
           electron/update-remote.test.ts
+
+      - name: Kiểm tra trình cài runtime Windows
+        if: matrix.platform == 'win32'
+        shell: powershell
+        run: |
+          $manifest = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 -Manifest | Select-Object -Last 1 | ConvertFrom-Json
+          if ($manifest.protocol_version -ne 1 -or $manifest.stages.Count -lt 1) { throw 'Invalid Windows bootstrap manifest' }
+
+      - name: Kiểm tra trình cài runtime macOS và Linux
+        if: matrix.platform != 'win32'
+        shell: bash
+        run: |
+          manifest="$(bash scripts/install.sh --manifest)"
+          node -e 'const m=JSON.parse(process.argv[1]); if(m.protocol_version!==1 || !m.stages?.length) process.exit(1)' "$manifest"
 
       - name: Đóng gói Windows hoặc Linux
         if: matrix.platform != 'darwin'

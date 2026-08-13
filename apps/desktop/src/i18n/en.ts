@@ -2303,9 +2303,12 @@ export const en: Translations = {
       skipped: 'Skipped',
       failed: 'Failed'
     },
+    journeySteps: ['Install', 'Connect a model', 'Start working'],
+    chooseLanguage: 'Setup language',
+    noTerminalRequired: 'No Terminal commands or configuration files are required for setup.',
     oneTimeTitle: 'Hermes needs a one-time install',
     unsupportedDesc: platform =>
-      `Automated first-launch install isn’t available on ${platform} yet. Open Terminal and run the command below, then relaunch this app. Subsequent launches will skip this step.`,
+      `This older setup session could not start the ${platform} installer. Reload to use the current automatic installer; no Terminal command is required.`,
     installCommand: 'Install command',
     copyCommand: 'Copy command',
     viewDocs: 'View install docs',

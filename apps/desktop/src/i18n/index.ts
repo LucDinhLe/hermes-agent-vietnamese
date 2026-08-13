@@ -1,5 +1,6 @@
 export { TRANSLATIONS } from './catalog'
 export {
+  FIRST_RUN_LOCALE_KEY,
   getConfigDisplayLanguage,
   type I18nConfigClient,
   type I18nContextValue,

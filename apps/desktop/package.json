@@ -32,6 +32,7 @@
     "pack": "npm run build && npm run builder -- --dir",
     "dist": "npm run build && npm run builder",
     "dist:mac": "npm run build && npm run builder -- --mac",
+    "dist:mac:x64": "npm run build && npm run builder -- --mac --x64",
     "dist:mac:arm64": "npm run build && npm run builder -- --mac --arm64",
     "dist:mac:dmg": "npm run build && npm run builder -- --mac dmg",
     "dist:mac:zip": "npm run build && npm run builder -- --mac zip",

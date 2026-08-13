@@ -43,27 +43,22 @@ test('normalizes Windows x64 and arm64 installers independently', () => {
   }
 })
 
-test('requires both macOS Apple Silicon distribution files', () => {
-  const { outputDir, releaseDir } = fixture()
-  writeArtifact(releaseDir, 'Hermes-0.17.0-mac-arm64.dmg')
-  writeArtifact(releaseDir, 'Hermes-0.17.0-mac-arm64.zip')
+test('requires both macOS distribution files for Apple Silicon and Intel', () => {
+  for (const [arch, label] of [
+    ['arm64', 'Apple-Silicon'],
+    ['x64', 'Intel']
+  ]) {
+    const { outputDir, releaseDir } = fixture()
+    writeArtifact(releaseDir, `Hermes-0.17.0-mac-${arch}.dmg`)
+    writeArtifact(releaseDir, `Hermes-0.17.0-mac-${arch}.zip`)
 
-  const result = collectCommunityArtifacts({ arch: 'arm64', outputDir, platform: 'darwin', releaseDir })
+    const result = collectCommunityArtifacts({ arch, outputDir, platform: 'darwin', releaseDir })
 
-  assert.deepEqual(result.copied.map(file => path.basename(file)).sort(), [
-    'Hermes-Vietnamese-macOS-Apple-Silicon.dmg',
-    'Hermes-Vietnamese-macOS-Apple-Silicon.zip'
-  ])
-  assert.throws(
-    () =>
-      collectCommunityArtifacts({
-        arch: 'x64',
-        outputDir: path.join(outputDir, 'x64'),
-        platform: 'darwin',
-        releaseDir
-      }),
-    /Apple Silicon/
-  )
+    assert.deepEqual(result.copied.map(file => path.basename(file)).sort(), [
+      `Hermes-Vietnamese-macOS-${label}.dmg`,
+      `Hermes-Vietnamese-macOS-${label}.zip`
+    ])
+  }
 })
 
 test('maps electron-builder Linux architecture names for every package format', () => {

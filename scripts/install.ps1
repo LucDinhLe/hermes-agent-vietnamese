@@ -745,6 +745,71 @@ function Get-PowerShellHostExe {
     return "powershell"
 }
 
+function Install-UvFromPyPI {
+    param([string]$ManagedUv)
+
+    # Smart App Control can reject uv when it arrives through a nested
+    # download-and-execute installer, even though the same official binary is
+    # accepted when extracted from uv's hash-published PyPI wheel. Prefer the
+    # wheel path for Desktop bootstrap: download data, verify its SHA-256 from
+    # PyPI metadata, extract it, then execute only the verified uv.exe.
+    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+    $wheelTag = if ($arch -eq "Arm64") { "win_arm64" } elseif ($arch -eq "X64") { "win_amd64" } else { $null }
+    if (-not $wheelTag) {
+        Write-Warn "No PyPI uv wheel mapping for Windows architecture $arch"
+        return $false
+    }
+
+    $cacheDir = Join-Path $HermesHome "bootstrap-cache\uv-pypi"
+    $wheelPath = Join-Path $cacheDir "uv-$wheelTag.whl"
+    $zipPath = Join-Path $cacheDir "uv-$wheelTag.zip"
+    $extractDir = Join-Path $cacheDir "expanded-$wheelTag"
+
+    try {
+        New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+        Write-Info "Fetching verified uv wheel metadata from PyPI ..."
+        $metadata = Invoke-RestMethod -Uri "https://pypi.org/pypi/uv/json" -UseBasicParsing
+        $asset = $metadata.urls |
+            Where-Object { $_.packagetype -eq "bdist_wheel" -and -not $_.yanked -and $_.filename -like "*-$wheelTag.whl" } |
+            Select-Object -First 1
+
+        if (-not $asset -or -not $asset.url -or -not $asset.digests.sha256) {
+            throw "PyPI did not publish a usable uv wheel for $wheelTag"
+        }
+
+        Invoke-WebRequest -Uri $asset.url -OutFile $wheelPath -UseBasicParsing
+        $actualHash = (Get-FileHash -Path $wheelPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $expectedHash = ([string]$asset.digests.sha256).ToLowerInvariant()
+        if ($actualHash -ne $expectedHash) {
+            throw "uv wheel SHA-256 mismatch (expected $expectedHash, got $actualHash)"
+        }
+
+        Copy-Item -Path $wheelPath -Destination $zipPath -Force
+        if (Test-Path $extractDir) { Remove-Item -Path $extractDir -Recurse -Force }
+        Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+        $wheelUv = Get-ChildItem -Path $extractDir -Filter "uv.exe" -File -Recurse |
+            Select-Object -First 1
+        if (-not $wheelUv) {
+            throw "Verified uv wheel did not contain uv.exe"
+        }
+
+        Copy-Item -Path $wheelUv.FullName -Destination $ManagedUv -Force
+        Unblock-File -Path $ManagedUv -ErrorAction SilentlyContinue
+        $version = & $ManagedUv --version
+        if ($LASTEXITCODE -ne 0) {
+            throw "verified uv.exe could not run (exit $LASTEXITCODE)"
+        }
+
+        $script:UvCmd = $ManagedUv
+        Write-Success "Managed uv installed from verified PyPI wheel ($version)"
+        return $true
+    } catch {
+        Write-Warn "Verified PyPI uv install failed: $_"
+        Remove-Item -Path $ManagedUv -Force -ErrorAction SilentlyContinue
+        return $false
+    }
+}
+
 function Install-Uv {
     # Hermes owns its own uv at $HermesHome\bin\uv.exe.  Always install there --
     # no PATH probing, no conda guards, no multi-location resolution chains.
@@ -762,6 +827,10 @@ function Install-Uv {
     Write-Info "Installing managed uv into $HermesHome\bin ..."
     New-Item -ItemType Directory -Path (Join-Path $HermesHome "bin") -Force | Out-Null
 
+    if (Install-UvFromPyPI -ManagedUv $managedUv) {
+        return $true
+    }
+
     # UV_INSTALL_DIR tells the astral installer to place the binary
     # directly into $HermesHome\bin instead of ~/.local/bin.
     $prevEAP = $ErrorActionPreference
@@ -776,8 +845,12 @@ function Install-Uv {
         $ErrorActionPreference = $prevEAP
 
         if (Test-Path $managedUv) {
+            Unblock-File -Path $managedUv -ErrorAction SilentlyContinue
             $script:UvCmd = $managedUv
             $version = & $managedUv --version
+            if ($LASTEXITCODE -ne 0) {
+                throw "managed uv.exe could not run (exit $LASTEXITCODE)"
+            }
             Write-Success "Managed uv installed ($version)"
             return $true
         }

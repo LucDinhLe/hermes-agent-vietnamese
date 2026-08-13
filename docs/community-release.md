@@ -5,7 +5,7 @@
 Một commit được phát hành khi cùng mã nguồn tạo được các gói sau và mọi gói đều vượt kiểm tra cấu trúc:
 
 - Windows 10/11 x64 và ARM64: NSIS `.exe`.
-- macOS 12+ Apple Silicon: `.dmg` và `.zip`.
+- macOS 12+ Apple Silicon và Intel x64: `.dmg` và `.zip`.
 - Linux x64 và ARM64: `.AppImage`, `.deb` và `.rpm`.
 - Tất cả tệp có tên nhất quán và xuất hiện trong `SHA256SUMS.txt`.
 - Bộ cài không chứa tài khoản, OAuth token, API key hoặc dữ liệu người đóng gói.
@@ -18,7 +18,7 @@ Workflow `.github/workflows/release-vietnamese.yml` có ba cổng:
 
 1. **Verify:** kiểm toán dependency, kiểm thử routing của bản cộng đồng, ngôn ngữ và kiểu dữ liệu.
 2. **Build matrix:** mỗi gói được build trên đúng hệ điều hành và đúng kiến trúc. Native dependency được cài lại trong từng runner; không cross-build module native từ máy Windows.
-3. **Release:** chỉ chạy khi cả năm build đạt, tải toàn bộ artifact, tạo bảng SHA-256 chung rồi tạo GitHub Release mới.
+3. **Release:** chỉ chạy khi cả sáu build đạt, tải toàn bộ artifact, tạo bảng SHA-256 chung rồi tạo GitHub Release mới.
 
 Một nhãn đã phát hành là bất biến. Workflow từ chối ghi đè tệp của nhãn cũ; bản sửa lỗi phải dùng số phát hành mới.
 
@@ -29,6 +29,7 @@ Một nhãn đã phát hành là bất biến. Workflow từ chối ghi đè t�
 | `windows-x64`   | `windows-2025`     | NSIS x64                   |
 | `windows-arm64` | `windows-11-arm`   | NSIS ARM64                 |
 | `macos-arm64`   | `macos-15`         | DMG + ZIP Apple Silicon    |
+| `macos-x64`     | `macos-15-intel`   | DMG + ZIP Intel x64        |
 | `linux-x64`     | `ubuntu-24.04`     | AppImage + DEB + RPM x64   |
 | `linux-arm64`   | `ubuntu-24.04-arm` | AppImage + DEB + RPM ARM64 |
 
@@ -73,6 +74,6 @@ Mỗi hệ điều hành phải vượt các bước sau:
 ## Giới hạn hiện tại
 
 - Native Windows của Hermes vẫn là Early Beta theo tài liệu dự án gốc.
-- macOS Intel không thuộc Tier 1 của Hermes và không được phát hành ở fork này.
+- macOS Intel được đóng gói riêng và cần pilot trên máy thật trước khi bỏ nhãn thử nghiệm.
 - Linux Desktop được build đa định dạng, nhưng mức tương thích ngoài Ubuntu/glibc/systemd/FHS cần pilot theo bản phân phối.
 - RAM/CPU/dung lượng bắt buộc chưa được Hermes công bố và chưa có benchmark tối thiểu. README chỉ đưa mức khuyến nghị vận hành, không biến ước lượng thành yêu cầu chính thức.

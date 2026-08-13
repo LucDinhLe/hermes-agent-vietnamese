@@ -2449,9 +2449,12 @@ export const zh: Translations = {
       skipped: '已跳过',
       failed: '失败'
     },
+    journeySteps: ['安装', '连接模型', '开始工作'],
+    chooseLanguage: '设置语言',
+    noTerminalRequired: '设置过程无需使用终端命令或编辑配置文件。',
     oneTimeTitle: 'Hermes 需要一次性安装',
     unsupportedDesc: platform =>
-      `${platform} 暂不支持自动首次启动安装。请打开终端并运行下面的命令，然后重新启动此应用。之后启动会跳过此步骤。`,
+      `这个旧设置会话无法启动 ${platform} 安装程序。请重新加载以使用当前的自动安装程序，无需运行终端命令。`,
     installCommand: '安装命令',
     copyCommand: '复制命令',
     viewDocs: '查看安装文档',

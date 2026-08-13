@@ -23,7 +23,7 @@ Dự án dành cho người Việt muốn dùng một AI agent có khả năng l
 Bản cộng đồng hiện cung cấp:
 
 - Giao diện Desktop mặc định bằng tiếng Việt và nút chuyển nhanh **VI/EN**.
-- Bộ cài cho Windows x64/ARM64, macOS Apple Silicon và Linux x64/ARM64.
+- Bộ cài cho Windows x64/ARM64, macOS Apple Silicon/Intel và Linux x64/ARM64.
 - Hướng dẫn tiếng Việt về cài đặt, đăng nhập nhà cung cấp AI, cập nhật và xử lý cảnh báo bảo mật.
 - Quy trình đồng bộ thay đổi từ dự án gốc, kiểm thử đa nền tảng và phát hành kèm mã SHA-256.
 - Cơ chế đăng nhập bằng tài khoản AI của từng người. Bộ cài không chứa tài khoản, khóa API hoặc dữ liệu của người đóng gói.
@@ -49,10 +49,11 @@ Tài liệu kỹ thuật đầy đủ của dự án gốc nằm tại [hermes-a
 
 ## Cài đặt nhanh
 
-1. Mở [bản thử nghiệm đa nền tảng hiện tại](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-5).
-2. Chọn tệp đúng với hệ điều hành và kiến trúc máy.
-3. Đối chiếu mã SHA-256 nếu hệ điều hành hiện cảnh báo.
-4. Cài ứng dụng, chọn nhà cung cấp mô hình rồi đăng nhập bằng tài khoản của bạn.
+1. **Tải về và cài đặt:** mở [bản thử nghiệm đa nền tảng hiện tại](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-5), chọn đúng gói và chọn English hoặc Tiếng Việt trong trình thiết lập.
+2. **Kết nối model:** đăng nhập OAuth, dùng khóa API hoặc kết nối model cục bộ qua điểm cuối tương thích OpenAI.
+3. **Bắt đầu giao việc:** xác nhận model mặc định và vào không gian làm việc Hermes đầy đủ, gồm cả Terminal tích hợp.
+
+Người dùng không cần mở Terminal, chạy lệnh hay sửa tệp cấu hình để hoàn tất thiết lập lần đầu. Terminal tích hợp vẫn được giữ nguyên để Hermes và người dùng thực hiện công việc sau khi cài đặt.
 
 Hướng dẫn riêng cho Windows, macOS, Linux, SmartScreen và Gatekeeper được trình bày trong [README tiếng Việt](README.vi.md).
 

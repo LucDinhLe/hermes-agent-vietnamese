@@ -1,12 +1,13 @@
 import { useStore } from '@nanostores/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { FirstRunJourney } from '@/components/first-run-journey'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { getGlobalModelOptions } from '@/hermes'
-import { useI18n } from '@/i18n'
+import { FIRST_RUN_LOCALE_KEY, normalizeLocale, useI18n } from '@/i18n'
 import { Check, ChevronDown, ChevronLeft, KeyRound, Loader2 } from '@/lib/icons'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { cn } from '@/lib/utils'
@@ -185,7 +186,7 @@ export function DesktopOnboardingOverlay({
   profile,
   requestGateway
 }: DesktopOnboardingOverlayProps) {
-  const { t } = useI18n()
+  const { setLocale, t } = useI18n()
   const onboarding = useStore($desktopOnboarding)
   const boot = useStore($desktopBoot)
   const ctxRef = useRef<OnboardingContext>({ requestGateway, onCompleted, profile })
@@ -229,6 +230,34 @@ export function DesktopOnboardingOverlay({
       void refreshOnboarding(ctx)
     }
   }, [ctx, enabled, onboarding.requested])
+
+  // Step 1 can switch the UI language before the local backend exists. Once
+  // onboarding reaches step 2, persist that early choice to Hermes config.
+  // The local fallback remains available for the next launch if saving fails.
+  const [attemptedFirstRunLocale, setAttemptedFirstRunLocale] = useState(false)
+
+  useEffect(() => {
+    if (attemptedFirstRunLocale || !enabled || onboarding.manual || onboarding.configured !== false) {
+      return
+    }
+
+    let pending: string | null = null
+
+    try {
+      pending = window.localStorage.getItem(FIRST_RUN_LOCALE_KEY)
+    } catch {
+      return
+    }
+
+    if (!pending) {
+      return
+    }
+
+    setAttemptedFirstRunLocale(true)
+    void setLocale(normalizeLocale(pending)).catch(() => {
+      // The pending choice stays in localStorage and can be retried later.
+    })
+  }, [attemptedFirstRunLocale, enabled, onboarding.configured, onboarding.manual, setLocale])
 
   // When the Providers settings page asked to connect a specific provider, the
   // store stashed its id. Once the provider list has loaded and we're back at
@@ -322,6 +351,9 @@ export function DesktopOnboardingOverlay({
             : 'translate-y-0 scale-100 opacity-100 blur-0'
         )}
       >
+        {!onboarding.manual ? (
+          <FirstRunJourney activeStep={flow.status === 'confirming_model' ? 3 : 2} className="px-5 pt-5" />
+        ) : null}
         {showPicker || !ready ? <Header /> : null}
         {onboarding.manual ? (
           <Button

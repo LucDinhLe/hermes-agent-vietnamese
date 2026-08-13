@@ -14,10 +14,11 @@ Mỗi người dùng đăng nhập bằng tài khoản hoặc khóa API của ch
 
 ## Bắt đầu nhanh
 
-1. Mở [bản thử nghiệm đa nền tảng hiện tại](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-5).
-2. Chọn tệp đúng hệ điều hành và kiến trúc theo bảng bên dưới.
-3. Đối chiếu mã SHA-256 nếu hệ điều hành hiện cảnh báo.
-4. Cài ứng dụng, chọn nhà cung cấp mô hình và đăng nhập bằng tài khoản của bạn.
+1. **Tải về và cài đặt:** chọn đúng gói bên dưới, mở ứng dụng và chọn English hoặc Tiếng Việt.
+2. **Kết nối model:** đăng nhập OAuth, nhập khóa API hoặc kết nối model cục bộ qua điểm cuối tương thích OpenAI.
+3. **Bắt đầu giao việc:** xác nhận model mặc định và vào không gian làm việc Hermes đầy đủ.
+
+Bạn không cần mở Terminal, chạy lệnh hay sửa tệp cấu hình để hoàn tất thiết lập lần đầu. Terminal tích hợp vẫn được giữ nguyên để AI agent thực hiện công việc sau khi cài đặt.
 
 ## Chọn đúng bộ cài
 
@@ -26,15 +27,16 @@ Mỗi người dùng đăng nhập bằng tài khoản hoặc khóa API của ch
 | Windows 10/11            | x64           | `Hermes-Vietnamese-Windows-x64-Setup.exe`         | Thử nghiệm cộng đồng                          |
 | Windows 10/11            | ARM64         | `Hermes-Vietnamese-Windows-arm64-Setup.exe`       | Thử nghiệm; runner build còn ở Public Preview |
 | macOS 12 trở lên         | Apple Silicon | `Hermes-Vietnamese-macOS-Apple-Silicon.dmg`       | Thử nghiệm cộng đồng                          |
+| macOS 12 trở lên         | Intel x64     | `Hermes-Vietnamese-macOS-Intel.dmg`               | Thử nghiệm cộng đồng                          |
 | Ubuntu/Linux tương thích | x64           | `.deb`, `.rpm` hoặc `.AppImage` có hậu tố `x64`   | Thử nghiệm cộng đồng                          |
 | Ubuntu/Linux tương thích | ARM64         | `.deb`, `.rpm` hoặc `.AppImage` có hậu tố `arm64` | Thử nghiệm; runner build còn ở Public Preview |
 
-Hermes chính thức ưu tiên macOS dùng Apple Silicon. Mac Intel không nằm trong phạm vi hỗ trợ của bản cộng đồng này. Windows 32-bit và Linux ARM 32-bit cũng không được đóng gói.
+Hermes ưu tiên macOS dùng Apple Silicon; bản cộng đồng vẫn đóng gói riêng cho Mac Intel x64 để người dùng máy tương thích có thể cài. Windows 32-bit và Linux ARM 32-bit không được đóng gói.
 
 ### Yêu cầu hệ thống
 
 - **Windows:** Windows 10 hoặc 11 bản 64-bit. Vào **Cài đặt → Hệ thống → Giới thiệu → Loại hệ thống** để xem máy dùng x64 hay ARM64.
-- **macOS:** macOS 12 trở lên, máy dùng chip Apple M-series.
+- **macOS:** macOS 12 trở lên, máy dùng chip Apple M-series hoặc Intel x64.
 - **Linux:** ưu tiên Ubuntu 24.04 trở lên. Các bản phân phối có `glibc`, `systemd` và cấu trúc thư mục FHS có khả năng tương thích; cần `git`, `curl`, `xz-utils` và bộ công cụ biên dịch C/C++ cho lần cài môi trường chạy.
 - **Kết nối mạng:** bắt buộc ở lần mở đầu tiên để Hermes tải môi trường chạy và để đăng nhập nhà cung cấp AI.
 
@@ -54,7 +56,7 @@ Bộ cài cộng đồng hiện chưa có chứng thư ký số thương mại. 
 
 ## Cài đặt trên macOS
 
-1. Tải **Hermes-Vietnamese-macOS-Apple-Silicon.dmg** từ trang Bản phát hành.
+1. Tải **Hermes-Vietnamese-macOS-Apple-Silicon.dmg** cho chip Apple M-series hoặc **Hermes-Vietnamese-macOS-Intel.dmg** cho Mac Intel.
 2. Mở tệp DMG và kéo Hermes vào thư mục **Applications**.
 3. Mở Hermes từ Applications.
 4. Nếu Gatekeeper cảnh báo vì bản cộng đồng chưa được ký/công chứng, hãy đối chiếu SHA-256 trước. Sau đó nhấp phải vào Hermes → **Open**, hoặc vào **System Settings → Privacy & Security → Open Anyway**.
@@ -65,9 +67,9 @@ Không dùng lệnh xóa thuộc tính bảo mật trên toàn bộ ứng dụng
 
 Chọn một trong ba định dạng đúng kiến trúc:
 
-- **Ubuntu/Debian:** `sudo apt install ./Hermes-Vietnamese-Linux-x64.deb`
-- **Fedora/RHEL:** `sudo dnf install ./Hermes-Vietnamese-Linux-x64.rpm`
-- **AppImage:** cấp quyền chạy cho tệp rồi mở trực tiếp; không cần cài ở cấp hệ thống.
+- **Ubuntu/Debian:** mở tệp `.deb` bằng trình Cài đặt phần mềm của hệ thống.
+- **Fedora/RHEL:** mở tệp `.rpm` bằng trình quản lý phần mềm của hệ thống.
+- **AppImage:** bật quyền cho phép chạy trong phần Thuộc tính của tệp rồi mở trực tiếp.
 
 Thay `x64` bằng `arm64` khi dùng máy Linux ARM64. Nếu AppImage không mở, kiểm tra FUSE theo hướng dẫn của bản phân phối hoặc dùng gói `.deb`/`.rpm` thay thế.
 
@@ -105,7 +107,7 @@ Bản giải thích tiếng Việt tại [MIỄN TRỪ TRÁCH NHIỆM](DISCLAIME
 
 ## Phạm vi hỗ trợ
 
-- Bản phát hành: Windows x64/ARM64, macOS Apple Silicon và Linux x64/ARM64.
+- Bản phát hành: Windows x64/ARM64, macOS Apple Silicon/Intel và Linux x64/ARM64.
 - Giao diện Desktop đã được Việt hóa; nội dung do mô hình tạo phụ thuộc ngôn ngữ bạn yêu cầu.
 - Claude Pro / Max hiện hỗ trợ trò chuyện trực tiếp trong Desktop. Công cụ, agent nền và lịch chạy của Claude Code chưa được chuyển thành công cụ Hermes trong bản đầu tiên.
 - Đây là bản cộng đồng không chính thức và không được Nous Research bảo chứng.

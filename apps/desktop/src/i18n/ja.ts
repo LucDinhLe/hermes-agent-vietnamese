@@ -2079,9 +2079,12 @@ export const ja = defineLocale({
       skipped: 'スキップ',
       failed: '失敗'
     },
+    journeySteps: ['インストール', 'モデルを接続', '作業を開始'],
+    chooseLanguage: 'セットアップ言語',
+    noTerminalRequired: 'セットアップにターミナル操作や設定ファイルの編集は必要ありません。',
     oneTimeTitle: 'Hermes には一度限りのインストールが必要です',
     unsupportedDesc: platform =>
-      `${platform} では自動の初回インストールはまだ利用できません。ターミナルを開いて以下のコマンドを実行し、このアプリを再起動してください。以降の起動ではこの手順はスキップされます。`,
+      `この古いセットアップでは ${platform} インストーラーを開始できませんでした。再読み込みすると現在の自動インストーラーを使用できます。ターミナル操作は不要です。`,
     installCommand: 'インストールコマンド',
     copyCommand: 'コマンドをコピー',
     viewDocs: 'インストールドキュメントを見る',

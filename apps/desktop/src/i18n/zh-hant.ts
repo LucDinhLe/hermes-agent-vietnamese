@@ -2016,9 +2016,12 @@ export const zhHant = defineLocale({
       skipped: '已略過',
       failed: '失敗'
     },
+    journeySteps: ['安裝', '連線模型', '開始工作'],
+    chooseLanguage: '設定語言',
+    noTerminalRequired: '設定過程不需要使用終端機指令或編輯設定檔。',
     oneTimeTitle: 'Hermes 需要一次性安裝',
     unsupportedDesc: platform =>
-      `${platform} 暫不支援自動首次啟動安裝。請開啟終端機並執行下面的指令，然後重新啟動此應用程式。之後啟動會略過此步驟。`,
+      `這個舊設定工作階段無法啟動 ${platform} 安裝程式。請重新載入以使用目前的自動安裝程式，不需要執行終端機指令。`,
     installCommand: '安裝指令',
     copyCommand: '複製指令',
     viewDocs: '檢視安裝文件',

@@ -60,10 +60,6 @@ export function collectCommunityArtifacts({ arch, outputDir, platform, releaseDi
   if (!SUPPORTED_ARCHES.has(arch)) {
     throw new Error(`Unsupported architecture: ${arch}`)
   }
-  if (platform === 'darwin' && arch !== 'arm64') {
-    throw new Error('The community macOS release supports Apple Silicon (arm64) only')
-  }
-
   ensureDirectory(outputDir)
   const copied = []
 
@@ -76,7 +72,7 @@ export function collectCommunityArtifacts({ arch, outputDir, platform, releaseDi
       )
     )
   } else if (platform === 'darwin') {
-    const prefix = 'Hermes-Vietnamese-macOS-Apple-Silicon'
+    const prefix = arch === 'arm64' ? 'Hermes-Vietnamese-macOS-Apple-Silicon' : 'Hermes-Vietnamese-macOS-Intel'
     copied.push(copyArtifact(findArtifact(releaseDir, 'mac', arch, '.dmg'), outputDir, `${prefix}.dmg`))
     copied.push(copyArtifact(findArtifact(releaseDir, 'mac', arch, '.zip'), outputDir, `${prefix}.zip`))
   } else {

@@ -9,6 +9,7 @@ Bản cộng đồng đa nền tảng với giao diện tiếng Việt mặc đ�
 - **Windows x64:** `Hermes-Vietnamese-Windows-x64-Setup.exe`
 - **Windows ARM64:** `Hermes-Vietnamese-Windows-arm64-Setup.exe`
 - **Mac dùng chip Apple:** `Hermes-Vietnamese-macOS-Apple-Silicon.dmg`
+- **Mac dùng chip Intel:** `Hermes-Vietnamese-macOS-Intel.dmg`
 - **Linux:** chọn `x64` hoặc `arm64`; ưu tiên `.deb` cho Ubuntu/Debian, `.rpm` cho Fedora/RHEL và `.AppImage` khi cần bản chạy độc lập.
 
 Mỗi người đăng nhập OpenAI Codex hoặc Claude Pro/Max bằng tài khoản của chính mình. Gemini dùng khóa API Google AI Studio của chính người dùng. Bản dựng không chứa tài khoản, mã OAuth, khóa API hoặc dữ liệu trò chuyện của người đóng gói.
@@ -17,6 +18,10 @@ Mỗi người đăng nhập OpenAI Codex hoặc Claude Pro/Max bằng tài kho�
 
 ### Cải thiện trong bản vá này
 
+- Thiết lập lần đầu được trình bày thành ba bước: cài đặt và chọn ngôn ngữ, kết nối model, bắt đầu giao việc.
+- Người dùng không cần mở Terminal, chạy lệnh hoặc sửa tệp cấu hình để hoàn tất thiết lập; Terminal tích hợp trong Hermes vẫn được giữ nguyên.
+- macOS Intel x64 có gói riêng bên cạnh Apple Silicon; Windows và Linux tiếp tục có bản x64/ARM64.
+- Windows ưu tiên tải `uv` từ wheel PyPI chính thức, kiểm tra SHA-256 trước khi chạy để giảm lỗi Smart App Control trong quá trình bootstrap.
 - Danh mục model luôn hiện nút mở rộng và số model của từng nhà cung cấp, kể cả khi nhóm đang thu gọn.
 - Claude Pro/Max hiển thị rõ ba lựa chọn `Sonnet`, `Opus` và `Haiku` sau khi mở rộng.
 - Gemini được ghi rõ là kết nối qua `Google AI Studio (API)`, tránh nhầm với gói thuê bao Gemini hoặc OAuth của Gemini CLI.
