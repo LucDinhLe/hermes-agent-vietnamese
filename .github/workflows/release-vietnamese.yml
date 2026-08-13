@@ -203,7 +203,7 @@ jobs:
     name: Gom gói và tạo GitHub Release
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: write
 
@@ -246,17 +246,34 @@ jobs:
           PRERELEASE: ${{ inputs.prerelease || false }}
         run: |
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Bản phát hành $RELEASE_TAG đã tồn tại. Hãy dùng nhãn mới; không ghi đè tệp đã công bố." >&2
-            exit 1
+            if [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')" != "true" ]]; then
+              echo "Bản phát hành $RELEASE_TAG đã công bố. Hãy dùng nhãn mới; không ghi đè tệp đã công bố." >&2
+              exit 1
+            fi
+
+            echo "Tiếp tục bản nháp $RELEASE_TAG còn dang dở."
+            gh release edit "$RELEASE_TAG" --target "${{ github.sha }}"
+          else
+            gh release create "$RELEASE_TAG" \
+              --draft \
+              --title "Hermes tiếng Việt $RELEASE_TAG" \
+              --notes-file .github/release-notes-vietnamese.md \
+              --target "${{ github.sha }}"
           fi
 
-          prerelease_flag=()
+          gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' > existing-assets.txt
+          for asset in release-assets/*; do
+            name="$(basename "$asset")"
+            if grep -Fxq "$name" existing-assets.txt; then
+              echo "Đã có $name; bỏ qua tải lại."
+              continue
+            fi
+            gh release upload "$RELEASE_TAG" "$asset"
+          done
+
+          publish_flags=(--draft=false)
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && "$PRERELEASE" == "true" ]]; then
-            prerelease_flag=(--prerelease)
+            publish_flags+=(--prerelease)
           fi
 
-          gh release create "$RELEASE_TAG" release-assets/* \
-            --title "Hermes tiếng Việt $RELEASE_TAG" \
-            --notes-file .github/release-notes-vietnamese.md \
-            --target "${{ github.sha }}" \
-            "${prerelease_flag[@]}"
+          gh release edit "$RELEASE_TAG" "${publish_flags[@]}"

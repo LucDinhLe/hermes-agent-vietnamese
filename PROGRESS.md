@@ -8,6 +8,7 @@
 - Claude Code dùng tên model cụ thể: Sonnet 5, Fable 5, Opus 5, Opus 4.8 và Haiku 4.5; quyền sử dụng thực tế vẫn do tài khoản Claude quyết định.
 - Tài liệu giải thích rõ Gemini dùng Google AI Studio API key hoặc Vertex AI. Không tích hợp lại OAuth của Gemini CLI vì điều khoản của Google cấm phần mềm bên thứ ba dùng luồng đó.
 - Xác minh: 7/7 kiểm thử onboarding đạt, 4/4 kiểm thử Claude Code provider đạt, Desktop typecheck đạt.
+- Lần công bố `vi-v0.20.0-9` đầu tiên bị hủy ở giới hạn 15 phút sau khi tải 17/19 tệp. Workflow được sửa để tiếp tục bản nháp, bỏ qua tệp đã có và chỉ công bố khi tải đủ; giới hạn job tăng lên 30 phút.
 
 ## Cập nhật 2026-08-13 — viết lại tài liệu công khai
 
