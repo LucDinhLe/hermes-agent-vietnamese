@@ -165,8 +165,9 @@ def test_install_ps1_stops_venv_resident_processes_before_removing_venv() -> Non
     """
     text = INSTALL_PS1.read_text()
 
-    # The hermes.exe tree-kill is preserved (kills spawned child processes too).
-    assert 'taskkill /F /T /IM hermes.exe' in text
+    # Never kill every process named hermes.exe: the Desktop shell has the same
+    # image name and may be the parent driving this managed-runtime refresh.
+    assert 'taskkill /F /T /IM hermes.exe' not in text
 
     # The venv path-prefix sweep exists. It must match by case-insensitive
     # StartsWith, NOT PowerShell -like: a venv path containing wildcard

@@ -2392,10 +2392,12 @@ function Install-Venv {
             } catch {
                 Write-Warn "Could not enumerate gateway scheduled tasks: $($_.Exception.Message)"
             }
-            # The launcher CLI (hermes.exe) plus its child tree.
-            & taskkill /F /T /IM hermes.exe /FI "PID ne $myPid" 2>$null | Out-Null
-            # taskkill /IM hermes.exe is NOT enough: the gateway/agent that a
-            # scheduled task or watchdog autostarts runs as
+            # Do NOT kill by image name here. The native Desktop executable is
+            # also named Hermes.exe; an in-app managed-runtime refresh would
+            # terminate its own parent midway through this stage. The path-
+            # scoped sweep below catches the venv's hermes.exe shim as well as
+            # its Python gateway/agent children without touching Desktop.
+            # A gateway/agent that a scheduled task or watchdog autostarts runs as
             # `pythonw.exe -m hermes_cli.main gateway run` straight out of
             # venv\Scripts\, so its image name is python/pythonw, not hermes.exe.
             # That process holds the venv's .pyd files open and re-triggers the
