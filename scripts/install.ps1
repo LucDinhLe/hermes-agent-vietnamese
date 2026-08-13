@@ -2162,9 +2162,11 @@ function Install-Repository {
         # config lock files) due to antivirus, OneDrive, or NTFS filter drivers.
         # The -c flag injects config before any file I/O occurs.
         Write-Info "Configuring git for Windows compatibility..."
-        $env:GIT_CONFIG_COUNT = "1"
+        $env:GIT_CONFIG_COUNT = "2"
         $env:GIT_CONFIG_KEY_0 = "windows.appendAtomically"
         $env:GIT_CONFIG_VALUE_0 = "false"
+        $env:GIT_CONFIG_KEY_1 = "core.longpaths"
+        $env:GIT_CONFIG_VALUE_1 = "true"
         git config --global windows.appendAtomically false 2>$null
 
         # Try SSH first, then HTTPS, with -c flag for atomic write fix

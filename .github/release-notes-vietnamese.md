@@ -22,6 +22,7 @@ Mỗi người đăng nhập OpenAI Codex hoặc Claude Pro/Max bằng tài kho�
 - Người dùng không cần mở Terminal, chạy lệnh hoặc sửa tệp cấu hình để hoàn tất thiết lập; Terminal tích hợp trong Hermes vẫn được giữ nguyên.
 - macOS Intel x64 có gói riêng bên cạnh Apple Silicon; Windows và Linux tiếp tục có bản x64/ARM64.
 - Windows ưu tiên tải `uv` từ wheel PyPI chính thức, kiểm tra SHA-256 trước khi chạy để giảm lỗi Smart App Control trong quá trình bootstrap.
+- Trình cài Windows bật hỗ trợ đường dẫn dài chỉ trong tiến trình bootstrap, tránh lỗi `Filename too long` mà không thay đổi cấu hình Git toàn máy.
 - Danh mục model luôn hiện nút mở rộng và số model của từng nhà cung cấp, kể cả khi nhóm đang thu gọn.
 - Claude Pro/Max hiển thị rõ ba lựa chọn `Sonnet`, `Opus` và `Haiku` sau khi mở rộng.
 - Gemini được ghi rõ là kết nối qua `Google AI Studio (API)`, tránh nhầm với gói thuê bao Gemini hoặc OAuth của Gemini CLI.
