@@ -128,7 +128,7 @@ export interface I18nProviderProps {
 
 export function I18nProvider({ children, configClient = defaultConfigClient, initialLocale }: I18nProviderProps) {
   const [locale, setLocaleState] = useState<Locale>(() =>
-    normalizeLocale(initialLocale ?? readFirstRunLocale() ?? DEFAULT_LOCALE)
+    normalizeLocale(initialLocale ?? readFirstRunLocale() ?? FIRST_RUN_LOCALE)
   )
 
   const [isLoadingConfig, setIsLoadingConfig] = useState(false)
@@ -173,7 +173,11 @@ export function I18nProvider({ children, configClient = defaultConfigClient, ini
       .catch(error => {
         if (!cancelled) {
           setConfigLoadError(toError(error))
-          setLocaleState(DEFAULT_LOCALE)
+          // The backend is intentionally unavailable during first install and
+          // managed release refreshes. Keep the cached choice (Vietnamese on a
+          // fresh community profile) so the setup/progress UI does not flash
+          // back to English while Hermes is being prepared.
+          setLocaleState(readFirstRunLocale() ?? FIRST_RUN_LOCALE)
         }
       })
       .finally(() => {
@@ -214,7 +218,10 @@ export function I18nProvider({ children, configClient = defaultConfigClient, ini
           throw new Error('Failed to save language')
         }
 
-        writeFirstRunLocale(null)
+        // Keep a local cache as an early-boot hint. Backend config remains
+        // authoritative once it is reachable, while install/update screens can
+        // render in the user's chosen language before that request succeeds.
+        writeFirstRunLocale(next)
       } catch (error) {
         const nextError = toError(error)
 

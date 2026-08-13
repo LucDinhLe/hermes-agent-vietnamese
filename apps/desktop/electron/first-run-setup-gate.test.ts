@@ -29,6 +29,17 @@ test('first-run setup gate skips non-bootstrap backends', async () => {
   assert.equal(gate.hasWaiter(), false)
 })
 
+test('managed release refresh bypasses the first-run install choice', async () => {
+  const prompts = []
+  const gate = createFirstRunSetupGate({ promptChoice: backend => prompts.push(backend), stuckAfterMs: 0 })
+
+  const decision = await gate.wait({ ...bootstrapBackend, bootstrapReason: 'packaged-runtime-refresh' })
+
+  assert.equal(decision, 'continue-local')
+  assert.deepEqual(prompts, [])
+  assert.equal(gate.hasWaiter(), false)
+})
+
 test('first-run setup gate prompts once for concurrent waits', async () => {
   const prompts = []
   const gate = createFirstRunSetupGate({ promptChoice: backend => prompts.push(backend), stuckAfterMs: 0 })
