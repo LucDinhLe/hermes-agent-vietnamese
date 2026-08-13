@@ -3,6 +3,10 @@ export interface BootstrapMarkerLike {
   schemaVersion?: unknown
 }
 
+export interface InstallStampLike {
+  commit?: unknown
+}
+
 export interface ActiveRuntimeState {
   hasValidMarker: boolean
   shouldUseActiveRuntime: boolean
@@ -26,6 +30,30 @@ export function hasValidBootstrapMarker(
   }
 
   return true
+}
+
+/**
+ * Packaged Desktop and its managed Hermes checkout are one product. When the
+ * package pin changes, a checkout previously created by Desktop must run the
+ * installer once so backend/provider changes ship with renderer changes too.
+ * CLI-owned installs have no valid marker and remain untouched.
+ */
+export function shouldRefreshManagedRuntime(
+  marker: BootstrapMarkerLike | null | undefined,
+  schemaVersion: number,
+  installStamp: InstallStampLike | null | undefined
+): boolean {
+  if (!hasValidBootstrapMarker(marker, schemaVersion)) {
+    return false
+  }
+
+  const packagedCommit = typeof installStamp?.commit === 'string' ? installStamp.commit.trim() : ''
+
+  if (packagedCommit.length < 7 || /^0+$/.test(packagedCommit)) {
+    return false
+  }
+
+  return marker?.pinnedCommit !== packagedCommit
 }
 
 // The active install at ~/.hermes/hermes-agent can be real and runnable even if

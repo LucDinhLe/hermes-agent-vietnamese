@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'vitest'
 
-import { classifyActiveRuntime, hasValidBootstrapMarker } from './active-runtime-state'
+import { classifyActiveRuntime, hasValidBootstrapMarker, shouldRefreshManagedRuntime } from './active-runtime-state'
 
 const VALID_MARKER = {
   pinnedCommit: '1234567890abcdef1234567890abcdef12345678',
@@ -57,4 +57,24 @@ test('a repair that deleted the marker does not strand a healthy install', () =>
   // #72166: the repair handler clears the marker unconditionally. Runtime
   // usability, not marker presence, must decide the next boot.
   assert.equal(classifyActiveRuntime(null, 1, true).shouldUseActiveRuntime, true)
+})
+
+test('a managed runtime refreshes once when a packaged desktop pin changes', () => {
+  const newerStamp = { commit: 'fedcba9876543210fedcba9876543210fedcba98' }
+
+  assert.equal(shouldRefreshManagedRuntime(VALID_MARKER, 1, newerStamp), true)
+  assert.equal(
+    shouldRefreshManagedRuntime({ ...VALID_MARKER, pinnedCommit: newerStamp.commit }, 1, newerStamp),
+    false,
+    'the refreshed marker suppresses repeat installs'
+  )
+})
+
+test('desktop does not take ownership of CLI installs or fallback build stamps', () => {
+  assert.equal(shouldRefreshManagedRuntime(null, 1, { commit: 'f'.repeat(40) }), false)
+  assert.equal(
+    shouldRefreshManagedRuntime({ schemaVersion: 999, pinnedCommit: 'a'.repeat(40) }, 1, { commit: 'f'.repeat(40) }),
+    false
+  )
+  assert.equal(shouldRefreshManagedRuntime(VALID_MARKER, 1, { commit: '0'.repeat(40) }), false)
 })

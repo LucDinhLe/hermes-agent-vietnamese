@@ -15,7 +15,8 @@ import {
   isPinnedCommit,
   resolveInstallScript,
   resolveMarkerPinnedCommit,
-  runBootstrap
+  runBootstrap,
+  shouldPinPackagedCommit
 } from './bootstrap-runner'
 
 const SCRIPT_NAME = process.platform === 'win32' ? 'install.ps1' : 'install.sh'
@@ -108,6 +109,12 @@ test('existing-checkout bootstrap args keep branch but skip the packaged commit 
     }),
     ['--dir', '/tmp/hermes-agent', '--hermes-home', '/tmp/hermes', '--branch', 'main']
   )
+})
+
+test('managed upgrades pin the packaged commit just like fresh installs', () => {
+  assert.equal(shouldPinPackagedCommit({ commit: 'a'.repeat(40), branch: 'main' }), true)
+  assert.equal(shouldPinPackagedCommit({ commit: ZERO_COMMIT, branch: 'main' }), false)
+  assert.equal(shouldPinPackagedCommit(null), false)
 })
 
 test('fallback install stamps use an unpinned branch ref', () => {

@@ -31,7 +31,7 @@ import {
 } from 'electron'
 import nodePty from 'node-pty'
 
-import { classifyActiveRuntime } from './active-runtime-state'
+import { classifyActiveRuntime, shouldRefreshManagedRuntime } from './active-runtime-state'
 import { stopBackendChild as stopBackendChildImpl, stopBackendTreesForUpdate } from './backend-child'
 import { dashboardFallbackArgs, sourceDeclaresServe } from './backend-command'
 import { createBackendConnectionState } from './backend-connection-state'
@@ -3720,6 +3720,10 @@ function activeRuntimeState() {
   return classifyActiveRuntime(readBootstrapMarker(), BOOTSTRAP_MARKER_SCHEMA_VERSION, isActiveRuntimeUsable())
 }
 
+function packagedRuntimeRefreshRequired() {
+  return shouldRefreshManagedRuntime(readBootstrapMarker(), BOOTSTRAP_MARKER_SCHEMA_VERSION, INSTALL_STAMP)
+}
+
 function writeBootstrapMarker(payload) {
   fs.mkdirSync(path.dirname(BOOTSTRAP_COMPLETE_MARKER), { recursive: true })
 
@@ -3986,8 +3990,9 @@ function resolveHermesBackend(backendArgs) {
   //    active runtime is usable, launch it directly; only fall through to
   //    bootstrap when the runtime itself is unusable.
   const activeRuntime = activeRuntimeState()
+  const refreshManagedRuntime = activeRuntime.shouldUseActiveRuntime && packagedRuntimeRefreshRequired()
 
-  if (activeRuntime.shouldUseActiveRuntime && !bootstrapRepairRequested) {
+  if (activeRuntime.shouldUseActiveRuntime && !bootstrapRepairRequested && !refreshManagedRuntime) {
     if (!activeRuntime.hasValidMarker) {
       rememberLog(
         `[bootstrap] Active Hermes runtime at ${ACTIVE_HERMES_ROOT} is usable but the bootstrap marker is missing or stale; skipping first-run bootstrap.`
@@ -3995,6 +4000,27 @@ function resolveHermesBackend(backendArgs) {
     }
 
     return createActiveBackend(backendArgs)
+  }
+
+  if (refreshManagedRuntime && !bootstrapRepairRequested) {
+    rememberLog(
+      `[bootstrap] Packaged desktop pin changed; refreshing the managed Hermes runtime at ${ACTIVE_HERMES_ROOT}.`
+    )
+
+    return {
+      kind: 'bootstrap-needed',
+      label: 'Hermes Agent upgrade required for this desktop release',
+      command: null,
+      args: backendArgs,
+      bootstrap: true,
+      env: {},
+      shell: false,
+      activeRoot: ACTIVE_HERMES_ROOT,
+      installStamp: INSTALL_STAMP,
+      isPackaged: IS_PACKAGED,
+      platform: process.platform,
+      bootstrapReason: 'packaged-runtime-refresh'
+    }
   }
 
   if (bootstrapRepairRequested) {
@@ -4146,7 +4172,11 @@ async function ensureRuntime(backend) {
   // will rewire startup to spawn the window first and route bootstrap events
   // to a renderer-side install overlay.
   if (backend.kind === 'bootstrap-needed') {
-    rememberLog('[bootstrap] no Hermes install found; starting first-launch bootstrap')
+    rememberLog(
+      backend.bootstrapReason === 'packaged-runtime-refresh'
+        ? '[bootstrap] managed Hermes runtime is older than the packaged desktop; starting release sync'
+        : '[bootstrap] no Hermes install found; starting first-launch bootstrap'
+    )
 
     if (await handOffWindowsBootstrapRecovery('bootstrap-needed')) {
       const handoffError: Error & { isBootstrapFailure?: boolean; bootstrapHandedOff?: boolean } = new Error(

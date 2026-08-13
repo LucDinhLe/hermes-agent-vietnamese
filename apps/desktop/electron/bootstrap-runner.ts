@@ -50,6 +50,10 @@ function isPinnedCommit(commit) {
   return typeof commit === 'string' && STAMP_COMMIT_RE.test(commit) && !FALLBACK_COMMIT_RE.test(commit)
 }
 
+function shouldPinPackagedCommit(installStamp) {
+  return Boolean(installStamp && isPinnedCommit(installStamp.commit))
+}
+
 type ExecGitFn = (args: string[], cwd: string) => string
 type ResolveHeadFn = (activeRoot: string | null | undefined) => string | null
 
@@ -915,14 +919,18 @@ async function runBootstrap(opts) {
 
   try {
     const existingCheckout = hasExistingGitCheckout(activeRoot)
-    const pinCommit = !existingCheckout
+    // Pin upgrades as well as fresh installs. The platform installers already
+    // refuse to roll a newer checkout backwards and preserve local changes via
+    // autostash, so this keeps backend code aligned with the packaged renderer
+    // without sacrificing user work.
+    const pinCommit = shouldPinPackagedCommit(installStamp)
 
     if (existingCheckout && installStamp && installStamp.commit) {
       emit({
         type: 'log',
         line:
           `[bootstrap] existing checkout detected at ${activeRoot}; ` +
-          `not pinning to packaged install stamp ${installStamp.commit.slice(0, 12)}`
+          `${pinCommit ? 'syncing to' : 'following branch for'} packaged install stamp ${installStamp.commit.slice(0, 12)}`
       })
     }
 
@@ -1033,5 +1041,6 @@ export {
   resolveInstallScript,
   resolveLocalInstallScript,
   resolveMarkerPinnedCommit,
-  runBootstrap
+  runBootstrap,
+  shouldPinPackagedCommit
 }
