@@ -25,4 +25,6 @@ Mỗi người đăng nhập OpenAI Codex hoặc Claude Pro/Max bằng tài kho�
 
 Đối chiếu tệp đã tải với `SHA256SUMS.txt`. Nếu bản phát hành chưa được ký số, Windows SmartScreen hoặc macOS Gatekeeper có thể cảnh báo. Đây là giới hạn của bản cộng đồng chưa có chứng thư phát hành, không phải bằng chứng rằng cảnh báo nên bị bỏ qua. Chỉ tiếp tục khi mã SHA-256 khớp và tệp được tải từ kho chính thức này.
 
+Xem trạng thái, phạm vi ký và vai trò phê duyệt trong [Code signing policy](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/CODE_SIGNING_POLICY.md). Chỉ các bản phát hành ghi rõ trạng thái ký mới được xem là đã ký số.
+
 Xem yêu cầu hệ thống, hướng dẫn cài đặt và giới hạn hỗ trợ trong `README.vi.md`. Phạm vi miễn trừ đối với hệ thống, thuật toán và giấy phép Hermes được giải thích bằng tiếng Việt trong `DISCLAIMER.md`; văn bản có hiệu lực vẫn là `LICENSE`.
