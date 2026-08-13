@@ -6,11 +6,23 @@ Bản cộng đồng đa nền tảng với giao diện tiếng Việt mặc đ�
 
 ### Chọn đúng tệp
 
-- **Windows x64:** `Hermes-Vietnamese-Windows-x64-Setup.exe`
-- **Windows ARM64:** `Hermes-Vietnamese-Windows-arm64-Setup.exe`
-- **Mac dùng chip Apple:** `Hermes-Vietnamese-macOS-Apple-Silicon.dmg`
-- **Mac dùng chip Intel:** `Hermes-Vietnamese-macOS-Intel.dmg`
-- **Linux:** chọn `x64` hoặc `arm64`; ưu tiên `.deb` cho Ubuntu/Debian, `.rpm` cho Fedora/RHEL và `.AppImage` khi cần bản chạy độc lập.
+| Máy đang dùng           | Tải trực tiếp                                                                                                                                               |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows 10/11 x64       | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Windows-x64-Setup.exe)           |
+| Windows 10/11 ARM64     | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-Windows-arm64-Setup.exe)       |
+| Mac chip Apple M-series | [Bộ cài macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
+| Mac chip Intel          | [Bộ cài macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-8/Hermes-Vietnamese-macOS-Intel.dmg)                 |
+| Ubuntu/Debian           | [Chọn `.deb` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                                  |
+| Fedora/RHEL             | [Chọn `.rpm` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                                  |
+| Linux khác              | [Chọn `.AppImage` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                             |
+
+### Kiểm tra máy trước khi tải
+
+- **Windows:** nhấn `Windows + I` → **Hệ thống → Giới thiệu**. Máy cần Windows 10/11 bản 64-bit. `x64-based processor` chọn x64; `ARM-based processor` chọn ARM64.
+- **macOS:** mở ** → About This Mac/Giới thiệu về máy Mac**. Máy cần macOS 12 trở lên. Chip `Apple M` chọn Apple Silicon; `Intel` chọn bản Intel.
+- **Linux:** mở **Settings → About**. `x86_64`/`amd64` chọn x64; `aarch64`/`arm64` chọn ARM64. Có thể chạy `uname -m` nếu giao diện không hiển thị.
+
+Xem [hướng dẫn kiểm tra máy chi tiết](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#kiểm-tra-máy-có-phù-hợp-không).
 
 Mỗi người đăng nhập OpenAI Codex hoặc Claude Pro/Max bằng tài khoản của chính mình. Gemini dùng khóa API Google AI Studio của chính người dùng. Bản dựng không chứa tài khoản, mã OAuth, khóa API hoặc dữ liệu trò chuyện của người đóng gói.
 
