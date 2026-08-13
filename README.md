@@ -72,7 +72,7 @@ Hermes là phần mềm AI agent, không phải một gói mô hình AI miễn p
 
 **Thông tin đăng nhập và dữ liệu của mỗi người được lưu riêng trên máy của mình.** Bộ cài phát hành không chứa tài khoản, khóa API, mã OAuth hoặc dữ liệu trò chuyện của người đóng gói. Dự án cộng đồng này không vận hành máy chủ tập trung để thu thập thông tin đăng nhập của người dùng.
 
-Khi người dùng chủ động gửi yêu cầu tới một nhà cung cấp AI, nội dung cần thiết để xử lý yêu cầu sẽ được chuyển tới nhà cung cấp đã chọn và chịu sự điều chỉnh của điều khoản cùng chính sách quyền riêng tư của nhà cung cấp đó.
+Khi người dùng chủ động cấu hình hoặc sử dụng một tính năng có kết nối mạng, dữ liệu cần thiết có thể được chuyển tới dịch vụ đã chọn. Các dịch vụ đó có thể gồm nhà cung cấp AI, công cụ web và tìm kiếm, trình duyệt, nền tảng nhắn tin, GitHub và nguồn phụ thuộc công khai. Việc xử lý dữ liệu chịu điều khoản và chính sách quyền riêng tư của từng dịch vụ.
 
 AI agent có thể chạy lệnh và thao tác với tệp trong phạm vi bạn cấp. Hãy đọc yêu cầu quyền trước khi chấp thuận, tránh đưa bí mật vào nội dung công khai và dùng môi trường cách ly cho công việc có rủi ro cao.
 

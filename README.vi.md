@@ -81,7 +81,7 @@ Thay `x64` bằng `arm64` khi dùng máy Linux ARM64. Nếu AppImage không mở
 
 **Thông tin đăng nhập và dữ liệu của mỗi người được lưu riêng trên máy của mình.** Bộ cài không chứa tài khoản, khóa API, mã OAuth hay dữ liệu trò chuyện của người đóng gói. Dự án cộng đồng này không vận hành máy chủ tập trung để thu thập thông tin đăng nhập của người dùng.
 
-Khi bạn chủ động gửi yêu cầu tới một nhà cung cấp AI, nội dung cần thiết để xử lý yêu cầu sẽ được chuyển tới nhà cung cấp đã chọn và chịu sự điều chỉnh của điều khoản cùng chính sách quyền riêng tư của nhà cung cấp đó.
+Khi bạn chủ động cấu hình hoặc sử dụng một tính năng có kết nối mạng, dữ liệu cần thiết có thể được chuyển tới dịch vụ đã chọn. Các dịch vụ đó có thể gồm nhà cung cấp AI, công cụ web và tìm kiếm, trình duyệt, nền tảng nhắn tin, GitHub và nguồn phụ thuộc công khai. Việc xử lý dữ liệu chịu điều khoản và chính sách quyền riêng tư của từng dịch vụ.
 
 ## Cập nhật
 
