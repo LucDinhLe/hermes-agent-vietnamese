@@ -35,7 +35,7 @@ Mọi thay đổi do người không có quyền ghi trực tiếp gửi lên ph
 
 **Thông tin đăng nhập và dữ liệu của mỗi người được lưu riêng trên máy của mình.** Dự án không vận hành máy chủ tập trung để thu thập thông tin đăng nhập của người dùng.
 
-Hermes chỉ chuyển nội dung yêu cầu tới nhà cung cấp AI do người dùng chủ động chọn và cấu hình. Ứng dụng cũng có thể kết nối GitHub hoặc nguồn phụ thuộc công khai khi người dùng cài đặt, kiểm tra cập nhật hoặc cập nhật phần mềm. Chi tiết được trình bày trong [miễn trừ trách nhiệm và phạm vi quyền riêng tư](DISCLAIMER.md).
+Hermes có thể truyền dữ liệu tới hệ thống mạng khi người dùng hoặc người vận hành chủ động cấu hình hay yêu cầu tính năng tương ứng. Các hệ thống đó có thể gồm nhà cung cấp AI, công cụ web và tìm kiếm, trình duyệt, nền tảng nhắn tin, GitHub và nguồn phụ thuộc công khai. Việc xử lý dữ liệu chịu điều khoản và chính sách quyền riêng tư của từng dịch vụ được người dùng chọn. Chi tiết được trình bày trong [miễn trừ trách nhiệm và phạm vi quyền riêng tư](DISCLAIMER.md).
 
 ## Thay đổi hệ thống và gỡ cài đặt
 
