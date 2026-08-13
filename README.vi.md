@@ -2,7 +2,7 @@
 
 Đây là bản địa hóa cộng đồng của [Hermes Agent](https://github.com/NousResearch/hermes-agent), dành cho người Việt muốn sử dụng AI agent dễ dàng hơn dù không thạo tiếng Anh.
 
-Đây là một **dự án Happy cho người Việt**, được thực hiện nhằm hỗ trợ người dùng Việt tiếp cận và sử dụng Hermes Agent thuận tiện hơn.
+Đây là một **dự án cá nhân, độc lập**, được thực hiện nhằm hỗ trợ người dùng Việt tiếp cận và sử dụng Hermes Agent thuận tiện hơn.
 
 Giao diện Desktop mặc định dùng tiếng Việt và có nút chuyển nhanh **VI/EN**. Người dùng vẫn có thể đổi ngôn ngữ trong phần Cài đặt. Tên model, tên riêng, thương hiệu, giao thức và câu lệnh được giữ nguyên để tránh sai lệch kỹ thuật.
 
