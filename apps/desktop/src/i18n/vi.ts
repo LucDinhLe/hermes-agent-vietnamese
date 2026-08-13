@@ -2320,9 +2320,12 @@ export const vi: Translations = {
       skipped: 'Bỏ qua',
       failed: 'Thất bại'
     },
+    journeySteps: ['Cài đặt', 'Kết nối model', 'Bắt đầu giao việc'],
+    chooseLanguage: 'Ngôn ngữ thiết lập',
+    noTerminalRequired: 'Không cần mở Terminal, chạy lệnh hay sửa tệp cấu hình để thiết lập.',
     oneTimeTitle: 'Hermes cần cài đặt một lần',
     unsupportedDesc: platform =>
-      `Chưa hỗ trợ tự động cài lần đầu trên ${platform}. Hãy mở cửa sổ dòng lệnh, chạy lệnh bên dưới rồi mở lại ứng dụng. Các lần khởi động sau sẽ bỏ qua bước này.`,
+      `Phiên thiết lập cũ này chưa khởi động được bộ cài ${platform}. Hãy tải lại để dùng bộ cài tự động hiện tại; bạn không cần mở Terminal hay chạy lệnh.`,
     installCommand: 'Lệnh cài đặt',
     copyCommand: 'Sao chép lệnh',
     viewDocs: 'Xem tài liệu cài đặt',

@@ -1,10 +1,10 @@
 import type { HermesConnection } from '@/global'
 
-export const TITLEBAR_HEIGHT = 34
+export const TITLEBAR_HEIGHT = 40
 export const MACOS_TRAFFIC_LIGHTS_HEIGHT = 14
-export const TITLEBAR_ICON_SIZE = 12
+export const TITLEBAR_ICON_SIZE = 16
 export const TITLEBAR_CONTROL_OFFSET_X = 74
-export const TITLEBAR_CONTROL_HEIGHT = 22
+export const TITLEBAR_CONTROL_HEIGHT = 32
 export const TITLEBAR_CONTROLS_TOP = (TITLEBAR_HEIGHT - TITLEBAR_CONTROL_HEIGHT) / 2
 export const TITLEBAR_FALLBACK_WINDOW_BUTTON_X = 24
 // Edge inset used when no left-side native controls take up that space —
@@ -16,7 +16,7 @@ export const TITLEBAR_EDGE_INSET = 14
 // shared <Button size="icon-titlebar"> (used polymorphically via asChild) —
 // Button is the single source of button styling.
 export const titlebarButtonClass =
-  'text-muted-foreground/85 hover:bg-(--ui-control-hover-background) hover:text-foreground'
+  'text-(--ui-text-secondary) hover:bg-(--ui-control-hover-background) hover:text-(--ui-text-primary)'
 
 export const titlebarHeaderBaseClass =
   'pointer-events-none relative z-3 flex h-(--titlebar-height) w-full min-w-0 shrink-0 items-center justify-start gap-3 overflow-hidden border-b border-(--ui-stroke-tertiary) bg-(--ui-chat-surface-background) px-[max(0.75rem,var(--titlebar-content-inset,0rem))] pr-[calc(var(--titlebar-tools-right,0.75rem)+var(--titlebar-tools-width,0px)+0.75rem)]'

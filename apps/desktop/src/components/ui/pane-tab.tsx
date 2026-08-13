@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils'
 /** Inset stroke for a vertical tab rail — content-facing edge. */
 export const PANE_TAB_STRIP_LINE_LEFT = 'shadow-[inset_1px_0_0_var(--ui-stroke-tertiary)]'
 export const PANE_TAB_STRIP_LINE_RIGHT = 'shadow-[inset_-1px_0_0_var(--ui-stroke-tertiary)]'
+export const PANE_TAB_STRIP_HEIGHT_PX = 36
 
 const TAB =
   'group/tab relative flex shrink-0 items-center border-transparent bg-(--tab-bg) text-[0.6875rem] font-medium [-webkit-app-region:no-drag]'
@@ -210,7 +211,7 @@ export const PaneTabStrip = React.forwardRef<HTMLDivElement, PaneTabStripProps>(
       // as one piece of chrome with the titlebar above it. No bottom rule — the
       // active tab's primary underline is the only seam.
       className={cn(
-        'group/pane-header relative flex h-7 shrink-0 select-none bg-(--ui-sidebar-surface-background) [-webkit-app-region:no-drag] [--pane-tab-active-bg:var(--ui-sidebar-surface-background)]',
+        'group/pane-header relative flex h-9 shrink-0 select-none bg-(--ui-sidebar-surface-background) [-webkit-app-region:no-drag] [--pane-tab-active-bg:var(--ui-sidebar-surface-background)]',
         className
       )}
       ref={ref}
@@ -243,8 +244,8 @@ export interface PaneStripTool {
 
 /**
  * Renders one `PaneStripTool` through the app's `Button` + `Tip` primitives, the
- * way `TitlebarToolButton` does: ghost variant, no active background — state
- * reads from the glyph's own opacity, with `aria-pressed` carrying it for a11y.
+ * way `TitlebarToolButton` does: ghost variant, no active background. State
+ * reads from text colour, with `aria-pressed` carrying it for a11y.
  *
  * Pointerdown is claimed here so a click can never also activate or drag the
  * zone behind the strip.
@@ -257,12 +258,12 @@ export function PaneStripGlyph({ active, disabled, icon, label, onSelect }: Omit
         aria-pressed={active ?? undefined}
         className={cn(
           'self-center bg-transparent select-none',
-          active ? 'opacity-100' : 'opacity-60 hover:opacity-100'
+          active ? 'text-(--ui-text-primary)' : 'text-(--ui-text-secondary) hover:text-(--ui-text-primary)'
         )}
         disabled={disabled}
         onClick={onSelect}
         onPointerDown={event => event.stopPropagation()}
-        size="icon-xs"
+        size="icon-pane"
         type="button"
         variant="ghost"
       >

@@ -80,7 +80,7 @@ export function previewStripTools(tabId: string): readonly PaneStripTool[] {
   return [
     {
       active: consoleOpen,
-      icon: <Codicon name="terminal" size="0.8125rem" />,
+      icon: <Codicon name="terminal" />,
       id: 'preview-console',
       label: translateNow(consoleOpen ? 'preview.web.hideConsole' : 'preview.web.showConsole'),
       onSelect: () => consoleState.setOpen(open => !open)
@@ -88,7 +88,7 @@ export function previewStripTools(tabId: string): readonly PaneStripTool[] {
     {
       active: devTools?.open,
       disabled: !devTools,
-      icon: <Codicon name="bug" size="0.8125rem" />,
+      icon: <Codicon name="bug" />,
       id: 'preview-devtools',
       label: translateNow(devTools?.open ? 'preview.web.hideDevTools' : 'preview.web.openDevTools'),
       onSelect: () => devTools?.toggle()

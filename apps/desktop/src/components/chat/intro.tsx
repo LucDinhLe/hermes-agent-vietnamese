@@ -1,5 +1,6 @@
 import { type CSSProperties, useState } from 'react'
 
+import { useI18n } from '@/i18n'
 import { capitalize, normalize } from '@/lib/text'
 
 import introCopyJsonl from './intro-copy.jsonl?raw'
@@ -145,6 +146,8 @@ function pickCopy(copies: IntroCopy[], seed = 0): IntroCopy {
 }
 
 const WORDMARK = 'HERMES AGENT'
+const VIETNAMESE_TAGLINE =
+  'Nhập một nhiệm vụ, câu hỏi hoặc đoạn mã. Hermes ghi nhớ phiên làm việc, dẫn nguồn và sẽ hỏi lại khi chưa chắc chắn.'
 
 function resolveCopy(personality?: string, seed?: number): IntroCopy {
   const personalityKey = normalizeKey(personality)
@@ -157,6 +160,7 @@ function resolveCopy(personality?: string, seed?: number): IntroCopy {
 }
 
 export function Intro({ personality, seed }: IntroProps) {
+  const { locale } = useI18n()
   const [mountSeed] = useState(() => Math.floor(Math.random() * 100000))
   const copy = resolveCopy(personality, mountSeed + (seed ?? 0))
 
@@ -177,7 +181,9 @@ export function Intro({ personality, seed }: IntroProps) {
           <span aria-hidden="true">{WORDMARK}</span>
         </p>
 
-        <p className="m-0 text-center leading-normal tracking-tight">{copy.body}</p>
+        <p className="m-0 text-center leading-normal tracking-tight">
+          {locale === 'vi' ? VIETNAMESE_TAGLINE : copy.body}
+        </p>
       </div>
     </div>
   )

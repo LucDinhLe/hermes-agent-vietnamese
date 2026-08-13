@@ -1907,6 +1907,9 @@ export interface Translations {
 
   install: {
     stageStates: Record<string, string>
+    journeySteps: [string, string, string]
+    chooseLanguage: string
+    noTerminalRequired: string
     oneTimeTitle: string
     unsupportedDesc: (platform: string) => string
     installCommand: string

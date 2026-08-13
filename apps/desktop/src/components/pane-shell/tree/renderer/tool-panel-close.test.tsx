@@ -127,6 +127,23 @@ describe('right-clicking a tool panel tab', () => {
   })
 })
 
+describe('tool-panel strip controls', () => {
+  it('keeps the minimize control visible with a 32px pointer target', () => {
+    declareDefaultTree(
+      split('column', [
+        group(['workspace'], { active: 'workspace', id: 'grp-main' }),
+        group(['terminal'], { active: 'terminal', id: 'grp-tools' })
+      ])
+    )
+    render(<TreeGroup node={zoneAt(1)} parentAxis="column" />)
+
+    const minimize = screen.getByRole('button', { name: /^(minimize|restore)$/i })
+
+    expect(minimize.className).toContain('size-8')
+    expect(minimize.className).not.toContain('opacity-0')
+  })
+})
+
 describe('⌘W over a focused tool panel', () => {
   it('closes the logs tab and the toggle brings it back', async () => {
     const { closeActiveTab } = await import('@/app/chat/close-tab')

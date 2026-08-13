@@ -37,7 +37,7 @@ export function BilingualQuickToggle() {
     <Tip label={label}>
       <Button
         aria-label={label}
-        className={`${titlebarButtonClass} bg-transparent px-1 font-mono text-[0.58rem] font-semibold tracking-tight select-none`}
+        className={`${titlebarButtonClass} bg-transparent px-1 font-mono text-[0.6875rem] font-semibold tracking-tight select-none`}
         disabled={isSavingLocale}
         onClick={() => void switchLanguage()}
         onPointerDown={event => event.stopPropagation()}
