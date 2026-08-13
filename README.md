@@ -6,6 +6,8 @@
 
 **Bản địa hóa cộng đồng giúp người Việt không thạo tiếng Anh có thể cài đặt, cấu hình và sử dụng Hermes Agent dễ dàng hơn.**
 
+Đây là một **dự án Happy cho người Việt**, được thực hiện nhằm hỗ trợ người dùng Việt tiếp cận và sử dụng Hermes Agent thuận tiện hơn.
+
 <p align="center">
   <a href="https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-5"><img src="https://img.shields.io/badge/Bản_thử_nghiệm-Windows_%7C_macOS_%7C_Linux-F97316?style=for-the-badge" alt="Tải bản thử nghiệm đa nền tảng"></a>
   <a href="README.vi.md"><img src="https://img.shields.io/badge/Hướng_dẫn-Tiếng_Việt-DC2626?style=for-the-badge" alt="Hướng dẫn tiếng Việt"></a>
@@ -66,6 +68,10 @@ Hermes là phần mềm AI agent, không phải một gói mô hình AI miễn p
 
 ## An toàn và riêng tư
 
+**Thông tin đăng nhập và dữ liệu của mỗi người được lưu riêng trên máy của mình.** Bộ cài phát hành không chứa tài khoản, khóa API, mã OAuth hoặc dữ liệu trò chuyện của người đóng gói. Dự án cộng đồng này không vận hành máy chủ tập trung để thu thập thông tin đăng nhập của người dùng.
+
+Khi người dùng chủ động gửi yêu cầu tới một nhà cung cấp AI, nội dung cần thiết để xử lý yêu cầu sẽ được chuyển tới nhà cung cấp đã chọn và chịu sự điều chỉnh của điều khoản cùng chính sách quyền riêng tư của nhà cung cấp đó.
+
 AI agent có thể chạy lệnh và thao tác với tệp trong phạm vi bạn cấp. Hãy đọc yêu cầu quyền trước khi chấp thuận, tránh đưa bí mật vào nội dung công khai và dùng môi trường cách ly cho công việc có rủi ro cao.
 
 Windows và macOS hiện có thể cảnh báo vì bộ cài cộng đồng chưa có chứng thư ký số thương mại. Hãy tải tệp từ trang phát hành của chính kho này và đối chiếu `SHA256SUMS.txt` trước khi cài. Dự án đang ở giai đoạn phát hành sớm; phản hồi thực tế giúp việc hoàn thiện nhanh hơn.
@@ -78,6 +84,14 @@ Lỗ hổng thuộc bản dịch, bộ cài hoặc quy trình phát hành của 
 
 Tên sản phẩm, tên model, thương hiệu, giao thức, câu lệnh và nội dung do AI tạo ra được giữ nguyên khi cần để bảo đảm kỹ thuật. Phần giao diện và hướng dẫn dành cho người dùng được Việt hóa.
 
+Giấy phép, thuật toán, kiến trúc và các tính năng lõi của Hermes vẫn được giữ theo dự án gốc. Bản cộng đồng bổ sung lớp Việt hóa, tài liệu, đóng gói đa nền tảng và các điều chỉnh tương thích cho người dùng Việt. Dự án không thay thế giấy phép gốc và không tuyên bố sở hữu phần lõi của Hermes.
+
+## Miễn trừ trách nhiệm
+
+Hermes được cung cấp theo giấy phép MIT với nguyên trạng phần mềm, không kèm cam kết bảo hành. Dự án cộng đồng không bảo đảm hệ thống luôn hoạt động liên tục, thuật toán hoặc kết quả AI luôn chính xác, hay mọi nhà cung cấp bên thứ ba luôn duy trì tính năng, model và chính sách hiện tại.
+
+Người dùng cần kiểm tra kết quả và quyền được yêu cầu trước khi cho AI agent thực hiện thao tác quan trọng. Bản giải thích tiếng Việt tại [MIỄN TRỪ TRÁCH NHIỆM](DISCLAIMER.md) giúp người dùng hiểu phạm vi áp dụng, không thay thế hoặc sửa đổi [giấy phép MIT gốc](LICENSE).
+
 ## Bảo trì và đóng góp
 
 Kho này được duy trì công khai với lịch sử thay đổi, issue, pull request, quy trình build đa nền tảng và bản phát hành có thể kiểm chứng. Trọng tâm bảo trì gồm chất lượng bản dịch, khả năng cài đặt trên ba hệ điều hành, đồng bộ an toàn với Hermes Agent gốc và bảo vệ thông tin đăng nhập của người dùng.
@@ -89,4 +103,4 @@ Kho này được duy trì công khai với lịch sử thay đổi, issue, pull
 
 ## Giấy phép
 
-MIT, xem [LICENSE](LICENSE). Bản quyền mã nguồn gốc thuộc Nous Research theo thông báo trong giấy phép.
+MIT, xem [LICENSE](LICENSE). Bản quyền mã nguồn gốc thuộc Nous Research theo thông báo trong giấy phép. Xem thêm [bản giải thích phạm vi và miễn trừ trách nhiệm bằng tiếng Việt](DISCLAIMER.md).

@@ -2,9 +2,13 @@
 
 Đây là bản địa hóa cộng đồng của [Hermes Agent](https://github.com/NousResearch/hermes-agent), dành cho người Việt muốn sử dụng AI agent dễ dàng hơn dù không thạo tiếng Anh.
 
+Đây là một **dự án Happy cho người Việt**, được thực hiện nhằm hỗ trợ người dùng Việt tiếp cận và sử dụng Hermes Agent thuận tiện hơn.
+
 Giao diện Desktop mặc định dùng tiếng Việt và có nút chuyển nhanh **VI/EN**. Người dùng vẫn có thể đổi ngôn ngữ trong phần Cài đặt. Tên model, tên riêng, thương hiệu, giao thức và câu lệnh được giữ nguyên để tránh sai lệch kỹ thuật.
 
-Mã nguồn gốc thuộc Nous Research và được phân phối theo giấy phép MIT. Đây là bản cộng đồng không chính thức, không được Nous Research, OpenAI, Anthropic hoặc Google bảo chứng. Mỗi người dùng đăng nhập bằng tài khoản hoặc khóa API của chính mình; bộ cài không kèm tài khoản AI trả phí.
+Mã nguồn gốc thuộc Nous Research và được phân phối theo giấy phép MIT. Đây là bản cộng đồng không chính thức, không được Nous Research, OpenAI, Anthropic hoặc Google bảo chứng. Giấy phép, thuật toán, kiến trúc và các tính năng lõi của Hermes vẫn được giữ theo dự án gốc. Bản cộng đồng bổ sung lớp Việt hóa, tài liệu, đóng gói đa nền tảng và các điều chỉnh tương thích cho người dùng Việt.
+
+Mỗi người dùng đăng nhập bằng tài khoản hoặc khóa API của chính mình; bộ cài không kèm tài khoản AI trả phí.
 
 ## Bắt đầu nhanh
 
@@ -73,7 +77,9 @@ Thay `x64` bằng `arm64` khi dùng máy Linux ARM64. Nếu AppImage không mở
 - **Gemini:** dùng khóa API do chính bạn tạo tại [Google AI Studio](https://aistudio.google.com/apikey). Gói Gemini trên web không tự động cấp quyền API.
 - **Nhà cung cấp khác:** Hermes hỗ trợ OpenRouter, Nous Portal và nhiều dịch vụ tương thích khác.
 
-Bộ cài không chứa tài khoản, khóa API hay dữ liệu trò chuyện của người đóng gói. Thông tin đăng nhập và dữ liệu của mỗi người được lưu riêng trên máy của họ.
+**Thông tin đăng nhập và dữ liệu của mỗi người được lưu riêng trên máy của mình.** Bộ cài không chứa tài khoản, khóa API, mã OAuth hay dữ liệu trò chuyện của người đóng gói. Dự án cộng đồng này không vận hành máy chủ tập trung để thu thập thông tin đăng nhập của người dùng.
+
+Khi bạn chủ động gửi yêu cầu tới một nhà cung cấp AI, nội dung cần thiết để xử lý yêu cầu sẽ được chuyển tới nhà cung cấp đã chọn và chịu sự điều chỉnh của điều khoản cùng chính sách quyền riêng tư của nhà cung cấp đó.
 
 ## Cập nhật
 
@@ -86,6 +92,14 @@ Linux không có cơ chế cập nhật Electron tích hợp chung cho mọi b�
 Gỡ ứng dụng trong **Settings → Apps → Installed apps** của Windows. Hermes còn giữ môi trường chạy và dữ liệu người dùng trong **%LOCALAPPDATA%\hermes** để tránh mất lịch sử ngoài ý muốn. Chỉ xóa thư mục đó khi bạn chắc chắn không cần dữ liệu cũ.
 
 Trên macOS/Linux, dữ liệu mặc định nằm trong `~/.hermes`. Xóa ứng dụng không tự động xóa thư mục này, nên tài khoản, phiên và bộ nhớ không bị mất ngoài ý muốn.
+
+## Miễn trừ trách nhiệm đối với Hermes
+
+Hermes được cung cấp theo giấy phép MIT với nguyên trạng phần mềm, không kèm cam kết bảo hành. Dự án cộng đồng không bảo đảm hệ thống luôn hoạt động liên tục, thuật toán hoặc kết quả AI luôn chính xác, hay mọi nhà cung cấp bên thứ ba luôn duy trì tính năng, model và chính sách hiện tại.
+
+Người dùng chịu trách nhiệm xem lại kết quả, yêu cầu quyền và hậu quả của các thao tác đã chấp thuận. Trong phạm vi pháp luật cho phép và theo nội dung giấy phép MIT, các tác giả cùng chủ sở hữu bản quyền không chịu trách nhiệm đối với khiếu nại, thiệt hại hoặc nghĩa vụ phát sinh từ phần mềm hay việc sử dụng phần mềm.
+
+Bản giải thích tiếng Việt tại [MIỄN TRỪ TRÁCH NHIỆM](DISCLAIMER.md) giúp người dùng hiểu phạm vi áp dụng. Nội dung này không thay thế, mở rộng hoặc sửa đổi [giấy phép MIT gốc](LICENSE).
 
 ## Phạm vi hỗ trợ
 
