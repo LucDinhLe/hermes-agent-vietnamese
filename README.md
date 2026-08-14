@@ -6,7 +6,7 @@
 
 **Bản cộng đồng giúp người Việt cài đặt, kết nối model và sử dụng Hermes Agent dễ dàng hơn, kể cả khi không thạo tiếng Anh.**
 
-Hermes là một AI agent có thể làm việc với tệp, dòng lệnh, trình duyệt, bộ nhớ, kỹ năng và lịch tự động. Bản này bổ sung giao diện Việt/Anh, quy trình thiết lập ba bước và bộ cài cho Windows, macOS, Linux. Không gian làm việc, Terminal tích hợp, thuật toán và tính năng lõi của Hermes vẫn được giữ theo dự án gốc.
+Hermes là một AI agent có thể làm việc với tệp, dòng lệnh, trình duyệt, bộ nhớ, kỹ năng và lịch tự động. Bản này bổ sung giao diện Việt/Anh, quy trình thiết lập ba bước và bộ cài cho Windows, macOS, Linux. Các tab phiên luôn nằm ở vùng giữa; Trình duyệt dùng chung mở trong panel bên phải để làm việc song song và giữ phiên đăng nhập. Không gian làm việc, Terminal tích hợp, thuật toán và tính năng lõi của Hermes vẫn được giữ theo dự án gốc.
 
 Đây là **dự án cá nhân vì cộng đồng** do [Lê Đình Lực](https://github.com/LucDinhLe) duy trì, phát triển từ Hermes Agent theo giấy phép MIT. Người dùng kết nối bằng tài khoản hoặc API key do từng dịch vụ cung cấp; dự án này tập trung vào Việt hóa, đóng gói và giúp người Việt thực hiện việc đó dễ dàng hơn.
 
@@ -30,8 +30,8 @@ Người dùng không cần mở Terminal, chạy lệnh hay sửa tệp cấu h
 
 Người dùng kỹ thuật có thể xem mã trình cài Windows tại [`scripts/install.ps1`](scripts/install.ps1); cài đặt bằng giao diện không yêu cầu tự chạy tệp này.
 
-| Máy đang dùng                | Tải trực tiếp                                                                                                                                               |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Máy đang dùng                | Tải trực tiếp                                                                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Windows 10/11, chip x64      | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-12/Hermes-Vietnamese-Windows-x64-Setup.exe)           |
 | Windows 10/11, chip ARM64    | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-12/Hermes-Vietnamese-Windows-arm64-Setup.exe)       |
 | Mac dùng chip Apple M-series | [Bộ cài macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-12/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
