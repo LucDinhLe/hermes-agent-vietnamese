@@ -2,6 +2,7 @@ import * as React from 'react'
 
 import { type MenuKit, renderActionItem } from '@/components/ui/actions-menu'
 import { Button } from '@/components/ui/button'
+import { Codicon } from '@/components/ui/codicon'
 import { Tip } from '@/components/ui/tooltip'
 import { translateNow } from '@/i18n'
 import { isMetaClose, middleClickHandlers } from '@/lib/middle-click'
@@ -45,8 +46,8 @@ const TAB_SELECTED =
 interface PaneTabProps extends React.ComponentProps<'div'> {
   active?: boolean
   dirty?: boolean
-  /** Close gesture, no hover X (too easy to hit on small tabs): middle-click,
-   *  or ⌘-click as the trackpad-friendly Mac equivalent. */
+  /** Close gesture: visible X on the active horizontal tab, hover/focus X on
+   *  inactive horizontal tabs, plus middle-click and ⌘-click. */
   onClose?: () => void
   /** Part of a multi-tab selection (⌥/Ctrl-click, Shift-click) — an accent
    *  wash marks every tab that a drag would carry, Chrome-style. */
@@ -141,7 +142,40 @@ export const PaneTab = React.forwardRef<HTMLDivElement, PaneTabProps>(function P
       {...props}
     >
       {children}
-      {dirty && (
+      {onClose && !vertical && (
+        <Tip label={translateNow('zones.closeRunningConfirm')}>
+          <Button
+            aria-label={translateNow('zones.closeRunningConfirm')}
+            className={cn(
+              'mr-1 shrink-0 self-center text-(--ui-text-tertiary) transition-opacity hover:text-foreground',
+              active ? 'opacity-100' : 'opacity-0 group-hover/tab:opacity-100 focus-visible:opacity-100'
+            )}
+            onClick={event => {
+              event.preventDefault()
+              event.stopPropagation()
+              onClose()
+            }}
+            onPointerDown={event => {
+              // The X is a leaf close action. Claim the press before the tab's
+              // activate/drag handler can treat it as a tab gesture.
+              event.preventDefault()
+              event.stopPropagation()
+            }}
+            size="icon-xs"
+            type="button"
+            variant="ghost"
+          >
+            <Codicon name="close" size="0.75rem" />
+            {dirty && (
+              <span
+                aria-hidden
+                className="pointer-events-none absolute top-0.5 right-0.5 size-1.5 rounded-full bg-amber-500 shadow-[0_0_0_1px_var(--tab-bg)] dark:bg-amber-400"
+              />
+            )}
+          </Button>
+        </Tip>
+      )}
+      {dirty && !(onClose && !vertical) && (
         <span
           aria-hidden
           className={cn(
