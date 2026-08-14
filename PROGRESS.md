@@ -8,6 +8,15 @@
 - Chuẩn hóa tiêu đề tab từ dữ liệu cũ `NEW SESSION` thành **Phiên mới** theo locale hiện tại; tiêu đề thật do người dùng đặt không bị thay đổi.
 - Xác minh: 28/28 kiểm thử mục tiêu đạt; typecheck đạt; lint 0 lỗi; 3.679/3.686 phép thử UI đầy đủ đạt ở lượt song song và cả 7 lỗi timeout/chồng DOM đều đạt khi chạy lại riêng; production build Desktop đạt ngoài sandbox.
 
+## Cập nhật 2026-08-14 — phát hành vi-v0.20.0-14
+
+- PR #21 đưa bản sửa nút đóng tab và tiêu đề **Phiên mới** vào `main`; PR #22 cập nhật toàn bộ liên kết tải, hướng dẫn Windows và ghi chú phát hành cho `vi-v0.20.0-14`.
+- CI của lát cắt mã nguồn đạt toàn bộ kiểm tra bắt buộc, gồm bộ giao diện đầy đủ 3.679 phép thử ở lượt GitHub; cổng rà soát thay đổi nhạy cảm cũng đạt.
+- Bản [`vi-v0.20.0-14`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-14) được công bố là **Latest** từ commit `571f43d527f5a95122baadf29768172682c7a765`, không phải bản nháp hoặc pre-release.
+- Sáu job đóng gói đều xanh, tạo đủ 19 tài sản cho Windows x64/ARM64, macOS Apple Silicon/Intel và Linux x64/ARM64 cùng các bảng SHA-256.
+- Bộ cài Windows x64 tải ngược từ bản phát hành công khai có 121.419.240 byte và SHA-256 `270c782c54f9cda496c6b5fb0a7a1b06af7fb919859952072fae971d45f14355`; mã băm khớp `SHA256SUMS.txt`.
+- Bộ cài vẫn chưa ký số trong thời gian chờ SignPath Foundation xét duyệt; cảnh báo SmartScreen được giải thích bằng hướng dẫn ảnh chụp đã liên kết ở đầu trang phát hành.
+
 ## Cập nhật 2026-08-14 — phát hành vi-v0.20.0-12
 
 - PR #14 đã nhập vào `main`, gồm luồng cài đặt/kết nối model, sửa bootstrap Windows, khôi phục tab nhiều phiên và đưa Trình duyệt dùng chung vào panel phải.
