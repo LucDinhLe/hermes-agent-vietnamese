@@ -4,7 +4,7 @@ Tài liệu này dành cho người muốn cài Hermes bằng giao diện, kết
 
 > **Bản hiện tại:** [vi-v0.20.0-13](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-13)
 >
-> **Trạng thái:** pre-release cộng đồng, đã nộp hồ sơ và đang chờ xét duyệt ký số
+> **Trạng thái:** bản phát hành công khai **Latest**, đã vượt qua kiểm thử đa nền tảng; hồ sơ ký số đã nộp và đang chờ xét duyệt
 >
 > **Nền tảng:** Windows x64/ARM64, macOS Apple Silicon/Intel, Linux x64/ARM64
 
