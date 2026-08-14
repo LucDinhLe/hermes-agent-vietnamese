@@ -1,5 +1,13 @@
 # Tiến độ
 
+## Cập nhật 2026-08-14 — phát hành vi-v0.20.0-12
+
+- PR #14 đã nhập vào `main`, gồm luồng cài đặt/kết nối model, sửa bootstrap Windows, khôi phục tab nhiều phiên và đưa Trình duyệt dùng chung vào panel phải.
+- Sửa hai phép thử `prompt-overlays` từng mặc định chữ tiếng Anh bằng cách khóa locale của chính bài test; toàn bộ UI suite trên GitHub đạt 3.672/3.672 phép thử.
+- Cổng phát hành phát hiện advisory mới `GHSA-2v37-7h3g-55p8`. PR #15 nâng riêng `nanoid` dòng 3 từ `3.3.17` lên `3.3.18`; `npm audit --omit=optional --audit-level=high` trả `0 vulnerabilities`, kiểm tra lockfile semantic và CI đạt.
+- Pre-release [`vi-v0.20.0-12`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-12) được tạo từ commit `4aee0954b12e5f5848c56d08741baeb036e1527d`, đủ 19 tài sản cho Windows, macOS và Linux x64/ARM64 cùng bảng SHA-256.
+- Bộ cài Windows x64 công khai có SHA-256 `cd42357d336b3f21fa2017fd521169ef00a034abda9524909da700a3cdc7c989`; mã băm tải thật khớp cả `SHA256SUMS.txt` và digest GitHub. Tệp vẫn chưa ký số trong thời gian chờ SignPath xét duyệt.
+
 ## Cập nhật 2026-08-14 — đưa Trình duyệt vào panel phải
 
 - Bỏ mục **Trình duyệt** khỏi thanh điều hướng bên trái và giữ nguyên toàn bộ tab phiên trong vùng làm việc giữa.
@@ -8,7 +16,7 @@
 - URL do người dùng hoặc agent mở tự chuyển panel phải sang Trình duyệt và mở lại panel nếu đang đóng. Phiên không có thư mục làm việc vẫn dùng được Browser; chế độ Tệp hiển thị trạng thái chưa có dự án.
 - Browser cũ từng được lưu như một pane động sẽ bị layout mirror loại khỏi vùng giữa trong lần chạy mới; tab URL và partition cookie `persist:hermes-preview` vẫn được giữ.
 - Xác minh hoàn tất: 59/59 kiểm thử mục tiêu đạt; Desktop typecheck đạt; ESLint và Prettier các tệp thay đổi đạt; production build và Windows x64 unpacked 466 tệp đạt.
-- Đã nâng cấp trên máy Windows thử nghiệm với điểm quay lui riêng. Bootstrap hoàn tất đúng commit `60e9b75d5`, dịch vụ nền trả `ok` cho Hermes 0.20.0 và mã băm ứng dụng cài đặt khớp bản đóng gói. Còn xác nhận trực quan thủ công vị trí biểu tượng và chuyển chế độ trên cửa sổ Hermes đang mở.
+- Đã nâng cấp trên máy Windows thử nghiệm với điểm quay lui riêng. Bootstrap hoàn tất đúng commit `60e9b75d5`, dịch vụ nền trả `ok` cho Hermes 0.20.0 và mã băm ứng dụng cài đặt khớp bản đóng gói. Đại ca đã xác nhận trực quan vị trí biểu tượng và việc chuyển giữa **Tệp** với **Trình duyệt**.
 
 ## Cập nhật 2026-08-14 — khôi phục tab nhiều phiên và sửa vị trí Trình duyệt
 
