@@ -37,6 +37,7 @@ import { Slot } from '@/contrib/react/slot'
 import { useContributions } from '@/contrib/react/use-contributions'
 import { registry } from '@/contrib/registry'
 import { discoverRuntimePlugins } from '@/contrib/runtime-loader'
+import { translateNow } from '@/i18n/runtime'
 import { NEW_SESSION_TITLE, sessionTitle as storedSessionTitle } from '@/lib/chat-runtime'
 import { Download, FileText, LayoutDashboard, PanelBottom, Terminal, Upload, Zap } from '@/lib/icons'
 import { type KeybindContribution, KEYBINDS_AREA } from '@/lib/keybinds/actions'
@@ -148,6 +149,7 @@ registry.registerMany([
     data: {
       placement: 'left',
       collapsible: true,
+      tabTitle: () => translateNow('sidebar.sessions'),
       dock: { pane: 'workspace', pos: 'left' },
       revealAliases: ['chat-sidebar'],
       width: `${SIDEBAR_DEFAULT_WIDTH}px`,
@@ -183,7 +185,13 @@ registry.registerMany([
     // NO minHeight: a tool panel drags all the way down to its collapsed
     // header (the sash floors it at COLLAPSED_ZONE_PX and folds the zone to
     // its rail there). A real floor left a sliver of unusable terminal.
-    data: { placement: 'bottom', height: '20vh', maxHeight: '80vh', revealOnPreset: true },
+    data: {
+      placement: 'bottom',
+      height: '20vh',
+      maxHeight: '80vh',
+      revealOnPreset: true,
+      tabTitle: () => translateNow('rightSidebar.terminal')
+    },
     render: () => <WiredPane part="terminal" />
   },
   {
@@ -194,6 +202,7 @@ registry.registerMany([
     data: {
       placement: 'right',
       collapsible: true,
+      tabTitle: () => translateNow('rightSidebar.files'),
       dock: { pane: 'workspace', pos: 'right' },
       revealAliases: ['file-browser'],
       width: FILE_BROWSER_DEFAULT_WIDTH,
@@ -211,6 +220,7 @@ registry.registerMany([
     data: {
       placement: 'right',
       collapsible: true,
+      tabTitle: () => translateNow('preview.diff'),
       revealAliases: [REVIEW_PANE_ID],
       width: FILE_BROWSER_DEFAULT_WIDTH,
       minWidth: FILE_BROWSER_MIN_WIDTH,

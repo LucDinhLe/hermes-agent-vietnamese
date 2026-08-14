@@ -6,7 +6,7 @@ Hướng dẫn này dành cho người tải Hermes Vietnamese bằng Microsoft 
 
 ## 1. Chọn đúng bộ cài
 
-1. Mở [bản phát hành vi-v0.20.0-12](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-12).
+1. Mở [bản phát hành vi-v0.20.0-13](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-13).
 2. Trong phần **Assets**, chọn:
    - Máy Windows x64 thông dụng: `Hermes-Vietnamese-Windows-x64-Setup.exe`.
    - Máy Windows ARM64: `Hermes-Vietnamese-Windows-arm64-Setup.exe`.
@@ -46,13 +46,7 @@ Chỉ tiếp tục khi tên tệp và nguồn tải đúng như phần 1. Nếu 
 
 ## Kiểm tra tăng cường nếu bạn quen dùng PowerShell
 
-Mã SHA-256 của bộ cài Windows x64 thuộc bản `vi-v0.20.0-12` là:
-
-```text
-CD42357D336B3F21FA2017FD521169EF00A034ABDA9524909DA700A3CDC7C989
-```
-
-Bạn có thể đối chiếu bằng `SHA256SUMS.txt` trong cùng bản phát hành. Việc kiểm tra mã băm là bước tăng cường; luồng cài đặt bằng giao diện ở trên không yêu cầu dùng dòng lệnh.
+Bạn có thể đối chiếu mã SHA-256 bằng tệp `SHA256SUMS.txt` trong cùng bản phát hành. Mỗi bản có mã riêng, vì vậy không dùng mã của bản cũ để kiểm tra bản mới. Việc kiểm tra mã băm là bước tăng cường; luồng cài đặt bằng giao diện ở trên không yêu cầu dùng dòng lệnh.
 
 ## Nếu vẫn không cài được
 

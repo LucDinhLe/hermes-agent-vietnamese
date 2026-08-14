@@ -1916,6 +1916,14 @@ export function runBackup(): Promise<ActionResponse & { archive?: string }> {
   })
 }
 
+export function runImportBackup(archive: string): Promise<ActionResponse> {
+  return window.hermesDesktop.api<ActionResponse>({
+    path: '/api/ops/import',
+    method: 'POST',
+    body: { archive, force: true }
+  })
+}
+
 export function runDebugShare(): Promise<DebugShareResponse> {
   return window.hermesDesktop.api<DebugShareResponse>({
     path: '/api/ops/debug-share',

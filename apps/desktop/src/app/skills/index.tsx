@@ -50,13 +50,14 @@ import { PanelEmpty, PanelPill } from '../overlays/panel'
 import { PageSearchShell } from '../page-search-shell'
 import { SETTINGS_ROUTE } from '../routes'
 import { ComputerUsePanel } from '../settings/computer-use-panel'
-import { asText, includesQuery, prettyName, toolNames, toolsetDisplayLabel } from '../settings/helpers'
+import { asText, includesQuery, toolNames, toolsetDisplayLabel } from '../settings/helpers'
 import { TerminalBackendPanel } from '../settings/terminal-backend-panel'
 import { ToolsetConfigPanel } from '../settings/toolset-config-panel'
 import type { SetStatusbarItemGroup } from '../shell/statusbar-controls'
 
 import { SkillsHub } from './hub'
 import { McpTab } from './mcp-tab'
+import { skillCategoryLabel } from './skill-category'
 import { $skillsSortDesc, $toolsetsSortDesc } from './store'
 
 const SKILLS_MODES = ['skills', 'toolsets', 'mcp', 'hub'] as const
@@ -111,7 +112,7 @@ function skillSubtitle(
   skill: SkillInfo,
   provenanceLabels: Record<'agent' | 'bundled' | 'hub', string>
 ): React.ReactNode {
-  const category = prettyName(categoryFor(skill))
+  const category = skillCategoryLabel(categoryFor(skill))
   const provenance = skill.provenance
 
   return (
@@ -741,7 +742,7 @@ function SkillDetail({ onArchive, onEdit, skill }: { onArchive: () => void; onEd
         description={asText(skill.description) || t.skills.noDescription}
         pills={
           <>
-            <PanelPill>{prettyName(categoryFor(skill))}</PanelPill>
+            <PanelPill>{skillCategoryLabel(categoryFor(skill))}</PanelPill>
             {skill.provenance && skill.provenance !== 'bundled' && (
               <PanelPill tone={skill.provenance === 'agent' ? 'good' : 'muted'}>
                 {t.skills.provenance[skill.provenance]}

@@ -1163,6 +1163,12 @@ export interface Translations {
       securityAuditDesc: string
       backup: string
       backupDesc: string
+      revealBackup: string
+      importBackup: string
+      importBackupDesc: string
+      importBackupConfirm: string
+      importBackupRestart: string
+      importBackupFailed: string
       debugShare: string
       debugShareDesc: string
       debugShareRunning: string
