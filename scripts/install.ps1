@@ -690,7 +690,21 @@ function Install-WindowsOfficialPython {
 
         $trustedPython = Resolve-TrustedWindowsPython
         if (-not $trustedPython) {
-            throw "Installed Python could not run or did not retain its trusted publisher signature"
+            # The python.org bundle is a registered installer. If Hermes data
+            # was moved or removed while that registration remained, a later
+            # install enters Modify mode and reports success without restoring
+            # files into the new Hermes home. Force Repair once so the cached
+            # PSF-signed components are written back to the current TargetDir.
+            Write-Warn "Python is registered but its files are missing; repairing the trusted installation."
+            $repairArguments = @("/repair") + $arguments
+            $repairProcess = Start-Process -FilePath $installerPath -ArgumentList $repairArguments -Wait -PassThru -WindowStyle Hidden
+            if ($repairProcess.ExitCode -ne 0) {
+                throw "Official Python repair exited with code $($repairProcess.ExitCode)"
+            }
+            $trustedPython = Resolve-TrustedWindowsPython
+        }
+        if (-not $trustedPython) {
+            throw "Installed Python could not run or did not retain its trusted publisher signature after repair"
         }
 
         $script:PythonVersion = $spec.Minor
@@ -4336,9 +4350,10 @@ function Write-Completion {
 # implements it.  ``Title`` is what UIs show; ``Category`` lets UIs group
 # stages; ``NeedsUserInput`` tells UIs "this stage prompts -- either skip it
 # or arrange to provide answers another way."
+$PythonStageVersion = if ($env:OS -eq "Windows_NT") { $WindowsOfficialPythonMinor } else { $PythonVersion }
 $InstallStages = @(
     @{ Name = "uv";               Title = "Installing uv package manager";        Category = "prereqs";      NeedsUserInput = $false; Worker = "Stage-Uv" }
-    @{ Name = "python";           Title = "Verifying Python $PythonVersion";      Category = "prereqs";      NeedsUserInput = $false; Worker = "Stage-Python" }
+    @{ Name = "python";           Title = "Verifying Python $PythonStageVersion"; Category = "prereqs";      NeedsUserInput = $false; Worker = "Stage-Python" }
     @{ Name = "git";              Title = "Installing Git";                       Category = "prereqs";      NeedsUserInput = $false; Worker = "Stage-Git" }
     @{ Name = "node";             Title = "Detecting Node.js";                    Category = "prereqs";      NeedsUserInput = $false; Worker = "Stage-Node" }
     @{ Name = "system-packages";  Title = "Installing ripgrep and ffmpeg";        Category = "prereqs";      NeedsUserInput = $false; Worker = "Stage-SystemPackages" }
@@ -4376,7 +4391,7 @@ $InstallStages += @(
 # (the default-invocation case where Main runs everything in one
 # process), and throws cleanly if uv truly isn't installed yet.
 function Stage-Uv               { if (-not (Install-Uv))     { throw "uv installation failed" } }
-function Stage-Python           { Resolve-UvCmd; if (-not (Test-Python))    { throw "Python $PythonVersion not available" } }
+function Stage-Python           { Resolve-UvCmd; if (-not (Test-Python))    { throw "Python $PythonStageVersion not available" } }
 function Stage-Git              {
     if (-not (Install-Git)) {
         if ($script:GitInstallFailureReason) { throw $script:GitInstallFailureReason }

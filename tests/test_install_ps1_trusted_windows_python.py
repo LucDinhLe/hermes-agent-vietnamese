@@ -41,6 +41,15 @@ def test_official_python_download_is_pinned_and_publisher_checked(source: str):
     assert "Python Software Foundation" in installer
 
 
+def test_registered_python_with_missing_files_is_repaired(source: str):
+    installer = _function_body(source, "Install-WindowsOfficialPython")
+    first_resolve = installer.index("$trustedPython = Resolve-TrustedWindowsPython")
+    repair = installer.index('$repairArguments = @("/repair") + $arguments')
+    second_resolve = installer.index("$trustedPython = Resolve-TrustedWindowsPython", repair)
+    assert first_resolve < repair < second_resolve
+    assert "Official Python repair exited with code" in installer
+
+
 def test_existing_trusted_python_is_reused_across_stage_processes(source: str):
     resolver = _function_body(source, "Resolve-TrustedWindowsPython")
     assert "trusted-python-path.txt" in source
@@ -64,3 +73,9 @@ def test_windows_python_stage_never_falls_back_to_uv_managed_python(source: str)
     windows_branch = test_python.split('if ($env:OS -eq "Windows_NT")', 1)[1]
     assert "Install-WindowsOfficialPython" in windows_branch
     assert "return $false" in windows_branch
+
+
+def test_windows_stage_reports_the_actual_official_python_version(source: str):
+    assert '$PythonStageVersion = if ($env:OS -eq "Windows_NT")' in source
+    assert 'Title = "Verifying Python $PythonStageVersion"' in source
+    assert 'throw "Python $PythonStageVersion not available"' in source
