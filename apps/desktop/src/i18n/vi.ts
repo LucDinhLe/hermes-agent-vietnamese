@@ -1,8 +1,225 @@
-import { FIELD_DESCRIPTIONS, FIELD_LABELS } from '@/app/settings/constants'
+import { defineFieldCopy } from '@/app/settings/field-copy'
 
 import type { Translations } from './types'
 
 // Generated from en.ts by tools/hermes-i18n/generate-vi.mjs.
+
+// The English settings catalog remains the schema source of truth, but it is
+// not suitable as visible copy in the Vietnamese community build. Keep model,
+// provider and backend product names intact while translating the actions and
+// concepts a user needs in order to configure Hermes safely.
+const VI_FIELD_LABELS = defineFieldCopy({
+  model: 'Model mặc định',
+  modelContextLength: 'Cửa sổ ngữ cảnh',
+  fallbackProviders: 'Model dự phòng',
+  toolsets: 'Bộ công cụ được bật',
+  timezone: 'Múi giờ',
+  display: {
+    personality: 'Phong cách trả lời',
+    showReasoning: 'Khối lập luận'
+  },
+  desktop: {
+    repoScanEnabled: 'Tự động tìm kho mã nguồn',
+    repoScanRoots: 'Thư mục tìm kho mã nguồn',
+    repoScanExcludePaths: 'Thư mục loại trừ'
+  },
+  agent: {
+    maxTurns: 'Số bước tối đa của AI agent',
+    imageInputMode: 'Tệp hình ảnh đính kèm',
+    apiMaxRetries: 'Số lần thử lại API',
+    serviceTier: 'Cấp dịch vụ',
+    toolUseEnforcement: 'Quy tắc sử dụng công cụ'
+  },
+  terminal: {
+    cwd: 'Thư mục làm việc',
+    backend: 'Dịch vụ thực thi',
+    timeout: 'Thời gian chờ lệnh',
+    persistentShell: 'Giữ phiên dòng lệnh',
+    envPassthrough: 'Biến môi trường được chuyển tiếp',
+    dockerImage: 'Docker image',
+    singularityImage: 'Singularity image',
+    modalImage: 'Modal image',
+    daytonaImage: 'Daytona image'
+  },
+  fileReadMaxChars: 'Giới hạn đọc tệp',
+  toolOutput: {
+    maxBytes: 'Giới hạn đầu ra dòng lệnh',
+    maxLines: 'Giới hạn số dòng mỗi trang',
+    maxLineLength: 'Giới hạn độ dài mỗi dòng'
+  },
+  codeExecution: {
+    mode: 'Phạm vi chạy mã'
+  },
+  approvals: {
+    mode: 'Chế độ phê duyệt',
+    timeout: 'Thời gian chờ phê duyệt',
+    mcpReloadConfirm: 'Xác nhận tải lại MCP'
+  },
+  commandAllowlist: 'Danh sách lệnh được phép',
+  security: {
+    redactSecrets: 'Che thông tin bí mật',
+    allowPrivateUrls: 'Cho phép URL riêng tư'
+  },
+  browser: {
+    allowPrivateUrls: 'URL riêng tư trong trình duyệt',
+    autoLocalForPrivateUrls: 'Tự dùng trình duyệt cục bộ cho URL riêng tư'
+  },
+  checkpoints: {
+    enabled: 'Điểm khôi phục tệp',
+    maxSnapshots: 'Giới hạn điểm khôi phục'
+  },
+  voice: {
+    recordKey: 'Phím tắt giọng nói',
+    maxRecordingSeconds: 'Thời lượng ghi âm tối đa',
+    autoTts: 'Tự động đọc câu trả lời'
+  },
+  stt: {
+    enabled: 'Chuyển giọng nói thành văn bản',
+    echoTranscripts: 'Gửi lại bản chép lời',
+    provider: 'Nhà cung cấp nhận dạng giọng nói',
+    local: {
+      model: 'Model chép lời cục bộ',
+      language: 'Ngôn ngữ chép lời'
+    },
+    openai: { model: 'Model STT của OpenAI' },
+    groq: { model: 'Model STT của Groq' },
+    mistral: { model: 'Model STT của Mistral' },
+    elevenlabs: {
+      modelId: 'Model STT của ElevenLabs',
+      languageCode: 'Ngôn ngữ ElevenLabs',
+      tagAudioEvents: 'Gắn nhãn sự kiện âm thanh',
+      diarize: 'Phân biệt người nói'
+    }
+  },
+  tts: {
+    provider: 'Nhà cung cấp đọc văn bản',
+    edge: { voice: 'Giọng Edge' },
+    openai: { model: 'Model TTS của OpenAI', voice: 'Giọng OpenAI' },
+    elevenlabs: { voiceId: 'Giọng ElevenLabs', modelId: 'Model ElevenLabs' },
+    xai: {
+      voiceId: 'Giọng xAI (Grok)',
+      language: 'Ngôn ngữ xAI',
+      speed: 'Tốc độ đọc xAI',
+      autoSpeechTags: 'Tự động thêm nhãn biểu cảm xAI',
+      optimizeStreamingLatency: 'Tối ưu độ trễ phát trực tuyến xAI',
+      sampleRate: 'Tần số lấy mẫu xAI',
+      bitRate: 'Tốc độ bit xAI'
+    },
+    minimax: { model: 'Model TTS của MiniMax', voiceId: 'Giọng MiniMax' },
+    mistral: { model: 'Model TTS của Mistral', voiceId: 'Giọng Mistral' },
+    gemini: { model: 'Model TTS của Gemini', voice: 'Giọng Gemini' },
+    neutts: { model: 'Model NeuTTS', device: 'Thiết bị NeuTTS' },
+    kittentts: { model: 'Model KittenTTS', voice: 'Giọng KittenTTS' },
+    piper: { voice: 'Giọng Piper' },
+    deepinfra: { model: 'Model TTS của DeepInfra', voice: 'Giọng DeepInfra' }
+  },
+  memory: {
+    memoryEnabled: 'Bộ nhớ dài hạn',
+    userProfileEnabled: 'Hồ sơ người dùng',
+    memoryCharLimit: 'Dung lượng bộ nhớ',
+    userCharLimit: 'Dung lượng hồ sơ',
+    provider: 'Nhà cung cấp bộ nhớ'
+  },
+  context: { engine: 'Cơ chế quản lý ngữ cảnh' },
+  compression: {
+    enabled: 'Tự động nén ngữ cảnh',
+    threshold: 'Ngưỡng nén',
+    targetRatio: 'Tỷ lệ nén mục tiêu',
+    protectLastN: 'Số tin nhắn gần đây được giữ nguyên'
+  },
+  delegation: {
+    model: 'Model của AI agent phụ',
+    provider: 'Nhà cung cấp cho AI agent phụ',
+    maxIterations: 'Giới hạn lượt của AI agent phụ',
+    maxConcurrentChildren: 'Số AI agent phụ chạy song song',
+    childTimeoutSeconds: 'Thời gian chờ AI agent phụ',
+    reasoningEffort: 'Mức lập luận của AI agent phụ'
+  },
+  updates: {
+    nonInteractiveLocalChanges: 'Xử lý thay đổi cục bộ khi cập nhật trong ứng dụng'
+  }
+})
+
+const VI_FIELD_DESCRIPTIONS = defineFieldCopy({
+  model: 'Dùng cho phiên mới, trừ khi bạn chọn model khác trong khung soạn thảo.',
+  modelContextLength: 'Để 0 để dùng dung lượng ngữ cảnh mà Hermes nhận diện từ model đã chọn.',
+  fallbackProviders: 'Các cặp provider:model sẽ được thử lần lượt khi model mặc định gặp lỗi.',
+  display: {
+    personality: 'Phong cách mặc định của trợ lý trong các phiên mới.',
+    showReasoning: 'Hiển thị phần lập luận khi dịch vụ nền cung cấp dữ liệu này.'
+  },
+  desktop: {
+    repoScanEnabled: 'Quét các thư mục cục bộ để hiển thị kho Git trong Dự án.',
+    repoScanRoots: 'Các thư mục cần quét. Để trống để quét thư mục cá nhân.',
+    repoScanExcludePaths: 'Bỏ qua các thư mục này và toàn bộ thư mục con khi tìm kho mã nguồn.'
+  },
+  timezone: 'Mã múi giờ IANA. Để trống để dùng múi giờ của hệ thống.',
+  agent: {
+    imageInputMode: 'Cách gửi hình ảnh đính kèm tới model.',
+    maxTurns: 'Số lượt gọi công cụ tối đa trước khi Hermes dừng một tác vụ.'
+  },
+  terminal: {
+    cwd: 'Thư mục dự án mặc định cho công cụ và dòng lệnh.',
+    persistentShell: 'Giữ trạng thái dòng lệnh giữa các lệnh khi dịch vụ nền hỗ trợ.',
+    envPassthrough: 'Các biến môi trường được chuyển vào quá trình thực thi công cụ.',
+    dockerImage: 'Container image dùng khi dịch vụ thực thi là Docker.',
+    singularityImage: 'Image dùng khi dịch vụ thực thi là Singularity.',
+    modalImage: 'Image dùng khi dịch vụ thực thi là Modal.',
+    daytonaImage: 'Image dùng khi dịch vụ thực thi là Daytona.'
+  },
+  codeExecution: {
+    mode: 'Mức giới hạn mã được chạy trong phạm vi dự án hiện tại.'
+  },
+  fileReadMaxChars: 'Số ký tự tối đa Hermes được đọc trong mỗi yêu cầu đọc tệp.',
+  approvals: {
+    mode: 'Cách Hermes xử lý các lệnh cần bạn phê duyệt rõ ràng.',
+    timeout: 'Thời gian yêu cầu phê duyệt chờ trước khi hết hạn.'
+  },
+  security: {
+    redactSecrets: 'Cố gắng che thông tin bí mật khỏi nội dung gửi tới model.'
+  },
+  checkpoints: {
+    enabled: 'Tạo điểm quay lui trước khi chỉnh sửa tệp.'
+  },
+  memory: {
+    memoryEnabled: 'Lưu ký ức dài hạn để hỗ trợ các phiên sau.',
+    userProfileEnabled: 'Duy trì hồ sơ ngắn gọn về sở thích của người dùng.'
+  },
+  context: {
+    engine: 'Cách quản lý cuộc trò chuyện dài khi sắp chạm giới hạn ngữ cảnh.'
+  },
+  compression: {
+    enabled: 'Tóm tắt phần ngữ cảnh cũ khi cuộc trò chuyện trở nên quá dài.'
+  },
+  voice: {
+    autoTts: 'Tự động đọc thành tiếng câu trả lời của trợ lý.'
+  },
+  tts: {
+    xai: {
+      voiceId: 'ID giọng xAI, ví dụ eve, hoặc ID giọng tùy chỉnh.',
+      language: 'Mã ngôn ngữ nói, ví dụ en hoặc pt-BR; dùng “auto” để tự nhận diện.',
+      speed: 'Tốc độ đọc. 0,7 là chậm; 1,0 là bình thường; 1,5 là nhanh.',
+      autoSpeechTags: 'Cho phép model thêm nhãn biểu cảm như [laughing] hoặc [sighs] trước khi tổng hợp giọng nói.',
+      optimizeStreamingLatency: 'Cân bằng độ trễ và chất lượng. 0 ưu tiên chất lượng; 2 ưu tiên độ trễ thấp.',
+      sampleRate: 'Tần số lấy mẫu âm thanh tính bằng Hz. Cao hơn cho chất lượng tốt hơn và tệp lớn hơn.',
+      bitRate: 'Tốc độ bit MP3 tính bằng bps. Chỉ áp dụng khi codec là mp3.'
+    },
+    neutts: {
+      device: 'Thiết bị xử lý cục bộ cho NeuTTS.'
+    }
+  },
+  stt: {
+    enabled: 'Bật chép lời bằng model cục bộ hoặc dịch vụ đã kết nối.',
+    echoTranscripts: 'Gửi lại bản chép thô 🎙️ của tin nhắn thoại vào cuộc trò chuyện.',
+    elevenlabs: {
+      languageCode: 'Mã ngôn ngữ ISO-639-3 tùy chọn. Để trống để ElevenLabs tự nhận diện.'
+    }
+  },
+  updates: {
+    nonInteractiveLocalChanges:
+      'Khi cập nhật trong ứng dụng, chọn giữ tạm thay đổi mã cục bộ (stash) hoặc loại bỏ chúng (discard). Cập nhật qua dòng lệnh luôn hỏi trước.'
+  }
+})
 
 export const vi: Translations = {
   common: {
@@ -536,8 +753,8 @@ export const vi: Translations = {
         turnOffFailed: 'Không thể tắt thú cưng.'
       }
     },
-    fieldLabels: FIELD_LABELS,
-    fieldDescriptions: FIELD_DESCRIPTIONS,
+    fieldLabels: VI_FIELD_LABELS,
+    fieldDescriptions: VI_FIELD_DESCRIPTIONS,
     about: {
       heading: 'Hermes Desktop',
       version: value => `Phiên bản ${value}`,
@@ -1331,6 +1548,13 @@ export const vi: Translations = {
       securityAuditDesc: 'Quét cấu hình và kỹ năng để phát hiện thiết lập có rủi ro',
       backup: 'Tạo bản sao lưu',
       backupDesc: 'Nén cấu hình, bộ nhớ, kỹ năng và phiên thành một tệp sao lưu',
+      revealBackup: 'Mở vị trí bản sao lưu',
+      importBackup: 'Khôi phục bản sao lưu',
+      importBackupDesc: 'Chọn tệp sao lưu Hermes để khôi phục cấu hình, bộ nhớ, kỹ năng và các phiên',
+      importBackupConfirm:
+        'Khôi phục bản sao lưu này? Dữ liệu Hermes hiện có cùng tên sẽ được thay thế. Bộ cài và các tệp ứng dụng vẫn được giữ nguyên.',
+      importBackupRestart: 'Khôi phục hoàn tất. Hãy khởi động lại Hermes để tải đầy đủ dữ liệu đã khôi phục.',
+      importBackupFailed: 'Không thể khôi phục bản sao lưu',
       debugShare: 'Chia sẻ gỡ lỗi',
       debugShareDesc: 'Tải lên báo cáo và nhật ký đã ẩn dữ liệu nhạy cảm, rồi nhận liên kết chia sẻ (tự xóa sau 6 giờ)',
       debugShareRunning: 'Đang tải lên báo cáo gỡ lỗi...',

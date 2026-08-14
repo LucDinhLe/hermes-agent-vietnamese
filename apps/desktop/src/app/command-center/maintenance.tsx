@@ -16,10 +16,12 @@ import {
   runCurator,
   runDebugShare,
   runDoctor,
+  runImportBackup,
   runSecurityAudit,
   setCuratorPaused
 } from '@/hermes'
 import { useI18n } from '@/i18n'
+import { revealDesktopPath } from '@/lib/desktop-fs'
 import { AlertCircle } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { upsertDesktopActionTask } from '@/store/activity'
@@ -61,6 +63,8 @@ export function MaintenancePanel() {
   const [memoryBusy, setMemoryBusy] = useState(false)
   const [share, setShare] = useState<DebugShareResponse | null>(null)
   const [sharing, setSharing] = useState(false)
+  const [backupArchive, setBackupArchive] = useState('')
+  const [backupReady, setBackupReady] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -117,8 +121,14 @@ export function MaintenancePanel() {
     }
   }, [actionName])
 
+  useEffect(() => {
+    if (actionName === 'backup' && actionStatus && !actionStatus.running && actionStatus.exit_code === 0) {
+      setBackupReady(true)
+    }
+  }, [actionName, actionStatus])
+
   const launch = useCallback(
-    async (label: string, start: () => Promise<ActionResponse>) => {
+    async <T extends ActionResponse>(label: string, start: () => Promise<T>): Promise<T | null> => {
       setError('')
 
       try {
@@ -126,13 +136,41 @@ export function MaintenancePanel() {
         setActionStatus(null)
         setActionName(started.name)
         notify({ kind: 'success', title: mm.actionStarted(label), message: '' })
+
+        return started
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
         notifyError(err, mm.actionFailed(label))
+
+        return null
       }
     },
     [mm]
   )
+
+  const createBackup = useCallback(async () => {
+    setBackupReady(false)
+    const started = await launch(mm.backup, runBackup)
+
+    if (started?.archive) {
+      setBackupArchive(started.archive)
+    }
+  }, [launch, mm.backup])
+
+  const restoreBackup = useCallback(async () => {
+    const [archive] = await window.hermesDesktop.selectPaths({
+      directories: false,
+      filters: [{ extensions: ['zip'], name: 'Hermes backup' }],
+      multiple: false,
+      title: mm.importBackup
+    })
+
+    if (!archive || !window.confirm(mm.importBackupConfirm)) {
+      return
+    }
+
+    await launch(mm.importBackup, () => runImportBackup(archive))
+  }, [launch, mm])
 
   const shareDebug = useCallback(async () => {
     setSharing(true)
@@ -215,7 +253,26 @@ export function MaintenancePanel() {
           description={mm.backupDesc}
           disabled={actionStatus?.running === true}
           label={mm.backup}
-          onRun={() => void launch(mm.backup, runBackup)}
+          onRun={() => void createBackup()}
+        />
+        {backupArchive && (
+          <div className="mb-1 flex items-center justify-between gap-3 rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) px-3 py-2">
+            <span className="min-w-0 truncate font-mono text-[0.65rem] text-(--ui-text-tertiary)">{backupArchive}</span>
+            <Button
+              disabled={!backupReady}
+              onClick={() => void revealDesktopPath(backupArchive)}
+              size="xs"
+              variant="text"
+            >
+              {mm.revealBackup}
+            </Button>
+          </div>
+        )}
+        <OpRow
+          description={mm.importBackupDesc}
+          disabled={actionStatus?.running === true}
+          label={mm.importBackup}
+          onRun={() => void restoreBackup()}
         />
         <OpRow
           description={mm.debugShareDesc}
@@ -261,6 +318,11 @@ export function MaintenancePanel() {
             >
               {actionStatus.lines.join('\n')}
             </pre>
+            {actionName === 'import' && !actionStatus.running && actionStatus.exit_code === 0 && (
+              <div className="mt-2 text-[length:var(--conversation-caption-font-size)] text-emerald-500">
+                {mm.importBackupRestart}
+              </div>
+            )}
           </div>
         )}
       </section>

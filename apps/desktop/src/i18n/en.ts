@@ -1324,6 +1324,13 @@ export const en: Translations = {
       securityAuditDesc: 'Scan config and skills for risky settings',
       backup: 'Create backup',
       backupDesc: 'Zip config, memories, skills, and sessions',
+      revealBackup: 'Show backup',
+      importBackup: 'Restore backup',
+      importBackupDesc: 'Select a Hermes backup zip and restore its config, memories, skills, and sessions',
+      importBackupConfirm:
+        'Restore this backup? Existing Hermes data with the same names will be replaced. The current installation and app files will stay in place.',
+      importBackupRestart: 'Restore completed. Restart Hermes to load all restored data.',
+      importBackupFailed: 'Backup restore failed',
       debugShare: 'Debug share',
       debugShareDesc: 'Upload a redacted report + logs, get shareable links (auto-deletes in 6h)',
       debugShareRunning: 'Uploading debug report...',

@@ -9,6 +9,7 @@ import {
   installSkillFromHub,
   resetMemory,
   runDebugShare,
+  runImportBackup,
   searchSkillsHub,
   selectToolsetModel,
   setCuratorPaused,
@@ -115,6 +116,18 @@ describe('Hermes REST parity helpers (hub / mcp / maintenance)', () => {
 
     expect(api).toHaveBeenCalledWith(
       expect.objectContaining({ path: '/api/ops/debug-share', method: 'POST', timeoutMs: 120_000 })
+    )
+  })
+
+  it('restores a selected Hermes backup without replacing application files', async () => {
+    await runImportBackup('C:\\Backups\\hermes-backup.zip')
+
+    expect(api).toHaveBeenCalledWith(
+      expect.objectContaining({
+        path: '/api/ops/import',
+        method: 'POST',
+        body: { archive: 'C:\\Backups\\hermes-backup.zip', force: true }
+      })
     )
   })
 
