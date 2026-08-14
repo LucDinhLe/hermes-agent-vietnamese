@@ -25,6 +25,8 @@ Tài liệu này dành cho người muốn cài Hermes bằng giao diện, kết
 4. Chọn **Tiếng Việt** hoặc **English**.
 5. Chọn cài Hermes trên máy và chờ ứng dụng hoàn tất chuẩn bị.
 
+Nếu Edge báo tệp `isn't commonly downloaded` hoặc chỉ hiện nút **Delete**, làm theo [hướng dẫn Windows từng bước bằng hình ảnh](docs/cai-dat-windows-bang-anh.md). Cảnh báo này không tự biến mất khi chờ.
+
 ### Bước 2. Kết nối model
 
 Màn kết nối hiện ngay ChatGPT, Claude Pro/Max và Gemini. Các kết nối tài khoản, khóa API và endpoint cục bộ khác xuất hiện trực tiếp trong danh sách cuộn bên dưới. Chọn một dịch vụ, đăng nhập hoặc nhập khóa của chính bạn. Bạn cũng có thể chọn **Tôi sẽ chọn nhà cung cấp sau**.
@@ -224,6 +226,8 @@ Trước khi tiếp tục:
 2. Tải `SHA256SUMS.txt` trong cùng bản phát hành.
 3. Đối chiếu mã SHA-256 của tệp đã tải.
 4. Chỉ chọn **Thông tin thêm → Vẫn chạy** trên Windows hoặc **Open Anyway** trên macOS khi mã khớp.
+
+Trên Microsoft Edge, người dùng có thể gặp thêm hai màn hình trước SmartScreen. Xem đúng vị trí **See more**, mũi tên cạnh **Delete** và **Keep anyway** trong [hướng dẫn cài Windows bằng hình ảnh](docs/cai-dat-windows-bang-anh.md).
 
 Cảnh báo trong thời gian chờ ký số không tự chứng minh tệp an toàn hoặc nguy hiểm. Mã băm và nguồn tải giúp bạn xác minh tệp có đúng với bản GitHub đã công bố hay không. Trạng thái hồ sơ được cập nhật tại [Code signing policy](CODE_SIGNING_POLICY.md).
 
