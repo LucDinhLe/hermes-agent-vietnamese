@@ -28,6 +28,8 @@ Mở [trang phát hành vi-v0.20.0-12](https://github.com/LucDinhLe/hermes-agent
 
 Người dùng không cần mở Terminal, chạy lệnh hay sửa tệp cấu hình. Lần cài đầu cần Internet và có thể mất vài phút vì Hermes phải tải môi trường chạy cùng các thành phần cần thiết.
 
+Người dùng kỹ thuật có thể xem mã trình cài Windows tại [`scripts/install.ps1`](scripts/install.ps1); cài đặt bằng giao diện không yêu cầu tự chạy tệp này.
+
 | Máy đang dùng                | Tải trực tiếp                                                                                                                                               |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Windows 10/11, chip x64      | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-12/Hermes-Vietnamese-Windows-x64-Setup.exe)           |

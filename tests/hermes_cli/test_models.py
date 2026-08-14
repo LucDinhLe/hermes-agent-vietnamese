@@ -133,14 +133,14 @@ class TestDetectProviderForModel:
 
 
     def test_short_alias_resolves_to_static_model(self):
-        """Short aliases (e.g. sonnet) should resolve without network lookups."""
+        """Short aliases prefer Claude Code without network lookups."""
         with patch(
             "hermes_cli.models.fetch_openrouter_models",
             side_effect=AssertionError("network lookup should not run"),
         ):
             result = detect_provider_for_model("sonnet", "auto")
         assert result is not None
-        assert result[0] == "anthropic"
+        assert result[0] == "claude-code"
         assert result[1].startswith("claude-sonnet")
 
 
