@@ -7,7 +7,8 @@
 - Trình duyệt dùng chung được render trực tiếp trong panel phải. Chuyển qua lại chỉ ẩn bề mặt, không tháo cây tệp hoặc webview, nên trạng thái cây, lịch sử trang và phiên đăng nhập còn nguyên.
 - URL do người dùng hoặc agent mở tự chuyển panel phải sang Trình duyệt và mở lại panel nếu đang đóng. Phiên không có thư mục làm việc vẫn dùng được Browser; chế độ Tệp hiển thị trạng thái chưa có dự án.
 - Browser cũ từng được lưu như một pane động sẽ bị layout mirror loại khỏi vùng giữa trong lần chạy mới; tab URL và partition cookie `persist:hermes-preview` vẫn được giữ.
-- Xác minh trước build: 59/59 kiểm thử mục tiêu đạt; Desktop typecheck đạt; ESLint và Prettier các tệp thay đổi đạt. Lần build trong sandbox hoàn tất renderer rồi bị lớp quyền máy chặn `esbuild`; cần chạy lại ngoài sandbox trước khi đóng gói.
+- Xác minh hoàn tất: 59/59 kiểm thử mục tiêu đạt; Desktop typecheck đạt; ESLint và Prettier các tệp thay đổi đạt; production build và Windows x64 unpacked 466 tệp đạt.
+- Đã nâng cấp trên máy Windows thử nghiệm với điểm quay lui riêng. Bootstrap hoàn tất đúng commit `60e9b75d5`, dịch vụ nền trả `ok` cho Hermes 0.20.0 và mã băm ứng dụng cài đặt khớp bản đóng gói. Còn xác nhận trực quan thủ công vị trí biểu tượng và chuyển chế độ trên cửa sổ Hermes đang mở.
 
 ## Cập nhật 2026-08-14 — khôi phục tab nhiều phiên và sửa vị trí Trình duyệt
 
