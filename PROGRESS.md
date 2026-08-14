@@ -1,5 +1,14 @@
 # Tiến độ
 
+## Cập nhật 2026-08-14 — khôi phục tab nhiều phiên và sửa vị trí Trình duyệt
+
+- Thanh tab trong vùng làm việc luôn hiện mặc định kể cả khi chỉ có một phiên; nút `+` tiếp tục tạo phiên mới trong đúng vùng đang làm việc. Tùy chọn người dùng chủ động **Ẩn thanh tab** vẫn được tôn trọng.
+- Bấm một phiên ở danh sách bên trái nay chuyển tới tab đã mở hoặc xếp phiên thành tab mới; chỉ dùng lại vùng chính khi đó thực sự là bản nháp trống.
+- Nút **Trình duyệt** vẫn nằm ở thanh điều hướng bên trái nhưng nội dung web mở thành tab ở vùng giữa, cạnh các phiên làm việc; tab có tiêu đề theo ngôn ngữ giao diện và vẫn có thể kéo ra cạnh để xem song song.
+- Nâng mã định danh Browser để tự di chuyển bản đã bị ghim nhầm vào vùng danh sách phiên ở các build thử trước; giữ nguyên địa chỉ cuối và partition cookie `persist:hermes-preview`.
+- Cho phép popup do người dùng kích hoạt để các website có luồng đăng nhập OAuth hoặc mạng xã hội hoạt động trong phiên Browser dùng chung.
+- Xác minh hiện tại: 54/54 kiểm thử mục tiêu đạt; Desktop typecheck đạt; ESLint và Prettier các tệp thay đổi đạt; production build đạt. Chưa đóng gói/cài lại bản Windows sau lát cắt này.
+
 ## Cập nhật 2026-08-14 — sửa lỗi Windows chặn Python khi cài mới
 
 - Xác định nguyên nhân từ nhật ký Windows Code Integrity: Enterprise Application Control cho phép ứng dụng Hermes nhưng chặn `python.exe` không có chữ ký trong bản Python do `uv` quản lý.

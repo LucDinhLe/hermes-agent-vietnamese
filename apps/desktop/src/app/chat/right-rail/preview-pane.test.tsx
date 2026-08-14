@@ -116,7 +116,7 @@ describe('PreviewPane console state', () => {
     await act(async () => {
       rendered = render(
         <PreviewPane
-          tabId="url:browser"
+          tabId="url:shared-browser-v2"
           target={{
             kind: 'url',
             label: 'Browser',
@@ -133,6 +133,8 @@ describe('PreviewPane console state', () => {
     )
     expect(rendered.getByText('Shared with agent')).toBeTruthy()
     expect(rendered.getByRole('button', { name: 'Reload page' })).toBeTruthy()
+    expect(rendered.container.querySelector('webview')?.getAttribute('partition')).toBe('persist:hermes-preview')
+    expect(rendered.container.querySelector('webview')?.getAttribute('allowpopups')).toBe('true')
   })
 
   it('renders authenticated remote HTML safely and honors source mode', async () => {

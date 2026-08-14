@@ -10,6 +10,7 @@ import {
   closePreviewForSource,
   closeRightRail,
   closeRightRailTab,
+  decodePreviewTabs,
   openPreview,
   previewTabId,
   type PreviewTarget,
@@ -80,6 +81,15 @@ describe('preview store', () => {
     expect(urlTabs).toHaveLength(1)
     expect(urlTabs[0].target.url).toBe('https://www.reddit.com')
     expect($rightRailActiveTabId.get()).toBe(urlTabs[0].id)
+  })
+
+  it('rekeys the legacy Browser pane so an upgrade can adopt it into the corrected workspace location', () => {
+    const browser = urlTarget('https://facebook.com')
+    const restored = decodePreviewTabs(JSON.stringify([{ id: 'url:browser', target: browser }]))
+
+    expect(restored).toHaveLength(1)
+    expect(restored[0].id).toBe(previewTabId(browser))
+    expect(restored[0].target.url).toBe('https://facebook.com')
   })
 
   it('re-fronts an existing tab instead of duplicating it, refreshing its target', () => {

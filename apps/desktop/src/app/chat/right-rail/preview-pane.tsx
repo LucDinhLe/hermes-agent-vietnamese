@@ -371,11 +371,11 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
         return interactPreviewWebview(webview, opts)
       },
       read: async () => {
-      const webview = webviewRef.current
+        const webview = webviewRef.current
 
-      if (!webview) {
-        throw new Error('preview webview is not ready')
-      }
+        if (!webview) {
+          throw new Error('preview webview is not ready')
+        }
 
         return readPreviewWebview(webview)
       }
@@ -591,6 +591,10 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
 
     const webview = document.createElement('webview') as PreviewWebview
     webview.className = 'flex h-full w-full flex-1 bg-transparent'
+    // OAuth/social sign-in commonly opens a user-initiated popup. Keep that
+    // browser behavior available; the guest shares this persistent partition,
+    // so successful sign-in remains local and reusable across app launches.
+    webview.setAttribute('allowpopups', 'true')
     webview.setAttribute('partition', 'persist:hermes-preview')
     webview.setAttribute('src', target.url)
     webview.setAttribute('webpreferences', 'contextIsolation=yes,nodeIntegration=no,sandbox=yes')

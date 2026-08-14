@@ -192,7 +192,11 @@ export const $previewServerRestartStatus = computed($previewServerRestart, resta
  *  browser it already has — re-front the tab, swap its target, and the pane
  *  rebuilds its webview against the new url. Files and artifacts stay keyed
  *  by identity; only the web surface is a singleton. */
-const BROWSER_TAB_ID: RightRailTabId = 'url:browser'
+// v2 deliberately changes the pane identity. Builds that first introduced the
+// shared Browser docked it into the narrow Sessions zone; re-keying preserves
+// the last URL/cookies while letting pane adoption place the Browser in the
+// center workspace on upgrade. The obsolete pane is pruned by paneMirror.
+const BROWSER_TAB_ID: RightRailTabId = 'url:shared-browser-v2'
 
 export function previewTabId(target: PreviewTarget): RightRailTabId {
   return target.kind === 'url' ? BROWSER_TAB_ID : `${target.kind}:${target.url}`

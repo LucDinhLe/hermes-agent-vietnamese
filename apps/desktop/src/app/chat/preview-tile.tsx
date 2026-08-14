@@ -14,6 +14,7 @@ import { findGroup } from '@/components/pane-shell/tree/model'
 import { $activeTreeGroup, $layoutTree, revealTreePane } from '@/components/pane-shell/tree/store'
 import { FileTypeIcon } from '@/components/ui/file-type-icon'
 import { ToolIcon } from '@/components/ui/tool-icon'
+import { useI18n } from '@/i18n'
 import { $rightRailActiveTabId, type RightRailTabId, selectRightRailTab } from '@/store/layout'
 import { $previewTabs, closeRightRailTab, type PreviewTarget } from '@/store/preview'
 
@@ -68,6 +69,19 @@ function PreviewTabLead({ tabId }: { tabId: string }) {
   }
 
   return <FileTypeIcon className="opacity-70" path={target.path || target.url} size="0.6875rem" />
+}
+
+/** URL previews are the persistent Browser surface, so their visible tab title
+ * follows the app locale instead of exposing the internal English label. */
+function PreviewTabTitle({ tabId }: { tabId: string }) {
+  const { t } = useI18n()
+  const target = targetFor(tabId)
+
+  return target?.kind === 'url' ? t.sidebar.nav.browser : previewTitle(tabId)
+}
+
+export function previewTileDock(target: PreviewTarget | null): { anchor: string; dir: 'center' | 'right' } {
+  return target?.kind === 'url' ? { anchor: 'workspace', dir: 'center' } : { anchor: 'workspace', dir: 'right' }
 }
 
 const PREVIEW_TILE_PREFIX = 'preview-tile'
@@ -128,14 +142,16 @@ const watchPreviewTileMirror = paneMirror<{ id: string }>({
   // the split weights. NOT anchored to the file tree — the old rail was a
   // files-adjacent strip, and carrying that over welded preview into the file
   // browser's zone, so ⌘J (toggle file browser) took the preview with it.
-  // Browser starts as a tab in the left Sessions zone. The user can switch
-  // between them in one click, or drag Browser out to get a resizable split.
+  // Browser starts as a tab in the center workspace, beside conversation tabs.
+  // The left navigation button reveals it; the user can drag it out to get a
+  // resizable split without turning the narrow Sessions sidebar into a webview.
   // File/artifact previews keep their roomy workspace-adjacent behavior.
-  anchor: tab => (targetFor(tab.id)?.kind === 'url' ? 'sessions' : 'workspace'),
-  dir: tab => (targetFor(tab.id)?.kind === 'url' ? 'center' : 'right'),
+  anchor: tab => previewTileDock(targetFor(tab.id)).anchor,
+  dir: tab => previewTileDock(targetFor(tab.id)).dir,
   minWidth: '22rem',
   title: previewTitle,
   tabLead: tabId => <PreviewTabLead tabId={tabId} />,
+  tabTitle: tabId => <PreviewTabTitle tabId={tabId} />,
   // Console + DevTools as bare strip glyphs after the last tab, where "+" sits.
   // Only a URL preview has a webview behind it, so a file/artifact tab gets none.
   stripTools: tabId => (targetFor(tabId)?.kind === 'url' ? previewStripTools(tabId) : []),
