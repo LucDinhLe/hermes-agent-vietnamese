@@ -1,5 +1,13 @@
 # Tiến độ
 
+## Cập nhật 2026-08-14 — khôi phục nút đóng tab phiên
+
+- Khôi phục nút `×` trên mọi tab ngang có thể đóng: tab đang hoạt động luôn hiển thị, tab nền hiện khi rê chuột hoặc focus bằng bàn phím.
+- Nút dùng vùng bấm 24 px, con trỏ bàn tay, nhãn trợ năng và tooltip theo ngôn ngữ giao diện; thao tác được chặn khỏi cơ chế kéo/chọn tab để một lần bấm chỉ thực hiện một việc.
+- Giữ nguyên hành vi an toàn có sẵn: phiên đang chạy hỏi xác nhận, còn đóng tab chỉ ẩn tab và phiên vẫn mở lại được từ danh sách bên trái.
+- Chuẩn hóa tiêu đề tab từ dữ liệu cũ `NEW SESSION` thành **Phiên mới** theo locale hiện tại; tiêu đề thật do người dùng đặt không bị thay đổi.
+- Xác minh: 28/28 kiểm thử mục tiêu đạt; typecheck đạt; lint 0 lỗi; 3.679/3.686 phép thử UI đầy đủ đạt ở lượt song song và cả 7 lỗi timeout/chồng DOM đều đạt khi chạy lại riêng; production build Desktop đạt ngoài sandbox.
+
 ## Cập nhật 2026-08-14 — phát hành vi-v0.20.0-12
 
 - PR #14 đã nhập vào `main`, gồm luồng cài đặt/kết nối model, sửa bootstrap Windows, khôi phục tab nhiều phiên và đưa Trình duyệt dùng chung vào panel phải.

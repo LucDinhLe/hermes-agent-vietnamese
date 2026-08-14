@@ -1,9 +1,14 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { setRuntimeI18nLocale } from '@/i18n'
+
 import { PaneTab, PaneTabLabel } from './pane-tab'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  setRuntimeI18nLocale('en')
+})
 
 describe('PaneTab close gestures', () => {
   it('middle-click closes — pointer events only, no auxclick', () => {
@@ -90,5 +95,70 @@ describe('PaneTab close gestures', () => {
 
     fireEvent.pointerDown(screen.getByText('tab'), { button: 0, metaKey: true })
     expect(onPointerDown).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('PaneTab visible close button', () => {
+  it('renders a localized close button for a closeable horizontal tab', () => {
+    setRuntimeI18nLocale('vi')
+
+    render(
+      <PaneTab onClose={vi.fn()}>
+        <PaneTabLabel>tab</PaneTabLabel>
+      </PaneTab>
+    )
+
+    expect(screen.getByRole('button', { name: 'Đóng tab' })).toBeTruthy()
+  })
+
+  it('keeps the close button visible on the active tab and uses a hand cursor', () => {
+    render(
+      <PaneTab active onClose={vi.fn()}>
+        <PaneTabLabel>tab</PaneTabLabel>
+      </PaneTab>
+    )
+
+    const closeButton = screen.getByRole('button', { name: 'Close tab' })
+
+    expect(closeButton.className).toContain('cursor-pointer')
+    expect(closeButton.className).toContain('opacity-100')
+  })
+
+  it('clicking the close button calls onClose without activating or dragging the tab', () => {
+    const onClose = vi.fn()
+    const onTabPointerDown = vi.fn()
+
+    render(
+      <PaneTab onClose={onClose} onPointerDown={onTabPointerDown}>
+        <PaneTabLabel>tab</PaneTabLabel>
+      </PaneTab>
+    )
+
+    const closeButton = screen.getByRole('button', { name: 'Close tab' })
+    fireEvent.pointerDown(closeButton)
+    fireEvent.click(closeButton)
+
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onTabPointerDown).not.toHaveBeenCalled()
+  })
+
+  it('does not render the close button on a vertical rail', () => {
+    render(
+      <PaneTab onClose={vi.fn()} vertical>
+        <PaneTabLabel>tab</PaneTabLabel>
+      </PaneTab>
+    )
+
+    expect(screen.queryByRole('button', { name: 'Close tab' })).toBeNull()
+  })
+
+  it('does not render the close button for an uncloseable tab', () => {
+    render(
+      <PaneTab>
+        <PaneTabLabel>tab</PaneTabLabel>
+      </PaneTab>
+    )
+
+    expect(screen.queryByRole('button', { name: 'Close tab' })).toBeNull()
   })
 })

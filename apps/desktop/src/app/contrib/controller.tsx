@@ -4,6 +4,7 @@ import type { CSSProperties, ReactElement, PointerEvent as ReactPointerEvent } f
 
 import { SessionDraftTitle } from '@/app/chat/session-draft-title'
 import { SessionStatusDot } from '@/app/chat/session-status-dot'
+import { sessionTabTitle } from '@/app/chat/session-tab-title'
 import { PALETTE_AREA, type PaletteContribution, paletteToggle } from '@/app/command-palette/contrib'
 import { type StatusbarItem } from '@/app/shell/statusbar-controls'
 import { IdleMount } from '@/components/idle-mount'
@@ -38,7 +39,6 @@ import { useContributions } from '@/contrib/react/use-contributions'
 import { registry } from '@/contrib/registry'
 import { discoverRuntimePlugins } from '@/contrib/runtime-loader'
 import { translateNow } from '@/i18n/runtime'
-import { NEW_SESSION_TITLE, sessionTitle as storedSessionTitle } from '@/lib/chat-runtime'
 import { Download, FileText, LayoutDashboard, PanelBottom, Terminal, Upload, Zap } from '@/lib/icons'
 import { type KeybindContribution, KEYBINDS_AREA } from '@/lib/keybinds/actions'
 import { setYoloEnabled } from '@/lib/yolo-session'
@@ -120,7 +120,7 @@ const workspaceDragPayload = (): SessionDragPayload | null => {
 
   const stored = $sessions.get().find(s => sessionMatchesStoredId(s, selected))
 
-  return { id: selected, profile: stored?.profile ?? '', title: stored ? storedSessionTitle(stored) : '' }
+  return { id: selected, profile: stored?.profile ?? '', title: stored ? sessionTabTitle(stored) : '' }
 }
 
 // The main tab drags like a session tile — drop it on a composer to link the
@@ -162,7 +162,7 @@ registry.registerMany([
     id: 'workspace',
     area: 'panes',
     // Live-retitled to the loaded session by syncWorkspaceTitle below.
-    title: NEW_SESSION_TITLE,
+    title: translateNow('commandCenter.nav.newChat.title'),
     data: {
       placement: 'main',
       minWidth: '22vw',
@@ -443,7 +443,7 @@ const syncWorkspaceTitle = () => {
     area: 'panes',
     // The placeholder, not the draft's live name — `tabTitle` below renders
     // that. Keeping it here would re-register the pane on every keystroke.
-    title: stored ? storedSessionTitle(stored) : NEW_SESSION_TITLE,
+    title: stored ? sessionTabTitle(stored) : translateNow('commandCenter.nav.newChat.title'),
     data: {
       // The tab's status dot — the SAME primitive the sidebar row and session
       // tiles render, so the main tab never disagrees with its sidebar row. A
