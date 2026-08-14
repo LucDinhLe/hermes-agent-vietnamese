@@ -7,7 +7,9 @@
 - Nút **Trình duyệt** vẫn nằm ở thanh điều hướng bên trái nhưng nội dung web mở thành tab ở vùng giữa, cạnh các phiên làm việc; tab có tiêu đề theo ngôn ngữ giao diện và vẫn có thể kéo ra cạnh để xem song song.
 - Nâng mã định danh Browser để tự di chuyển bản đã bị ghim nhầm vào vùng danh sách phiên ở các build thử trước; giữ nguyên địa chỉ cuối và partition cookie `persist:hermes-preview`.
 - Cho phép popup do người dùng kích hoạt để các website có luồng đăng nhập OAuth hoặc mạng xã hội hoạt động trong phiên Browser dùng chung.
-- Xác minh hiện tại: 54/54 kiểm thử mục tiêu đạt; Desktop typecheck đạt; ESLint và Prettier các tệp thay đổi đạt; production build đạt. Chưa đóng gói/cài lại bản Windows sau lát cắt này.
+- Xác minh hiện tại: 54/54 kiểm thử mục tiêu đạt; Desktop typecheck đạt; ESLint và Prettier các tệp thay đổi đạt; production build và Windows x64 unpacked đạt.
+- Đã nâng cấp bản `c7cee6a1d` trên máy Windows thử nghiệm với điểm quay lui riêng. Bootstrap tự đồng bộ đúng commit sau khi nhánh được đẩy lên GitHub; marker hoàn tất và `/api/health` trả `ok`, Hermes 0.20.0.
+- Toàn bộ UI suite không hoàn tất trong giới hạn 180 giây và lặp lại các lỗi nền không thuộc lát cắt tại `prompt-overlays`, `messaging`, `gateway-settings` và `skills`; không ghi nhận bộ này là đạt. Bước quan sát giao diện tự động không khả dụng trong môi trường thử, nên cần xác nhận trực quan thủ công trên cửa sổ Hermes đang mở.
 
 ## Cập nhật 2026-08-14 — sửa lỗi Windows chặn Python khi cài mới
 
