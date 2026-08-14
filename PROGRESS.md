@@ -1,5 +1,15 @@
 # Tiến độ
 
+## Cập nhật 2026-08-14 — sửa lỗi Windows chặn Python khi cài mới
+
+- Xác định nguyên nhân từ nhật ký Windows Code Integrity: Enterprise Application Control cho phép ứng dụng Hermes nhưng chặn `python.exe` không có chữ ký trong bản Python do `uv` quản lý.
+- Windows bootstrap chuyển sang CPython 3.12.10 chính thức có chữ ký của Python Software Foundation; bộ cài kiểm tra cả chữ ký Authenticode và SHA-256 đã ghim trước khi chạy.
+- Hỗ trợ Windows x64 và ARM64; `uv` nhận đường dẫn tuyệt đối tới interpreter đã xác minh để không tự chọn lại bản Python không có chữ ký.
+- Lưu lựa chọn interpreter tin cậy qua các stage, tái sử dụng Python hợp lệ đã cài theo Hermes, registry hoặc PATH khi sửa chữa và cập nhật.
+- Fresh-install smoke test dùng hồ sơ riêng trong LocalAppData trên Windows và tự đi qua lựa chọn cài cục bộ; không đọc hoặc sửa hồ sơ Hermes chính.
+- Xác minh thật trên máy có Application Control: Python 3.12.10 và `venv\\Scripts\\python.exe` đều có chữ ký hợp lệ; stage phụ thuộc hoàn tất; CLI Hermes chạy; `/api/health` trả HTTP 200 với Hermes 0.20.0.
+- 17/17 kiểm thử hồi quy installer đạt; 13/13 kiểm thử fresh-install/gate đạt; Desktop typecheck đạt; lint 0 lỗi. Toàn bộ Electron suite có 19 lỗi nền tảng cũ khi các ca POSIX chạy trên Windows, không liên quan lát cắt này và không được ghi nhận là đạt.
+
 ## Cập nhật 2026-08-14 — không gian Trình duyệt dùng chung
 
 - Thêm **Trình duyệt** vào thanh điều hướng bên trái và mở trong cùng vùng với **Phiên** theo mặc định.

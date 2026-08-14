@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { listPackage } from '@electron/asar'
 
 import PACKAGE_JSON from '../package.json' with { type: 'json' }
+import { freshInstallSandboxPrefix } from './fresh-install-sandbox.mjs'
 import { packagedAppDirectoryName } from './packaged-layout.mjs'
 
 const MODE = process.argv[2] || 'help'
@@ -61,7 +62,12 @@ const DEFAULT_HERMES_HOME = (() => {
   return path.join(os.homedir(), '.hermes')
 })()
 const VENV_ROOT = path.join(DEFAULT_HERMES_HOME, 'hermes-agent', 'venv')
-const FRESH_SANDBOX_ROOT = path.join(os.tmpdir(), 'hermes-desktop-fresh-install')
+const FRESH_SANDBOX_PREFIX = freshInstallSandboxPrefix({
+  platform: PLATFORM,
+  localAppData: process.env.LOCALAPPDATA || '',
+  homeDir: os.homedir(),
+  tempDir: os.tmpdir()
+})
 
 function die(message) {
   console.error(`\n${message}`)
@@ -239,7 +245,8 @@ function launchFresh() {
     die(`Missing app executable: ${APP.binary}`)
   }
 
-  const sandbox = fs.mkdtempSync(`${FRESH_SANDBOX_ROOT}-`)
+  fs.mkdirSync(path.dirname(FRESH_SANDBOX_PREFIX), { recursive: true })
+  const sandbox = fs.mkdtempSync(FRESH_SANDBOX_PREFIX)
   const userDataDir = path.join(sandbox, 'electron-user-data')
   const hermesHome = path.join(sandbox, 'hermes-home')
   const cwd = path.join(sandbox, 'workspace')
@@ -257,7 +264,7 @@ function launchFresh() {
 
   env.HERMES_DESKTOP_CWD = cwd
   env.HERMES_DESKTOP_IGNORE_EXISTING = '1'
-  env.HERMES_DESKTOP_TEST_MODE = 'fresh-install'
+  env.HERMES_DESKTOP_TEST_MODE = 'fresh-install-auto'
   env.HERMES_DESKTOP_USER_DATA_DIR = userDataDir
   env.HERMES_HOME = hermesHome
   delete env.HERMES_DESKTOP_HERMES

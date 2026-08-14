@@ -376,6 +376,8 @@ $script:ResolvedPathReport = @{
 $RepoUrlSsh = "git@github.com:LucDinhLe/hermes-agent-vietnamese.git"
 $RepoUrlHttps = "https://github.com/LucDinhLe/hermes-agent-vietnamese.git"
 $PythonVersion = "3.11"
+$WindowsOfficialPythonVersion = "3.12.10"
+$WindowsOfficialPythonMinor = "3.12"
 # Minor versions the installer accepts when the requested $PythonVersion isn't
 # available, in preference order.  uv discovers both uv-managed and system
 # interpreters, so this list also matches a pre-existing system Python.  Single
@@ -489,6 +491,218 @@ function Invoke-NativeWithRelaxedErrorAction {
         $ErrorActionPreference = $prevEAP
     }
 }
+
+function Get-WindowsOfficialPythonSpec {
+    $arch = Get-WindowsArch
+    $fileName = switch ($arch) {
+        "x64" { "python-$WindowsOfficialPythonVersion-amd64.exe" }
+        "arm64" { "python-$WindowsOfficialPythonVersion-arm64.exe" }
+        default { throw "Hermes Desktop supports official Python bootstrap only on Windows x64 and ARM64 (detected $arch)." }
+    }
+    $sha256 = switch ($arch) {
+        "x64" { "67B5635E80EA51072B87941312D00EC8927C4DB9BA18938F7AD2D27B328B95FB" }
+        "arm64" { "377AC8FD478987940088E879441E702A71B53164D2A1E6F1D51FF77A7E470258" }
+    }
+
+    return @{
+        Arch = $arch
+        FileName = $fileName
+        Minor = $WindowsOfficialPythonMinor
+        Sha256 = $sha256
+        Url = "https://www.python.org/ftp/python/$WindowsOfficialPythonVersion/$fileName"
+        Version = $WindowsOfficialPythonVersion
+    }
+}
+
+function Get-WindowsOfficialPythonExe {
+    $spec = Get-WindowsOfficialPythonSpec
+    return Join-Path $HermesHome "python\cpython-$($spec.Version)-$($spec.Arch)\python.exe"
+}
+
+function Get-TrustedWindowsPythonMarker {
+    return Join-Path $HermesHome "python\trusted-python-path.txt"
+}
+
+function Test-TrustedWindowsPython {
+    param([Parameter(Mandatory = $true)][string]$PythonExe)
+
+    if (-not (Test-Path -LiteralPath $PythonExe)) { return $false }
+
+    try {
+        $signature = Get-AuthenticodeSignature -LiteralPath $PythonExe
+        $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { "" }
+        if ($signature.Status -ne "Valid" -or $signer -notlike "*Python Software Foundation*") {
+            return $false
+        }
+
+        $previousEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            $versionOutput = & $PythonExe --version 2>&1
+            $exitCode = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $previousEAP
+        }
+
+        return $exitCode -eq 0 -and $versionOutput -match "Python $WindowsOfficialPythonMinor\."
+    } catch {
+        return $false
+    }
+}
+
+function Resolve-TrustedWindowsPython {
+    $candidates = [System.Collections.Generic.List[string]]::new()
+    $marker = Get-TrustedWindowsPythonMarker
+
+    if (Test-Path -LiteralPath $marker) {
+        try {
+            $savedPath = (Get-Content -LiteralPath $marker -Raw -ErrorAction Stop).Trim()
+            if ($savedPath) { $null = $candidates.Add($savedPath) }
+        } catch { }
+    }
+
+    $null = $candidates.Add((Get-WindowsOfficialPythonExe))
+
+    $registryPaths = @(
+        "HKCU:\Software\Python\PythonCore\$WindowsOfficialPythonMinor\InstallPath",
+        "HKLM:\Software\Python\PythonCore\$WindowsOfficialPythonMinor\InstallPath",
+        "HKLM:\Software\WOW6432Node\Python\PythonCore\$WindowsOfficialPythonMinor\InstallPath"
+    )
+    foreach ($registryPath in $registryPaths) {
+        try {
+            $installPath = (Get-Item -LiteralPath $registryPath -ErrorAction Stop).GetValue("")
+            if ($installPath) { $null = $candidates.Add((Join-Path $installPath "python.exe")) }
+        } catch { }
+    }
+
+    $knownPaths = @(
+        (Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"),
+        (Join-Path $env:ProgramFiles "Python312\python.exe")
+    )
+    foreach ($knownPath in $knownPaths) {
+        if ($knownPath) { $null = $candidates.Add($knownPath) }
+    }
+
+    foreach ($commandName in @("python.exe", "python3.exe")) {
+        try {
+            foreach ($command in @(Get-Command $commandName -All -ErrorAction SilentlyContinue)) {
+                if ($command.Source) { $null = $candidates.Add($command.Source) }
+            }
+        } catch { }
+    }
+
+    $seen = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+    foreach ($candidate in $candidates) {
+        if (-not $candidate) { continue }
+        try { $fullPath = [System.IO.Path]::GetFullPath($candidate) } catch { continue }
+        if (-not $seen.Add($fullPath)) { continue }
+        $isTrusted = Test-TrustedWindowsPython -PythonExe $fullPath
+        if ($env:HERMES_DEBUG_INSTALL -eq "1") {
+            Write-Info "Trusted Python candidate: $fullPath (accepted=$isTrusted)"
+        }
+        if (-not $isTrusted) { continue }
+
+        try {
+            $markerDir = Split-Path -Parent $marker
+            New-Item -ItemType Directory -Path $markerDir -Force | Out-Null
+            Set-Content -LiteralPath $marker -Value $fullPath -Encoding UTF8
+        } catch { }
+        return $fullPath
+    }
+
+    return $null
+}
+
+function Install-WindowsOfficialPython {
+    $spec = Get-WindowsOfficialPythonSpec
+    $targetDir = Join-Path $HermesHome "python\cpython-$($spec.Version)-$($spec.Arch)"
+    $pythonExe = Join-Path $targetDir "python.exe"
+
+    $trustedPython = Resolve-TrustedWindowsPython
+    if ($trustedPython) {
+        $script:PythonVersion = $spec.Minor
+        Write-Success "Trusted Python found (Python $($spec.Minor), signed by Python Software Foundation)"
+        return $true
+    }
+
+    $cacheDir = Join-Path $HermesHome "bootstrap-cache\python.org"
+    $installerPath = Join-Path $cacheDir $spec.FileName
+    $partialPath = "$installerPath.partial"
+
+    try {
+        New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+
+        if (Test-Path -LiteralPath $installerPath) {
+            $cachedHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash
+            if ($cachedHash -ne $spec.Sha256) {
+                Write-Warn "Cached Python installer hash mismatch; downloading a clean copy."
+                Remove-Item -LiteralPath $installerPath -Force
+            }
+        }
+
+        if (-not (Test-Path -LiteralPath $installerPath)) {
+            Write-Info "Downloading signed CPython $($spec.Version) for Windows $($spec.Arch) ..."
+            Remove-Item -LiteralPath $partialPath -Force -ErrorAction SilentlyContinue
+            Invoke-WebRequest -Uri $spec.Url -OutFile $partialPath -UseBasicParsing
+
+            $downloadHash = (Get-FileHash -LiteralPath $partialPath -Algorithm SHA256).Hash
+            if ($downloadHash -ne $spec.Sha256) {
+                throw "Python installer SHA-256 mismatch (expected $($spec.Sha256), got $downloadHash)"
+            }
+
+            Move-Item -LiteralPath $partialPath -Destination $installerPath -Force
+        }
+
+        $installerHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash
+        if ($installerHash -ne $spec.Sha256) {
+            throw "Cached Python installer SHA-256 mismatch"
+        }
+
+        $installerSignature = Get-AuthenticodeSignature -LiteralPath $installerPath
+        $installerSigner = if ($installerSignature.SignerCertificate) { $installerSignature.SignerCertificate.Subject } else { "" }
+        if ($installerSignature.Status -ne "Valid" -or $installerSigner -notlike "*Python Software Foundation*") {
+            throw "Python installer is not validly signed by the Python Software Foundation"
+        }
+
+        Unblock-File -LiteralPath $installerPath -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+
+        $arguments = @(
+            "/quiet",
+            "InstallAllUsers=0",
+            "TargetDir=`"$targetDir`"",
+            "Include_launcher=0",
+            "Include_test=0",
+            "Include_doc=0",
+            "Include_tcltk=0",
+            "Include_pip=0",
+            "PrependPath=0",
+            "Shortcuts=0",
+            "AssociateFiles=0",
+            "CompileAll=0"
+        )
+        $process = Start-Process -FilePath $installerPath -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
+        if ($process.ExitCode -ne 0) {
+            throw "Official Python installer exited with code $($process.ExitCode)"
+        }
+
+        $trustedPython = Resolve-TrustedWindowsPython
+        if (-not $trustedPython) {
+            throw "Installed Python could not run or did not retain its trusted publisher signature"
+        }
+
+        $script:PythonVersion = $spec.Minor
+        Write-Success "Trusted Python installed (Python $($spec.Version), $($spec.Arch))"
+        return $true
+    } catch {
+        Remove-Item -LiteralPath $partialPath -Force -ErrorAction SilentlyContinue
+        Write-Warn "Official Python install failed: $($_.Exception.Message)"
+        return $false
+    }
+}
+
 function Discard-LockfileChurn {
     param([string]$Repo = $InstallDir)
 
@@ -1100,6 +1314,20 @@ function Resolve-AvailablePythonVersion {
 }
 
 function Test-Python {
+    # uv-managed Python comes from python-build-standalone. Its Windows
+    # executables are not Authenticode-signed and are rejected by enforced
+    # Application Control for Business policies. Use the official CPython
+    # installer on Windows, verify both its pinned SHA-256 and PSF publisher
+    # signature, and create the Hermes venv from that trusted interpreter.
+    if ($env:OS -eq "Windows_NT") {
+        Write-Info "Checking trusted Python $WindowsOfficialPythonMinor for Windows..."
+        if (Install-WindowsOfficialPython) { return $true }
+
+        Write-Err "Failed to install trusted Python for Windows"
+        Write-Info "Check access to https://www.python.org and retry."
+        return $false
+    }
+
     Write-Info "Checking Python $PythonVersion..."
     
     # Let uv find or install Python
@@ -2335,19 +2563,37 @@ function Install-Venv {
         return
     }
 
+    $pythonLabel = $PythonVersion
+
+    # On Windows, use the exact path to the PSF-signed interpreter installed by
+    # the python stage. Asking uv for a minor version would prefer its unsigned
+    # managed distribution and recreate the Application Control failure.
+    if ($env:OS -eq "Windows_NT") {
+        $trustedPython = Resolve-TrustedWindowsPython
+        if (-not $trustedPython) {
+            throw "Trusted Windows Python is missing or blocked. Re-run the python install stage."
+        }
+        $spec = Get-WindowsOfficialPythonSpec
+        $script:PythonVersion = $trustedPython
+        $pythonLabel = $spec.Minor
+    }
+
     # Re-resolve the interpreter before creating the venv.  Under Hermes-Setup.exe
     # each stage runs in its own powershell.exe, so the fallback the `python`
     # stage picked (e.g. 3.12 when 3.11 is absent) did NOT propagate into this
     # fresh process -- $PythonVersion is back at its "3.11" default.  Trusting it
     # here made `uv venv venv --python 3.11` fail with exit 2 on machines without
     # 3.11 even though the `python` stage reported success (issue #50769).
-    $resolved = Resolve-AvailablePythonVersion
-    if ($resolved -and $resolved -ne $PythonVersion) {
-        Write-Info "Python $PythonVersion not available; using detected Python $resolved"
-        $script:PythonVersion = $resolved
+    if ($env:OS -ne "Windows_NT") {
+        $resolved = Resolve-AvailablePythonVersion
+        if ($resolved -and $resolved -ne $PythonVersion) {
+            Write-Info "Python $PythonVersion not available; using detected Python $resolved"
+            $script:PythonVersion = $resolved
+            $pythonLabel = $resolved
+        }
     }
 
-    Write-Info "Creating virtual environment with Python $PythonVersion..."
+    Write-Info "Creating virtual environment with Python $pythonLabel..."
     
     Push-Location $InstallDir
 
@@ -2522,7 +2768,7 @@ function Install-Venv {
         }
     }
 
-    Write-Success "Virtual environment ready (Python $PythonVersion)"
+    Write-Success "Virtual environment ready (Python $pythonLabel)"
 }
 
 function Install-Dependencies {
