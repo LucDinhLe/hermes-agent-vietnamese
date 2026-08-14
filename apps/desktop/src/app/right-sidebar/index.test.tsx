@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { HermesReadDirResult } from '@/global'
+import { setRightSidebarView } from '@/store/layout'
+import { closeRightRail } from '@/store/preview'
 import { $connection, setCurrentCwd } from '@/store/session'
 
 import { resetProjectTreeState } from './files/use-project-tree'
@@ -17,6 +19,8 @@ function installBridge() {
 describe('RightSidebarPane', () => {
   beforeEach(() => {
     $connection.set(null)
+    closeRightRail()
+    setRightSidebarView('files')
     resetProjectTreeState()
     readDir.mockReset()
     readDir.mockResolvedValue({ entries: [{ isDirectory: false, name: 'README.md', path: '/repo/README.md' }] })
@@ -26,6 +30,8 @@ describe('RightSidebarPane', () => {
   afterEach(() => {
     cleanup()
     $connection.set(null)
+    closeRightRail()
+    setRightSidebarView('files')
     setCurrentCwd('')
     resetProjectTreeState()
     delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
@@ -53,5 +59,38 @@ describe('RightSidebarPane', () => {
 
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Refresh tree' })).toBeNull())
     expect(readDir).not.toHaveBeenCalled()
+  })
+
+  it('switches the right panel between local files and the shared Browser without unmounting either surface', async () => {
+    setCurrentCwd('/repo')
+
+    render(
+      <RightSidebarPane
+        browserContent={<div>Shared browser surface</div>}
+        onActivateFile={vi.fn()}
+        onActivateFolder={vi.fn()}
+      />
+    )
+
+    const filesButton = await screen.findByRole('button', { name: 'File system' })
+    const browserButton = screen.getByRole('button', { name: 'Browser' })
+    const filesSurface = screen.getByTestId('right-sidebar-files')
+    const browserSurface = screen.getByTestId('right-sidebar-browser')
+
+    expect(filesButton.getAttribute('aria-pressed')).toBe('true')
+    expect(filesSurface.getAttribute('aria-hidden')).toBe('false')
+    expect(browserSurface.getAttribute('aria-hidden')).toBe('true')
+
+    fireEvent.click(browserButton)
+
+    expect(browserButton.getAttribute('aria-pressed')).toBe('true')
+    expect(filesSurface.getAttribute('aria-hidden')).toBe('true')
+    expect(browserSurface.getAttribute('aria-hidden')).toBe('false')
+    expect(screen.getByText('Shared browser surface')).not.toBeNull()
+
+    fireEvent.click(filesButton)
+
+    expect(filesSurface.getAttribute('aria-hidden')).toBe('false')
+    expect(browserSurface.getAttribute('aria-hidden')).toBe('true')
   })
 })

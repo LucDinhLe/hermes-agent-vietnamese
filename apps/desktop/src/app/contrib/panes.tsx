@@ -12,6 +12,7 @@ import { useStore } from '@nanostores/react'
 import { useQuery } from '@tanstack/react-query'
 import { atom } from 'nanostores'
 
+import { PreviewPane } from '@/app/chat/right-rail/preview-pane'
 import { RightSidebarPane } from '@/app/right-sidebar'
 import { ReviewPane } from '@/app/right-sidebar/review'
 import type { GroupSetter } from '@/app/shell/group-setter'
@@ -25,7 +26,7 @@ import { getLogs } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { normalizeOrLocalPreviewTarget } from '@/lib/local-preview'
 import { cn } from '@/lib/utils'
-import { openPreview } from '@/store/preview'
+import { $previewReloadRequest, $previewTabs, openPreview } from '@/store/preview'
 import { $currentCwd } from '@/store/session'
 
 // ---------------------------------------------------------------------------
@@ -98,9 +99,28 @@ function previewFile(path: string) {
 const ZONE_CONTENT = 'h-full [&>aside]:h-full [&>aside]:w-full [&>aside]:pt-0'
 
 export function FilesPane() {
+  const previewReloadRequest = useStore($previewReloadRequest)
+  const previewTabs = useStore($previewTabs)
+  const restartPreviewServer = useStore($restartPreviewServer)
+  const browserTab = previewTabs.find(tab => tab.target.kind === 'url')
+
   return (
     <div className={ZONE_CONTENT}>
-      <RightSidebarPane onActivateFile={previewFile} onActivateFolder={previewFile} />
+      <RightSidebarPane
+        browserContent={
+          browserTab ? (
+            <PreviewPane
+              embedded
+              onRestartServer={restartPreviewServer ?? undefined}
+              reloadRequest={previewReloadRequest}
+              tabId={browserTab.id}
+              target={browserTab.target}
+            />
+          ) : undefined
+        }
+        onActivateFile={previewFile}
+        onActivateFolder={previewFile}
+      />
     </div>
   )
 }

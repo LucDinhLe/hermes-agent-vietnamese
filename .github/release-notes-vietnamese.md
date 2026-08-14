@@ -6,15 +6,15 @@ Bản cộng đồng đa nền tảng với giao diện tiếng Việt mặc đ�
 
 ### Chọn đúng tệp
 
-| Máy đang dùng           | Tải trực tiếp                                                                                                                                               |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows 10/11 x64       | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-11/Hermes-Vietnamese-Windows-x64-Setup.exe)           |
-| Windows 10/11 ARM64     | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-11/Hermes-Vietnamese-Windows-arm64-Setup.exe)       |
-| Mac chip Apple M-series | [Bộ cài macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-11/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
-| Mac chip Intel          | [Bộ cài macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-11/Hermes-Vietnamese-macOS-Intel.dmg)                 |
-| Ubuntu/Debian           | [Chọn `.deb` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                                  |
-| Fedora/RHEL             | [Chọn `.rpm` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                                  |
-| Linux khác              | [Chọn `.AppImage` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                             |
+| Máy đang dùng           | Tải trực tiếp                                                                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Windows 10/11 x64       | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-12/Hermes-Vietnamese-Windows-x64-Setup.exe)           |
+| Windows 10/11 ARM64     | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-12/Hermes-Vietnamese-Windows-arm64-Setup.exe)       |
+| Mac chip Apple M-series | [Bộ cài macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-12/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
+| Mac chip Intel          | [Bộ cài macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-12/Hermes-Vietnamese-macOS-Intel.dmg)                 |
+| Ubuntu/Debian           | [Chọn `.deb` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                                   |
+| Fedora/RHEL             | [Chọn `.rpm` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                                   |
+| Linux khác              | [Chọn `.AppImage` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                              |
 
 ### Kiểm tra máy trước khi tải
 
@@ -30,6 +30,9 @@ Mỗi người đăng nhập OpenAI Codex hoặc Claude Pro/Max bằng tài kho�
 
 ### Cải thiện trong bản vá này
 
+- Trình cài Windows tự chạy một lượt sửa chữa an toàn khi Python đã được Windows ghi nhận nhưng tệp cài đặt thực tế bị thiếu; thông báo lỗi cũng hiển thị đúng phiên bản Python 3.12.
+- Sửa lỗi `AIAgent.__init__()` khiến agent không khởi tạo khi vùng xem trước tương tác được bật.
+- Khôi phục thanh tab nhiều phiên luôn hiển thị ở vùng giữa; mở Trình duyệt dùng chung trong panel bên phải cạnh tên thư mục để trò chuyện và duyệt web song song. Chuyển giữa **Tệp** và **Trình duyệt** vẫn giữ cây thư mục, lịch sử trang và phiên đăng nhập.
 - Các tiêu đề giữ chỗ `NEW SESSION` do bản cũ đã lưu nay hiển thị thành `Phiên mới` khi dùng tiếng Việt, không sửa nội dung do người dùng tự đặt.
 - Khi nâng cấp ứng dụng, bản Desktop nay tự đồng bộ lõi Hermes đi kèm đúng một lần; lịch sử, cấu hình và thông tin đăng nhập cục bộ được giữ nguyên.
 - Trình cập nhật Windows không còn dừng nhầm chính ứng dụng Hermes trong bước làm mới môi trường chạy.

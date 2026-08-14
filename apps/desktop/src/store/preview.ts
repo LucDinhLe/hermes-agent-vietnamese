@@ -3,7 +3,13 @@ import { atom, computed } from 'nanostores'
 import { persistentAtom } from '@/lib/persisted'
 import { normalize } from '@/lib/text'
 
-import { $rightRailActiveTabId, type RightRailTabId, selectRightRailTab } from './layout'
+import {
+  $rightRailActiveTabId,
+  type RightRailTabId,
+  selectRightRailTab,
+  setFileBrowserOpen,
+  setRightSidebarView
+} from './layout'
 
 /**
  * PREVIEW RAIL — one list of tabs, one way in.
@@ -192,10 +198,15 @@ export const $previewServerRestartStatus = computed($previewServerRestart, resta
  *  browser it already has — re-front the tab, swap its target, and the pane
  *  rebuilds its webview against the new url. Files and artifacts stay keyed
  *  by identity; only the web surface is a singleton. */
-const BROWSER_TAB_ID: RightRailTabId = 'url:browser'
+// v2 deliberately changes the pane identity. Builds that first introduced the
+// shared Browser docked it into the narrow Sessions zone. The id still preserves
+// the saved target while the layout mirror now prunes that obsolete pane and
+// the persistent right rail renders the Browser directly.
+export const SHARED_BROWSER_TAB_ID: RightRailTabId = 'url:shared-browser-v2'
+export const SHARED_BROWSER_HOME = 'https://www.google.com/'
 
 export function previewTabId(target: PreviewTarget): RightRailTabId {
-  return target.kind === 'url' ? BROWSER_TAB_ID : `${target.kind}:${target.url}`
+  return target.kind === 'url' ? SHARED_BROWSER_TAB_ID : `${target.kind}:${target.url}`
 }
 
 // Browsing files is "peek at the source"; a tool or an explicit link handing
@@ -224,6 +235,35 @@ export function openPreview(target: PreviewTarget, source: PreviewRecordSource =
 
   $previewTabs.set(index === -1 ? [...current, tab] : current.map((item, i) => (i === index ? tab : item)))
   selectRightRailTab(id)
+
+  if (resolved.kind === 'url') {
+    setRightSidebarView('browser')
+    setFileBrowserOpen(true)
+  }
+}
+
+/** Reveal the one persistent Browser in the right rail without resetting the
+ * page it already has open. The first explicit open starts at the shared home. */
+export function openSharedBrowser(): void {
+  const existing = $previewTabs.get().find(tab => tab.target.kind === 'url')
+
+  if (existing) {
+    selectRightRailTab(existing.id)
+    setRightSidebarView('browser')
+    setFileBrowserOpen(true)
+
+    return
+  }
+
+  openPreview(
+    {
+      kind: 'url',
+      label: 'Browser',
+      source: SHARED_BROWSER_HOME,
+      url: SHARED_BROWSER_HOME
+    },
+    'manual'
+  )
 }
 
 export function closeRightRailTab(tabId: string) {

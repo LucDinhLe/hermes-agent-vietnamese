@@ -40,6 +40,26 @@ test('managed release refresh bypasses the first-run install choice', async () =
   assert.equal(gate.hasWaiter(), false)
 })
 
+test('automated fresh-install smoke tests continue locally without renderer input', async () => {
+  const prompts = []
+  const logs = []
+
+  const gate = createFirstRunSetupGate({
+    autoContinue: true,
+    log: message => logs.push(message),
+    promptChoice: backend => prompts.push(backend),
+    stuckAfterMs: 0
+  })
+
+  const decision = await gate.wait(bootstrapBackend)
+
+  assert.equal(decision, 'continue-local')
+  assert.equal(gate.isLocalBootstrapConfirmed(), true)
+  assert.equal(gate.hasWaiter(), false)
+  assert.deepEqual(prompts, [])
+  assert.equal(logs.some(message => message.includes('automated fresh-install smoke test')), true)
+})
+
 test('first-run setup gate prompts once for concurrent waits', async () => {
   const prompts = []
   const gate = createFirstRunSetupGate({ promptChoice: backend => prompts.push(backend), stuckAfterMs: 0 })

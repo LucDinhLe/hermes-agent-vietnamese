@@ -2,7 +2,10 @@
  * When a lone pane must keep its tab strip (name card + close).
  *
  * Default: a single pane isn't a "tab", so the header auto-hides. Exceptions
- * force it on so a closeable surface never becomes an unclosable dead zone:
+ * force it on so a closeable surface never becomes an unclosable dead zone and
+ * a chat workspace always keeps its session switcher visible:
+ *  - a chat/session pane, including the uncloseable workspace, because the
+ *    strip is the user's durable map of open conversations and owns the "+"
  *  - a closeable `placement: 'main'` pane — every mirrored TILE (a session, a
  *    page, a preview) is one, so dragging a tile into a zone of its own keeps
  *    its tab and its ✕
@@ -17,8 +20,13 @@ export interface LoneHeaderChrome {
 export function forceLoneHeaderForPanes(
   shown: readonly string[],
   chromeOf: (id: string) => LoneHeaderChrome,
-  isCollapsePane: (id: string) => boolean
+  isCollapsePane: (id: string) => boolean,
+  isSessionPane: (id: string) => boolean = () => false
 ): boolean {
+  if (shown.some(isSessionPane)) {
+    return true
+  }
+
   // "This pane can be closed, so it must expose the ✕." Only the uncloseable
   // workspace is exempt; standing side chrome (files / sessions) isn't 'main'.
   if (

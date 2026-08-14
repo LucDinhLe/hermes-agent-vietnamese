@@ -89,42 +89,46 @@ export function ReviewPane() {
                 says "review", so the zone header hides it (styles.css). */}
             <SidebarPanelLabel data-pane-self-label="">{c.review}</SidebarPanelLabel>
           </div>
-          <Tip label={treeMode === 'tree' ? c.viewAsList : c.viewAsTree}>
-            <Button
-              aria-label={treeMode === 'tree' ? c.viewAsList : c.viewAsTree}
-              className={ACTION_BTN}
-              disabled={!hasFiles}
-              onClick={toggleReviewTreeMode}
-              size="icon-xs"
-              variant="ghost"
-            >
-              <Codicon name={treeMode === 'tree' ? 'list-flat' : 'list-tree'} size="0.8125rem" />
-            </Button>
-          </Tip>
-          <Tip label={c.stageAll}>
-            <Button
-              aria-label={c.stageAll}
-              className={ACTION_BTN}
-              disabled={!hasFiles}
-              onClick={() => void stageReviewFile(null).catch(err => notifyError(err, c.stageAll))}
-              size="icon-xs"
-              variant="ghost"
-            >
-              <Codicon name="add" size="0.8125rem" />
-            </Button>
-          </Tip>
-          <Tip label={c.revertAll}>
-            <Button
-              aria-label={c.revertAll}
-              className={ACTION_BTN}
-              disabled={!hasFiles}
-              onClick={() => requestRevert(null)}
-              size="icon-xs"
-              variant="ghost"
-            >
-              <Codicon name="discard" size="0.8125rem" />
-            </Button>
-          </Tip>
+          {/* These actions have no effect in an empty working tree. Hiding
+              them keeps the pane honest instead of presenting faint,
+              unexplained controls that cannot do anything yet. */}
+          {hasFiles && (
+            <>
+              <Tip label={treeMode === 'tree' ? c.viewAsList : c.viewAsTree}>
+                <Button
+                  aria-label={treeMode === 'tree' ? c.viewAsList : c.viewAsTree}
+                  className={ACTION_BTN}
+                  onClick={toggleReviewTreeMode}
+                  size="icon-xs"
+                  variant="ghost"
+                >
+                  <Codicon name={treeMode === 'tree' ? 'list-flat' : 'list-tree'} size="0.8125rem" />
+                </Button>
+              </Tip>
+              <Tip label={c.stageAll}>
+                <Button
+                  aria-label={c.stageAll}
+                  className={ACTION_BTN}
+                  onClick={() => void stageReviewFile(null).catch(err => notifyError(err, c.stageAll))}
+                  size="icon-xs"
+                  variant="ghost"
+                >
+                  <Codicon name="add" size="0.8125rem" />
+                </Button>
+              </Tip>
+              <Tip label={c.revertAll}>
+                <Button
+                  aria-label={c.revertAll}
+                  className={ACTION_BTN}
+                  onClick={() => requestRevert(null)}
+                  size="icon-xs"
+                  variant="ghost"
+                >
+                  <Codicon name="discard" size="0.8125rem" />
+                </Button>
+              </Tip>
+            </>
+          )}
           <Tip label={t.rightSidebar.refreshTree}>
             <Button
               aria-label={t.rightSidebar.refreshTree}

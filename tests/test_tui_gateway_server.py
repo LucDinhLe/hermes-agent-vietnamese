@@ -3654,7 +3654,7 @@ def test_startup_runtime_resolves_short_alias_without_network(monkeypatch):
 
     model, provider = server._resolve_startup_runtime()
 
-    assert provider == "anthropic"
+    assert provider == "claude-code"
     assert model.startswith("claude-sonnet")
 
 
@@ -3673,7 +3673,7 @@ def test_startup_runtime_does_not_call_network_detector(monkeypatch):
     model, provider = server._resolve_startup_runtime()
 
     assert model
-    assert provider in {None, "anthropic"}
+    assert provider in {None, "claude-code"}
 
 
 def _session(agent=None, **extra):
@@ -16722,4 +16722,3 @@ def test_save_cfg_keeps_unicode_personalities_readable(tmp_path, monkeypatch):
     assert "你好" in text
     assert "(=^･ω･^=)" in text
     assert "\\u4f60" not in text
-

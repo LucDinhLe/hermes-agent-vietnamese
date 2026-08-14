@@ -48,6 +48,7 @@ const SIDEBAR_DISMISSED_AUTO_PROJECTS_STORAGE_KEY = 'hermes.desktop.dismissedAut
 const SIDEBAR_DISMISSED_WORKTREES_STORAGE_KEY = 'hermes.desktop.dismissedWorktrees'
 const PANES_FLIPPED_STORAGE_KEY = 'hermes.desktop.panesFlipped'
 const RIGHT_RAIL_ACTIVE_TAB_STORAGE_KEY = 'hermes.desktop.rightRailActiveTab'
+const RIGHT_SIDEBAR_VIEW_STORAGE_KEY = 'hermes.desktop.rightSidebarView'
 
 export const CHAT_SIDEBAR_PANE_ID = 'chat-sidebar'
 export const FILE_BROWSER_PANE_ID = 'file-browser'
@@ -58,6 +59,7 @@ export const FILES_PANE_ID = 'files'
 /** Every rail tab is a preview of something, namespaced by what backs it: a
  *  path on disk, a live URL, or an id into the in-memory artifact registry. */
 export type RightRailTabId = `artifact:${string}` | `file:${string}` | `url:${string}`
+export type RightSidebarView = 'browser' | 'files'
 
 ensurePaneRegistered(CHAT_SIDEBAR_PANE_ID, { open: true })
 ensurePaneRegistered(FILE_BROWSER_PANE_ID, { open: false })
@@ -78,6 +80,18 @@ export const $rightRailActiveTabId = persistentAtom<RightRailTabId | null>(RIGHT
   decode: raw => (raw ? (raw as RightRailTabId) : null),
   encode: tabId => tabId ?? ''
 })
+
+/** Which durable surface is visible inside the right-hand workspace rail.
+ * Both bodies stay mounted while switching so file-tree expansion, web history,
+ * and authenticated browser state survive the presentation-only toggle. */
+export const $rightSidebarView = persistentAtom<RightSidebarView>(RIGHT_SIDEBAR_VIEW_STORAGE_KEY, 'files', {
+  decode: raw => (raw === 'browser' ? 'browser' : 'files'),
+  encode: view => view
+})
+
+export function setRightSidebarView(view: RightSidebarView): void {
+  $rightSidebarView.set(view)
+}
 
 export const $sidebarWidth: ReadableAtom<number> = computed($paneStates, states => {
   const override = states[CHAT_SIDEBAR_PANE_ID]?.widthOverride

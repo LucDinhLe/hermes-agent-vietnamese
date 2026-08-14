@@ -20,6 +20,7 @@ from toolsets import TOOLSETS, resolve_toolset
 GUI_TOOLS = {
     "close_terminal",
     "focus_pane",
+    "interact_preview",
     "open_preview",
     "read_preview",
     "read_terminal",

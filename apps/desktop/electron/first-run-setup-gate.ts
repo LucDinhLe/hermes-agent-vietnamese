@@ -6,6 +6,7 @@ interface FirstRunSetupBackend {
 }
 
 interface FirstRunSetupGateOptions {
+  autoContinue?: boolean
   hideChoice?: () => void
   log?: (message: string) => void
   onStuck?: (backend: FirstRunSetupBackend, stuckAfterMs: number) => void
@@ -16,6 +17,7 @@ interface FirstRunSetupGateOptions {
 export type FirstRunSetupDecision = 'continue-local' | 'remote-applied' | 'reset'
 
 export function createFirstRunSetupGate({
+  autoContinue = false,
   hideChoice,
   log,
   onStuck,
@@ -68,6 +70,14 @@ export function createFirstRunSetupGate({
 
   const wait = async (backend?: FirstRunSetupBackend | null) => {
     if (!shouldGate(backend)) {
+      return 'continue-local' as const
+    }
+
+    if (autoContinue) {
+      localBootstrapConfirmed = true
+
+      log?.('[bootstrap] automated fresh-install smoke test selected local install')
+
       return 'continue-local' as const
     }
 

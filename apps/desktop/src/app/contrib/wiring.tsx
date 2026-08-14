@@ -895,9 +895,10 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     onReload: reloadFromMessage,
     onRemoveAttachment: id => void composer.removeAttachment(id),
     onRestoreToMessage: restoreToMessage,
-    // Already on screen (open tile, or the main session)? Jump to its tab;
-    // otherwise load it into main. Same door every other session link uses.
-    onResumeSession: sessionId => openSession(sessionId, navigate),
+    // Preserve the conversation already in main: jump to an existing tab or
+    // stack the selected session beside it. A truly blank workspace is still
+    // reused, so the first open does not create a redundant tab.
+    onResumeSession: sessionId => openSession(sessionId, navigate, 'stack'),
     onRetryResume: sessionId => void resumeSession(sessionId, true),
     onSteer: steerPrompt,
     onSubmit: submitText,

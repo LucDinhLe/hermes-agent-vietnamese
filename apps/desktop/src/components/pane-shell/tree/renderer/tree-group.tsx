@@ -244,12 +244,19 @@ export function TreeGroup({
   //    tile in its own zone is unclosable (the "3rd tile has no tab" trap);
   //  - a TOOL PANEL (terminal/logs — a collapse pane) dragged out of the main
   //    stack, else it's a dead zone with no tab to grab or ✕ to close.
-  // The uncloseable workspace and side chrome (sessions/files) keep the clean
+  // The chat workspace keeps its strip even while it is the only pane: those
+  // tabs are the user's durable map of open conversations and the strip owns
+  // the "+" action. Standing side chrome (sessions/files) keeps the clean
   // no-tab default. Double-click toggles it either way; a minimized group
   // always shows its header (it IS the header).
   // Session-tile ids force the header even before chrome registers — cycling
   // onto a freshly-split tile used to land headerless ("name card missing").
-  const forceLoneHeader = forceLoneHeaderForPanes(shown, id => paneChrome(paneFor(id)), isCollapsePane)
+  const forceLoneHeader = forceLoneHeaderForPanes(
+    shown,
+    id => paneChrome(paneFor(id)),
+    isCollapsePane,
+    isSessionStripPane
+  )
 
   // A full-page view (headerVeto) suppresses the strip while it's the active
   // pane — a page is not a tab-able surface; the bar returns with the chat.

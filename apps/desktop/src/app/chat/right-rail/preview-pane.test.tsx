@@ -110,6 +110,33 @@ describe('PreviewPane console state', () => {
     forgetPreviewStripTools(tabId)
   })
 
+  it('shows full browser controls and makes the shared agent session explicit', async () => {
+    let rendered!: ReturnType<typeof render>
+
+    await act(async () => {
+      rendered = render(
+        <PreviewPane
+          tabId="url:shared-browser-v2"
+          target={{
+            kind: 'url',
+            label: 'Browser',
+            source: 'https://example.com',
+            url: 'https://example.com'
+          }}
+        />
+      )
+    })
+
+    expect(rendered.getByRole('form', { name: 'Browser controls' })).toBeTruthy()
+    expect((rendered.getByRole('textbox', { name: 'Web address' }) as HTMLInputElement).value).toBe(
+      'https://example.com'
+    )
+    expect(rendered.getByText('Shared with agent')).toBeTruthy()
+    expect(rendered.getByRole('button', { name: 'Reload page' })).toBeTruthy()
+    expect(rendered.container.querySelector('webview')?.getAttribute('partition')).toBe('persist:hermes-preview')
+    expect(rendered.container.querySelector('webview')?.getAttribute('allowpopups')).toBe('true')
+  })
+
   it('renders authenticated remote HTML safely and honors source mode', async () => {
     const dataUrl = `data:text/html;base64,${btoa('<h1>remote</h1>')}`
 

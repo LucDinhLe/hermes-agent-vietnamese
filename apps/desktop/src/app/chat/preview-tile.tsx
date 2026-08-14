@@ -10,10 +10,13 @@
  * one bar instead of two.
  */
 
+import { computed } from 'nanostores'
+
 import { findGroup } from '@/components/pane-shell/tree/model'
 import { $activeTreeGroup, $layoutTree, revealTreePane } from '@/components/pane-shell/tree/store'
 import { FileTypeIcon } from '@/components/ui/file-type-icon'
 import { ToolIcon } from '@/components/ui/tool-icon'
+import { useI18n } from '@/i18n'
 import { $rightRailActiveTabId, type RightRailTabId, selectRightRailTab } from '@/store/layout'
 import { $previewTabs, closeRightRailTab, type PreviewTarget } from '@/store/preview'
 
@@ -70,6 +73,25 @@ function PreviewTabLead({ tabId }: { tabId: string }) {
   return <FileTypeIcon className="opacity-70" path={target.path || target.url} size="0.6875rem" />
 }
 
+/** URL previews are the persistent Browser surface, so their visible tab title
+ * follows the app locale instead of exposing the internal English label. */
+function PreviewTabTitle({ tabId }: { tabId: string }) {
+  const { t } = useI18n()
+  const target = targetFor(tabId)
+
+  return target?.kind === 'url' ? t.sidebar.nav.browser : previewTitle(tabId)
+}
+
+/** Browser belongs to the persistent right rail. Files and artifacts remain
+ * movable layout tiles beside the workspace. */
+export function isLayoutPreviewTarget(target: PreviewTarget | null): boolean {
+  return Boolean(target && target.kind !== 'url')
+}
+
+export function previewTileDock(_target: PreviewTarget | null): { anchor: string; dir: 'right' } {
+  return { anchor: 'workspace', dir: 'right' }
+}
+
 const PREVIEW_TILE_PREFIX = 'preview-tile'
 
 /** Keep pane contributions mirroring `$previewTabs`, keep the store's selection
@@ -86,7 +108,7 @@ export function watchPreviewTiles(): void {
   const reveal = () => {
     const tabId = $rightRailActiveTabId.get()
 
-    if (tabId && targetFor(tabId)) {
+    if (tabId && isLayoutPreviewTarget(targetFor(tabId))) {
       revealTreePane(`${PREVIEW_TILE_PREFIX}:${tabId}`)
     }
   }
@@ -120,18 +142,21 @@ export function watchPreviewTiles(): void {
   $activeTreeGroup.listen(follow)
 }
 
+const $layoutPreviewTabs = computed($previewTabs, tabs => tabs.filter(tab => isLayoutPreviewTarget(tab.target)))
+
 const watchPreviewTileMirror = paneMirror<{ id: string }>({
-  source: $previewTabs,
+  source: $layoutPreviewTabs,
   key: tab => tab.id,
   prefix: PREVIEW_TILE_PREFIX,
-  // Identical to route (page) tiles: its own zone docked beside main, sized by
-  // the split weights. NOT anchored to the file tree — the old rail was a
-  // files-adjacent strip, and carrying that over welded preview into the file
-  // browser's zone, so ⌘J (toggle file browser) took the preview with it.
-  dir: () => 'right',
+  // File/artifact previews stay as movable workspace-adjacent tiles. Browser
+  // is intentionally filtered out: it lives inside the persistent right rail,
+  // where files and web can switch without touching the conversation tabs.
+  anchor: tab => previewTileDock(targetFor(tab.id)).anchor,
+  dir: tab => previewTileDock(targetFor(tab.id)).dir,
   minWidth: '22rem',
   title: previewTitle,
   tabLead: tabId => <PreviewTabLead tabId={tabId} />,
+  tabTitle: tabId => <PreviewTabTitle tabId={tabId} />,
   // Console + DevTools as bare strip glyphs after the last tab, where "+" sits.
   // Only a URL preview has a webview behind it, so a file/artifact tab gets none.
   stripTools: tabId => (targetFor(tabId)?.kind === 'url' ? previewStripTools(tabId) : []),

@@ -2430,7 +2430,7 @@ def _resolve_static_model_alias(
             return provider, matched
 
     # Last resort: providers that re-expose other vendors' models. Only reached
-    # when no native-vendor catalog matched — so `sonnet` resolves to anthropic.
+    # when no native-vendor or direct subscription catalog matched.
     # None are currently defined (_BORROWED_MODEL_PROVIDERS is empty).
     for provider in _BORROWED_MODEL_PROVIDERS:
         if provider in current_keys and (matched := _match(provider)):

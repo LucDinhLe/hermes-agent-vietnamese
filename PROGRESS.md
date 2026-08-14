@@ -1,5 +1,49 @@
 # Tiến độ
 
+## Cập nhật 2026-08-14 — đưa Trình duyệt vào panel phải
+
+- Bỏ mục **Trình duyệt** khỏi thanh điều hướng bên trái và giữ nguyên toàn bộ tab phiên trong vùng làm việc giữa.
+- Thêm hai nút **Tệp** và **Trình duyệt** cạnh tên thư mục ở đầu panel phải; biểu tượng dùng kích thước điều khiển panel 32 px để dễ nhìn và có trạng thái đang chọn rõ ràng.
+- Trình duyệt dùng chung được render trực tiếp trong panel phải. Chuyển qua lại chỉ ẩn bề mặt, không tháo cây tệp hoặc webview, nên trạng thái cây, lịch sử trang và phiên đăng nhập còn nguyên.
+- URL do người dùng hoặc agent mở tự chuyển panel phải sang Trình duyệt và mở lại panel nếu đang đóng. Phiên không có thư mục làm việc vẫn dùng được Browser; chế độ Tệp hiển thị trạng thái chưa có dự án.
+- Browser cũ từng được lưu như một pane động sẽ bị layout mirror loại khỏi vùng giữa trong lần chạy mới; tab URL và partition cookie `persist:hermes-preview` vẫn được giữ.
+- Xác minh hoàn tất: 59/59 kiểm thử mục tiêu đạt; Desktop typecheck đạt; ESLint và Prettier các tệp thay đổi đạt; production build và Windows x64 unpacked 466 tệp đạt.
+- Đã nâng cấp trên máy Windows thử nghiệm với điểm quay lui riêng. Bootstrap hoàn tất đúng commit `60e9b75d5`, dịch vụ nền trả `ok` cho Hermes 0.20.0 và mã băm ứng dụng cài đặt khớp bản đóng gói. Còn xác nhận trực quan thủ công vị trí biểu tượng và chuyển chế độ trên cửa sổ Hermes đang mở.
+
+## Cập nhật 2026-08-14 — khôi phục tab nhiều phiên và sửa vị trí Trình duyệt
+
+- Thanh tab trong vùng làm việc luôn hiện mặc định kể cả khi chỉ có một phiên; nút `+` tiếp tục tạo phiên mới trong đúng vùng đang làm việc. Tùy chọn người dùng chủ động **Ẩn thanh tab** vẫn được tôn trọng.
+- Bấm một phiên ở danh sách bên trái nay chuyển tới tab đã mở hoặc xếp phiên thành tab mới; chỉ dùng lại vùng chính khi đó thực sự là bản nháp trống.
+- Nút **Trình duyệt** vẫn nằm ở thanh điều hướng bên trái nhưng nội dung web mở thành tab ở vùng giữa, cạnh các phiên làm việc; tab có tiêu đề theo ngôn ngữ giao diện và vẫn có thể kéo ra cạnh để xem song song.
+- Nâng mã định danh Browser để tự di chuyển bản đã bị ghim nhầm vào vùng danh sách phiên ở các build thử trước; giữ nguyên địa chỉ cuối và partition cookie `persist:hermes-preview`.
+- Cho phép popup do người dùng kích hoạt để các website có luồng đăng nhập OAuth hoặc mạng xã hội hoạt động trong phiên Browser dùng chung.
+- Xác minh hiện tại: 54/54 kiểm thử mục tiêu đạt; Desktop typecheck đạt; ESLint và Prettier các tệp thay đổi đạt; production build và Windows x64 unpacked đạt.
+- Đã nâng cấp bản `c7cee6a1d` trên máy Windows thử nghiệm với điểm quay lui riêng. Bootstrap tự đồng bộ đúng commit sau khi nhánh được đẩy lên GitHub; marker hoàn tất và `/api/health` trả `ok`, Hermes 0.20.0.
+- Toàn bộ UI suite không hoàn tất trong giới hạn 180 giây và lặp lại các lỗi nền không thuộc lát cắt tại `prompt-overlays`, `messaging`, `gateway-settings` và `skills`; không ghi nhận bộ này là đạt. Bước quan sát giao diện tự động không khả dụng trong môi trường thử, nên cần xác nhận trực quan thủ công trên cửa sổ Hermes đang mở.
+
+## Cập nhật 2026-08-14 — sửa lỗi Windows chặn Python khi cài mới
+
+- Xác định nguyên nhân từ nhật ký Windows Code Integrity: Enterprise Application Control cho phép ứng dụng Hermes nhưng chặn `python.exe` không có chữ ký trong bản Python do `uv` quản lý.
+- Windows bootstrap chuyển sang CPython 3.12.10 chính thức có chữ ký của Python Software Foundation; bộ cài kiểm tra cả chữ ký Authenticode và SHA-256 đã ghim trước khi chạy.
+- Hỗ trợ Windows x64 và ARM64; `uv` nhận đường dẫn tuyệt đối tới interpreter đã xác minh để không tự chọn lại bản Python không có chữ ký.
+- Lưu lựa chọn interpreter tin cậy qua các stage, tái sử dụng Python hợp lệ đã cài theo Hermes, registry hoặc PATH khi sửa chữa và cập nhật.
+- Fresh-install smoke test dùng hồ sơ riêng trong LocalAppData trên Windows và tự đi qua lựa chọn cài cục bộ; không đọc hoặc sửa hồ sơ Hermes chính.
+- Xác minh thật trên máy có Application Control: Python 3.12.10 và `venv\\Scripts\\python.exe` đều có chữ ký hợp lệ; stage phụ thuộc hoàn tất; CLI Hermes chạy; `/api/health` trả HTTP 200 với Hermes 0.20.0.
+- 17/17 kiểm thử hồi quy installer đạt; 13/13 kiểm thử fresh-install/gate đạt; Desktop typecheck đạt; lint 0 lỗi. Toàn bộ Electron suite có 19 lỗi nền tảng cũ khi các ca POSIX chạy trên Windows, không liên quan lát cắt này và không được ghi nhận là đạt.
+
+## Cập nhật 2026-08-14 — không gian Trình duyệt dùng chung
+
+- Thêm **Trình duyệt** vào thanh điều hướng bên trái và mở trong cùng vùng với **Phiên** theo mặc định.
+- Người dùng có thể chuyển tab, kéo Trình duyệt sang vùng riêng, xem song song và thay đổi kích thước bằng hệ thống pane hiện có.
+- Bổ sung thanh địa chỉ, quay lại, tiến tới và tải lại; chỉ cho phép địa chỉ HTTP/HTTPS.
+- Người dùng và agent thao tác trên cùng Electron webview và cùng partition đăng nhập `persist:hermes-preview`.
+- `read_preview` trả thêm danh sách phần tử tương tác có mã tham chiếu; công cụ Desktop mới `interact_preview` hỗ trợ bấm, nhập, nhấn phím, cuộn và điều hướng.
+- Không đọc giá trị mật khẩu và từ chối để agent nhập vào ô mật khẩu.
+- Ẩn các nút của vùng **Thay đổi mã** khi chưa có thay đổi tương thích, giúp giao diện bớt gây nhầm lẫn.
+- Xác minh: 39/39 kiểm thử UI mục tiêu đạt, 71/71 kiểm thử Python đạt, typecheck đạt, lint 0 lỗi, production build và Windows unpacked đạt.
+- Smoke test dùng hồ sơ mới tách biệt đã lên màn hình thiết lập lần đầu. Nhật ký không có lỗi gateway hoặc bootstrap; phím tắt toàn cục đang trùng với ứng dụng khác nhưng không ảnh hưởng tính năng Trình duyệt.
+- Tài liệu kỹ thuật và giới hạn hiện tại: `docs/shared-browser-pane.md`.
+
 ## Cập nhật 2026-08-13 — mở đầy đủ kết nối và tên model Claude
 
 - Màn **Kết nối model** hiển thị trực tiếp toàn bộ luồng đăng nhập tài khoản mà backend cung cấp và toàn bộ nhà cung cấp có thể thiết lập bằng khóa API; không còn giấu danh mục khóa sau nút phụ.

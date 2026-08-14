@@ -2872,7 +2872,17 @@ export const zh: Translations = {
       loadFailedConsole: (code, message) => `加载失败${code ? ` (${code})` : ''}: ${message}`,
       unreachableDescription: '无法访问预览页面。',
       openTarget: url => `打开 ${url}`,
-      fallbackTitle: '预览'
+      fallbackTitle: '预览',
+      addressBar: '浏览器控件',
+      address: '网址',
+      addressPlaceholder: '输入网址',
+      back: '后退',
+      forward: '前进',
+      reloadPage: '重新加载页面',
+      invalidAddressTitle: '网址无效',
+      invalidAddressMessage: '请输入 http 或 https 地址。',
+      sharedWithAgent: '与智能体共享',
+      sharedWithAgentHint: '你和智能体正在使用同一页面和同一登录会话。'
     }
   },
 
