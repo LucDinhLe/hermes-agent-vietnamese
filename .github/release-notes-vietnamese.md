@@ -4,6 +4,8 @@ Bản cộng đồng đa nền tảng với giao diện tiếng Việt mặc đ�
 
 Đây là một dự án cá nhân, độc lập, được thực hiện nhằm hỗ trợ người dùng Việt tiếp cận và sử dụng Hermes Agent thuận tiện hơn. Giấy phép, thuật toán, kiến trúc và các tính năng lõi của Hermes vẫn được giữ theo dự án gốc.
 
+> **Dùng Windows và gặp cảnh báo khi tải/cài?** Xem [hướng dẫn từng bước bằng hình ảnh](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/docs/cai-dat-windows-bang-anh.md). Cảnh báo không tự biến mất khi chờ; hướng dẫn chỉ rõ vị trí **See more → Keep anyway → More info → Run anyway** và cách phân biệt cảnh báo uy tín với cảnh báo phát hiện mối đe dọa thực sự.
+
 ### Chọn đúng tệp
 
 | Máy đang dùng           | Tải trực tiếp                                                                                                                                                |
