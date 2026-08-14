@@ -10,6 +10,8 @@
  * one bar instead of two.
  */
 
+import { computed } from 'nanostores'
+
 import { findGroup } from '@/components/pane-shell/tree/model'
 import { $activeTreeGroup, $layoutTree, revealTreePane } from '@/components/pane-shell/tree/store'
 import { FileTypeIcon } from '@/components/ui/file-type-icon'
@@ -80,8 +82,14 @@ function PreviewTabTitle({ tabId }: { tabId: string }) {
   return target?.kind === 'url' ? t.sidebar.nav.browser : previewTitle(tabId)
 }
 
-export function previewTileDock(target: PreviewTarget | null): { anchor: string; dir: 'center' | 'right' } {
-  return target?.kind === 'url' ? { anchor: 'workspace', dir: 'center' } : { anchor: 'workspace', dir: 'right' }
+/** Browser belongs to the persistent right rail. Files and artifacts remain
+ * movable layout tiles beside the workspace. */
+export function isLayoutPreviewTarget(target: PreviewTarget | null): boolean {
+  return Boolean(target && target.kind !== 'url')
+}
+
+export function previewTileDock(_target: PreviewTarget | null): { anchor: string; dir: 'right' } {
+  return { anchor: 'workspace', dir: 'right' }
 }
 
 const PREVIEW_TILE_PREFIX = 'preview-tile'
@@ -100,7 +108,7 @@ export function watchPreviewTiles(): void {
   const reveal = () => {
     const tabId = $rightRailActiveTabId.get()
 
-    if (tabId && targetFor(tabId)) {
+    if (tabId && isLayoutPreviewTarget(targetFor(tabId))) {
       revealTreePane(`${PREVIEW_TILE_PREFIX}:${tabId}`)
     }
   }
@@ -134,18 +142,15 @@ export function watchPreviewTiles(): void {
   $activeTreeGroup.listen(follow)
 }
 
+const $layoutPreviewTabs = computed($previewTabs, tabs => tabs.filter(tab => isLayoutPreviewTarget(tab.target)))
+
 const watchPreviewTileMirror = paneMirror<{ id: string }>({
-  source: $previewTabs,
+  source: $layoutPreviewTabs,
   key: tab => tab.id,
   prefix: PREVIEW_TILE_PREFIX,
-  // Identical to route (page) tiles: its own zone docked beside main, sized by
-  // the split weights. NOT anchored to the file tree — the old rail was a
-  // files-adjacent strip, and carrying that over welded preview into the file
-  // browser's zone, so ⌘J (toggle file browser) took the preview with it.
-  // Browser starts as a tab in the center workspace, beside conversation tabs.
-  // The left navigation button reveals it; the user can drag it out to get a
-  // resizable split without turning the narrow Sessions sidebar into a webview.
-  // File/artifact previews keep their roomy workspace-adjacent behavior.
+  // File/artifact previews stay as movable workspace-adjacent tiles. Browser
+  // is intentionally filtered out: it lives inside the persistent right rail,
+  // where files and web can switch without touching the conversation tabs.
   anchor: tab => previewTileDock(targetFor(tab.id)).anchor,
   dir: tab => previewTileDock(targetFor(tab.id)).dir,
   minWidth: '22rem',

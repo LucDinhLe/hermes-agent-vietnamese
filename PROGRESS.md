@@ -1,5 +1,14 @@
 # Tiến độ
 
+## Cập nhật 2026-08-14 — đưa Trình duyệt vào panel phải
+
+- Bỏ mục **Trình duyệt** khỏi thanh điều hướng bên trái và giữ nguyên toàn bộ tab phiên trong vùng làm việc giữa.
+- Thêm hai nút **Tệp** và **Trình duyệt** cạnh tên thư mục ở đầu panel phải; biểu tượng dùng kích thước điều khiển panel 32 px để dễ nhìn và có trạng thái đang chọn rõ ràng.
+- Trình duyệt dùng chung được render trực tiếp trong panel phải. Chuyển qua lại chỉ ẩn bề mặt, không tháo cây tệp hoặc webview, nên trạng thái cây, lịch sử trang và phiên đăng nhập còn nguyên.
+- URL do người dùng hoặc agent mở tự chuyển panel phải sang Trình duyệt và mở lại panel nếu đang đóng. Phiên không có thư mục làm việc vẫn dùng được Browser; chế độ Tệp hiển thị trạng thái chưa có dự án.
+- Browser cũ từng được lưu như một pane động sẽ bị layout mirror loại khỏi vùng giữa trong lần chạy mới; tab URL và partition cookie `persist:hermes-preview` vẫn được giữ.
+- Xác minh trước build: 59/59 kiểm thử mục tiêu đạt; Desktop typecheck đạt; ESLint và Prettier các tệp thay đổi đạt. Lần build trong sandbox hoàn tất renderer rồi bị lớp quyền máy chặn `esbuild`; cần chạy lại ngoài sandbox trước khi đóng gói.
+
 ## Cập nhật 2026-08-14 — khôi phục tab nhiều phiên và sửa vị trí Trình duyệt
 
 - Thanh tab trong vùng làm việc luôn hiện mặc định kể cả khi chỉ có một phiên; nút `+` tiếp tục tạo phiên mới trong đúng vùng đang làm việc. Tùy chọn người dùng chủ động **Ẩn thanh tab** vẫn được tôn trọng.

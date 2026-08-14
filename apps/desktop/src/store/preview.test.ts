@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { $rightRailActiveTabId } from './layout'
+import {
+  $fileBrowserOpen,
+  $rightRailActiveTabId,
+  $rightSidebarView,
+  setFileBrowserOpen,
+  setRightSidebarView
+} from './layout'
 import {
   $previewServerRestart,
   $previewServerRestartStatus,
@@ -12,6 +18,7 @@ import {
   closeRightRailTab,
   decodePreviewTabs,
   openPreview,
+  openSharedBrowser,
   previewTabId,
   type PreviewTarget,
   progressPreviewServerRestart
@@ -33,12 +40,16 @@ describe('preview store', () => {
   beforeEach(() => {
     $previewServerRestart.set(null)
     closeRightRail()
+    setFileBrowserOpen(false)
+    setRightSidebarView('files')
     window.localStorage.clear()
   })
 
   afterEach(() => {
     $previewServerRestart.set(null)
     closeRightRail()
+    setFileBrowserOpen(false)
+    setRightSidebarView('files')
     window.localStorage.clear()
   })
 
@@ -81,6 +92,30 @@ describe('preview store', () => {
     expect(urlTabs).toHaveLength(1)
     expect(urlTabs[0].target.url).toBe('https://www.reddit.com')
     expect($rightRailActiveTabId.get()).toBe(urlTabs[0].id)
+  })
+
+  it('routes web targets into the visible right-hand Browser surface', () => {
+    openPreview(urlTarget('https://facebook.com'), 'tool-result')
+
+    expect($rightSidebarView.get()).toBe('browser')
+    expect($fileBrowserOpen.get()).toBe(true)
+    expect($previewTarget.get()?.url).toBe('https://facebook.com')
+  })
+
+  it('opens the shared Browser home once, then returns to its existing page', () => {
+    openSharedBrowser()
+    const first = $previewTabs.get().find(tab => tab.target.kind === 'url')
+
+    expect(first?.target.url).toBe('https://www.google.com/')
+
+    openPreview(urlTarget('https://facebook.com'), 'manual')
+    setRightSidebarView('files')
+    openSharedBrowser()
+
+    const browserTabs = $previewTabs.get().filter(tab => tab.target.kind === 'url')
+    expect(browserTabs).toHaveLength(1)
+    expect(browserTabs[0].target.url).toBe('https://facebook.com')
+    expect($rightSidebarView.get()).toBe('browser')
   })
 
   it('rekeys the legacy Browser pane so an upgrade can adopt it into the corrected workspace location', () => {
