@@ -1,9 +1,15 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { $rightRailActiveTabId, selectRightRailTab } from '@/store/layout'
 import { closeRightRail, openPreview, type PreviewTarget } from '@/store/preview'
 
-import { PREVIEW_READ_MAX_CHARS, readActivePreview, registerPreviewPageReader } from './preview-reader'
+import {
+  interactActivePreview,
+  PREVIEW_READ_MAX_CHARS,
+  readActivePreview,
+  registerPreviewPageController,
+  registerPreviewPageReader
+} from './preview-reader'
 
 function urlTarget(url: string): PreviewTarget {
   return { kind: 'url', label: 'Browser', source: url, url }
@@ -55,6 +61,60 @@ describe('readActivePreview (read_preview tool)', () => {
       total_chars: 12,
       // The live address wins over the target (in-page navigation).
       url: 'https://news.ycombinator.com/news'
+    })
+  })
+
+  it('includes interactive refs from the same visible page', async () => {
+    openPreview(urlTarget('https://example.com/login'), 'tool-result')
+    register($rightRailActiveTabId.get()!, async () => ({
+      elements: [
+        { disabled: false, name: 'Email', ref: '@p1', role: 'textbox' },
+        { disabled: false, name: 'Continue', ref: '@p2', role: 'button' }
+      ],
+      text: 'Sign in',
+      title: 'Example',
+      url: 'https://example.com/login'
+    }))
+
+    expect(await readActivePreview()).toMatchObject({
+      elements: [
+        { name: 'Email', ref: '@p1', role: 'textbox' },
+        { name: 'Continue', ref: '@p2', role: 'button' }
+      ]
+    })
+  })
+
+  it('routes browser interaction to the controller behind the active tab', async () => {
+    openPreview(urlTarget('https://example.com'), 'tool-result')
+
+    const interact = vi.fn().mockResolvedValue({
+      action: 'click',
+      message: 'Clicked Continue',
+      ok: true,
+      title: 'Example',
+      url: 'https://example.com/next'
+    })
+
+    const unregister = registerPreviewPageController($rightRailActiveTabId.get()!, {
+      interact,
+      read: async () => ({ text: '', title: '', url: '' })
+    })
+
+    cleanups.push(unregister)
+
+    await expect(interactActivePreview({ action: 'click', ref: '@p2' })).resolves.toMatchObject({
+      ok: true,
+      url: 'https://example.com/next'
+    })
+    expect(interact).toHaveBeenCalledWith({ action: 'click', ref: '@p2' })
+  })
+
+  it('reports that interaction is unavailable when no live Browser pane is mounted', async () => {
+    openPreview(urlTarget('https://example.com'), 'tool-result')
+
+    await expect(interactActivePreview({ action: 'reload' })).resolves.toMatchObject({
+      action: 'reload',
+      ok: false
     })
   })
 

@@ -128,7 +128,11 @@ const watchPreviewTileMirror = paneMirror<{ id: string }>({
   // the split weights. NOT anchored to the file tree — the old rail was a
   // files-adjacent strip, and carrying that over welded preview into the file
   // browser's zone, so ⌘J (toggle file browser) took the preview with it.
-  dir: () => 'right',
+  // Browser starts as a tab in the left Sessions zone. The user can switch
+  // between them in one click, or drag Browser out to get a resizable split.
+  // File/artifact previews keep their roomy workspace-adjacent behavior.
+  anchor: tab => (targetFor(tab.id)?.kind === 'url' ? 'sessions' : 'workspace'),
+  dir: tab => (targetFor(tab.id)?.kind === 'url' ? 'center' : 'right'),
   minWidth: '22rem',
   title: previewTitle,
   tabLead: tabId => <PreviewTabLead tabId={tabId} />,

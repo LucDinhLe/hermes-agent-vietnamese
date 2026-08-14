@@ -2284,6 +2284,7 @@ class TestAgentRuntimePostHookOwnershipSync:
         ("clarify", {"question": "Continue?"}),
         ("read_terminal", {}),
         ("read_preview", {}),
+        ("interact_preview", {"action": "reload"}),
         ("read_window_below", {}),
         ("delegate_task", {"goal": "Check the child path"}),
     )
@@ -2326,6 +2327,10 @@ class TestAgentRuntimePostHookOwnershipSync:
         )
         monkeypatch.setattr(
             "tools.read_preview_tool.read_preview_tool",
+            lambda **kwargs: '{"ok":true}',
+        )
+        monkeypatch.setattr(
+            "tools.interact_preview_tool.interact_preview_tool",
             lambda **kwargs: '{"ok":true}',
         )
         monkeypatch.setattr(

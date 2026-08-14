@@ -1855,6 +1855,7 @@ export const en: Translations = {
   sidebar: {
     nav: {
       'new-session': 'New session',
+      browser: 'Browser',
       skills: 'Capabilities',
       messaging: 'Messaging',
       artifacts: 'Artifacts'
@@ -2738,7 +2739,17 @@ export const en: Translations = {
       loadFailedConsole: (code, message) => `Load failed${code ? ` (${code})` : ''}: ${message}`,
       unreachableDescription: 'The preview page could not be reached.',
       openTarget: url => `Open ${url}`,
-      fallbackTitle: 'Preview'
+      fallbackTitle: 'Preview',
+      addressBar: 'Browser controls',
+      address: 'Web address',
+      addressPlaceholder: 'Enter a web address',
+      back: 'Back',
+      forward: 'Forward',
+      reloadPage: 'Reload page',
+      invalidAddressTitle: 'Invalid web address',
+      invalidAddressMessage: 'Enter an http or https address.',
+      sharedWithAgent: 'Shared with agent',
+      sharedWithAgentHint: 'You and the agent are using this same page and signed-in session.'
     }
   },
 

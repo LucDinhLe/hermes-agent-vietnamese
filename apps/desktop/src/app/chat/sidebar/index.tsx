@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router'
 
 import { PlatformAvatar } from '@/app/messaging/platform-icon'
+import { revealTreePane } from '@/components/pane-shell/tree/store'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from '@/components/ui/context-menu'
@@ -69,6 +70,8 @@ import {
   toggleSidebarMessagingOpen,
   unpinSession
 } from '@/store/layout'
+import { $rightRailActiveTabId, selectRightRailTab } from '@/store/layout'
+import { $previewTabs, openPreview } from '@/store/preview'
 import { $newChatProfile, $profiles, $profileScope, ALL_PROFILES, normalizeProfileKey } from '@/store/profile'
 import {
   $activeProjectId,
@@ -174,6 +177,12 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
     keybindActionId: 'session.new'
   },
   {
+    id: 'browser',
+    label: '',
+    icon: props => <Codicon name="globe" {...props} />,
+    action: 'open-browser'
+  },
+  {
     id: 'skills',
     label: '',
     icon: props => <Codicon name="symbol-misc" {...props} />,
@@ -195,6 +204,35 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
     keybindActionId: 'nav.artifacts'
   }
 ]
+
+const SHARED_BROWSER_HOME = 'https://www.google.com/'
+
+function openSharedBrowserPane(): void {
+  const existing = $previewTabs.get().find(tab => tab.target.kind === 'url')
+
+  if (existing) {
+    selectRightRailTab(existing.id)
+    revealTreePane(`preview-tile:${existing.id}`)
+
+    return
+  }
+
+  openPreview(
+    {
+      kind: 'url',
+      label: 'Browser',
+      source: SHARED_BROWSER_HOME,
+      url: SHARED_BROWSER_HOME
+    },
+    'manual'
+  )
+
+  const tabId = $rightRailActiveTabId.get()
+
+  if (tabId) {
+    revealTreePane(`preview-tile:${tabId}`)
+  }
+}
 
 // Two modes via the `compact` height variant (styles.css):
 //   tall    → each section is shrink-0, capped, its own scroller; Sessions is flex-1.
@@ -1396,6 +1434,7 @@ export function ChatSidebar({
                   (Boolean(item.route) && pathname === item.route)
 
                 const isNewSession = item.id === 'new-session'
+                const isBrowser = item.action === 'open-browser'
 
                 const button = (
                   <SidebarMenuButton
@@ -1415,6 +1454,12 @@ export function ChatSidebar({
                         'cursor-default hover:border-transparent hover:bg-transparent hover:text-inherit'
                     )}
                     onClick={() => {
+                      if (isBrowser) {
+                        openSharedBrowserPane()
+
+                        return
+                      }
+
                       // A plain new session lands in whatever profile the live
                       // gateway is on (= the active switcher context). null →
                       // no swap. The switcher header is the single place to

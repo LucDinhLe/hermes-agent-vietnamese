@@ -2,6 +2,8 @@ import { useStore } from '@nanostores/react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { Button } from '@/components/ui/button'
+import { Codicon } from '@/components/ui/codicon'
 import { Tip } from '@/components/ui/tooltip'
 import { type Translations, useI18n } from '@/i18n'
 import { isDesktopFsRemoteMode } from '@/lib/desktop-fs'
@@ -12,6 +14,7 @@ import { notify, notifyError } from '@/store/notifications'
 import { $previewServerRestart, failPreviewServerRestart, type PreviewTarget } from '@/store/preview'
 
 import { ArtifactPreview } from './preview-artifact'
+import { normalizeBrowserAddress } from './preview-browser-address'
 import {
   clampConsoleHeight,
   compactUrl,
@@ -21,14 +24,20 @@ import {
 } from './preview-console'
 import { type ConsoleEntry } from './preview-console-state'
 import { LocalFilePreview, PreviewEmptyState } from './preview-file'
-import { registerPreviewPageReader } from './preview-reader'
+import { interactPreviewWebview, readPreviewWebview } from './preview-page-bridge'
+import { registerPreviewPageController } from './preview-reader'
 import { previewConsoleState, registerPreviewDevTools } from './preview-strip-tools'
 
 type PreviewWebview = HTMLElement & {
+  canGoBack?: () => boolean
+  canGoForward?: () => boolean
   closeDevTools?: () => void
   executeJavaScript?: (code: string) => Promise<unknown>
   getTitle?: () => string
   getURL?: () => string
+  goBack?: () => void
+  goForward?: () => void
+  loadURL?: (url: string) => Promise<void>
   isDevToolsOpened?: () => boolean
   openDevTools?: () => void
   reload?: () => void
@@ -141,6 +150,9 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
   const consoleHeight = useStore(consoleState.$height)
   const consoleOpen = useStore(consoleState.$open)
   const [currentUrl, setCurrentUrl] = useState(target.url)
+  const [addressValue, setAddressValue] = useState(target.url)
+  const [canGoBack, setCanGoBack] = useState(false)
+  const [canGoForward, setCanGoForward] = useState(false)
   const [devtoolsOpen, setDevtoolsOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<PreviewLoadErrorState | null>(null)
@@ -242,6 +254,25 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
     }
   }, [isWebPreview])
 
+  const syncHistory = useCallback(() => {
+    setCanGoBack(webviewRef.current?.canGoBack?.() ?? false)
+    setCanGoForward(webviewRef.current?.canGoForward?.() ?? false)
+  }, [])
+
+  const submitAddress = useCallback(() => {
+    const url = normalizeBrowserAddress(addressValue)
+
+    if (!url) {
+      notify({ kind: 'warning', title: copy.invalidAddressTitle, message: copy.invalidAddressMessage })
+
+      return
+    }
+
+    setAddressValue(url)
+    setCurrentUrl(url)
+    void webviewRef.current?.loadURL?.(url)
+  }, [addressValue, copy.invalidAddressMessage, copy.invalidAddressTitle])
+
   const appendConsoleEntry = useCallback(
     (entry: Omit<ConsoleEntry, 'id'>) => {
       consoleShouldStickRef.current = isNearConsoleBottom(consoleBodyRef.current)
@@ -329,19 +360,24 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
       return
     }
 
-    return registerPreviewPageReader(tabId, async () => {
+    return registerPreviewPageController(tabId, {
+      interact: opts => {
+        const webview = webviewRef.current
+
+        if (!webview) {
+          throw new Error('preview webview is not ready')
+        }
+
+        return interactPreviewWebview(webview, opts)
+      },
+      read: async () => {
       const webview = webviewRef.current
 
-      if (!webview?.executeJavaScript) {
+      if (!webview) {
         throw new Error('preview webview is not ready')
       }
 
-      const text = await webview.executeJavaScript('document.body ? document.body.innerText : ""')
-
-      return {
-        text: typeof text === 'string' ? text : '',
-        title: webview.getTitle?.() ?? '',
-        url: webview.getURL?.() ?? ''
+        return readPreviewWebview(webview)
       }
     })
   }, [isWebPreview, tabId])
@@ -539,6 +575,9 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
     host.replaceChildren()
     webviewRef.current = null
     setCurrentUrl(target.url)
+    setAddressValue(target.url)
+    setCanGoBack(false)
+    setCanGoForward(false)
     setDevtoolsOpen(false)
     setLoadError(null)
     consoleState.reset()
@@ -588,6 +627,8 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
       if (detail.url) {
         setLoadError(null)
         setCurrentUrl(detail.url)
+        setAddressValue(detail.url)
+        syncHistory()
       }
     }
 
@@ -617,7 +658,12 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
     }
 
     const onStart = () => setLoading(true)
-    const onStop = () => setLoading(false)
+
+    const onStop = () => {
+      setLoading(false)
+      syncHistory()
+    }
+
     // The WEBVIEW is the source of truth for DevTools, not our click handler:
     // closing the DevTools window itself fires devtools-closed with no click,
     // and the glyph was left stuck "on" when we tracked it locally.
@@ -646,12 +692,69 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
       webview.removeEventListener('did-stop-loading', onStop)
       webview.remove()
     }
-  }, [appendConsoleEntry, consoleState, copy, isRemoteHtml, isWebPreview, target.url])
+  }, [appendConsoleEntry, consoleState, copy, isRemoteHtml, isWebPreview, syncHistory, target.url])
 
   return (
     <aside className="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-transparent text-muted-foreground">
+      {target.kind === 'url' && !isRemoteHtml && (
+        <form
+          aria-label={copy.addressBar}
+          className="flex h-10 shrink-0 items-center gap-1.5 border-b border-border/60 bg-background/95 px-2"
+          onSubmit={event => {
+            event.preventDefault()
+            submitAddress()
+          }}
+        >
+          <Tip label={copy.back}>
+            <Button
+              aria-label={copy.back}
+              disabled={!canGoBack}
+              onClick={() => webviewRef.current?.goBack?.()}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <Codicon name="arrow-left" size="0.9rem" />
+            </Button>
+          </Tip>
+          <Tip label={copy.forward}>
+            <Button
+              aria-label={copy.forward}
+              disabled={!canGoForward}
+              onClick={() => webviewRef.current?.goForward?.()}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <Codicon name="arrow-right" size="0.9rem" />
+            </Button>
+          </Tip>
+          <Tip label={copy.reloadPage}>
+            <Button aria-label={copy.reloadPage} onClick={reloadPreview} size="icon-sm" type="button" variant="ghost">
+              <Codicon name="refresh" size="0.9rem" spinning={loading} />
+            </Button>
+          </Tip>
+          <div className="flex min-w-24 flex-1 items-center rounded-md border border-border/70 bg-muted/25 px-2 focus-within:border-primary/50">
+            <Codicon className="mr-1.5 shrink-0 opacity-55" name="lock" size="0.75rem" />
+            <input
+              aria-label={copy.address}
+              className="h-7 min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none"
+              onChange={event => setAddressValue(event.target.value)}
+              placeholder={copy.addressPlaceholder}
+              spellCheck={false}
+              value={addressValue}
+            />
+          </div>
+          <Tip label={copy.sharedWithAgentHint}>
+            <span className="hidden shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[0.65rem] font-medium text-primary sm:flex">
+              <Codicon name="robot" size="0.72rem" />
+              {copy.sharedWithAgent}
+            </span>
+          </Tip>
+        </form>
+      )}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {!embedded && (
+        {!embedded && target.kind !== 'url' && (
           <div className="pointer-events-none flex min-h-(--titlebar-height) items-center gap-1.5 border-b border-border/60 bg-background px-2 py-1">
             <div className="min-w-0 flex-1">
               <Tip label={copy.openTarget(currentUrl)}>

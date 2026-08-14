@@ -1,5 +1,18 @@
 # Tiến độ
 
+## Cập nhật 2026-08-14 — không gian Trình duyệt dùng chung
+
+- Thêm **Trình duyệt** vào thanh điều hướng bên trái và mở trong cùng vùng với **Phiên** theo mặc định.
+- Người dùng có thể chuyển tab, kéo Trình duyệt sang vùng riêng, xem song song và thay đổi kích thước bằng hệ thống pane hiện có.
+- Bổ sung thanh địa chỉ, quay lại, tiến tới và tải lại; chỉ cho phép địa chỉ HTTP/HTTPS.
+- Người dùng và agent thao tác trên cùng Electron webview và cùng partition đăng nhập `persist:hermes-preview`.
+- `read_preview` trả thêm danh sách phần tử tương tác có mã tham chiếu; công cụ Desktop mới `interact_preview` hỗ trợ bấm, nhập, nhấn phím, cuộn và điều hướng.
+- Không đọc giá trị mật khẩu và từ chối để agent nhập vào ô mật khẩu.
+- Ẩn các nút của vùng **Thay đổi mã** khi chưa có thay đổi tương thích, giúp giao diện bớt gây nhầm lẫn.
+- Xác minh: 39/39 kiểm thử UI mục tiêu đạt, 71/71 kiểm thử Python đạt, typecheck đạt, lint 0 lỗi, production build và Windows unpacked đạt.
+- Smoke test dùng hồ sơ mới tách biệt đã lên màn hình thiết lập lần đầu. Nhật ký không có lỗi gateway hoặc bootstrap; phím tắt toàn cục đang trùng với ứng dụng khác nhưng không ảnh hưởng tính năng Trình duyệt.
+- Tài liệu kỹ thuật và giới hạn hiện tại: `docs/shared-browser-pane.md`.
+
 ## Cập nhật 2026-08-13 — mở đầy đủ kết nối và tên model Claude
 
 - Màn **Kết nối model** hiển thị trực tiếp toàn bộ luồng đăng nhập tài khoản mà backend cung cấp và toàn bộ nhà cung cấp có thể thiết lập bằng khóa API; không còn giấu danh mục khóa sau nút phụ.

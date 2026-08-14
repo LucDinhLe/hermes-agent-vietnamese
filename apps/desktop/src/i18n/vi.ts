@@ -1870,6 +1870,7 @@ export const vi: Translations = {
   sidebar: {
     nav: {
       'new-session': 'Phiên mới',
+      browser: 'Trình duyệt',
       skills: 'Kỹ năng',
       messaging: 'Nhắn tin',
       artifacts: 'Tệp kết quả'
@@ -2213,7 +2214,7 @@ export const vi: Translations = {
       changed: count => `${count} tệp thay đổi`,
       ahead: count => `đi trước ${count} commit`,
       behind: count => `đi sau ${count} commit`,
-      review: 'Đánh giá',
+      review: 'Thay đổi mã',
       close: 'Đóng',
       openChanges: 'Mở danh sách thay đổi',
       openFile: 'Mở tệp',
@@ -2653,7 +2654,7 @@ export const vi: Translations = {
     noProjectTitle: 'Không có dự án',
     noProjectBody: 'Mở một dự án để duyệt các tệp của nó và xem xét các thay đổi.',
     noProjectOpen: 'Không có dự án nào mở',
-    noDiffs: 'Không có thay đổi',
+    noDiffs: 'Chưa có thay đổi mã',
     unreadableTitle: 'Không thể đọc được',
     unreadableBody: error => `Không thể đọc được thư mục này (${error}).`,
     emptyTitle: 'Trống',
@@ -2757,7 +2758,17 @@ export const vi: Translations = {
       loadFailedConsole: (code, message) => `Tải không thành công${code ? ` (${code})` : ''}: ${message}`,
       unreachableDescription: 'Không thể truy cập trang xem trước.',
       openTarget: url => `Mở ${url}`,
-      fallbackTitle: 'Xem trước'
+      fallbackTitle: 'Xem trước',
+      addressBar: 'Điều khiển trình duyệt',
+      address: 'Địa chỉ web',
+      addressPlaceholder: 'Nhập địa chỉ web',
+      back: 'Quay lại',
+      forward: 'Tiến tới',
+      reloadPage: 'Tải lại trang',
+      invalidAddressTitle: 'Địa chỉ web không hợp lệ',
+      invalidAddressMessage: 'Hãy nhập địa chỉ http hoặc https.',
+      sharedWithAgent: 'Dùng chung với agent',
+      sharedWithAgentHint: 'Bạn và agent đang dùng cùng trang và cùng phiên đăng nhập này.'
     }
   },
 

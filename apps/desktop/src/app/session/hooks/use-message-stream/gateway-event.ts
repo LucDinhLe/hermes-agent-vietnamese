@@ -3,7 +3,11 @@ import type { HermesSkin } from '@hermes/shared/skin'
 import type { QueryClient } from '@tanstack/react-query'
 import { type MutableRefObject, useCallback, useEffect, useRef } from 'react'
 
-import { readActivePreview } from '@/app/chat/right-rail/preview-reader'
+import {
+  interactActivePreview,
+  type PreviewInteractAction,
+  readActivePreview
+} from '@/app/chat/right-rail/preview-reader'
 import { writeAgentTerminalChunk } from '@/app/right-sidebar/terminal/agent-terminal-stream'
 import { readActiveTerminal } from '@/app/right-sidebar/terminal/buffer'
 import { closeAgentTerminalByProc } from '@/app/right-sidebar/terminal/terminals'
@@ -1076,6 +1080,28 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
             void $gateway.get()?.request('preview.read.respond', {
               request_id: requestId,
               text: result ? JSON.stringify(result) : ''
+            })
+          })
+        }
+      } else if (event.type === 'preview.interact.request') {
+        // interact_preview tool: execute on the active live webview so the
+        // agent and user share navigation, cookies, focus and visible state.
+        const requestId = typeof payload?.request_id === 'string' ? payload.request_id : ''
+        const action = typeof payload?.action === 'string' ? (payload.action as PreviewInteractAction) : null
+
+        if (requestId && action) {
+          const options = {
+            action,
+            delta_y: typeof payload?.delta_y === 'number' ? payload.delta_y : undefined,
+            key: typeof payload?.key === 'string' ? payload.key : undefined,
+            ref: typeof payload?.ref === 'string' ? payload.ref : undefined,
+            text: typeof payload?.text === 'string' ? payload.text : undefined
+          }
+
+          void interactActivePreview(options).then(result => {
+            void $gateway.get()?.request('preview.interact.respond', {
+              request_id: requestId,
+              text: JSON.stringify(result)
             })
           })
         }

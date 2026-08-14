@@ -2310,6 +2310,16 @@ export interface Translations {
       unreachableDescription: string
       openTarget: (url: string) => string
       fallbackTitle: string
+      addressBar: string
+      address: string
+      addressPlaceholder: string
+      back: string
+      forward: string
+      reloadPage: string
+      invalidAddressTitle: string
+      invalidAddressMessage: string
+      sharedWithAgent: string
+      sharedWithAgentHint: string
     }
   }
 

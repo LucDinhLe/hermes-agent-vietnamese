@@ -3278,6 +3278,7 @@ def _block(event: str, sid: str, payload: dict, timeout: float | None = 300) -> 
         "clarify.request",
         "terminal.read.request",
         "preview.read.request",
+        "preview.interact.request",
         "window.read.request",
     }:
         _emit(
@@ -5856,6 +5857,24 @@ def _agent_cbs(sid: str) -> dict:
             "preview.read.request",
             sid,
             {k: v for k, v in (("start", start), ("count", count)) if v is not None},
+            timeout=45,
+        ),
+        # interact_preview tool (desktop GUI): route actions to the exact live
+        # webview the user sees, then wait for preview.interact.respond.
+        "interact_preview_callback": lambda action, ref=None, text=None, key=None, delta_y=None: _block(
+            "preview.interact.request",
+            sid,
+            {
+                k: v
+                for k, v in (
+                    ("action", action),
+                    ("ref", ref),
+                    ("text", text),
+                    ("key", key),
+                    ("delta_y", delta_y),
+                )
+                if v is not None
+            },
             timeout=45,
         ),
         # read_window_below tool (desktop GUI): the renderer asks its main
