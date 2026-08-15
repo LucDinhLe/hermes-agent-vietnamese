@@ -16,10 +16,17 @@ import {
   pipTargetArgs,
   pythonDirPattern,
   pythonRequest,
+  repositoryGitQueries,
   resolveTag,
   resolveTargets,
   stageAgentBrowserLaunchers
 } from '../scripts/stage-agent-payloads.mjs'
+
+test('repository tag peeling is passed to git as one argument on Windows too', () => {
+  const queries = repositoryGitQueries('vi-v0.20.0-18')
+  assert.deepEqual(queries.commit, ['rev-parse', 'vi-v0.20.0-18^{commit}'])
+  assert.deepEqual(queries.commitDate, ['log', '-1', '--format=%ct', 'vi-v0.20.0-18'])
+})
 
 // ─── resolveTargets ────────────────────────────────────────────────
 

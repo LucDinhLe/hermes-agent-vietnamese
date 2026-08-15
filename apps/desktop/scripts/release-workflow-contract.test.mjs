@@ -10,6 +10,7 @@ const runtimeSmoke = readFileSync(
   'utf8'
 )
 const jsTests = readFileSync(new URL('../../../.github/workflows/js-tests.yml', import.meta.url), 'utf8')
+const builderWrapper = readFileSync(new URL('../scripts/run-electron-builder.mjs', import.meta.url), 'utf8')
 
 test('candidate workflow builds the complete resident runtime on every advertised native target', () => {
   for (const runner of [
@@ -33,6 +34,7 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /skip-decompress: true/)
   assert.match(candidate, /Bắt buộc cấu hình ký và công chứng Apple/)
   assert.match(candidate, /CSC_IDENTITY_AUTO_DISCOVERY/)
+  assert.match(candidate, /unset CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER/)
   assert.match(candidate, /community-prerelease/)
   assert.match(candidate, /release_class/)
   assert.ok(
@@ -50,6 +52,7 @@ test('candidate workflow can only create a draft and never promotes it', () => {
   assert.match(candidate, /gh release create "\$TAG" --verify-tag --target "\$COMMIT" --draft/)
   assert.doesNotMatch(candidate, /--draft=false/)
   assert.match(candidate, /--draft --prerelease/)
+  assert.match(builderWrapper, /args\.push\("--publish", "never"\)/)
 })
 
 test('promotion is separate and requires exact manifest plus successful runtime smoke evidence', () => {

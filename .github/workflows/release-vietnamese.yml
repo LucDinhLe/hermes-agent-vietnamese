@@ -247,6 +247,7 @@ jobs:
       - name: Dựng runtime và gói native
         shell: bash
         env:
+          RELEASE_CLASS: ${{ needs.verify.outputs.release_class }}
           CSC_LINK: ${{ needs.verify.outputs.release_class == 'stable' && secrets.MAC_CSC_LINK || '' }}
           CSC_KEY_PASSWORD: ${{ needs.verify.outputs.release_class == 'stable' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
           APPLE_API_KEY: ${{ needs.verify.outputs.release_class == 'stable' && secrets.APPLE_API_KEY || '' }}
@@ -255,6 +256,9 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ needs.verify.outputs.release_class == 'stable' && 'true' || 'false' }}
           HERMES_PAYLOAD_BUILD_PYTHON: ${{ matrix.platform == 'win32' && 'python' || 'python3' }}
         run: |
+          if [ "$RELEASE_CLASS" != "stable" ]; then
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER
+          fi
           node scripts/build-bundled-desktop.mjs --tag="$HERMES_PAYLOAD_TAG" --no-install
 
       - name: Kiểm tra đúng payload đóng gói

@@ -1,5 +1,19 @@
 # Tiến độ
 
+## Cập nhật 2026-08-15 — candidate v17 dừng ở đóng gói, chuyển sang v18
+
+- Verify nguồn v17 đạt; Install & Update E2E tạo đúng ma trận tag `vi-v*` và
+  xanh toàn bộ 10 tuyến cài lại/nâng cấp từ v1, v5, v9, v12 và v16.
+- Sáu job native lộ ba lỗi đóng gói: biểu thức peel tag qua shell mất dấu `^`
+  trên Windows; biến chứng thư Apple rỗng bị electron-builder hiểu là đường dẫn
+  thư mục; electron-builder tự kích hoạt publish chỉ vì checkout đang ở tag.
+- Runtime staging nay gọi Git bằng argv xác định; build community prerelease
+  xóa hoàn toàn biến chứng thư rỗng; wrapper electron-builder luôn dùng
+  `--publish never`. Staging draft và public promotion tiếp tục là hai bước độc
+  lập. Regression đạt 73/73 và bộ UI đã chốt đạt 27/27; typecheck đạt.
+- Candidate kế tiếp là `vi-v0.20.0-18`. Tag v17 là bất biến, không di chuyển;
+  không có draft/artifact v17 nào đủ điều kiện công bố.
+
 ## Cập nhật 2026-08-15 — candidate v16 dừng ở đóng gói, chuyển sang v17
 
 - Verify của tag bất biến `vi-v0.20.0-16` đạt, gồm 36/36 kiểm thử Python phát

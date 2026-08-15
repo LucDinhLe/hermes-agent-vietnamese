@@ -337,8 +337,8 @@ function run(cmd, args, opts = {}) {
  * failure the captured stderr goes into the thrown error, so probe
  * failures are never silent.
  */
-function probe(cmd, args) {
-  const result = spawnSync(cmd, args, { encoding: "utf8" })
+function probe(cmd, args, opts = {}) {
+  const result = spawnSync(cmd, args, { encoding: "utf8", ...opts })
   if (result.error) {
     throw new Error(`${cmd} did not start: ${result.error.message}`)
   }
@@ -348,12 +348,22 @@ function probe(cmd, args) {
   return result.stdout
 }
 
+export function repositoryGitQueries(tag) {
+  return {
+    commit: ["rev-parse", `${tag}^{commit}`],
+    commitDate: ["log", "-1", "--format=%ct", tag],
+  }
+}
+
 function stageRepo(tag, outDir) {
   const repoDir = path.join(outDir, "repo")
   fs.rmSync(repoDir, { recursive: true, force: true })
   fs.mkdirSync(repoDir, { recursive: true })
-  const commit = execSync(`git rev-parse ${tag}^{commit}`, { cwd: REPO_ROOT, encoding: "utf8" }).trim()
-  const commitDate = execSync(`git log -1 --format=%ct ${tag}`, { cwd: REPO_ROOT, encoding: "utf8" }).trim()
+  const queries = repositoryGitQueries(tag)
+  // Pass the peel expression as an argv item. A shell string loses the caret
+  // on Windows (`tag^{commit}` becomes `tag{commit}` under cmd.exe).
+  const commit = probe("git", queries.commit, { cwd: REPO_ROOT }).trim()
+  const commitDate = probe("git", queries.commitDate, { cwd: REPO_ROOT }).trim()
   // The payload repo is a PLAIN SOURCE TREE, deliberately without .git.
   // Bundled installs never run git against the checkout: updates replace
   // the whole tree (electron-updater), and `hermes update --eject` makes
