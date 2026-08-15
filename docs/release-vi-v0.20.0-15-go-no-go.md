@@ -8,11 +8,10 @@ Ngày đánh giá: 2026-08-15
 nghiêm trọng đã được đóng cục bộ, nhưng ba cổng bắt buộc vẫn chưa có bằng chứng
 đạt:
 
-1. Gói Windows x64 cuối tại `4148a5546` chạy được, nhưng fresh bootstrap thuần
-   dừng ở HTTP 404 vì commit cục bộ chưa được phép push. Mã UI mới nhất tại
-   `b5b707511` đã build và smoke production bằng hồ sơ cô lập nhưng chưa được
-   đóng lại thành artifact cuối; các cách này không thay cho fresh bootstrap từ
-   đúng commit đã công bố.
+1. Gói Windows x64 cuối tại `3b49907af` build sạch và đã sửa lỗi remote SSH gây
+   `git fetch` exit 128. Tuy nhiên fresh bootstrap/cập nhật công khai vẫn chưa
+   thể lấy đúng commit vì commit v15 chưa được phép push; kiểm tra bằng mã cục
+   bộ không thay cho fresh bootstrap từ đúng commit đã công bố.
 2. Workflow `install-e2e` đã có test hợp đồng cục bộ nhưng chưa được chạy trên
    GitHub runner với tag `vi-v*`, vì nhánh chưa được push.
 3. Chưa có smoke test trên máy thật macOS Apple Silicon và Linux x64.
@@ -35,7 +34,8 @@ Hermes cũ trong bất kỳ bước nào.
 | Bản vá UI phát hiện khi smoke  | Đạt bằng test/build                          | Tab ban đầu từng giữ placeholder tiếng Anh sau khi chuyển locale; commit `c646de336` dùng tiêu đề draft dịch động. Typecheck, lint và 4/4 test liên quan đạt.                                                                            |
 | Tên/đổi tên phiên              | Đạt                                          | Hồ sơ cũ hỏng được cách ly, không khôi phục. Trên hồ sơ sạch, tên tự sinh hiện ở panel trái, đổi tên lưu bền qua reload, không còn 500. `b2fa5e368` thêm bảo vệ lineage root/tip và test hồi quy.                                        |
 | SQLite/WAL                     | Đạt có giảm hiệu năng                        | Runtime SQLite 3.49.1 còn lỗi WAL-reset nhưng mã lõi giữ DB mới ở `journal_mode=delete`; `4148a5546` cho `doctor --fix` chuyển DB WAL cũ khi offline. Hồ sơ thử cuối có 0 phiên và state DB ở rollback mode.                             |
-| Windows artifact cuối          | Build/khởi động đạt; bootstrap cuối còn chặn | NSIS x64 từ `4148a5546`, stamp sạch; payload không chứa `tar`, `image-size`, state DB, `.env` hay credentials. Application Control cho chạy; backend mã cuối ready trên hồ sơ cô lập. Bootstrap ghim commit trả 404 vì commit chưa push. |
+| Trình cập nhật repo            | Đạt cục bộ; chưa thể kiểm tra tuyến công khai | `3b49907af` đổi remote chính thức SSH sang HTTPS trước autostash/fetch và ưu tiên HTTPS khi clone mới; không đổi fork/remote tùy chỉnh. 14/14 test installer mục tiêu và 6/6 test Electron remote đạt; `ls-remote` qua HTTPS tới `main` thành công. |
+| Windows artifact cuối          | Build đạt; bootstrap cuối còn chặn            | NSIS x64 từ `3b49907af`, stamp sạch; 431 mục trong `app.asar` và 388 tệp unpacked không chứa `tar`, `image-size`, state DB, `.env` hay credentials. Fresh update đúng commit chưa thể hoàn tất vì v15 chưa push.                       |
 | Desktop suite tổng quan        | Chấp nhận có điều kiện                       | Lượt mới: UI 3.685/3.692, 421/424 tệp; cả 13 test trong 3 tệp timeout/chồng DOM đều đạt khi chạy riêng tuần tự. Electron trước đó 993/1.023; 27 ca POSIX/quyền/timing nền thất bại trên Windows.                                         |
 | Website                        | Build đạt, typecheck nền chưa đạt            | Docusaurus locale `en` build thành công; còn hai broken-link warning có sẵn. Typecheck vướng cấu hình Docusaurus/TypeScript 6, namespace JSX và thiếu `userStories.json`.                                                                |
 | macOS Apple Silicon            | Chưa đạt                                     | Chưa có máy thật.                                                                                                                                                                                                                        |
@@ -44,12 +44,12 @@ Hermes cũ trong bất kỳ bước nào.
 ## Artifact Windows cuối
 
 - Tệp: `Hermes-0.17.0-win-x64.exe`
-- Kích thước: `121419143` byte
-- SHA-256: `3B06CADCCA7BD1E2EB0A402CF672AC0E227E54D95F75968203A7595F2916907D`
-- Install stamp: `4148a5546e00e7500176c9e42e621d0e0862424d`
+- Kích thước: `121419467` byte
+- SHA-256: `991D4EFC0F5A55E7CF4EBC83C46C98455CEA3A51C36D48CB974DD1E706E02082`
+- Install stamp: `3b49907afbb1c63bd6724bef46e4ff5f465e63d6`
 - Trạng thái chữ ký: `NotSigned`
 - SHA-256 `win-unpacked/Hermes.exe`:
-  `C8CFCDD8F756EE87F8A286BD2393710888251FC0CD3EFBDE99F4BFD9BFAA5180`
+  `B93AE8BDD91CCC4BA08B77D0F0AC6406450B07F0A92E06E3546928DCD3AD31F3`
 
 Hai hash trên chỉ là artifact cục bộ để kiểm chứng, chưa phải hash phát hành.
 
@@ -67,6 +67,8 @@ Hai hash trên chỉ là artifact cục bộ để kiểm chứng, chưa phải 
   journal mode khi còn tiến trình giữ DB.
 - Cho panel Tệp/Trình duyệt mở rộng theo viewport và tự fit trang web khi hẹp;
   giữ nguyên kích thước đã lưu và sàn an toàn của vùng hội thoại.
+- Sửa updater của bản cài được quản lý: tự đổi remote chính thức từ SSH sang
+  HTTPS trước khi fetch, ưu tiên HTTPS khi clone mới và giữ nguyên remote fork.
 - Cách ly toàn bộ dữ liệu session cũ bị hỏng; tuyệt đối không khôi phục vào hồ
   sơ sạch hoặc artifact.
 
@@ -97,9 +99,9 @@ CI build không thay thế hai lượt máy thật trên.
 - Giữ `vi-v0.20.0-14` là Latest; không thay asset hoặc tag hiện tại.
 - Nhánh v15 chỉ có commit cục bộ. Nếu dừng hẳn, bỏ worktree/nhánh sau khi lưu báo
   cáo; không cần rollback người dùng vì chưa có hành động công khai.
-- Nếu thay đổi đã được push sau này nhưng chưa release, revert `b5b707511` trước,
-  rồi lần lượt từ `4148a5546` về trước; chạy lại lock/security tests sau mỗi
-  revert.
+- Nếu thay đổi đã được push sau này nhưng chưa release, revert `3b49907af`
+  trước, rồi `b5b707511` và lần lượt từ `4148a5546` về trước; chạy lại
+  lock/security tests sau mỗi revert.
 - Nếu một pre-release v15 sau này lỗi, đánh dấu pre-release/thu hồi Latest và
   hướng người thử quay lại v14; không tự động phục hồi state/profile cũ.
 
@@ -111,6 +113,8 @@ CI build không thay thế hai lượt máy thật trên.
 - Cập nhật sàn phụ thuộc Node cho chuỗi build và website.
 - Sửa kiểm thử cài đặt định kỳ để hỗ trợ tag phát hành `vi-v*` và in chẩn đoán
   rõ ràng khi trigger.
+- Sửa cập nhật trên máy dùng remote GitHub SSH bằng cách chuyển remote chính
+  thức sang HTTPS; không thay đổi remote fork/tùy chỉnh.
 - Sửa tab phiên đầu tiên hiển thị đúng **Phiên mới** theo ngôn ngữ giao diện.
 - Khôi phục tên phiên tự sinh ở danh sách trái và đổi tên bền vững qua lineage
   phiên sau nén.
@@ -124,7 +128,7 @@ SmartScreen/Application Control và macOS Gatekeeper có thể chặn hoặc c�
 ## Điều kiện để đổi sang GO
 
 1. Sau khi Đại ca cho phép push, build lại từ commit cuối (hiện là
-   `b5b707511`) có thể tải bằng install stamp và chạy fresh-install smoke trọn
+   `3b49907af`) có thể tải bằng install stamp và chạy fresh-install smoke trọn
    vẹn trên hồ sơ mới. Không thay stamp hoặc bỏ ghim commit để vượt cổng này.
 2. Push nhánh sau khi Đại ca cho phép; workflow `install-e2e` phải tạo job và
    chạy được với tag `vi-v*`, phân loại rõ lỗi hạ tầng nếu có.
