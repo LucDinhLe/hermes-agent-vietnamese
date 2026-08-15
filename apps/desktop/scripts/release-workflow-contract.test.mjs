@@ -15,6 +15,7 @@ const runtimeSmoke = readFileSync(
   new URL('../../../.github/workflows/runtime-smoke-vietnamese.yml', import.meta.url),
   'utf8'
 )
+const jsTests = readFileSync(new URL('../../../.github/workflows/js-tests.yml', import.meta.url), 'utf8')
 
 test('candidate workflow builds the complete resident runtime on every advertised native target', () => {
   for (const runner of ['windows-2025', 'windows-11-arm', 'macos-15', 'macos-15-intel', 'ubuntu-24.04', 'ubuntu-24.04-arm']) {
@@ -51,4 +52,9 @@ test('runtime smoke refuses missing platform, update, persistence, signing, or r
   assert.match(runtimeSmoke, /validate-release-evidence\.mjs/)
   assert.match(runtimeSmoke, /release-runtime-evidence\.json/)
   assert.match(runtimeSmoke, /candidate_commit="\$\(git rev-parse HEAD\)"/)
+})
+
+test('the ordinary packaged desktop gate installs uv before invoking the build', () => {
+  assert.match(jsTests, /matrix\.script == 'check:test:desktop:all'/)
+  assert.match(jsTests, /astral-sh\/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39/)
 })
