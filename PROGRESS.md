@@ -1,5 +1,26 @@
 # Tiến độ
 
+## Cập nhật 2026-08-15 — đóng blocker Windows ARM64 cho candidate v19
+
+- Native staging v18 xác nhận Windows ARM64 dừng ở `pywinpty==2.0.15`: bản này
+  không có wheel ARM64 nên pip biên dịch sdist và linker lấy nhầm
+  `C:\Program Files\Git\usr\lib\winpty.lib` x64, gây xung đột machine type cùng
+  15 symbol `winpty_*` không thể liên kết. Đây là lỗi runtime thật, không phải
+  lỗi mạng hoặc runner.
+- Runtime Windows nay ghim `pywinpty==3.0.5`, bản đầu tiên có wheel CPython
+  3.11/3.12 hoàn chỉnh cho cả x64 và ARM64. Không dùng 3.0.4 vì changelog chính
+  thức xác nhận wheel x64/ARM64 của bản đó thiếu native binary.
+- Windows ARM64 staging đã loại `pywinpty` khỏi danh sách cho phép build sdist;
+  lock chứa URL và SHA-256 riêng cho cả `win_amd64` lẫn `win_arm64`. Regression
+  chặn hạ pin, thiếu một trong hai kiến trúc hoặc đưa package quay lại đường
+  source-build.
+- Trên Windows x64, wheel 3.0.5 cài thật chứa `_winpty.pyd`, `conpty.dll`,
+  `winpty.dll`, `winpty-agent.exe`, `OpenConsole.exe`; toàn bộ spawn, đọc/ghi,
+  resize và đóng ConPTY đạt. Kiểm thử hiện tại: Python 21 đạt, đóng gói/Electron
+  27 đạt, `uv lock --check` đạt.
+- Candidate vẫn là `vi-v0.20.0-19`. Chưa tạo hoặc đẩy tag cho tới khi commit
+  cuối sạch, fetch được và CI nguồn mới đạt; v18 giữ bất biến.
+
 ## Cập nhật 2026-08-15 — candidate v18 dừng ở verifier macOS, chuyển sang v19
 
 - Verify nguồn và Install & Update E2E v18 đều đạt; Windows x64, Linux x64 và

@@ -104,7 +104,7 @@ export function resolveTargets(platform = process.platform, arch = process.arch)
       // pyyaml publishes win_arm64 wheels for cp312+ only — the payload
       // python is 3.11, so it builds here too (pure fallback when the
       // libyaml accelerator is unavailable).
-      sourceBuild: ["cryptography", "httptools", "ruamel-yaml-clib", "pywinpty", "pyyaml"],
+      sourceBuild: ["cryptography", "httptools", "ruamel-yaml-clib", "pyyaml"],
     },
   }
   const key = `${platform}-${arch}`
@@ -125,8 +125,9 @@ export function resolveTargets(platform = process.platform, arch = process.arch)
  *
  * Exception: the target's sourceBuild list. Some pinned packages publish
  * no wheel for a target (win32-arm64: cryptography dropped win_arm64
- * after 46.0.3; httptools and ruamel-yaml-clib never shipped one;
- * pywinpty 2.x has none). For those named packages pip builds the
+ * after 46.0.3; httptools and ruamel-yaml-clib never shipped one).
+ * pywinpty is intentionally absent because pinned 3.0.5 publishes native
+ * wheels for both Windows architectures. For the named packages pip builds the
  * EXACT pinned version from its sdist ON the build runner, which yields
  * real target-arch code in site-packages — the user machine still
  * never compiles. The build runner needs the toolchains (MSVC arm64 +
@@ -149,6 +150,12 @@ export function pipTargetArgs({ sitePackagesDir, sourceBuild = [] }) {
     // and --target's scripts would carry the BUILD host's shebang paths.
     "--no-compile",
   ]
+}
+
+export function payloadImportProbe(target) {
+  const modules = ["pydantic_core", "cryptography", "charset_normalizer"]
+  if (target.platform === "win32") modules.push("winpty")
+  return `import ${modules.join(", ")}`
 }
 
 /**
@@ -600,7 +607,7 @@ function stageSitePackages(target, outDir, pythonBinary) {
   // and actually importing is the stronger proof.)
   probe(pythonBinary, [
     "-c",
-    `import sys; sys.path.insert(0, ${JSON.stringify(sitePackagesDir)}); import pydantic_core, cryptography, charset_normalizer`,
+    `import sys; sys.path.insert(0, ${JSON.stringify(sitePackagesDir)}); ${payloadImportProbe(target)}`,
   ])
 }
 

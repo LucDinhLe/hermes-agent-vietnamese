@@ -175,6 +175,44 @@ def test_cryptography_pin_and_lock_cover_2026_advisories():
         )
 
 
+def test_pywinpty_pin_and_lock_ship_native_windows_arm64_wheel():
+    """The bundled Windows ARM64 runtime must not compile pywinpty from sdist.
+
+    pywinpty 2.x did not publish win_arm64 wheels. The v18 native candidate
+    therefore linked Git for Windows' x64 ``winpty.lib`` on the ARM64 runner
+    and failed with machine-type conflicts. Version 3.0.5 is the first usable
+    release whose published CPython 3.11/3.12 wheels include both Windows
+    architectures; 3.0.4 is explicitly excluded because its wheels omitted
+    required native binaries.
+    """
+    pins = _pins_from_specs(_pyproject_pinned_specs()).get("pywinpty")
+    assert pins == {"3.0.5"}, (
+        "Windows runtime must exact-pin pywinpty==3.0.5; earlier releases do "
+        "not provide a complete native Windows ARM64 payload"
+    )
+
+    lock = tomllib.loads((REPO_ROOT / "uv.lock").read_text(encoding="utf-8"))
+    packages = [
+        pkg
+        for pkg in lock.get("package", [])
+        if _canonical(pkg["name"]) == "pywinpty"
+    ]
+    assert [pkg["version"] for pkg in packages] == ["3.0.5"]
+
+    wheel_names = {
+        Path(wheel["url"]).name
+        for package in packages
+        for wheel in package.get("wheels", [])
+    }
+    for python_tag in ("cp311-cp311", "cp312-cp312"):
+        assert any(
+            f"-{python_tag}-win_amd64.whl" in name for name in wheel_names
+        ), python_tag
+        assert any(
+            f"-{python_tag}-win_arm64.whl" in name for name in wheel_names
+        ), python_tag
+
+
 
 
 # ---------------------------------------------------------------------------

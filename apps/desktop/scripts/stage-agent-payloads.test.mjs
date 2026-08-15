@@ -13,6 +13,7 @@ import {
   parseSkips,
   PAYLOAD_ITEMS,
   parseVietnameseReleaseTag,
+  payloadImportProbe,
   pipTargetArgs,
   pythonDirPattern,
   pythonRequest,
@@ -247,7 +248,7 @@ test('python dir matcher accepts patch-versioned installs and rejects foreign bu
   assert.ok(!pattern.test('cpython-3.115-windows-aarch64-none'))
 })
 
-test('source-build exceptions override only-binary for the named packages only', () => {
+test('source-build exceptions exclude packages with native Windows ARM64 wheels', () => {
   // Fully wheel-covered targets keep the pure only-binary shape.
   const linux = resolveTargets('linux', 'x64')
   assert.deepEqual(pipTargetArgs({ sitePackagesDir: '/sp', sourceBuild: linux.sourceBuild ?? [] }), [
@@ -258,9 +259,20 @@ test('source-build exceptions override only-binary for the named packages only',
   // win32-arm64 names the packages with no published win_arm64 wheel;
   // pip's later --no-binary overrides --only-binary per package, so
   // exactly these build from sdist and everything else stays wheels-only.
+  // pywinpty 3.0.5 has a complete native wheel and must never fall back to
+  // the broken source-build path that linked an x64 winpty.lib on ARM64.
   const winArm = resolveTargets('win32', 'arm64')
   const args = pipTargetArgs({ sitePackagesDir: '/sp', sourceBuild: winArm.sourceBuild })
   const noBinary = args[args.indexOf('--no-binary') + 1]
   assert.ok(args.indexOf('--no-binary') > args.indexOf('--only-binary'))
-  assert.equal(noBinary, 'cryptography,httptools,ruamel-yaml-clib,pywinpty,pyyaml')
+  assert.equal(noBinary, 'cryptography,httptools,ruamel-yaml-clib,pyyaml')
+  assert.ok(!noBinary.split(',').includes('pywinpty'))
+})
+
+test('packaged runtime import probe loads pywinpty on both Windows architectures', () => {
+  for (const arch of ['x64', 'arm64']) {
+    const probe = payloadImportProbe(resolveTargets('win32', arch))
+    assert.match(probe, /\bwinpty\b/)
+  }
+  assert.doesNotMatch(payloadImportProbe(resolveTargets('linux', 'x64')), /\bwinpty\b/)
 })
