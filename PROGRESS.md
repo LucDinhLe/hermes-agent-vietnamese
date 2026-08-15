@@ -1,5 +1,27 @@
 # Tiến độ
 
+## Cập nhật 2026-08-15 — mở rộng và tự fit Trình duyệt ở panel phải
+
+- Bỏ giới hạn cứng `20rem` (320 px) của panel Tệp/Trình duyệt. Panel nay có thể
+  kéo tới `min(65vw, 90rem)`; vùng hội thoại vẫn giữ sàn `22vw`, còn kích thước
+  người dùng kéo tiếp tục được lưu bằng pane state hiện có.
+- Webview tự tính zoom theo bề rộng thực: giữ trang ở 100% từ 960 px trở lên,
+  thu nhỏ tỷ lệ thuận khi panel hẹp và chặn ở 45% để nội dung vẫn đọc được.
+  Không chèn CSS/JavaScript riêng vào website.
+- Test hồi quy được viết trước và đạt 18/18 cho giới hạn panel, công thức fit,
+  lifecycle `dom-ready`/resize và chuyển Tệp/Trình duyệt. Typecheck đạt; lint 0
+  lỗi; production build đạt.
+- Toàn bộ UI suite đạt 421/424 tệp và 3.685/3.692 phép thử ở lượt tải cao; cả 3
+  tệp còn lại (13 phép thử) đều đạt khi chạy riêng tuần tự, xác nhận lỗi lượt đầu
+  là timeout/chồng DOM do nghẽn tài nguyên, không phải hồi quy panel.
+- Smoke production tại commit `b5b707511` dùng `HERMES_HOME` và user-data tạm
+  cô lập, bắt đầu với 0 phiên. Panel kéo thật từ 237 lên 645 px, lưu đúng 645 px
+  và giữ nguyên khi đổi Tệp ↔ Trình duyệt. Google ở 237 px dùng zoom 45%; ở 645
+  px dùng 67% và có `innerWidth = scrollWidth = 963`, không tràn ngang.
+- Không đọc, nhập hoặc khôi phục hồ sơ Hermes cũ. Quyết định phát hành vẫn
+  **NO-GO** vì fresh bootstrap đúng commit cuối, runner GitHub `vi-v*`, macOS
+  Apple Silicon thật và Linux x64 thật chưa đạt.
+
 ## Cập nhật 2026-08-15 — quyết định NO-GO cho vi-v0.20.0-15
 
 - Lỗi tên phiên không tự hiện và đổi tên trả HTTP 500 được truy ra đúng
