@@ -81,6 +81,10 @@ export function resolveTargets(platform = process.platform, arch = process.arch)
       pythonPlatform: "x86_64-apple-darwin",
       nodeDist: "darwin-x64",
       uvPython: "macos-x86_64-none",
+      // cryptography 50.0.0 removed macOS x86_64 wheels. Build the exact
+      // hash-locked sdist on the Intel runner against the workflow's pinned,
+      // statically linked OpenSSL instead of weakening the security floor.
+      sourceBuild: ["cryptography"],
     },
     "darwin-arm64": {
       uvTarget: "aarch64-apple-darwin",
@@ -124,8 +128,9 @@ export function resolveTargets(platform = process.platform, arch = process.arch)
  * machine; the backend imports straight from this directory.
  *
  * Exception: the target's sourceBuild list. Some pinned packages publish
- * no wheel for a target (win32-arm64: cryptography dropped win_arm64
- * after 46.0.3; httptools and ruamel-yaml-clib never shipped one).
+ * no wheel for a target (darwin-x64: cryptography 50.0.0 dropped Intel
+ * wheels; win32-arm64: cryptography dropped win_arm64 after 46.0.3;
+ * httptools and ruamel-yaml-clib never shipped one).
  * pywinpty is intentionally absent because pinned 3.0.5 publishes native
  * wheels for both Windows architectures. For the named packages pip builds the
  * EXACT pinned version from its sdist ON the build runner, which yields

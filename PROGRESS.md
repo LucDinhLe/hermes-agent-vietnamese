@@ -1,5 +1,22 @@
 # Tiến độ
 
+## Cập nhật 2026-08-16 — đóng blocker macOS Intel cho candidate v20
+
+- Candidate bất biến `vi-v0.20.0-19` đạt source contracts, Install & Update E2E
+  và năm job native: Windows x64/ARM64, macOS Apple Silicon, Linux x64/ARM64.
+  macOS Intel dừng đúng ở runtime payload vì `cryptography==50.0.0` không phát
+  hành wheel x86_64; không có draft hoặc artifact v19 nào được công bố.
+- Candidate kế tiếp giữ nguyên sàn bảo mật `cryptography==50.0.0` và chỉ cho
+  macOS Intel dựng sdist đã khóa hash. Workflow dựng OpenSSL 3.5.7 tĩnh từ URL
+  phiên bản bất biến, kiểm SHA-256
+  `a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8`,
+  rồi import-probe native payload trước khi đóng gói. macOS ARM64 vẫn bắt buộc
+  wheel; không nới ngoại lệ cho nền tảng khác.
+- Regression hiện tại: 75/75 kiểm thử desktop release, 21 kiểm thử Python,
+  typecheck/lint đạt (0 lỗi; 96 cảnh báo có sẵn), `uv lock --check` đạt và npm
+  runtime audit báo 0 lỗ hổng. Candidate vẫn là **NO-GO/candidate only** cho tới
+  khi tag v20 dựng đủ sáu nền tảng và exact artifact vượt runtime smoke.
+
 ## Cập nhật 2026-08-15 — đóng blocker Windows ARM64 cho candidate v19
 
 - Native staging v18 xác nhận Windows ARM64 dừng ở `pywinpty==2.0.15`: bản này

@@ -248,13 +248,22 @@ test('python dir matcher accepts patch-versioned installs and rejects foreign bu
   assert.ok(!pattern.test('cpython-3.115-windows-aarch64-none'))
 })
 
-test('source-build exceptions exclude packages with native Windows ARM64 wheels', () => {
+test('source-build exceptions stay target-specific and exclude covered native wheels', () => {
   // Fully wheel-covered targets keep the pure only-binary shape.
   const linux = resolveTargets('linux', 'x64')
   assert.deepEqual(pipTargetArgs({ sitePackagesDir: '/sp', sourceBuild: linux.sourceBuild ?? [] }), [
     'install', '--require-hashes', '--only-binary', ':all:', '-r', 'requirements-payload.txt',
     '--target', '/sp', '--upgrade', '--no-compile'
   ])
+
+  // cryptography 50.0.0 publishes macOS ARM64 wheels but no Intel wheel.
+  // Only the Intel target may build its exact hash-locked sdist.
+  const macIntel = resolveTargets('darwin', 'x64')
+  const macIntelArgs = pipTargetArgs({ sitePackagesDir: '/sp', sourceBuild: macIntel.sourceBuild })
+  assert.equal(macIntelArgs[macIntelArgs.indexOf('--no-binary') + 1], 'cryptography')
+  const macArm = resolveTargets('darwin', 'arm64')
+  const macArmArgs = pipTargetArgs({ sitePackagesDir: '/sp', sourceBuild: macArm.sourceBuild ?? [] })
+  assert.ok(!macArmArgs.includes('--no-binary'))
 
   // win32-arm64 names the packages with no published win_arm64 wheel;
   // pip's later --no-binary overrides --only-binary per package, so
