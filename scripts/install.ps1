@@ -2150,6 +2150,42 @@ function Install-SystemPackages {
 # Installation
 # ============================================================================
 
+function Test-OfficialSshRemote {
+    param([AllowNull()][string]$RemoteUrl)
+
+    if ([string]::IsNullOrWhiteSpace($RemoteUrl)) { return $false }
+
+    $normalized = $RemoteUrl.Trim().TrimEnd("/")
+    if ($normalized.EndsWith(".git", [StringComparison]::OrdinalIgnoreCase)) {
+        $normalized = $normalized.Substring(0, $normalized.Length - 4)
+    }
+
+    return (
+        ($normalized -ieq "git@github.com:LucDinhLe/hermes-agent-vietnamese") -or
+        ($normalized -ieq "ssh://git@github.com/LucDinhLe/hermes-agent-vietnamese")
+    )
+}
+
+function Use-PublicHttpsOriginForManagedInstall {
+    # The managed checkout is read-only application source. Older installers
+    # cloned the public repo over SSH first, leaving origin dependent on SSH
+    # host trust (and sometimes a hardware-backed key) during later GUI
+    # updates. Self-heal only the official SSH origin; forks and custom remotes
+    # remain untouched.
+    $originOut = @(git -c windows.appendAtomically=false remote get-url origin 2>$null)
+    $originExit = $LASTEXITCODE
+    if (($originExit -ne 0) -or ($originOut.Count -eq 0)) { return }
+
+    $originUrl = $originOut[0].ToString().Trim()
+    if (-not (Test-OfficialSshRemote $originUrl)) { return }
+
+    Write-Info "Switching the public Hermes update remote from SSH to HTTPS..."
+    git -c windows.appendAtomically=false remote set-url origin $RepoUrlHttps 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not switch the public Hermes update remote to HTTPS (exit $LASTEXITCODE)"
+    }
+}
+
 function Install-Repository {
     Write-Info "Installing to $InstallDir..."
 
@@ -2216,6 +2252,11 @@ function Install-Repository {
                 # users hit on update. Pin autocrlf=false so the dirt is never
                 # created in the first place.
                 git -c windows.appendAtomically=false config core.autocrlf false 2>$null
+                # Repair legacy managed clones before inspecting/stashing local
+                # changes. If SSH host verification is unavailable, failing
+                # here used to leave an avoidable autostash behind even though
+                # the official public repo needs no SSH authentication.
+                Use-PublicHttpsOriginForManagedInstall
                 Discard-LockfileChurn $InstallDir
                 # Preserve any real local changes before the checkout instead of
                 # discarding them with `reset --hard HEAD`. The old hard reset
@@ -2411,22 +2452,23 @@ function Install-Repository {
         $env:GIT_CONFIG_VALUE_1 = "true"
         git config --global windows.appendAtomically false 2>$null
 
-        # Try SSH first, then HTTPS, with -c flag for atomic write fix
-        Write-Info "Trying SSH clone..."
-        $env:GIT_SSH_COMMAND = "ssh -o BatchMode=yes -o ConnectTimeout=5"
+        # This is a public managed checkout, so prefer anonymous HTTPS. SSH is
+        # retained only as a fallback for networks where HTTPS is unavailable.
+        Write-Info "Trying HTTPS clone..."
         try {
-            Invoke-NativeWithRelaxedErrorAction { git -c windows.appendAtomically=false clone --depth 1 --branch $Branch $RepoUrlSsh $InstallDir }
+            Invoke-NativeWithRelaxedErrorAction { git -c windows.appendAtomically=false clone --depth 1 --branch $Branch $RepoUrlHttps $InstallDir }
             if ($LASTEXITCODE -eq 0) { $cloneSuccess = $true }
         } catch { }
-        $env:GIT_SSH_COMMAND = $null
 
         if (-not $cloneSuccess) {
             if (Test-Path $InstallDir) { Remove-Item -Recurse -Force $InstallDir -ErrorAction SilentlyContinue }
-            Write-Info "SSH failed, trying HTTPS..."
+            Write-Info "HTTPS failed, trying SSH..."
+            $env:GIT_SSH_COMMAND = "ssh -o BatchMode=yes -o ConnectTimeout=5"
             try {
-                Invoke-NativeWithRelaxedErrorAction { git -c windows.appendAtomically=false clone --depth 1 --branch $Branch $RepoUrlHttps $InstallDir }
+                Invoke-NativeWithRelaxedErrorAction { git -c windows.appendAtomically=false clone --depth 1 --branch $Branch $RepoUrlSsh $InstallDir }
                 if ($LASTEXITCODE -eq 0) { $cloneSuccess = $true }
             } catch { }
+            $env:GIT_SSH_COMMAND = $null
         }
 
         # Fallback: download ZIP archive (bypasses git file I/O issues entirely)
@@ -2536,6 +2578,7 @@ function Install-Repository {
     # next `hermes update` checkout aborts on a "dirty" tree the user never
     # touched (see the update path above).
     git -c windows.appendAtomically=false config core.autocrlf false 2>$null
+    Use-PublicHttpsOriginForManagedInstall
 
     # Post-clone pin: when a clone (or ZIP-fallback init) just landed us on
     # $Branch's tip, honour the higher-precedence $Commit / $Tag by checking

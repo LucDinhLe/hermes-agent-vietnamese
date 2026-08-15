@@ -5,8 +5,8 @@
  * If the user's GitHub SSH key is FIDO2/passkey-backed, a background `git fetch
  * origin` triggers an unexplained hardware-touch prompt. For passive checks
  * against the official repo we substitute the public HTTPS `ls-remote` path,
- * which needs no auth and cannot prompt. Active update/apply flows are left
- * unchanged.
+ * which needs no auth and cannot prompt. The active installer update path has
+ * the same policy and also repairs legacy official SSH origins in-place.
  *
  * Extracted from main.ts so the security-critical remote detection is unit
  * testable without booting Electron (main.ts requires('electron') at load).
