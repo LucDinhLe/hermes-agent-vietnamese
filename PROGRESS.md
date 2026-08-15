@@ -1,5 +1,27 @@
 # Tiến độ
 
+## Cập nhật 2026-08-15 — chuẩn bị checkpoint vi-v0.20.0-15
+
+- Tạo worktree tách biệt từ `origin/main` tại `771fd6df9`; không đụng nhánh
+  `docs/record-vi-v0.20.0-14` hoặc các hiện vật smoke cũ.
+- Nâng runtime `cryptography` từ `48.0.1` lên `50.0.0`, là sàn chung đã vá
+  CVE-2026-69247, CVE-2026-69248 và CVE-2026-69249. Môi trường cô lập cài thật
+  tập `[all]`, DingTalk, Teams, Azure và dev; 174 regression tests đạt.
+- Ép toàn cây Node build/optional lên `tar 7.5.22`; `npm ci`, `npm rebuild
+  get-windows`, sáu test staging Windows và bảy test packaging matrix đạt.
+- Nâng `nanoid` website lên `3.3.18`. OSV Scanner 2.3.8 hiện chỉ còn hai cảnh
+  báo `image-size 2.0.2` website-only chưa có fixed version; `cryptography`,
+  `tar` và `nanoid` đã biến mất khỏi kết quả quét cục bộ.
+- Sửa install/update E2E để trigger tag `vi-v*`, ưu tiên họ tag Việt hóa trên
+  fork, giữ tương thích tag upstream và thêm job chẩn đoán trigger. 4 test hợp
+  đồng workflow/tag đạt; YAML parse đạt. Chưa push nên GitHub chưa thể chứng minh
+  job mới tạo trên runner thật.
+- Desktop typecheck đạt; lint đạt với 0 lỗi và 91 cảnh báo có sẵn; 70/70 UI test
+  liên quan tab phiên, đóng tab và Browser panel phải đạt; production build đạt
+  ngoài sandbox.
+- Cổng tiếp theo: commit checkpoint để install-stamp ghim đúng mã v15, đóng gói
+  Windows x64, quét nội dung artifact và chạy fresh-install bằng hồ sơ cô lập.
+
 ## Cập nhật 2026-08-14 — khôi phục nút đóng tab phiên
 
 - Khôi phục nút `×` trên mọi tab ngang có thể đóng: tab đang hoạt động luôn hiển thị, tab nền hiện khi rê chuột hoặc focus bằng bàn phím.
