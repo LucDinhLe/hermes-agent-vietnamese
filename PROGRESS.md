@@ -13,6 +13,11 @@
 - Xác minh bản sửa: release workflow contract 5/5; bốn tệp Python đạt 36/36
   bằng runner cô lập chuẩn. Vì không di chuyển hoặc tái sử dụng tag bất biến,
   candidate kế tiếp mang số `vi-v0.20.0-16`.
+- Install/update E2E của tag v15 đã tạo đủ matrix nhưng mọi leg fetch nhầm tag
+  Việt hóa từ repo upstream NousResearch; leg của chính v15 còn tự kiểm thử cập
+  nhật từ một commit sang chính nó. Reusable workflow nay truyền URL fork vào
+  sandbox và tag-trigger loại candidate hiện tại khỏi tập phiên bản nguồn.
+- Regression cho picker/fork route đạt 5/5; YAML và Bash syntax đều hợp lệ.
 
 ## Cập nhật 2026-08-15 — cho phép community prerelease không ký, không hạ chuẩn stable
 

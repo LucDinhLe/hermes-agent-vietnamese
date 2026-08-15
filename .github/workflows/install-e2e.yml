@@ -90,10 +90,16 @@ jobs:
       - id: pick
         env:
           TAG_COUNT: ${{ inputs['tag-count'] || '5' }}
+          EXCLUDE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
         run: |
           set -euo pipefail
           echo "Selecting release tags for event=${{ github.event_name }} ref=${{ github.ref }} count=$TAG_COUNT"
-          tags="$(scripts/sandbox/pick-release-tags.sh --count "$TAG_COUNT")"
+          picker_args=(--count "$TAG_COUNT")
+          if [ -n "$EXCLUDE_TAG" ]; then
+            echo "Excluding current candidate tag from update-from matrix: $EXCLUDE_TAG"
+            picker_args+=(--exclude "$EXCLUDE_TAG")
+          fi
+          tags="$(scripts/sandbox/pick-release-tags.sh "${picker_args[@]}")"
           echo "Testing updates from: $tags"
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
 

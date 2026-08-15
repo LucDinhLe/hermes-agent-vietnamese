@@ -44,7 +44,12 @@ def _git(repo: Path, *args: str) -> None:
     )
 
 
-def _pick(tmp_path: Path, tags: list[str], count: int = 5) -> list[str]:
+def _pick(
+    tmp_path: Path,
+    tags: list[str],
+    count: int = 5,
+    exclude: str | None = None,
+) -> list[str]:
     repo = tmp_path / "repo"
     repo.mkdir()
     _git(repo, "init")
@@ -61,15 +66,19 @@ def _pick(tmp_path: Path, tags: list[str], count: int = 5) -> list[str]:
     if git_usr_bin.exists():
         env["PATH"] = os.pathsep.join([str(git_usr_bin), env.get("PATH", "")])
 
+    args = [
+        _bash(),
+        _git_bash_path(PICKER),
+        "--count",
+        str(count),
+        "--repo",
+        _git_bash_path(repo),
+    ]
+    if exclude is not None:
+        args.extend(["--exclude", exclude])
+
     result = subprocess.run(
-        [
-            _bash(),
-            _git_bash_path(PICKER),
-            "--count",
-            str(count),
-            "--repo",
-            _git_bash_path(repo),
-        ],
+        args,
         check=False,
         capture_output=True,
         env=env,
@@ -106,6 +115,16 @@ def test_count_one_selects_newest_fork_release(tmp_path: Path):
     assert picked == ["vi-v0.20.0-14"]
 
 
+def test_current_candidate_is_excluded_from_update_from_matrix(tmp_path: Path):
+    picked = _pick(
+        tmp_path,
+        ["vi-v0.20.0-12", "vi-v0.20.0-14", "vi-v0.20.0-15"],
+        exclude="vi-v0.20.0-15",
+    )
+
+    assert picked == ["vi-v0.20.0-12", "vi-v0.20.0-14"]
+
+
 def test_workflow_triggers_fork_tags_and_has_diagnostic_job():
     workflow = (REPO_ROOT / ".github" / "workflows" / "install-e2e.yml").read_text(
         encoding="utf-8"
@@ -116,3 +135,10 @@ def test_workflow_triggers_fork_tags_and_has_diagnostic_job():
     assert "needs: diagnostics" in workflow
     assert "inputs['tag-count']" in workflow
     assert "inputs.tag-count" not in workflow
+    assert '--exclude "$EXCLUDE_TAG"' in workflow
+
+    reusable = (REPO_ROOT / ".github" / "workflows" / "install-e2e-run.yml").read_text(
+        encoding="utf-8"
+    )
+    assert "HERMES_DEV_SANDBOX_UPSTREAM:" in reusable
+    assert "github.com/${{ github.repository }}.git" in reusable
