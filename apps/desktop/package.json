@@ -187,8 +187,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "NousResearch",
-        "repo": "hermes-agent"
+        "owner": "LucDinhLe",
+        "repo": "hermes-agent-vietnamese"
       }
     ],
     "directories": {

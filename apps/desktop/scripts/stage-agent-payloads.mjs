@@ -38,6 +38,9 @@ import fs from "node:fs"
 import path from "node:path"
 
 import { isMain } from "./utils.mjs"
+import { parseVietnameseReleaseTag } from "../../../scripts/vietnamese-release.mjs"
+
+export { parseVietnameseReleaseTag } from "../../../scripts/vietnamese-release.mjs"
 
 export const PAYLOAD_SCHEMA_VERSION = 2
 
@@ -114,8 +117,8 @@ export function resolveTargets(platform = process.platform, arch = process.arch)
 
 /**
  * Build the `pip install --target` argument list that fills the payload's
- * site-packages. The caller invokes it through `uvx pip …` ON the staged
- * payload interpreter, natively on the target runner, so wheels resolve
+ * site-packages. The caller invokes the digest-pinned build uv against the
+ * staged payload interpreter, natively on the target runner, so wheels resolve
  * for the target platform/arch. With --only-binary=:all: it never
  * compiles on the user machine — there IS no install step on the user
  * machine; the backend imports straight from this directory.
@@ -134,6 +137,7 @@ export function resolveTargets(platform = process.platform, arch = process.arch)
 export function pipTargetArgs({ sitePackagesDir, sourceBuild = [] }) {
   return [
     "install",
+    "--require-hashes",
     "--only-binary", ":all:",
     ...(sourceBuild.length > 0 ? ["--no-binary", sourceBuild.join(",")] : []),
     "-r", "requirements-payload.txt",
@@ -198,7 +202,7 @@ export function bannerExpectations(target) {
 }
 
 /**
- * Resolve the release tag to stage. CI passes --tag=vX.Y.Z. Local runs can
+ * Resolve the release tag to stage. CI passes --tag=vi-vX.Y.Z-N. Local runs can
  * fall back to `git describe` for smoke tests. When bundling was requested
  * and no tag exists, payload staging is a hard error. A bundled artifact
  * without a pinned tag produces un-adoptable, un-updatable installs.
@@ -207,17 +211,18 @@ export function resolveTag(argv, describeFn) {
   const explicit = argv.find((a) => a.startsWith("--tag="))
   if (explicit) {
     const tag = explicit.slice("--tag=".length).trim()
-    if (!/^v(?:0|[1-9]\d{0,2})\.\d+\.\d+$/.test(tag)) {
-      throw new Error(`--tag must be a final release tag (vX.Y.Z), got: ${tag}`)
-    }
-    return tag
+    return parseVietnameseReleaseTag(tag).tag
   }
   const described = describeFn()
-  if (described && /^v(?:0|[1-9]\d{0,2})\.\d+\.\d+$/.test(described)) {
-    return described
+  if (described) {
+    try {
+      return parseVietnameseReleaseTag(described).tag
+    } catch {
+      // Fall through to the release-specific error below.
+    }
   }
   throw new Error(
-    "no release tag: pass --tag=vX.Y.Z (CI) or run from a checkout at an exact release tag"
+    "no Vietnamese release tag: pass --tag=vi-vX.Y.Z-N (CI) or run from an exact release tag"
   )
 }
 
@@ -334,16 +339,40 @@ function stageRepo(tag, outDir) {
       dereference: true,
     })
   }
+  // Browser automation is a production root dependency, not a workspace
+  // dependency. Copy the lockfile-installed package and npm shims into the
+  // source snapshot so the resident runtime never has to contact npm before
+  // it can discover agent-browser. The package tarball is integrity-pinned by
+  // package-lock.json and `npm ci` runs before this stage.
+  const browserPackage = path.join(REPO_ROOT, "node_modules", "agent-browser")
+  const browserBinDir = path.join(REPO_ROOT, "node_modules", ".bin")
+  if (!fs.existsSync(browserPackage) || !fs.existsSync(browserBinDir)) {
+    throw new Error("repo: agent-browser production dependency missing — run root npm ci first")
+  }
+  fs.cpSync(browserPackage, path.join(repoDir, "node_modules", "agent-browser"), {
+    recursive: true,
+    dereference: true,
+  })
+  const stagedBinDir = path.join(repoDir, "node_modules", ".bin")
+  fs.mkdirSync(stagedBinDir, { recursive: true })
+  const browserShims = fs.readdirSync(browserBinDir).filter((name) => /^agent-browser(?:\.(?:cmd|ps1))?$/.test(name))
+  if (browserShims.length === 0) {
+    throw new Error("repo: npm did not create an agent-browser executable shim")
+  }
+  for (const shim of browserShims) {
+    fs.cpSync(path.join(browserBinDir, shim), path.join(stagedBinDir, shim), { dereference: true })
+  }
   // Version provenance without git: the schema-v2 build stamp. The
   // version_info ladder prefers this stamp over git probing, so bundled
   // installs report exact-release provenance (distance 0, the tag's
   // commit) with no .git present.
-  run("python3", [
+  const buildPython = process.env.HERMES_PAYLOAD_BUILD_PYTHON || (process.platform === "win32" ? "python" : "python3")
+  run(buildPython, [
     path.join(repoDir, "scripts", "write_install_stamp.py"),
     "--output", path.join(repoDir, ".hermes_build_info.json"),
     "--commit", commit,
     "--commit-date", commitDate,
-    "--base-version", tag.slice(1),
+    "--base-version", parseVietnameseReleaseTag(tag).baseVersion,
     "--distance", "0",
     "--source", "ci",
   ])
@@ -478,22 +507,20 @@ function stageSitePackages(target, outDir, pythonBinary) {
   fs.rmSync(sitePackagesDir, { recursive: true, force: true })
   fs.mkdirSync(sitePackagesDir, { recursive: true })
   // Export the lock to a requirements file, then install the whole tree
-  // with pip running ON THE STAGED PAYLOAD INTERPRETER: pip resolves
+  // with uv targeting THE STAGED PAYLOAD INTERPRETER: wheel resolution
   // platform tags for the interpreter that executes it, so this is what
-  // pins site-packages to the target architecture. (uvx pip runs under
-  // uvx's own python — on the arm64 test box that pulled win_amd64
-  // wheels.) No venv anywhere: a venv's bin/python is a symlink to an
+  // pins site-packages to the target architecture. Do not use `uvx pip`:
+  // that floats an extra tool package and once ran under uvx's own Python,
+  // pulling win_amd64 wheels on an arm64 box. No venv anywhere: a venv's
+  // bin/python is a symlink to an
   // ABSOLUTE build-host path, and the .app runs from unpredictable
   // locations (renames, Gatekeeper translocation, AppImage mounts).
   if (!pythonBinary) {
     throw new Error("site-packages: the uv/python stage must run first (it provides the payload interpreter)")
   }
   run("uv", ["export", "--frozen", "--no-emit-project", "-o", "requirements-payload.txt"], { cwd: REPO_ROOT })
-  run(
-    "uvx",
-    ["--python", pythonBinary, "pip", ...pipTargetArgs({ sitePackagesDir, sourceBuild: target.sourceBuild || [] })],
-    { cwd: REPO_ROOT }
-  )
+  const pipArgs = pipTargetArgs({ sitePackagesDir, sourceBuild: target.sourceBuild || [] })
+  run("uv", ["pip", pipArgs[0], "--python", pythonBinary, ...pipArgs.slice(1)], { cwd: REPO_ROOT })
 
   // hermes-agent's own code imports from repo/ (the .pth puts it first on
   // sys.path — PROJECT_ROOT derivations need the real tree around the

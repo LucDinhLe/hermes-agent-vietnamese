@@ -140,7 +140,8 @@ export function findResidentPython(
   platform: NodeJS.Platform = process.platform,
   fsImpl: Pick<typeof fs, 'readdirSync' | 'existsSync'> = fs
 ): string | null {
-  const pythonRoot = path.join(payloadDir, 'python')
+  const pathModule = platform === 'win32' ? path.win32 : path.posix
+  const pythonRoot = pathModule.join(payloadDir, 'python')
 
   let entries: string[]
 
@@ -155,8 +156,8 @@ export function findResidentPython(
   for (const entry of entries.filter((name) => name.startsWith('cpython-')).sort().reverse()) {
     const candidate =
       platform === 'win32'
-        ? path.join(pythonRoot, entry, 'python.exe')
-        : path.join(pythonRoot, entry, 'bin', 'python3')
+        ? pathModule.join(pythonRoot, entry, 'python.exe')
+        : pathModule.join(pythonRoot, entry, 'bin', 'python3')
 
     if (fsImpl.existsSync(candidate)) {
       return candidate
@@ -186,22 +187,25 @@ export function resolveChannel(
 }
 
 /**
- * Pick the newest final release tag (vX.Y.Z, no prerelease suffix) from
- * `git ls-remote --tags` output. Numeric ordering, so v0.10.0 > v0.9.0.
+ * Pick the newest final upstream/community release tag from
+ * `git ls-remote --tags` output. Community vi-vX.Y.Z-N iterations sort after
+ * the matching upstream base version.
  * Returns null when the output has no final release tag.
  *
  * A peeled entry (`refs/tags/v1.2.3^{}`) resolves the commit that an
  * annotated tag points at. It wins over the unpeeled line of the same tag.
  */
 export function latestReleaseFromLsRemote(output: string): { tag: string; sha: string } | null {
-  const versions = new Map<string, { key: [number, number, number]; sha: string; peeled: boolean }>()
+  const versions = new Map<string, { key: [number, number, number, number]; sha: string; peeled: boolean }>()
 
   for (const line of output.split('\n')) {
     // The major component is capped at three digits: the historical CalVer
     // tags (v2026.7.20) would win every numeric sort. This mirrors
     // _RELEASE_TAG_RE in hermes_cli/update_cmd.py and _SEMVER_TAG_RE in
     // scripts/write_install_stamp.py.
-    const m = line.match(/^([0-9a-f]{40})\trefs\/tags\/(v(?:0|[1-9]\d{0,2})\.\d+\.\d+)(\^\{\})?$/)
+    const m = line.match(
+      /^([0-9a-f]{40})\trefs\/tags\/((?:vi-)?v(?:0|[1-9]\d{0,2})\.\d+\.\d+(?:-\d+)?)(\^\{\})?$/
+    )
 
     if (!m) {
       continue
@@ -211,19 +215,40 @@ export function latestReleaseFromLsRemote(output: string): { tag: string; sha: s
     const existing = versions.get(tag)
 
     if (!existing || (peel && !existing.peeled)) {
-      const [major, minor, patch] = tag.slice(1).split('.').map(Number)
+      const community = /^vi-v(\d+)\.(\d+)\.(\d+)-(\d+)$/.exec(tag)
+      const upstream = /^v(\d+)\.(\d+)\.(\d+)$/.exec(tag)
+      const parsed = community || upstream
 
-      versions.set(tag, { key: [major, minor, patch], sha, peeled: Boolean(peel) })
+      if (!parsed) {
+        continue
+      }
+
+      const [, major, minor, patch, iteration] = parsed
+
+      versions.set(tag, {
+        key: [Number(major), Number(minor), Number(patch), community ? Number(iteration) : -1],
+        sha,
+        peeled: Boolean(peel)
+      })
     }
   }
 
-  let best: { tag: string; sha: string; key: [number, number, number] } | null = null
+  let best: { tag: string; sha: string; key: [number, number, number, number] } | null = null
 
   for (const [tag, { key, sha }] of versions) {
-    const newer =
-      !best ||
-      key[0] > best.key[0] ||
-      (key[0] === best.key[0] && (key[1] > best.key[1] || (key[1] === best.key[1] && key[2] > best.key[2])))
+    let newer = best === null
+
+    if (best !== null) {
+      for (let index = 0; index < key.length; index += 1) {
+        if (key[index] === best.key[index]) {
+          continue
+        }
+
+        newer = key[index] > best.key[index]
+
+        break
+      }
+    }
 
     if (newer) {
       best = { tag, sha, key }

@@ -1,0 +1,77 @@
+import assert from "node:assert/strict"
+import { test } from "node:test"
+
+import {
+  RELEASE_PLATFORMS,
+  REQUIRED_RUNTIME_GATES,
+  validateReleaseEvidence,
+} from "./validate-release-evidence.mjs"
+
+const manifestSha = "f".repeat(64)
+const commit = "a".repeat(40)
+const checksumText = RELEASE_PLATFORMS.map((platform, index) => `${String(index + 1).repeat(64).slice(0, 64)}  ${platform}.bin`).join("\n")
+
+function validEvidence() {
+  return {
+    schemaVersion: 1,
+    tag: "vi-v0.20.0-15",
+    commit,
+    sha256sumsSha256: manifestSha,
+    platforms: Object.fromEntries(RELEASE_PLATFORMS.map((platform, index) => [platform, {
+      decision: "GO",
+      machine: `machine-${platform}`,
+      osVersion: "test-os",
+      arch: platform.endsWith("arm64") ? "arm64" : "x64",
+      artifact: `${platform}.bin`,
+      sha256: String(index + 1).repeat(64).slice(0, 64),
+      gates: Object.fromEntries(REQUIRED_RUNTIME_GATES.map(gate => [gate, true])),
+      logs: [`${platform}.log`],
+      screenshots: [`${platform}.png`],
+      signing: platform.startsWith("windows-")
+        ? { authenticode: "Valid" }
+        : platform.startsWith("macos-")
+          ? { developerId: true, notarized: true, stapled: true }
+          : { sha256: true },
+    }]))
+  }
+}
+
+test("accepts complete exact-artifact evidence for all advertised platforms", () => {
+  assert.doesNotThrow(() => validateReleaseEvidence(validEvidence(), checksumText, {
+    tag: "vi-v0.20.0-15",
+    commit,
+    sha256sumsSha256: manifestSha,
+  }))
+})
+
+test("one missing platform or runtime gate makes the release NO-GO", () => {
+  const missingPlatform = validEvidence()
+  delete missingPlatform.platforms["macos-arm64"]
+  assert.throws(() => validateReleaseEvidence(missingPlatform, checksumText), /macos-arm64/)
+
+  const missingGate = validEvidence()
+  missingGate.platforms["windows-x64"].gates.updateFromPrevious = false
+  assert.throws(() => validateReleaseEvidence(missingGate, checksumText), /updateFromPrevious/)
+})
+
+test("rejects evidence produced for another source commit", () => {
+  assert.throws(() => validateReleaseEvidence(validEvidence(), checksumText, {
+    tag: "vi-v0.20.0-15",
+    commit: "b".repeat(40),
+    sha256sumsSha256: manifestSha,
+  }), /commit mismatch/)
+})
+
+test("rejects unsigned Windows, unnotarized macOS, or a mismatched artifact hash", () => {
+  const unsigned = validEvidence()
+  unsigned.platforms["windows-x64"].signing.authenticode = "NotSigned"
+  assert.throws(() => validateReleaseEvidence(unsigned, checksumText), /Authenticode/)
+
+  const mac = validEvidence()
+  mac.platforms["macos-arm64"].signing.stapled = false
+  assert.throws(() => validateReleaseEvidence(mac, checksumText), /stapling/)
+
+  const bytes = validEvidence()
+  bytes.platforms["linux-x64"].sha256 = "0".repeat(64)
+  assert.throws(() => validateReleaseEvidence(bytes, checksumText), /SHA-256/)
+})

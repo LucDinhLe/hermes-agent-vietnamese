@@ -11,12 +11,13 @@ from hermes_cli.update_cmd import (
 
 class TestParseReleaseTag:
     def test_final_releases_parse(self):
-        assert _parse_release_tag("v0.17.0") == (0, 17, 0)
-        assert _parse_release_tag("v10.2.33") == (10, 2, 33)
-        assert _parse_release_tag(" v1.2.3 ") == (1, 2, 3)
+        assert _parse_release_tag("v0.17.0") == (0, 17, 0, -1)
+        assert _parse_release_tag("vi-v0.20.0-15") == (0, 20, 0, 15)
+        assert _parse_release_tag("v10.2.33") == (10, 2, 33, -1)
+        assert _parse_release_tag(" v1.2.3 ") == (1, 2, 3, -1)
 
     def test_prereleases_and_garbage_rejected(self):
-        for tag in ("v1.2.3-rc1", "v1.2.3-beta.1", "v1.2", "1.2.3", "release-1", "vv1.2.3", ""):
+        for tag in ("v1.2.3-rc1", "v1.2.3-beta.1", "vi-v1.2.3", "vi-v1.2.3-rc1", "v1.2", "1.2.3", "release-1", "vv1.2.3", ""):
             assert _parse_release_tag(tag) is None, tag
 
     def test_calver_tags_rejected(self):
@@ -29,7 +30,7 @@ class TestParseReleaseTag:
         """
         assert _parse_release_tag("v2026.7.20") is None
         assert _parse_release_tag("v1000.0.0") is None
-        assert _parse_release_tag("v999.0.0") == (999, 0, 0)
+        assert _parse_release_tag("v999.0.0") == (999, 0, 0, -1)
 
     def test_numeric_ordering_not_lexicographic(self):
         """v0.10.0 must sort above v0.9.0 — the whole point of tuple parsing."""
@@ -49,6 +50,14 @@ class TestLatestReleaseTagFromLsRemote:
         tag, sha = _latest_release_tag_from_ls_remote(output)
         assert tag == "v0.10.0"
         assert sha == "bbb2"
+
+    def test_picks_latest_vietnamese_iteration(self):
+        output = (
+            "base\trefs/tags/v0.20.0\n"
+            "old\trefs/tags/vi-v0.20.0-14\n"
+            "new\trefs/tags/vi-v0.20.0-15\n"
+        )
+        assert _latest_release_tag_from_ls_remote(output) == ("vi-v0.20.0-15", "new")
 
     def test_peeled_sha_wins_for_annotated_tags(self):
         output = (

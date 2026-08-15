@@ -38,6 +38,7 @@ _REPO_ROOT = Path(__file__).parent.parent.resolve()
 # component (for example v2026.7.20). Restrict release majors to three digits
 # so these date tags cannot masquerade as the v0.x.y SemVer boundaries.
 _SEMVER_TAG_RE = re.compile(r"^v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
+_VI_RELEASE_TAG_RE = re.compile(r"^vi-v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)-(0|[1-9]\d*)$")
 _LEGACY_CALVER_TAG_RE = re.compile(r"^v20\d{2}\.\d+\.\d+(?:\.\d+)?$")
 
 FALLBACK_COMMIT = "0" * 40
@@ -181,10 +182,10 @@ def build_stamp(
     # cannot update itself.
     payload = os.environ.get("HERMES_DESKTOP_BUNDLED") == "1"
     tag = os.environ.get("HERMES_PAYLOAD_TAG") or None
-    if payload and not (tag and re.match(r"^v(0|[1-9]\d{0,2})\.\d+\.\d+$", tag)):
+    if payload and not (tag and _VI_RELEASE_TAG_RE.fullmatch(tag)):
         raise SystemExit(
             "write_install_stamp: HERMES_DESKTOP_BUNDLED=1 requires "
-            f"HERMES_PAYLOAD_TAG=vX.Y.Z (got {tag!r})"
+            f"HERMES_PAYLOAD_TAG=vi-vX.Y.Z-N (got {tag!r})"
         )
 
     return {

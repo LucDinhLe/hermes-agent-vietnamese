@@ -6,13 +6,13 @@
 //   1. preflight: uv, git, npm exist; a release tag is resolvable
 //   2. npm ci at the repo root (skip with --no-install)
 //   3. build ui-tui (with hermes-ink) and the dashboard SPA
-//   4. download the payload node dist for this platform (22.x)
+//   4. download the digest-pinned payload Node dist for this platform
 //   5. npm run build in apps/desktop with HERMES_DESKTOP_BUNDLED=1
 //   6. npm run builder -- <platform targets>   (skip with --no-package)
 //
 // Usage:
-//   node scripts/build-bundled-desktop.mjs --tag=v0.20.0
-//   node scripts/build-bundled-desktop.mjs --tag=v0.20.0 --no-install --no-package
+//   node scripts/build-bundled-desktop.mjs --tag=vi-v0.20.0-15
+//   node scripts/build-bundled-desktop.mjs --tag=vi-v0.20.0-15 --no-install --no-package
 //
 // Signing is CI's job (Azure/Apple secrets). Local builds are unsigned.
 
@@ -23,9 +23,14 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { hostTarBin } from "../apps/desktop/scripts/stage-agent-payloads.mjs"
+import { prepareAgentBrowserNative } from "./prepare-agent-browser-native.mjs"
+import {
+  parseVietnameseReleaseTag,
+  payloadNodeDescriptor,
+  sha256File,
+} from "./vietnamese-release.mjs"
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
-const PAYLOAD_NODE_MAJOR = "22" // matches NODE_VERSION in scripts/install.sh
 
 const args = process.argv.slice(2)
 const tagArg = args.find((a) => a.startsWith("--tag="))?.slice("--tag=".length)
@@ -67,11 +72,14 @@ if (!tag) {
   try {
     tag = capture("git describe --tags --exact-match")
   } catch {
-    fail("no --tag=vX.Y.Z given and HEAD is not at an exact release tag")
+    fail("no --tag=vi-vX.Y.Z-N given and HEAD is not at an exact release tag")
   }
 }
-if (!/^v(?:0|[1-9]\d{0,2})\.\d+\.\d+$/.test(tag)) {
-  fail(`'${tag}' is not a final release tag (vX.Y.Z)`)
+let release
+try {
+  release = parseVietnameseReleaseTag(tag)
+} catch (error) {
+  fail(error.message)
 }
 
 // The canonical Hermes version is owned by pyproject.toml (the same rule
@@ -86,11 +94,11 @@ const pyprojectVersion = fs
 if (!pyprojectVersion) {
   fail("could not read version from pyproject.toml")
 }
-if (tag !== `v${pyprojectVersion}`) {
+if (release.baseVersion !== pyprojectVersion) {
   fail(`tag ${tag} does not match pyproject.toml version ${pyprojectVersion}`)
 }
 
-const targets = { linux: "--linux AppImage", darwin: "--mac dmg zip", win32: "--win nsis" }[process.platform]
+const targets = { linux: "--linux AppImage deb rpm", darwin: "--mac dmg zip", win32: "--win nsis" }[process.platform]
 if (!targets) {
   fail(`unsupported platform: ${process.platform}`)
 }
@@ -112,27 +120,22 @@ run("npm", ["run", "build", "--workspace", "web"])
 
 // ── 4. payload node dist ────────────────────────────────────────────────────
 
-const distName = { linux: "linux", darwin: "darwin", win32: "win" }[process.platform]
-const distArch = { x64: "x64", arm64: "arm64" }[process.arch]
-const distExt = process.platform === "win32" ? "zip" : process.platform === "darwin" ? "tar.gz" : "tar.xz"
-
-const index = JSON.parse(
-  execSync(`curl -fsSL https://nodejs.org/dist/index.json`, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 })
-)
-const version = index.find((e) => e.version.startsWith(`v${PAYLOAD_NODE_MAJOR}.`))?.version
-if (!version) {
-  fail(`no node ${PAYLOAD_NODE_MAJOR}.x release found in nodejs.org index`)
-}
+const nodeInput = payloadNodeDescriptor(process.platform, process.arch)
 
 const work = fs.mkdtempSync(path.join(os.tmpdir(), "hermes-node-payload-"))
-const archive = `node-${version}-${distName}-${distArch}.${distExt}`
+const archive = nodeInput.archive
 const extractDir = path.join(work, "extract")
 const nodeDir = path.join(work, "node-payload")
 fs.mkdirSync(extractDir, { recursive: true })
 
-console.log(`[build-bundled] payload node: ${version}`)
-run("curl", ["-fsSL", "-o", path.join(work, archive), `https://nodejs.org/dist/${version}/${archive}`])
-run(hostTarBin(), ["-xf", path.join(work, archive), "-C", extractDir])
+console.log(`[build-bundled] payload node: ${nodeInput.version} (${nodeInput.sha256})`)
+const archivePath = path.join(work, archive)
+run("curl", ["-fsSL", "-o", archivePath, nodeInput.url])
+const actualNodeSha = sha256File(archivePath)
+if (actualNodeSha !== nodeInput.sha256) {
+  fail(`payload Node SHA-256 mismatch: expected ${nodeInput.sha256}, got ${actualNodeSha}`)
+}
+run(hostTarBin(), ["-xf", archivePath, "-C", extractDir])
 const [topDir] = fs.readdirSync(extractDir)
 fs.renameSync(path.join(extractDir, topDir), nodeDir)
 
@@ -152,6 +155,7 @@ const env = {
 }
 
 const desktop = path.join(REPO_ROOT, "apps", "desktop")
+prepareAgentBrowserNative(process.platform, process.arch)
 run("npm", ["run", "build"], { cwd: desktop, env })
 
 if (skipPackage) {
@@ -162,7 +166,7 @@ if (skipPackage) {
     [
       "run", "builder", "--",
       ...targets.split(" "),
-      `-c.extraMetadata.version=${pyprojectVersion}`,
+      `-c.extraMetadata.version=${release.appVersion}`,
       ...extraBuilderArgs,
     ],
     { cwd: desktop, env }

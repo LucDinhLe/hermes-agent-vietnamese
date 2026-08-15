@@ -34,6 +34,14 @@ export function shouldUseAppUpdater(facts: UpdaterGateFacts): boolean {
   return facts.stampHasPayload === true && facts.installMode === 'bundled' && facts.isPackaged === true
 }
 
+export function releaseTagForAppVersion(version: string): string {
+  const community = /^(0|[1-9]\d{0,2})\.(\d+)\.(\d+)-vi\.(0|[1-9]\d*)$/.exec(version)
+
+  return community
+    ? `vi-v${community[1]}.${community[2]}.${community[3]}-${community[4]}`
+    : `v${version}`
+}
+
 /**
  * Map an electron-updater check result to the renderer's update-check shape
  * (the shape hermes:updates:check already returns for the git path). The
@@ -65,7 +73,7 @@ export function describeFeedCheck(
     channel: 'stable',
     currentVersion: current,
     latestVersion: latest,
-    latestTag: latest ? `v${latest}` : null,
+    latestTag: latest ? releaseTagForAppVersion(latest) : null,
     // Prefer electron-updater's own semver verdict: a plain string compare
     // would offer a locally-newer dev build a downgrade.
     updateAvailable: isUpdateAvailable ?? (latest !== null && latest !== current),
@@ -92,6 +100,10 @@ export function getAutoUpdater(): AppUpdater {
 
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
+  // Community revision numbers are encoded as SemVer prerelease components
+  // (0.20.0-vi.15) even though the GitHub release itself is stable. Without
+  // this flag electron-updater filters the fork's update feed out entirely.
+  autoUpdater.allowPrerelease = true
   cachedUpdater = autoUpdater
 
   return autoUpdater

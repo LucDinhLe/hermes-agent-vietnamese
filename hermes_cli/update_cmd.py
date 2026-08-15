@@ -104,17 +104,21 @@ _UPDATE_CRITICAL_FILES = (
     "hermes_constants.py",
 )
 
-# Release tags have the form v1.2.3. A tag can have a pre-release suffix.
-# The stable channel ignores tags with a suffix. Stable means final releases only.
+# Community releases use vi-v1.2.3-N. Keep accepting upstream v1.2.3 tags for
+# source checkouts, but rank a Vietnamese iteration after its matching upstream
+# base release. Suffixes other than the numeric community iteration stay out of
+# the stable channel.
 # The major component is capped at three digits. The historical CalVer tags
 # (for example v2026.7.20) use a four-digit year, and a numeric sort would
 # rank them above every SemVer release. This matches _SEMVER_TAG_RE in
 # scripts/write_install_stamp.py.
-_RELEASE_TAG_RE = re.compile(r"^v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)$")
+_RELEASE_TAG_RE = re.compile(
+    r"^(?:vi-)?v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)(?:-(\d+))?$"
+)
 
 
 def _parse_release_tag(tag: str):
-    """Parse ``vX.Y.Z`` into a sortable (X, Y, Z) tuple, or return None.
+    """Parse a final upstream/community release into a sortable tuple.
 
     Tags with a pre-release or build suffix (``v1.2.3-rc1``) return None.
     Tags that do not have the shape of a final release also return None.
@@ -123,7 +127,11 @@ def _parse_release_tag(tag: str):
     m = _RELEASE_TAG_RE.match(tag.strip())
     if not m:
         return None
-    return tuple(int(g) for g in m.groups())
+    major, minor, patch, iteration = m.groups()
+    is_vietnamese = tag.strip().startswith("vi-")
+    if is_vietnamese != (iteration is not None):
+        return None
+    return (int(major), int(minor), int(patch), int(iteration) if iteration else -1)
 
 
 def _latest_release_tag_from_ls_remote(output: str):
@@ -163,7 +171,7 @@ def _resolve_latest_release_tag(git_cmd, cwd):
     """Ask origin for the newest final release tag. Returns (tag, sha) or (None, None)."""
     try:
         result = subprocess.run(
-            git_cmd + ["ls-remote", "--tags", "origin", "v*"],
+            git_cmd + ["ls-remote", "--tags", "origin", "v*", "vi-v*"],
             cwd=cwd,
             capture_output=True,
             text=True, encoding="utf-8", errors="replace",
@@ -229,7 +237,7 @@ def _github_latest_release_tag():
         with urllib.request.urlopen(req, timeout=30) as resp:
             return json.loads(resp.read().decode("utf-8"))
 
-    base = "https://api.github.com/repos/NousResearch/hermes-agent"
+    base = "https://api.github.com/repos/LucDinhLe/hermes-agent-vietnamese"
     try:
         data = _get_json(f"{base}/releases/latest")
         tag = data.get("tag_name")

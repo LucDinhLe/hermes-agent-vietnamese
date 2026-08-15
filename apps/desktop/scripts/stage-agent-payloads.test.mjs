@@ -9,6 +9,7 @@ import {
   bundlePthLines,
   parseSkips,
   PAYLOAD_ITEMS,
+  parseVietnameseReleaseTag,
   pipTargetArgs,
   pythonDirPattern,
   pythonRequest,
@@ -55,6 +56,7 @@ test('site-packages install refuses sdists and targets the payload dir', () => {
   // runner for packages we did not explicitly allow-list. The install is
   // native, so no --platform cross-tags belong here.
   assert.equal(args[0], 'install')
+  assert.ok(args.includes('--require-hashes'))
   assert.ok(args.includes('--only-binary'))
   assert.equal(args[args.indexOf('-r') + 1], 'requirements-payload.txt')
   assert.equal(args[args.indexOf('--target') + 1], '/out/site-packages')
@@ -86,16 +88,27 @@ test('bundle .pth entries are relative and name repo before site-packages', () =
 
 // ─── resolveTag ────────────────────────────────────────────────────
 
-test('explicit --tag wins and must be a final release', () => {
-  assert.equal(resolveTag(['--tag=v1.2.3'], () => null), 'v1.2.3')
-  assert.throws(() => resolveTag(['--tag=v1.2.3-rc1'], () => null), /final release/)
-  assert.throws(() => resolveTag(['--tag=main'], () => null), /final release/)
+test('Vietnamese release tags map deterministically to Electron SemVer', () => {
+  assert.deepEqual(parseVietnameseReleaseTag('vi-v0.20.0-15'), {
+    tag: 'vi-v0.20.0-15',
+    baseVersion: '0.20.0',
+    iteration: 15,
+    appVersion: '0.20.0-vi.15'
+  })
+  assert.throws(() => parseVietnameseReleaseTag('v0.20.0'), /vi-vX.Y.Z-N/)
+  assert.throws(() => parseVietnameseReleaseTag('vi-v0.20.0-rc1'), /vi-vX.Y.Z-N/)
+})
+
+test('explicit --tag wins and must be a final Vietnamese release', () => {
+  assert.equal(resolveTag(['--tag=vi-v0.20.0-15'], () => null), 'vi-v0.20.0-15')
+  assert.throws(() => resolveTag(['--tag=v1.2.3'], () => null), /vi-vX.Y.Z-N/)
+  assert.throws(() => resolveTag(['--tag=main'], () => null), /vi-vX.Y.Z-N/)
 })
 
 test('falls back to git describe only for exact release tags', () => {
-  assert.equal(resolveTag([], () => 'v0.17.0'), 'v0.17.0')
-  assert.throws(() => resolveTag([], () => 'v0.17.0-14-gdeadbeef'), /no release tag/)
-  assert.throws(() => resolveTag([], () => null), /no release tag/)
+  assert.equal(resolveTag([], () => 'vi-v0.20.0-15'), 'vi-v0.20.0-15')
+  assert.throws(() => resolveTag([], () => 'vi-v0.20.0-15-14-gdeadbeef'), /no Vietnamese release tag/)
+  assert.throws(() => resolveTag([], () => null), /no Vietnamese release tag/)
 })
 
 // ─── parseSkips ────────────────────────────────────────────────────
@@ -113,13 +126,13 @@ test('parseSkips accepts known items and rejects unknown ones', () => {
 test('manifest records staged vs explicitly-skipped vs failed per item', () => {
   const target = resolveTargets('linux', 'x64')
   const manifest = buildManifest({
-    tag: 'v1.0.0',
+    tag: 'vi-v1.0.0-1',
     commit: 'a'.repeat(40),
     target,
     staged: ['repo', 'uv', 'python'],
     skipped: new Set(['site-packages'])
   })
-  assert.equal(manifest.tag, 'v1.0.0')
+  assert.equal(manifest.tag, 'vi-v1.0.0-1')
   // Invariant: every payload item has an entry. The resident-runtime gate
   // reads presence. An absent entry is ambiguous.
   for (const item of PAYLOAD_ITEMS) {
@@ -182,7 +195,7 @@ test('source-build exceptions override only-binary for the named packages only',
   // Fully wheel-covered targets keep the pure only-binary shape.
   const linux = resolveTargets('linux', 'x64')
   assert.deepEqual(pipTargetArgs({ sitePackagesDir: '/sp', sourceBuild: linux.sourceBuild ?? [] }), [
-    'install', '--only-binary', ':all:', '-r', 'requirements-payload.txt',
+    'install', '--require-hashes', '--only-binary', ':all:', '-r', 'requirements-payload.txt',
     '--target', '/sp', '--upgrade', '--no-compile'
   ])
 

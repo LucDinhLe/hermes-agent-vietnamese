@@ -1,0 +1,76 @@
+name: Công khai Hermes tiếng Việt đã nghiệm thu
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Draft đã nghiệm thu, ví dụ vi-v0.20.0-15'
+        required: true
+        type: string
+      sha256sums_sha256:
+        description: 'SHA-256 của chính tệp SHA256SUMS.txt đã nghiệm thu'
+        required: true
+        type: string
+      runtime_smoke_run_id:
+        description: 'Run ID workflow runtime-smoke đã GO trên đúng artifact'
+        required: true
+        type: string
+
+concurrency:
+  group: hermes-vietnamese-promotion-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  promote:
+    name: Kiểm gate và chuyển chính draft thành public
+    runs-on: ubuntu-24.04
+    environment: release-production
+    steps:
+      - name: Xác minh draft, manifest và runtime-smoke
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          EXPECTED_MANIFEST_SHA: ${{ inputs.sha256sums_sha256 }}
+          SMOKE_RUN_ID: ${{ inputs.runtime_smoke_run_id }}
+        run: |
+          [[ "$TAG" =~ ^vi-v(0|[1-9][0-9]{0,2})\.[0-9]+\.[0-9]+-(0|[1-9][0-9]*)$ ]]
+          test "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = "true"
+          mkdir candidate
+          gh release download "$TAG" --dir candidate
+          actual_manifest_sha="$(sha256sum candidate/SHA256SUMS.txt | cut -d' ' -f1)"
+          test "$actual_manifest_sha" = "$EXPECTED_MANIFEST_SHA"
+          cd candidate
+          sha256sum --check SHA256SUMS.txt
+          cd ..
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SMOKE_RUN_ID")"
+          test "$(jq -r .name <<<"$run_json")" = "Kiểm thử runtime artifact Hermes tiếng Việt"
+          test "$(jq -r .conclusion <<<"$run_json")" = "success"
+          candidate_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          gh run download "$SMOKE_RUN_ID" --name "release-evidence-$TAG" --dir evidence
+          CANDIDATE_COMMIT="$candidate_commit" node -e "const e=require('./evidence/release-evidence.json'); const required=['windows-x64','windows-arm64','macos-arm64','macos-x64','linux-x64','linux-arm64']; if(e.tag!==process.env.TAG || e.commit!==process.env.CANDIDATE_COMMIT || e.sha256sumsSha256!==process.env.EXPECTED_MANIFEST_SHA || required.some(k=>e.platforms?.[k]?.decision!=='GO')) process.exit(1)"
+
+      - name: Công khai đúng các byte đã smoke
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: gh release edit "$TAG" --draft=false --prerelease=false
+
+      - name: Kiểm tra lại URL và hash công khai
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          EXPECTED_MANIFEST_SHA: ${{ inputs.sha256sums_sha256 }}
+        run: |
+          test "$(gh release view "$TAG" --json isDraft,isPrerelease --jq '.isDraft or .isPrerelease')" = "false"
+          mkdir public
+          gh release download "$TAG" --dir public
+          test "$(sha256sum public/SHA256SUMS.txt | cut -d' ' -f1)" = "$EXPECTED_MANIFEST_SHA"
+          cd public
+          sha256sum --check SHA256SUMS.txt

@@ -189,11 +189,10 @@ test('findResidentPython picks the patch-versioned dir and needs a real binary',
     null
   )
 
-  // Windows binary lives at the install root, not bin/. The
-  // implementation joins with the HOST path module, so the test builds
-  // its expected path the same way to stay host-agnostic.
-  const winRoot = 'win-res/agent-payload'
-  const winExpected = ['win-res/agent-payload', 'python', 'cpython-3.11.15-windows-x86_64-none', 'python.exe'].join('/')
+  // Windows binary lives at the install root, not bin/. Target path rules
+  // are independent of the host running this test.
+  const winRoot = 'C:\\res\\agent-payload'
+  const winExpected = 'C:\\res\\agent-payload\\python\\cpython-3.11.15-windows-x86_64-none\\python.exe'
 
   const winPython = findResidentPython(
     winRoot,
@@ -238,6 +237,20 @@ test('release picking is numeric, skips prereleases, prefers peeled shas', () =>
 
   assert.equal(semverOnly?.tag, 'v0.10.0')
   assert.equal(semverOnly?.sha, 'c'.repeat(40))
+})
+
+test('release picking understands Vietnamese iterations', () => {
+  const output = [
+    `${'a'.repeat(40)}\trefs/tags/v0.20.0`,
+    `${'b'.repeat(40)}\trefs/tags/vi-v0.20.0-14`,
+    `${'c'.repeat(40)}\trefs/tags/vi-v0.20.0-15`,
+    `${'d'.repeat(40)}\trefs/tags/vi-v0.20.0-15^{}`
+  ].join('\n')
+
+  assert.deepEqual(latestReleaseFromLsRemote(output), {
+    tag: 'vi-v0.20.0-15',
+    sha: 'd'.repeat(40)
+  })
 })
 
 test('release picking returns null when no final release tag exists', () => {

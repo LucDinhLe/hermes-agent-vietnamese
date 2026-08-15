@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 
 import { test } from 'vitest'
 
-import { describeFeedCheck, shouldUseAppUpdater } from './app-updater'
+import { describeFeedCheck, releaseTagForAppVersion, shouldUseAppUpdater } from './app-updater'
 
 // ── shouldUseAppUpdater ─────────────────────────────────────────────
 
@@ -54,6 +54,15 @@ test('feed check reports an available update when versions differ', () => {
   assert.equal(out.latestTag, 'v0.18.0')
   assert.equal(out.updateAvailable, true)
   assert.ok(out.fetchedAt > 0)
+})
+
+test('community app versions map back to public vi release tags', () => {
+  assert.equal(releaseTagForAppVersion('0.20.0-vi.15'), 'vi-v0.20.0-15')
+  assert.equal(releaseTagForAppVersion('0.20.0'), 'v0.20.0')
+
+  const out = describeFeedCheck('0.20.0-vi.14', { version: '0.20.0-vi.15' }, true)
+  assert.equal(out.latestTag, 'vi-v0.20.0-15')
+  assert.equal(out.updateAvailable, true)
 })
 
 test('feed check reports up to date when versions match', () => {
