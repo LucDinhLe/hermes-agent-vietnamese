@@ -2126,6 +2126,7 @@ export const ar = defineLocale({
     aria: 'الشريط الجانبي الأيمن',
     panelsAria: 'لوحات الشريط الأيمن',
     files: 'الملفات',
+    browserNewTab: 'علامة تبويب متصفح جديدة',
     terminal: 'الطرفية',
     noFolderSelected: 'لم يتم اختيار مجلد',
     changeCwdTitle: 'تغيير مجلد العمل',

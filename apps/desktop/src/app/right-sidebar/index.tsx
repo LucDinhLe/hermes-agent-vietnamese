@@ -1,18 +1,25 @@
 import { useStore } from '@nanostores/react'
-import { type ComponentProps, type ReactNode, useEffect } from 'react'
+import { type ComponentProps, type ReactNode } from 'react'
 
 import { TreeSkeleton } from '@/components/chat/skeletons'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
+import { PaneStripGlyph, PaneTab, PaneTabLabel, PaneTabStrip } from '@/components/ui/pane-tab'
 import { Tip } from '@/components/ui/tooltip'
 import { useDelayedTrue } from '@/hooks/use-delayed-true'
 import { useI18n } from '@/i18n'
 import { normalizeOrLocalPreviewTarget } from '@/lib/local-preview'
 import { cn } from '@/lib/utils'
-import { $panesFlipped, $rightSidebarView, setRightSidebarView } from '@/store/layout'
+import {
+  $panesFlipped,
+  $rightRailActiveTabId,
+  $rightSidebarView,
+  selectRightRailTab,
+  setRightSidebarView
+} from '@/store/layout'
 import { notifyError } from '@/store/notifications'
-import { $previewTabs, openPreview, openSharedBrowser } from '@/store/preview'
+import { $previewTabs, closeRightRailTab, openNewBrowserTab, openPreview, openSharedBrowser } from '@/store/preview'
 import { $currentCwd } from '@/store/session'
 
 import { SidebarPanelLabel } from '../shell/sidebar-label'
@@ -30,6 +37,7 @@ export function RightSidebarPane({ browserContent, onActivateFile, onActivateFol
   const { t } = useI18n()
   const r = t.rightSidebar
   const panesFlipped = useStore($panesFlipped)
+  const activeTabId = useStore($rightRailActiveTabId)
   const rightSidebarView = useStore($rightSidebarView)
   const previewTabs = useStore($previewTabs)
   const currentCwd = useStore($currentCwd).trim()
@@ -53,20 +61,8 @@ export function RightSidebarPane({ browserContent, onActivateFile, onActivateFol
     setNodeOpen
   } = useProjectTree(hasWorkspace ? currentCwd : '')
 
-  const cwdName =
-    effectiveCwd
-      .split(/[\\/]+/)
-      .filter(Boolean)
-      .pop() ?? effectiveCwd
-
   const canCollapse = Object.values(openState).some(Boolean)
-  const hasBrowser = previewTabs.some(tab => tab.target.kind === 'url')
-
-  useEffect(() => {
-    if (rightSidebarView === 'browser' && !hasBrowser) {
-      openSharedBrowser()
-    }
-  }, [hasBrowser, rightSidebarView])
+  const browserTabs = previewTabs.filter(tab => tab.target.kind === 'url')
 
   const previewFile = async (path: string) => {
     try {
@@ -92,63 +88,89 @@ export function RightSidebarPane({ browserContent, onActivateFile, onActivateFol
           : 'border-l shadow-[inset_0.0625rem_0_0_color-mix(in_srgb,white_18%,transparent)]'
       )}
     >
-      <RightSidebarSectionHeader className="h-8 gap-0.5">
-        <div className="flex min-w-0 flex-1 items-center">
-          <SidebarPanelLabel>{cwdName || r.files}</SidebarPanelLabel>
-        </div>
-        <Tip label={r.files}>
-          <Button
-            aria-label={r.files}
-            aria-pressed={rightSidebarView === 'files'}
-            className={cn(HEADER_ACTION_CLASS, rightSidebarView === 'files' && HEADER_ACTION_ACTIVE_CLASS)}
-            onClick={() => setRightSidebarView('files')}
-            size="icon-pane"
-            variant="ghost"
-          >
-            <Codicon name="files" />
-          </Button>
-        </Tip>
-        <Tip label={t.sidebar.nav.browser}>
-          <Button
-            aria-label={t.sidebar.nav.browser}
-            aria-pressed={rightSidebarView === 'browser'}
-            className={cn(HEADER_ACTION_CLASS, rightSidebarView === 'browser' && HEADER_ACTION_ACTIVE_CLASS)}
-            onClick={openSharedBrowser}
-            size="icon-pane"
-            variant="ghost"
-          >
-            <Codicon name="globe" />
-          </Button>
-        </Tip>
-        {rightSidebarView === 'files' && hasWorkspace && (
-          <>
-            <Tip label={r.refreshTree}>
+      <PaneTabStrip
+        className="h-8"
+        trailing={
+          <div className="flex shrink-0 items-center gap-0.5 pr-1">
+            {rightSidebarView === 'browser' && (
+              <PaneStripGlyph icon={<Codicon name="add" />} label={r.browserNewTab} onSelect={openNewBrowserTab} />
+            )}
+            <Tip label={r.files}>
               <Button
-                aria-label={r.refreshTree}
-                className={HEADER_ACTION_LABEL_REVEAL}
-                disabled={rootLoading}
-                onClick={() => void refreshRoot()}
+                aria-label={r.files}
+                aria-pressed={rightSidebarView === 'files'}
+                className={cn(HEADER_ACTION_CLASS, rightSidebarView === 'files' && HEADER_ACTION_ACTIVE_CLASS)}
+                onClick={() => setRightSidebarView('files')}
                 size="icon-pane"
                 variant="ghost"
               >
-                <Codicon name="refresh" spinning={rootLoading} />
+                <Codicon name="files" />
               </Button>
             </Tip>
-            <Tip label={r.collapseAll}>
+            <Tip label={t.sidebar.nav.browser}>
               <Button
-                aria-label={r.collapseAll}
-                className={cn(HEADER_ACTION_CLASS, !canCollapse && 'pointer-events-none opacity-0')}
-                disabled={!canCollapse}
-                onClick={collapseAll}
+                aria-label={t.sidebar.nav.browser}
+                aria-pressed={rightSidebarView === 'browser'}
+                className={cn(HEADER_ACTION_CLASS, rightSidebarView === 'browser' && HEADER_ACTION_ACTIVE_CLASS)}
+                onClick={openSharedBrowser}
                 size="icon-pane"
                 variant="ghost"
               >
-                <Codicon name="collapse-all" />
+                <Codicon name="globe" />
               </Button>
             </Tip>
-          </>
-        )}
-      </RightSidebarSectionHeader>
+            {rightSidebarView === 'files' && hasWorkspace && (
+              <>
+                <Tip label={r.refreshTree}>
+                  <Button
+                    aria-label={r.refreshTree}
+                    className={HEADER_ACTION_LABEL_REVEAL}
+                    disabled={rootLoading}
+                    onClick={() => void refreshRoot()}
+                    size="icon-pane"
+                    variant="ghost"
+                  >
+                    <Codicon name="refresh" spinning={rootLoading} />
+                  </Button>
+                </Tip>
+                <Tip label={r.collapseAll}>
+                  <Button
+                    aria-label={r.collapseAll}
+                    className={cn(HEADER_ACTION_CLASS, !canCollapse && 'pointer-events-none opacity-0')}
+                    disabled={!canCollapse}
+                    onClick={collapseAll}
+                    size="icon-pane"
+                    variant="ghost"
+                  >
+                    <Codicon name="collapse-all" />
+                  </Button>
+                </Tip>
+              </>
+            )}
+          </div>
+        }
+      >
+        {rightSidebarView === 'browser' &&
+          browserTabs.map((tab, index) => {
+            const label = `${t.sidebar.nav.browser} ${index + 1}`
+            const active = tab.id === activeTabId
+
+            return (
+              <PaneTab
+                active={active}
+                aria-label={label}
+                aria-selected={active}
+                key={tab.id}
+                onClose={() => closeRightRailTab(tab.id)}
+                role="tab"
+              >
+                <PaneTabLabel as="button" aria-label={label} onClick={() => selectRightRailTab(tab.id)} type="button">
+                  {label}
+                </PaneTabLabel>
+              </PaneTab>
+            )
+          })}
+      </PaneTabStrip>
       <div
         aria-hidden={rightSidebarView !== 'files'}
         className={cn('min-h-0 flex-1 flex-col', rightSidebarView === 'files' ? 'flex' : 'hidden')}

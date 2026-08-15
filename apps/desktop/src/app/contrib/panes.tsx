@@ -26,6 +26,7 @@ import { getLogs } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { normalizeOrLocalPreviewTarget } from '@/lib/local-preview'
 import { cn } from '@/lib/utils'
+import { $rightRailActiveTabId } from '@/store/layout'
 import { $previewReloadRequest, $previewTabs, openPreview } from '@/store/preview'
 import { $currentCwd } from '@/store/session'
 
@@ -99,24 +100,34 @@ function previewFile(path: string) {
 const ZONE_CONTENT = 'h-full [&>aside]:h-full [&>aside]:w-full [&>aside]:pt-0'
 
 export function FilesPane() {
+  const activeTabId = useStore($rightRailActiveTabId)
   const previewReloadRequest = useStore($previewReloadRequest)
   const previewTabs = useStore($previewTabs)
   const restartPreviewServer = useStore($restartPreviewServer)
-  const browserTab = previewTabs.find(tab => tab.target.kind === 'url')
+  const browserTabs = previewTabs.filter(tab => tab.target.kind === 'url')
 
   return (
     <div className={ZONE_CONTENT}>
       <RightSidebarPane
         browserContent={
-          browserTab ? (
-            <PreviewPane
-              embedded
-              onRestartServer={restartPreviewServer ?? undefined}
-              reloadRequest={previewReloadRequest}
-              tabId={browserTab.id}
-              target={browserTab.target}
-            />
-          ) : undefined
+          browserTabs.length > 0
+            ? browserTabs.map(tab => (
+                <div
+                  aria-hidden={tab.id !== activeTabId}
+                  className={cn('min-h-0 flex-1 flex-col', tab.id === activeTabId ? 'flex' : 'hidden')}
+                  data-browser-tab={tab.id}
+                  key={tab.id}
+                >
+                  <PreviewPane
+                    embedded
+                    onRestartServer={restartPreviewServer ?? undefined}
+                    reloadRequest={previewReloadRequest}
+                    tabId={tab.id}
+                    target={tab.target}
+                  />
+                </div>
+              ))
+            : undefined
         }
         onActivateFile={previewFile}
         onActivateFolder={previewFile}

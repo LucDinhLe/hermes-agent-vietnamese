@@ -2308,6 +2308,7 @@ export const zhHant = defineLocale({
     aria: '右側邊欄',
     panelsAria: '右側邊欄面板',
     files: '檔案系統',
+    browserNewTab: '新增瀏覽器分頁',
     terminal: '終端機',
     noFolderSelected: '未選擇資料夾',
     changeCwdTitle: '變更工作目錄',
