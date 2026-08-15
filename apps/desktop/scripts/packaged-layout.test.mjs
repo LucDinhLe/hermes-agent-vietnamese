@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 
 import { test } from 'vitest'
 
-import { packagedAppDirectoryName } from './packaged-layout.mjs'
+import { isMacDmgArtifactName, packagedAppDirectoryName } from './packaged-layout.mjs'
 
 test('matches electron-builder unpacked directory names for supported release targets', () => {
   assert.equal(packagedAppDirectoryName('win32', 'x64'), 'win-unpacked')
@@ -17,6 +17,13 @@ test('matches electron-builder unpacked directory names for supported release ta
 test('fails closed for release targets outside the supported matrix', () => {
   assert.throws(() => packagedAppDirectoryName('freebsd', 'x64'), /Unsupported packaged-app platform/)
   assert.throws(() => packagedAppDirectoryName('linux', 'ia32'), /Unsupported packaged-app architecture/)
+})
+
+test('finds release-version override DMGs without rebuilding the packaged app', () => {
+  assert.equal(isMacDmgArtifactName('Hermes-0.20.0-vi.19-mac-arm64.dmg', 'arm64'), true)
+  assert.equal(isMacDmgArtifactName('Hermes-0.20.0-vi.19-mac-x64.dmg', 'x64'), true)
+  assert.equal(isMacDmgArtifactName('Hermes-0.20.0-vi.19-mac-x64.dmg.blockmap', 'x64'), false)
+  assert.equal(isMacDmgArtifactName('Hermes-0.20.0-vi.19-mac-x64.dmg', 'arm64'), false)
 })
 
 test('declares the project homepage required by Linux package metadata', () => {

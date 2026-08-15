@@ -1,5 +1,18 @@
 # Tiến độ
 
+## Cập nhật 2026-08-15 — candidate v18 dừng ở verifier macOS, chuyển sang v19
+
+- Verify nguồn và Install & Update E2E v18 đều đạt; Windows x64, Linux x64 và
+  Linux ARM64 xanh trọn job native. Cả hai runner Mac dựng thành công ứng dụng,
+  DMG và ZIP `0.20.0-vi.18`, nhưng verifier tìm DMG theo phiên bản package nội
+  bộ `0.17.0`, tưởng artifact chưa có và kích hoạt một build thừa lần hai.
+- Bộ dò DMG nay khóa theo hậu tố `-mac-<arch>.dmg`, đúng cùng contract mà bước
+  chuẩn hóa artifact dùng, độc lập với release-version override. Regression xác
+  nhận cả Apple Silicon và Intel, loại blockmap/sai kiến trúc; bộ hợp đồng tăng
+  lên 74/74.
+- Candidate kế tiếp là `vi-v0.20.0-19`; tag v18 giữ bất biến. Không có draft hay
+  artifact v18 nào được công bố.
+
 ## Cập nhật 2026-08-15 — candidate v17 dừng ở đóng gói, chuyển sang v18
 
 - Verify nguồn v17 đạt; Install & Update E2E tạo đúng ma trận tag `vi-v*` và

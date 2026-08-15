@@ -7,7 +7,7 @@ import { listPackage } from '@electron/asar'
 
 import PACKAGE_JSON from '../package.json' with { type: 'json' }
 import { freshInstallSandboxPrefix } from './fresh-install-sandbox.mjs'
-import { packagedAppDirectoryName } from './packaged-layout.mjs'
+import { isMacDmgArtifactName, packagedAppDirectoryName } from './packaged-layout.mjs'
 
 const MODE = process.argv[2] || 'help'
 const ARCH = process.arch === 'arm64' ? 'arm64' : 'x64'
@@ -131,12 +131,9 @@ function resolveDmgPath() {
     return path.join(RELEASE_ROOT, `Hermes-${PACKAGE_JSON.version}-${ARCH}.dmg`)
   }
 
-  const prefix = `Hermes-${PACKAGE_JSON.version}`
   const candidates = fs
     .readdirSync(RELEASE_ROOT)
-    .filter(name => name.endsWith('.dmg'))
-    .filter(name => name.startsWith(prefix))
-    .filter(name => name.includes(ARCH))
+    .filter(name => isMacDmgArtifactName(name, ARCH))
     .sort((a, b) => {
       const aMtime = fs.statSync(path.join(RELEASE_ROOT, a)).mtimeMs
       const bMtime = fs.statSync(path.join(RELEASE_ROOT, b)).mtimeMs
