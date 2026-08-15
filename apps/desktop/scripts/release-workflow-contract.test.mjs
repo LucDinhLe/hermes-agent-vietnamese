@@ -50,6 +50,8 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /\.\/scripts\/run_tests\.sh -q/)
   assert.doesNotMatch(candidate, /uv run pytest/)
   assert.match(candidate, /Upload đúng byte vào draft/)
+  assert.match(candidate, /\(cd release-assets && sha256sum candidate-provenance\.json >> SHA256SUMS\.txt\)/)
+  assert.doesNotMatch(candidate, /sha256sum release-assets\/candidate-provenance\.json/)
 })
 
 test('candidate workflow can only create a draft and never promotes it', () => {

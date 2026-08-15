@@ -1,5 +1,18 @@
 # Tiến độ
 
+## Cập nhật 2026-08-16 — candidate v20 dựng đủ, dừng ở verifier draft
+
+- `vi-v0.20.0-20` đạt toàn bộ sáu build native và 12/12 Install & Update E2E;
+  macOS Intel đã dựng thành công `cryptography==50.0.0` từ sdist khóa hash với
+  OpenSSL 3.5.7 tĩnh, đóng blocker của v19.
+- Draft kín v20 upload đủ artifact và đối chiếu thành công mọi installer/gói
+  native. Verifier dừng vì dòng provenance trong `SHA256SUMS.txt` chứa tiền tố
+  `release-assets/`, trong khi bước tải lại đã đứng trong thư mục `uploaded`.
+  Đây là lỗi đường dẫn manifest của workflow; không phải sai byte artifact.
+- Workflow nay tạo checksum provenance ngay bên trong `release-assets`, nên
+  manifest luôn ghi basename giống toàn bộ asset khác. Regression cấm mẫu đường
+  dẫn cũ. Tag/draft v20 giữ bất biến; candidate kế tiếp là `vi-v0.20.0-21`.
+
 ## Cập nhật 2026-08-16 — đóng blocker macOS Intel cho candidate v20
 
 - Candidate bất biến `vi-v0.20.0-19` đạt source contracts, Install & Update E2E

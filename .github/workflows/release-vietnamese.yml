@@ -419,7 +419,7 @@ jobs:
         run: |
           node apps/desktop/scripts/collect-community-artifacts.mjs checksums release-assets SHA256SUMS.txt
           node -e "const fs=require('fs'); fs.writeFileSync('release-assets/candidate-provenance.json', JSON.stringify({tag:process.env.TAG,commit:process.env.COMMIT,releaseClass:process.env.RELEASE_CLASS,runId:process.env.RUN_ID,workflow:process.env.WORKFLOW},null,2)+'\n')"
-          sha256sum release-assets/candidate-provenance.json >> release-assets/SHA256SUMS.txt
+          (cd release-assets && sha256sum candidate-provenance.json >> SHA256SUMS.txt)
         env:
           TAG: ${{ needs.verify.outputs.tag }}
           COMMIT: ${{ needs.verify.outputs.commit }}
