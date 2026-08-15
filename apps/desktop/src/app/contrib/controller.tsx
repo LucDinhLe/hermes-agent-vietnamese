@@ -166,6 +166,12 @@ registry.registerMany([
     data: {
       placement: 'main',
       minWidth: '22vw',
+      // The initial registration happens before the persisted locale finishes
+      // loading. Render the draft title reactively so a clean install does not
+      // leave this first tab stuck on the English placeholder after switching
+      // to Vietnamese. syncWorkspaceTitle replaces this once session state
+      // changes, using the same component for later fresh drafts.
+      tabTitle: () => <SessionDraftTitle scope={null} />,
       tabDrag: workspaceTabDrag,
       tabWrap: wrapWorkspaceTab,
       uncloseable: true
