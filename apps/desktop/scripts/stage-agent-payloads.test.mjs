@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { test } from 'vitest'
 
@@ -14,7 +17,8 @@ import {
   pythonDirPattern,
   pythonRequest,
   resolveTag,
-  resolveTargets
+  resolveTargets,
+  stageAgentBrowserLaunchers
 } from '../scripts/stage-agent-payloads.mjs'
 
 // ─── resolveTargets ────────────────────────────────────────────────
@@ -143,6 +147,51 @@ test('manifest records staged vs explicitly-skipped vs failed per item', () => {
   assert.equal(manifest.items['site-packages'].reason, 'explicit-skip')
   // node was not staged and not explicitly skipped, so its status is failed.
   assert.equal(manifest.items.node.reason, 'failed')
+})
+
+// ─── agent-browser launchers ──────────────────────────────────────
+
+test('agent-browser launchers ignore host-specific npm bin entries', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-agent-browser-shims-'))
+  try {
+    const packageDir = path.join(tempDir, 'node_modules', 'agent-browser')
+    const sourceBinDir = path.join(tempDir, 'node_modules', '.bin')
+    const stagedBinDir = path.join(tempDir, 'staged', 'node_modules', '.bin')
+    fs.mkdirSync(path.join(packageDir, 'bin'), { recursive: true })
+    fs.writeFileSync(path.join(packageDir, 'bin', 'agent-browser.js'), '#!/usr/bin/env node\nconsole.log("launcher-ok")\n')
+    // Reproduce the directory-shaped Unix entry that broke the v16 matrix.
+    fs.mkdirSync(path.join(sourceBinDir, 'agent-browser'), { recursive: true })
+
+    fs.cpSync(packageDir, path.join(tempDir, 'staged', 'node_modules', 'agent-browser'), { recursive: true })
+    stageAgentBrowserLaunchers(packageDir, stagedBinDir)
+
+    const shellPath = path.join(stagedBinDir, 'agent-browser')
+    assert.match(fs.readFileSync(shellPath, 'utf8'), /\.\.\/agent-browser\/bin\/agent-browser\.js/)
+    if (process.platform !== 'win32') assert.notEqual(fs.statSync(shellPath).mode & 0o111, 0)
+    assert.match(fs.readFileSync(path.join(stagedBinDir, 'agent-browser.cmd'), 'utf8'), /agent-browser\\bin/)
+    assert.match(fs.readFileSync(path.join(stagedBinDir, 'agent-browser.ps1'), 'utf8'), /agent-browser\/bin/)
+
+    const launcher = path.join(stagedBinDir, process.platform === 'win32' ? 'agent-browser.cmd' : 'agent-browser')
+    const probe = spawnSync(launcher, [], { encoding: 'utf8', shell: process.platform === 'win32' })
+    assert.equal(probe.status, 0, probe.stderr)
+    assert.equal(probe.stdout.trim(), 'launcher-ok')
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  }
+})
+
+test('agent-browser launcher staging rejects an incomplete npm package', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-agent-browser-missing-'))
+  try {
+    const packageDir = path.join(tempDir, 'agent-browser')
+    fs.mkdirSync(packageDir, { recursive: true })
+    assert.throws(
+      () => stageAgentBrowserLaunchers(packageDir, path.join(tempDir, '.bin')),
+      /missing bin\/agent-browser\.js/
+    )
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  }
 })
 
 // ─── arch guards ────────────────────────────────────────────────────

@@ -325,6 +325,13 @@ function validateResidentPayload(stamp) {
     die(`Install stamp and resident manifest provenance disagree: ${JSON.stringify({ stamp, manifest })}`)
   }
 
+  const browserLauncher = path.join(
+    payloadRoot,
+    'repo',
+    'node_modules',
+    '.bin',
+    PLATFORM === 'win32' ? 'agent-browser.cmd' : 'agent-browser'
+  )
   const required = [
     path.join(payloadRoot, 'repo', 'hermes_cli', 'main.py'),
     path.join(payloadRoot, 'repo', '.hermes-install.json'),
@@ -339,11 +346,18 @@ function validateResidentPayload(stamp) {
       `agent-browser-${PLATFORM === 'win32' ? 'win32' : PLATFORM}-${ARCH}${PLATFORM === 'win32' ? '.exe' : ''}`
     ),
     path.join(payloadRoot, 'site-packages', 'cryptography', '__init__.py'),
+    browserLauncher,
     path.join(payloadRoot, 'node', PLATFORM === 'win32' ? 'node.exe' : path.join('bin', 'node')),
     path.join(payloadRoot, 'uv', PLATFORM === 'win32' ? 'uv.exe' : 'uv')
   ]
   for (const file of required) {
     if (!exists(file)) die(`Resident payload is incomplete: ${file}`)
+  }
+  if (!fs.statSync(browserLauncher).isFile()) {
+    die(`Resident agent-browser launcher is not a file: ${browserLauncher}`)
+  }
+  if (PLATFORM !== 'win32' && (fs.statSync(browserLauncher).mode & 0o111) === 0) {
+    die(`Resident agent-browser launcher is not executable: ${browserLauncher}`)
   }
   if (exists(path.join(payloadRoot, 'repo', '.git'))) {
     die(`Resident payload must be a Git-independent source snapshot: ${path.join(payloadRoot, 'repo', '.git')}`)

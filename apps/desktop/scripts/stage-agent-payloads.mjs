@@ -268,6 +268,54 @@ export function buildManifest({ tag, commit, target, staged, skipped }) {
   }
 }
 
+/**
+ * Write deterministic agent-browser launchers beside the bundled npm package.
+ * npm's `.bin/agent-browser` is a regular shim on Windows but can be a Unix
+ * symlink that Node 26 classifies as a directory when cpSync dereferences it.
+ * Generate launchers from the package's public bin contract instead of copying
+ * package-manager implementation details into the release artifact.
+ */
+export function stageAgentBrowserLaunchers(browserPackage, stagedBinDir) {
+  const entryPoint = path.join(browserPackage, "bin", "agent-browser.js")
+  if (!fs.statSync(entryPoint, { throwIfNoEntry: false })?.isFile()) {
+    throw new Error("repo: agent-browser package is missing bin/agent-browser.js")
+  }
+
+  fs.mkdirSync(stagedBinDir, { recursive: true })
+  const shellPath = path.join(stagedBinDir, "agent-browser")
+  fs.writeFileSync(
+    shellPath,
+    `#!/bin/sh
+basedir=$(dirname "$(echo "$0" | sed -e 's,\\\\,/,g')")
+if [ -x "$basedir/node" ]; then
+  exec "$basedir/node" "$basedir/../agent-browser/bin/agent-browser.js" "$@"
+else
+  exec node "$basedir/../agent-browser/bin/agent-browser.js" "$@"
+fi
+`
+  )
+  fs.chmodSync(shellPath, 0o755)
+
+  fs.writeFileSync(
+    path.join(stagedBinDir, "agent-browser.cmd"),
+    `@ECHO off\r
+SETLOCAL\r
+SET "basedir=%~dp0"\r
+IF EXIST "%basedir%node.exe" (SET "_prog=%basedir%node.exe") ELSE (SET "_prog=node")\r
+"%_prog%" "%basedir%..\\agent-browser\\bin\\agent-browser.js" %*\r
+`
+  )
+  fs.writeFileSync(
+    path.join(stagedBinDir, "agent-browser.ps1"),
+    `#!/usr/bin/env pwsh\r
+$basedir=Split-Path $MyInvocation.MyCommand.Definition -Parent\r
+$exe="node"; if (Test-Path "$basedir/node.exe") { $exe="$basedir/node.exe" }\r
+& $exe "$basedir/../agent-browser/bin/agent-browser.js" $args\r
+exit $LASTEXITCODE\r
+`
+  )
+}
+
 // ─── impure staging steps (they shell out, have no unit tests, and run in CI) ──────
 
 function run(cmd, args, opts = {}) {
@@ -345,8 +393,7 @@ function stageRepo(tag, outDir) {
   // it can discover agent-browser. The package tarball is integrity-pinned by
   // package-lock.json and `npm ci` runs before this stage.
   const browserPackage = path.join(REPO_ROOT, "node_modules", "agent-browser")
-  const browserBinDir = path.join(REPO_ROOT, "node_modules", ".bin")
-  if (!fs.existsSync(browserPackage) || !fs.existsSync(browserBinDir)) {
+  if (!fs.existsSync(browserPackage)) {
     throw new Error("repo: agent-browser production dependency missing — run root npm ci first")
   }
   fs.cpSync(browserPackage, path.join(repoDir, "node_modules", "agent-browser"), {
@@ -354,14 +401,7 @@ function stageRepo(tag, outDir) {
     dereference: true,
   })
   const stagedBinDir = path.join(repoDir, "node_modules", ".bin")
-  fs.mkdirSync(stagedBinDir, { recursive: true })
-  const browserShims = fs.readdirSync(browserBinDir).filter((name) => /^agent-browser(?:\.(?:cmd|ps1))?$/.test(name))
-  if (browserShims.length === 0) {
-    throw new Error("repo: npm did not create an agent-browser executable shim")
-  }
-  for (const shim of browserShims) {
-    fs.cpSync(path.join(browserBinDir, shim), path.join(stagedBinDir, shim), { dereference: true })
-  }
+  stageAgentBrowserLaunchers(browserPackage, stagedBinDir)
   // Version provenance without git: the schema-v2 build stamp. The
   // version_info ladder prefers this stamp over git probing, so bundled
   // installs report exact-release provenance (distance 0, the tag's

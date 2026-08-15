@@ -1,5 +1,28 @@
 # Tiến độ
 
+## Cập nhật 2026-08-15 — candidate v16 dừng ở đóng gói, chuyển sang v17
+
+- Verify của tag bất biến `vi-v0.20.0-16` đạt, gồm 36/36 kiểm thử Python phát
+  hành. Ba runner native macOS Apple Silicon, Linux x64 và Linux ARM64 cùng dừng
+  ở `stage-agent-payloads.mjs`: Node 26 coi liên kết npm
+  `node_modules/.bin/agent-browser` là thư mục khi `cpSync` dereference. Workflow
+  được hủy sau khi đã chứng minh lỗi chung để không tiếp tục tốn runner; không có
+  draft release hoặc artifact v16 nào được tạo.
+- Runtime staging nay tạo ba launcher `agent-browser` xác định trực tiếp từ bin
+  contract của package, không sao chép chi tiết `.bin` phụ thuộc npm/hệ điều
+  hành. Regression tái tạo entry dạng thư mục đạt 17/17; launcher Windows chạy
+  thật và trả `agent-browser 0.26.0`. Exact-artifact verifier mới buộc launcher
+  Unix là tệp executable và launcher Windows là tệp, ngăn lỗi cấu trúc lọt qua.
+- Install/update E2E v16 tạo đúng matrix tag `vi-v*`; ba tuyến `hermes update`
+  từ v1/v5/v8/v12 đều đạt. Các tuyến installer re-run fetch HTTPS ra GitHub thật
+  thay vì bare repo cô lập nên lệch commit. Sandbox nay rewrite HTTPS GitHub qua
+  SSH shim/fake remote; contract test tăng lên 6/6. Candidate kế tiếp là
+  `vi-v0.20.0-17`; không di chuyển hoặc tái sử dụng tag v16.
+- Quyết định tiếp tục là **candidate only / NO-GO** cho tới khi v17 dựng đủ sáu
+  nền tảng và đúng artifact qua runtime smoke. Nếu công bố, đây chỉ là
+  **community prerelease chưa ký số**, đúng chấp thuận của chủ phát hành; không
+  quảng cáo stable và không dùng tiền lệ AICoworker thay cho bằng chứng Hermes.
+
 ## Cập nhật 2026-08-15 — candidate v15 dừng trước build, chuyển sang v16
 
 - Tag bất biến `vi-v0.20.0-15` đã kích hoạt đúng workflow phát hành và

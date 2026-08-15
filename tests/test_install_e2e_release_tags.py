@@ -142,3 +142,14 @@ def test_workflow_triggers_fork_tags_and_has_diagnostic_job():
     )
     assert "HERMES_DEV_SANDBOX_UPSTREAM:" in reusable
     assert "github.com/${{ github.repository }}.git" in reusable
+
+
+def test_installer_rerun_keeps_https_git_fetches_inside_fake_remote():
+    stage2 = (
+        REPO_ROOT / "scripts" / "sandbox" / "stage2-run.sh"
+    ).read_text(encoding="utf-8")
+
+    assert "--setenv GIT_CONFIG_COUNT 1" in stage2
+    assert "--setenv GIT_CONFIG_KEY_0 'url.git@github.com:.insteadOf'" in stage2
+    assert "--setenv GIT_CONFIG_VALUE_0 'https://github.com/'" in stage2
+    assert '"${git_env[@]}"' in stage2
