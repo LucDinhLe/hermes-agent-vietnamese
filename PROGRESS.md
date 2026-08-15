@@ -1,5 +1,25 @@
 # Tiến độ
 
+## Cập nhật 2026-08-15 — quyết định NO-GO cho vi-v0.20.0-15
+
+- Windows fresh bootstrap trên hồ sơ cô lập hoàn tất đủ stage ở checkpoint
+  `18c00b4c3`; backend health HTTP 200, Hermes 0.20.0 và runtime thực tế dùng
+  `cryptography 50.0.0`. Không nhập hoặc khôi phục dữ liệu Hermes cũ.
+- Smoke test phát hiện tab draft đầu tiên vẫn giữ placeholder tiếng Anh sau khi
+  đổi sang tiếng Việt. Commit cục bộ `c646de336` chuyển tab này sang tiêu đề
+  dịch động; typecheck, lint và 4/4 test liên quan đạt.
+- Bộ cài Windows x64 cuối build thành công, 121.419.167 byte, SHA-256
+  `1140C2E1F654FBEA980B5386B3698264A249F32A9F9A44916B4BA665FE645372`, stamp
+  sạch đúng `c646de336`. Artifact vẫn `NotSigned` và không chứa runtime Node bị
+  cảnh báo hay dữ liệu cá nhân.
+- Windows Application Control chặn `Hermes.exe` cuối sau khi hash thay đổi, nên
+  chưa thể chạy lại UI smoke trên đúng commit cuối. Không tắt hoặc lách policy.
+- Website production build locale `en` đạt; typecheck website còn lỗi nền
+  TypeScript 6/Docusaurus/JSX và dữ liệu user stories, không thuộc lát cắt.
+- Quyết định: **NO-GO** cho phát hành công khai/thử nghiệm rộng. Còn thiếu runner
+  GitHub thật cho `vi-v*`, fresh smoke artifact Windows cuối, macOS Apple Silicon
+  thật và Linux x64 thật. Xem `docs/release-vi-v0.20.0-15-go-no-go.md`.
+
 ## Cập nhật 2026-08-15 — chuẩn bị checkpoint vi-v0.20.0-15
 
 - Tạo worktree tách biệt từ `origin/main` tại `771fd6df9`; không đụng nhánh
