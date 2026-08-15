@@ -16,6 +16,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
@@ -206,6 +207,22 @@ jobs:
           "$VCPKG_INSTALLATION_ROOT/vcpkg" install openssl:arm64-windows-static-md
           printf 'OPENSSL_DIR=C:\\vcpkg\\installed\\arm64-windows-static-md\nOPENSSL_STATIC=1\n' >> "$GITHUB_ENV"
 
+      - name: Bắt buộc cấu hình ký và công chứng Apple
+        if: matrix.platform == 'darwin'
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          test -n "$CSC_LINK" || { echo "::error::MAC_CSC_LINK is missing"; exit 1; }
+          test -n "$CSC_KEY_PASSWORD" || { echo "::error::MAC_CSC_KEY_PASSWORD is missing"; exit 1; }
+          test -n "$APPLE_API_KEY" || { echo "::error::APPLE_API_KEY is missing"; exit 1; }
+          test -n "$APPLE_API_KEY_ID" || { echo "::error::APPLE_API_KEY_ID is missing"; exit 1; }
+          test -n "$APPLE_API_ISSUER" || { echo "::error::APPLE_API_ISSUER is missing"; exit 1; }
+
       - name: Dựng runtime và gói native
         shell: bash
         env:
@@ -216,10 +233,6 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           HERMES_PAYLOAD_BUILD_PYTHON: ${{ matrix.platform == 'win32' && 'python' || 'python3' }}
         run: |
-          if [[ "${{ matrix.platform }}" == "darwin" && -z "${CSC_LINK:-}" ]]; then
-            unset CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER
-            export CSC_IDENTITY_AUTO_DISCOVERY=false
-          fi
           node scripts/build-bundled-desktop.mjs --tag="$HERMES_PAYLOAD_TAG" --no-install
 
       - name: Kiểm tra đúng payload đóng gói
@@ -233,6 +246,67 @@ jobs:
           node apps/desktop/scripts/collect-community-artifacts.mjs collect
           ${{ matrix.platform }} ${{ matrix.arch }} apps/desktop/release release-assets
 
+      - name: Bắt buộc cấu hình SignPath cho Windows
+        if: matrix.platform == 'win32'
+        shell: bash
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+        run: |
+          test -n "$SIGNPATH_API_TOKEN" || { echo "::error::SIGNPATH_API_TOKEN is missing"; exit 1; }
+          test -n "$SIGNPATH_ORGANIZATION_ID" || { echo "::error::SIGNPATH_ORGANIZATION_ID is missing"; exit 1; }
+          test -n "$SIGNPATH_PROJECT_SLUG" || { echo "::error::SIGNPATH_PROJECT_SLUG is missing"; exit 1; }
+          test -n "$SIGNPATH_SIGNING_POLICY_SLUG" || { echo "::error::SIGNPATH_SIGNING_POLICY_SLUG is missing"; exit 1; }
+          test -n "$SIGNPATH_ARTIFACT_CONFIGURATION_SLUG" || { echo "::error::SIGNPATH_ARTIFACT_CONFIGURATION_SLUG is missing"; exit 1; }
+
+      - name: Upload bộ cài Windows chưa ký cho SignPath
+        id: upload-unsigned-windows
+        if: matrix.platform == 'win32'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned-${{ matrix.id }}-${{ needs.verify.outputs.commit }}
+          path: release-assets/Hermes-Vietnamese-Windows-*-Setup.exe
+          archive: false
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Ký Authenticode bằng SignPath
+        if: matrix.platform == 'win32'
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned-windows.outputs.artifact-id }}
+          skip-decompress: true
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 1800
+          output-artifact-directory: signed-windows
+
+      - name: Thay bằng đúng byte đã ký và xác minh Authenticode
+        if: matrix.platform == 'win32'
+        shell: powershell
+        run: |
+          $expected = @(Get-ChildItem -LiteralPath release-assets -Filter 'Hermes-Vietnamese-Windows-*-Setup.exe')
+          if ($expected.Count -ne 1) { throw "Expected one normalized Windows installer, found $($expected.Count)" }
+          $signed = @(Get-ChildItem -LiteralPath signed-windows -Recurse -File -Filter $expected[0].Name)
+          if ($signed.Count -ne 1) { throw "Expected one signed $($expected[0].Name), found $($signed.Count)" }
+          Copy-Item -LiteralPath $signed[0].FullName -Destination $expected[0].FullName -Force
+          $signature = Get-AuthenticodeSignature -LiteralPath $expected[0].FullName
+          if ($signature.Status -ne 'Valid' -or $null -eq $signature.SignerCertificate) {
+            throw "Signed installer Authenticode is $($signature.Status), not Valid"
+          }
+
+      - name: Ghi lại checksum sau ký
+        run: >-
+          node apps/desktop/scripts/collect-community-artifacts.mjs checksums
+          release-assets SHA256SUMS-${{ matrix.platform }}-${{ matrix.arch }}.txt
+
       - name: Ghi trạng thái ký/công chứng
         shell: bash
         run: |
@@ -243,11 +317,11 @@ jobs:
             echo "platform=${{ matrix.platform }}"
             echo "arch=${{ matrix.arch }}"
             if [[ "${{ matrix.platform }}" == "win32" ]]; then
-              powershell.exe -NoProfile -Command "Get-ChildItem apps/desktop/release/*.exe | ForEach-Object { Get-AuthenticodeSignature -LiteralPath \$_.FullName | Select-Object Path,Status,StatusMessage,SignerCertificate } | ConvertTo-Json -Depth 4"
+              powershell.exe -NoProfile -Command "Get-ChildItem release-assets/*.exe | ForEach-Object { Get-AuthenticodeSignature -LiteralPath \$_.FullName | Select-Object Path,Status,StatusMessage,SignerCertificate } | ConvertTo-Json -Depth 4"
             elif [[ "${{ matrix.platform }}" == "darwin" ]]; then
-              codesign --verify --deep --strict --verbose=2 apps/desktop/release/mac*/Hermes.app 2>&1 || true
-              spctl --assess --type execute --verbose=4 apps/desktop/release/mac*/Hermes.app 2>&1 || true
-              xcrun stapler validate apps/desktop/release/mac*/Hermes.app 2>&1 || true
+              codesign --verify --deep --strict --verbose=2 apps/desktop/release/mac*/Hermes.app 2>&1
+              spctl --assess --type execute --verbose=4 apps/desktop/release/mac*/Hermes.app 2>&1
+              xcrun stapler validate apps/desktop/release/mac*/Hermes.app 2>&1
             else
               echo "signing=sha256-only"
             fi

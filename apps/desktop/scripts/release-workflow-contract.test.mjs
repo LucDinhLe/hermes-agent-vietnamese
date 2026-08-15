@@ -25,6 +25,17 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /build-bundled-desktop\.mjs/)
   assert.match(candidate, /dtolnay\/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c/)
   assert.match(candidate, /aarch64-pc-windows-msvc/)
+  assert.match(candidate, /signpath\/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627/)
+  assert.match(candidate, /Get-AuthenticodeSignature/)
+  assert.match(candidate, /SIGNPATH_SIGNING_POLICY_SLUG/)
+  assert.match(candidate, /SIGNPATH_ARTIFACT_CONFIGURATION_SLUG/)
+  assert.match(candidate, /skip-decompress: true/)
+  assert.match(candidate, /Bắt buộc cấu hình ký và công chứng Apple/)
+  assert.doesNotMatch(candidate, /CSC_IDENTITY_AUTO_DISCOVERY/)
+  assert.ok(
+    candidate.indexOf('Thay bằng đúng byte đã ký') < candidate.indexOf('Ghi lại checksum sau ký'),
+    'Windows checksum must be regenerated after replacing the unsigned installer'
+  )
   assert.match(candidate, /test:desktop:all/)
   assert.match(candidate, /Upload đúng byte vào draft/)
 })
