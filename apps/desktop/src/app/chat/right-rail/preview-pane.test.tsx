@@ -155,15 +155,17 @@ describe('PreviewPane console state', () => {
         unobserve() {}
       }
     )
-    vi.spyOn(browserDocument, 'createElement').mockImplementation((tagName: string, options?: ElementCreationOptions) => {
-      const element = nativeCreateElement(tagName, options)
+    vi.spyOn(browserDocument, 'createElement').mockImplementation(
+      (tagName: string, options?: ElementCreationOptions) => {
+        const element = nativeCreateElement(tagName, options)
 
-      if (tagName === 'webview') {
-        Object.assign(element, { setZoomFactor })
+        if (tagName === 'webview') {
+          Object.assign(element, { setZoomFactor })
+        }
+
+        return element
       }
-
-      return element
-    })
+    )
 
     let rendered!: ReturnType<typeof render>
     await act(async () => {
@@ -184,23 +186,71 @@ describe('PreviewPane console state', () => {
     const host = webview.parentElement!
 
     act(() => {
-      resize?.(
-        [{ contentRect: { width: 480 }, target: host } as unknown as ResizeObserverEntry],
-        {} as ResizeObserver
-      )
+      resize?.([{ contentRect: { width: 480 }, target: host } as unknown as ResizeObserverEntry], {} as ResizeObserver)
       webview.dispatchEvent(new Event('dom-ready'))
     })
 
     expect(setZoomFactor).toHaveBeenLastCalledWith(0.5)
 
     act(() => {
-      resize?.(
-        [{ contentRect: { width: 960 }, target: host } as unknown as ResizeObserverEntry],
-        {} as ResizeObserver
-      )
+      resize?.([{ contentRect: { width: 960 }, target: host } as unknown as ResizeObserverEntry], {} as ResizeObserver)
     })
 
     expect(setZoomFactor).toHaveBeenLastCalledWith(1)
+  })
+
+  it('refits after a pane drag when ResizeObserver delivery is deferred', async () => {
+    const setZoomFactor = vi.fn()
+    const browserDocument = window.document
+    const nativeCreateElement = browserDocument.createElement.bind(browserDocument)
+
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+      }
+    )
+    vi.spyOn(browserDocument, 'createElement').mockImplementation(
+      (tagName: string, options?: ElementCreationOptions) => {
+        const element = nativeCreateElement(tagName, options)
+
+        if (tagName === 'webview') {
+          Object.assign(element, { setZoomFactor })
+        }
+
+        return element
+      }
+    )
+
+    let rendered!: ReturnType<typeof render>
+    await act(async () => {
+      rendered = render(
+        <PreviewPane
+          tabId="url:pointerup-refit"
+          target={{
+            kind: 'url',
+            label: 'Browser',
+            source: 'https://example.com',
+            url: 'https://example.com'
+          }}
+        />
+      )
+    })
+
+    const webview = rendered.container.querySelector('webview')!
+    const host = webview.parentElement!
+    let hostWidth = 480
+
+    vi.spyOn(host, 'getBoundingClientRect').mockImplementation(() => ({ width: hostWidth }) as DOMRect)
+
+    act(() => webview.dispatchEvent(new Event('dom-ready')))
+    expect(setZoomFactor).toHaveBeenLastCalledWith(0.5)
+
+    hostWidth = 720
+    act(() => browserDocument.dispatchEvent(new Event('pointerup')))
+
+    expect(setZoomFactor).toHaveBeenLastCalledWith(0.75)
   })
 
   it('renders authenticated remote HTML safely and honors source mode', async () => {

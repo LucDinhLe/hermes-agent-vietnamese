@@ -206,6 +206,36 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
 
   useResizeObserver(handleBrowserResize, hostRef)
 
+  useEffect(() => {
+    const refitBrowser = () => {
+      const host = hostRef.current
+
+      if (!host) {
+        return
+      }
+
+      applyBrowserFit(host.getBoundingClientRect().width)
+    }
+
+    // Electron can defer ResizeObserver delivery while the native <webview>
+    // is occluded or a split-pane drag owns pointer capture. Re-measure at the
+    // two stable layout boundaries so the guest cannot stay stuck at the zoom
+    // from the rail's previous width.
+    document.addEventListener('pointerup', refitBrowser, true)
+
+    if (typeof window.addEventListener === 'function') {
+      window.addEventListener('resize', refitBrowser)
+    }
+
+    return () => {
+      document.removeEventListener('pointerup', refitBrowser, true)
+
+      if (typeof window.removeEventListener === 'function') {
+        window.removeEventListener('resize', refitBrowser)
+      }
+    }
+  }, [applyBrowserFit])
+
   // Artifacts have no URL to load — they render from the registry, never in a
   // webview.
   const isWebPreview =
