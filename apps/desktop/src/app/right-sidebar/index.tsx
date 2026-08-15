@@ -164,7 +164,7 @@ export function RightSidebarPane({ browserContent, onActivateFile, onActivateFol
                 onClose={() => closeRightRailTab(tab.id)}
                 role="tab"
               >
-                <PaneTabLabel as="button" aria-label={label} onClick={() => selectRightRailTab(tab.id)} type="button">
+                <PaneTabLabel aria-label={label} as="button" onClick={() => selectRightRailTab(tab.id)} type="button">
                   {label}
                 </PaneTabLabel>
               </PaneTab>
