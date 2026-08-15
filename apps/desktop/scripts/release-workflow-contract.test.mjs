@@ -40,6 +40,9 @@ test('candidate workflow builds the complete resident runtime on every advertise
     'Windows checksum must be regenerated after replacing the unsigned installer'
   )
   assert.match(candidate, /test:desktop:all/)
+  assert.match(candidate, /uv sync --locked --python 3\.11 --extra dev/)
+  assert.match(candidate, /\.\/scripts\/run_tests\.sh -q/)
+  assert.doesNotMatch(candidate, /uv run pytest/)
   assert.match(candidate, /Upload đúng byte vào draft/)
 })
 

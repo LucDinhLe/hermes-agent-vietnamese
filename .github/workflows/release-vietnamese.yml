@@ -84,6 +84,11 @@ jobs:
         with:
           command: npm ci --no-audit --no-fund
 
+      - name: Cài phụ thuộc Python kiểm thử từ lockfile
+        uses: ./.github/actions/retry
+        with:
+          command: uv sync --locked --python 3.11 --extra dev
+
       - name: Kiểm tra đầu vào runtime bất biến
         run: node --test scripts/vietnamese-release.test.mjs scripts/prepare-agent-browser-native.test.mjs
 
@@ -123,7 +128,7 @@ jobs:
 
       - name: Kiểm thử Python liên quan phát hành
         run: >-
-          uv run pytest -q
+          ./scripts/run_tests.sh -q
           tests/scripts/test_write_install_stamp.py
           tests/hermes_cli/test_update_channel_stable.py
           tests/hermes_cli/test_update_eject.py

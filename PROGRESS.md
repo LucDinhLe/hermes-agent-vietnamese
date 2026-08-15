@@ -1,5 +1,19 @@
 # Tiến độ
 
+## Cập nhật 2026-08-15 — candidate v15 dừng trước build, chuyển sang v16
+
+- Tag bất biến `vi-v0.20.0-15` đã kích hoạt đúng workflow phát hành và
+  install/update E2E của fork, nhưng cổng verify dừng trước build vì workflow
+  gọi `pytest` khi chưa cài nhóm phụ thuộc `dev`. Không có artifact hoặc release
+  v15 nào được tạo.
+- Workflow nay cài nhóm kiểm thử từ `uv.lock` bằng
+  `uv sync --locked --python 3.11 --extra dev` và chạy bốn tệp release qua
+  wrapper chuẩn `scripts/run_tests.sh`. Contract test cấm tái xuất hiện lệnh
+  `uv run pytest` thiếu môi trường.
+- Xác minh bản sửa: release workflow contract 5/5; bốn tệp Python đạt 36/36
+  bằng runner cô lập chuẩn. Vì không di chuyển hoặc tái sử dụng tag bất biến,
+  candidate kế tiếp mang số `vi-v0.20.0-16`.
+
 ## Cập nhật 2026-08-15 — cho phép community prerelease không ký, không hạ chuẩn stable
 
 - Chủ phát hành chấp nhận công bố đúng trạng thái hiện có và không mua Apple
