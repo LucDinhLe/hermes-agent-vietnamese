@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { Tip } from '@/components/ui/tooltip'
+import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { type Translations, useI18n } from '@/i18n'
 import { isDesktopFsRemoteMode } from '@/lib/desktop-fs'
 import { openPreviewTargetInBrowser, remoteHtmlPreviewDocument } from '@/lib/local-preview'
@@ -15,6 +16,7 @@ import { $previewServerRestart, failPreviewServerRestart, type PreviewTarget } f
 
 import { ArtifactPreview } from './preview-artifact'
 import { normalizeBrowserAddress } from './preview-browser-address'
+import { previewBrowserZoomFactor } from './preview-browser-fit'
 import {
   clampConsoleHeight,
   compactUrl,
@@ -42,6 +44,7 @@ type PreviewWebview = HTMLElement & {
   openDevTools?: () => void
   reload?: () => void
   reloadIgnoringCache?: () => void
+  setZoomFactor?: (factor: number) => void
 }
 
 interface PreviewPaneProps {
@@ -141,7 +144,10 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
   const consoleState = previewConsoleState(tabId ?? target.url)
   const consoleBodyRef = useRef<HTMLDivElement | null>(null)
   const consoleShouldStickRef = useRef(true)
+  const browserReadyRef = useRef(false)
+  const browserWidthRef = useRef(0)
   const hostRef = useRef<HTMLDivElement | null>(null)
+  const lastBrowserZoomRef = useRef<number | null>(null)
   const lastReloadRequestRef = useRef(reloadRequest)
   const lastRestartEventRef = useRef('')
   const previewContentRef = useRef<HTMLDivElement | null>(null)
@@ -157,6 +163,78 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<PreviewLoadErrorState | null>(null)
   const [localReloadKey, setLocalReloadKey] = useState(0)
+
+  const applyBrowserFit = useCallback((width: number) => {
+    browserWidthRef.current = width
+
+    const webview = webviewRef.current
+
+    if (!browserReadyRef.current || !webview?.setZoomFactor) {
+      return
+    }
+
+    const factor = previewBrowserZoomFactor(width)
+
+    if (lastBrowserZoomRef.current === factor) {
+      return
+    }
+
+    try {
+      webview.setZoomFactor(factor)
+      lastBrowserZoomRef.current = factor
+    } catch {
+      // The guest may be navigating or tearing down between a resize delivery
+      // and this call. Its next dom-ready/resize event retries the fit.
+    }
+  }, [])
+
+  const handleBrowserResize = useCallback(
+    (entries: readonly ResizeObserverEntry[]) => {
+      const host = hostRef.current
+
+      if (!host) {
+        return
+      }
+
+      const entry = entries.find(candidate => candidate.target === host)
+      const width = entry?.contentRect.width ?? host.getBoundingClientRect().width
+
+      applyBrowserFit(width)
+    },
+    [applyBrowserFit]
+  )
+
+  useResizeObserver(handleBrowserResize, hostRef)
+
+  useEffect(() => {
+    const refitBrowser = () => {
+      const host = hostRef.current
+
+      if (!host) {
+        return
+      }
+
+      applyBrowserFit(host.getBoundingClientRect().width)
+    }
+
+    // Electron can defer ResizeObserver delivery while the native <webview>
+    // is occluded or a split-pane drag owns pointer capture. Re-measure at the
+    // two stable layout boundaries so the guest cannot stay stuck at the zoom
+    // from the rail's previous width.
+    document.addEventListener('pointerup', refitBrowser, true)
+
+    if (typeof window.addEventListener === 'function') {
+      window.addEventListener('resize', refitBrowser)
+    }
+
+    return () => {
+      document.removeEventListener('pointerup', refitBrowser, true)
+
+      if (typeof window.removeEventListener === 'function') {
+        window.removeEventListener('resize', refitBrowser)
+      }
+    }
+  }, [applyBrowserFit])
 
   // Artifacts have no URL to load — they render from the registry, never in a
   // webview.
@@ -574,6 +652,8 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
 
     host.replaceChildren()
     webviewRef.current = null
+    browserReadyRef.current = false
+    lastBrowserZoomRef.current = null
     setCurrentUrl(target.url)
     setAddressValue(target.url)
     setCanGoBack(false)
@@ -668,6 +748,11 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
       syncHistory()
     }
 
+    const onDomReady = () => {
+      browserReadyRef.current = true
+      applyBrowserFit(browserWidthRef.current || host.getBoundingClientRect().width)
+    }
+
     // The WEBVIEW is the source of truth for DevTools, not our click handler:
     // closing the DevTools window itself fires devtools-closed with no click,
     // and the glyph was left stuck "on" when we tracked it locally.
@@ -682,6 +767,7 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
     webview.addEventListener('did-navigate-in-page', onNavigate)
     webview.addEventListener('did-start-loading', onStart)
     webview.addEventListener('did-stop-loading', onStop)
+    webview.addEventListener('dom-ready', onDomReady)
     host.appendChild(webview)
     webviewRef.current = webview
 
@@ -694,9 +780,11 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
       webview.removeEventListener('did-navigate-in-page', onNavigate)
       webview.removeEventListener('did-start-loading', onStart)
       webview.removeEventListener('did-stop-loading', onStop)
+      webview.removeEventListener('dom-ready', onDomReady)
+      browserReadyRef.current = false
       webview.remove()
     }
-  }, [appendConsoleEntry, consoleState, copy, isRemoteHtml, isWebPreview, syncHistory, target.url])
+  }, [applyBrowserFit, appendConsoleEntry, consoleState, copy, isRemoteHtml, isWebPreview, syncHistory, target.url])
 
   return (
     <aside className="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-transparent text-muted-foreground">

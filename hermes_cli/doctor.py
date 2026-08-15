@@ -111,7 +111,7 @@ def _hermes_database_paths(hermes_home: Path) -> list[tuple[str, Path]]:
     ]
     # Non-default kanban boards each keep their own kanban.db.
     for board_db in sorted((hermes_home / "kanban" / "boards").glob("*/kanban.db")):
-        entries.append((str(board_db.relative_to(hermes_home)), board_db))
+        entries.append((board_db.relative_to(hermes_home).as_posix(), board_db))
     return entries
 
 
@@ -153,10 +153,98 @@ def _format_db_size(db_path: Path) -> str:
     return _format_size(nbytes)
 
 
+def _database_holder_pids(db_path: Path) -> tuple[list[int] | None, str | None]:
+    """Return PIDs with *db_path* open, or an error when exclusivity is unknown.
+
+    Journal-mode repair must be offline.  A zero-timeout SQLite pragma is the
+    final lock guard, but an idle connection can exist without holding a lock
+    at the instant of the pragma.  The process scan closes that gap for
+    Hermes/Python/SQLite processes without asking Windows for every Chromium
+    helper's open-file table (which can take minutes).  The zero-timeout SQLite
+    mode switch remains the final guard; if psutil cannot perform the targeted
+    scan, fail closed.
+    """
+    try:
+        import psutil
+    except ImportError:
+        return None, "psutil is unavailable"
+
+    try:
+        target = os.path.normcase(str(db_path.resolve()))
+    except OSError as exc:
+        return None, str(exc)
+
+    holders: list[int] = []
+    try:
+        processes = psutil.process_iter(["pid", "name"])
+    except Exception as exc:
+        return None, str(exc)
+
+    for process in processes:
+        process_name = str(process.info.get("name") or "").lower()
+        if process.pid != os.getpid() and not any(
+            marker in process_name for marker in ("hermes", "python", "sqlite")
+        ):
+            continue
+        try:
+            opened = process.open_files()
+        except (psutil.AccessDenied, psutil.NoSuchProcess, psutil.ZombieProcess):
+            continue
+        except Exception as exc:
+            return None, str(exc)
+        for opened_file in opened:
+            try:
+                candidate = os.path.normcase(str(Path(opened_file.path).resolve()))
+            except OSError:
+                continue
+            if candidate == target:
+                holders.append(process.pid)
+                break
+    return sorted(set(holders)), None
+
+
+def _repair_wal_database(db_path: Path) -> tuple[bool, str | None]:
+    """Offline-convert one WAL database to DELETE without waiting on locks."""
+    holder_pids, holder_error = _database_holder_pids(db_path)
+    if holder_error is not None or holder_pids is None:
+        return (
+            False,
+            f"could not prove exclusive access: {holder_error or 'unknown error'}",
+        )
+    if holder_pids:
+        return False, f"database is open in {len(holder_pids)} process(es)"
+
+    try:
+        import sqlite3
+        from hermes_state import _set_journal_mode_no_wait
+
+        connection = sqlite3.connect(
+            str(db_path),
+            timeout=0,
+            isolation_level=None,
+        )
+        try:
+            actual = _set_journal_mode_no_wait(connection, "DELETE")
+        finally:
+            connection.close()
+    except Exception as exc:
+        return False, str(exc)
+
+    if actual != "delete":
+        return False, f"SQLite kept journal_mode={actual or 'unknown'}"
+    mode, error = _read_journal_mode(db_path)
+    if error is not None or mode != "rollback":
+        return False, error or f"database header still reports {mode or 'unknown'}"
+    return True, None
+
+
 def _report_database_journal_modes(
     hermes_home: Path | None = None,
     version_info: tuple[int, ...] | None = None,
-) -> None:
+    *,
+    should_fix: bool = False,
+    issues: list[str] | None = None,
+) -> int:
     """List each database's journal mode; warn on WAL under a vulnerable SQLite."""
     from hermes_state import _wal_reset_repair_hint, is_sqlite_wal_reset_vulnerable
 
@@ -166,8 +254,9 @@ def _report_database_journal_modes(
         databases = _hermes_database_paths(home)
     except Exception as exc:
         check_warn(f"Could not list Hermes databases: {exc}")
-        return
+        return 0
     exposed = []
+    fixed = 0
     for name, path in databases:
         if not path.is_file():
             continue
@@ -183,11 +272,26 @@ def _report_database_journal_modes(
                 check_info(f"{name}: journal mode could not be read ({error})")
         elif mode == "wal":
             if vulnerable:
-                exposed.append(name)
-                check_warn(
-                    f"{name} is in WAL mode ({size})",
-                    "(exposed to the WAL-reset bug until SQLite is upgraded)",
-                )
+                if should_fix:
+                    repaired, repair_error = _repair_wal_database(path)
+                    if repaired:
+                        fixed += 1
+                        check_ok(
+                            f"{name}: changed WAL to rollback journal mode",
+                            f"({size}, no longer exposed)",
+                        )
+                    else:
+                        exposed.append(name)
+                        check_warn(
+                            f"{name} remains in WAL mode ({size})",
+                            f"({repair_error}; close Hermes and rerun `hermes doctor --fix`)",
+                        )
+                else:
+                    exposed.append(name)
+                    check_warn(
+                        f"{name} is in WAL mode ({size})",
+                        "(exposed to the WAL-reset bug until repaired or SQLite is upgraded)",
+                    )
             else:
                 check_info(f"{name}: WAL journal mode ({size})")
         elif vulnerable:
@@ -195,7 +299,16 @@ def _report_database_journal_modes(
         else:
             check_info(f"{name}: rollback journal mode ({size})")
     if exposed:
-        check_info(f"To clear the exposure: {_wal_reset_repair_hint()}")
+        check_info(
+            "To clear the exposure: close Hermes and run `hermes doctor --fix`; "
+            f"to restore WAL concurrency: {_wal_reset_repair_hint()}"
+        )
+        if issues is not None:
+            issues.append(
+                "Hermes databases remain exposed to SQLite's WAL-reset bug — "
+                "close Hermes and run 'hermes doctor --fix'"
+            )
+    return fixed
 
 
 def _safe_which(cmd: str) -> str | None:
@@ -1043,9 +1156,9 @@ def run_doctor(args):
             (_sqlite_src[:48] + "…") if len(_sqlite_src) > 48 else _sqlite_src
         )
         if is_sqlite_wal_reset_vulnerable():
-            # Warn-only: Hermes already refuses to enable WAL on fresh DBs.
-            # Do not append to ``issues`` because runtime repair remains
-            # best-effort and unsupported installs may need manual action.
+            # The runtime warning itself is informational when every database
+            # is already in rollback mode. Any still-WAL database is added to
+            # the action summary by _report_database_journal_modes below.
             check_warn(
                 f"SQLite {_sqlite_ver} (WAL-reset bug)",
                 _sqlite_upgrade_hint(),
@@ -1054,7 +1167,10 @@ def run_doctor(args):
             check_ok(f"SQLite {_sqlite_ver}")
         if _sqlite_src_short:
             check_info(f"SQLite source id: {_sqlite_src_short}")
-        _report_database_journal_modes()
+        fixed_count += _report_database_journal_modes(
+            should_fix=should_fix,
+            issues=issues,
+        )
     except Exception as e:
         check_warn(f"SQLite version probe failed: {e}")
     # Check if in virtual environment

@@ -2761,6 +2761,7 @@ export const zh: Translations = {
     aria: '右侧边栏',
     panelsAria: '右侧边栏面板',
     files: '文件系统',
+    browserNewTab: '新建浏览器标签页',
     terminal: '终端',
     noFolderSelected: '未选择文件夹',
     changeCwdTitle: '更改工作目录',

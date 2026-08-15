@@ -16,3 +16,10 @@ export function packagedAppDirectoryName(platform, arch) {
   const platformName = platform === 'win32' ? 'win' : 'linux'
   return `${platformName}${arch === 'x64' ? '' : `-${arch}`}-unpacked`
 }
+
+export function isMacDmgArtifactName(name, arch) {
+  if (!SUPPORTED_ARCHES.has(arch)) {
+    throw new Error(`Unsupported packaged-app architecture: ${arch}`)
+  }
+  return typeof name === 'string' && name.startsWith('Hermes-') && name.toLowerCase().endsWith(`-mac-${arch}.dmg`)
+}

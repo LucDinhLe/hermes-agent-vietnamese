@@ -20,8 +20,8 @@ function fileTarget(path: string): PreviewTarget {
 }
 
 describe('readActivePreview (read_preview tool)', () => {
-  // All URL targets share the singleton Browser tab id, so a reader registered
-  // in one test would answer the next — unregister whatever a test installed.
+  // Page controllers live outside React and follow Browser tab ids, so a
+  // reader registered in one test would answer the next unless it is removed.
   let cleanups: Array<() => void> = []
 
   const register = (tabId: string, reader: Parameters<typeof registerPreviewPageReader>[1]) => {

@@ -17,4 +17,4 @@ def test_repository_clone_enables_windows_long_paths_before_any_clone() -> None:
     assert '$env:GIT_CONFIG_COUNT = "2"' in source
     assert '$env:GIT_CONFIG_VALUE_1 = "true"' in source
     assert "git config --global core.longpaths true" not in source
-    assert config_index < ssh_clone_index < https_clone_index
+    assert config_index < https_clone_index < ssh_clone_index

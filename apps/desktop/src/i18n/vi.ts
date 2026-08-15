@@ -2863,6 +2863,7 @@ export const vi: Translations = {
     aria: 'Thanh bên phải',
     panelsAria: 'Bảng điều khiển bên phải',
     files: 'Hệ thống tệp',
+    browserNewTab: 'Tab trình duyệt mới',
     terminal: 'Dòng lệnh',
     noFolderSelected: 'Không có thư mục nào được chọn',
     changeCwdTitle: 'Thay đổi thư mục làm việc',

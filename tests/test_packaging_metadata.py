@@ -68,7 +68,7 @@ _UPDATE_DOWNGRADE_GUARD_FLOORS = {
     # `hermes update` reinstalls exact pins from pyproject/lazy_deps. These
     # reviewed CVE pins must not slide back to stale versions that downgrade
     # already-patched user environments.
-    "cryptography": (48, 0, 1),
+    "cryptography": (50, 0, 0),
     "starlette": (1, 3, 1),
     "python-multipart": (0, 0, 32),
 }
@@ -147,6 +147,70 @@ def test_locked_starlette_is_not_vulnerable_to_cve_2026_48710():
             f"floor {'.'.join(map(str, _STARLETTE_CVE_FLOOR))} — regenerate the "
             f"lockfile after bumping the pin"
         )
+
+
+def test_cryptography_pin_and_lock_cover_2026_advisories():
+    """Runtime and lock must cover CVE-2026-69247/69248/69249.
+
+    The highest fixed-version floor across the three advisories is 50.0.0.
+    Hermes imports cryptography on production authentication and messaging
+    paths, so a transitive-only or stale-lock fix is insufficient.
+    """
+    floor = _UPDATE_DOWNGRADE_GUARD_FLOORS["cryptography"]
+    pins = _pins_from_specs(_pyproject_pinned_specs()).get("cryptography")
+
+    assert pins, "cryptography must remain directly pinned on runtime install paths"
+    for version in pins:
+        assert _version_tuple(version) >= floor, (
+            f"pyproject pins cryptography=={version}, below the common fixed floor "
+            f"{'.'.join(map(str, floor))} for CVE-2026-69247/69248/69249"
+        )
+
+    locked = _locked_versions("cryptography")
+    assert locked, "cryptography not found in uv.lock"
+    for version in locked:
+        assert _version_tuple(version) >= floor, (
+            f"uv.lock resolves cryptography=={version}, below the common fixed "
+            f"floor {'.'.join(map(str, floor))}"
+        )
+
+
+def test_pywinpty_pin_and_lock_ship_native_windows_arm64_wheel():
+    """The bundled Windows ARM64 runtime must not compile pywinpty from sdist.
+
+    pywinpty 2.x did not publish win_arm64 wheels. The v18 native candidate
+    therefore linked Git for Windows' x64 ``winpty.lib`` on the ARM64 runner
+    and failed with machine-type conflicts. Version 3.0.5 is the first usable
+    release whose published CPython 3.11/3.12 wheels include both Windows
+    architectures; 3.0.4 is explicitly excluded because its wheels omitted
+    required native binaries.
+    """
+    pins = _pins_from_specs(_pyproject_pinned_specs()).get("pywinpty")
+    assert pins == {"3.0.5"}, (
+        "Windows runtime must exact-pin pywinpty==3.0.5; earlier releases do "
+        "not provide a complete native Windows ARM64 payload"
+    )
+
+    lock = tomllib.loads((REPO_ROOT / "uv.lock").read_text(encoding="utf-8"))
+    packages = [
+        pkg
+        for pkg in lock.get("package", [])
+        if _canonical(pkg["name"]) == "pywinpty"
+    ]
+    assert [pkg["version"] for pkg in packages] == ["3.0.5"]
+
+    wheel_names = {
+        Path(wheel["url"]).name
+        for package in packages
+        for wheel in package.get("wheels", [])
+    }
+    for python_tag in ("cp311-cp311", "cp312-cp312"):
+        assert any(
+            f"-{python_tag}-win_amd64.whl" in name for name in wheel_names
+        ), python_tag
+        assert any(
+            f"-{python_tag}-win_arm64.whl" in name for name in wheel_names
+        ), python_tag
 
 
 

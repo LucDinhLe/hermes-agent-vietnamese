@@ -2150,6 +2150,42 @@ function Install-SystemPackages {
 # Installation
 # ============================================================================
 
+function Test-OfficialSshRemote {
+    param([AllowNull()][string]$RemoteUrl)
+
+    if ([string]::IsNullOrWhiteSpace($RemoteUrl)) { return $false }
+
+    $normalized = $RemoteUrl.Trim().TrimEnd("/")
+    if ($normalized.EndsWith(".git", [StringComparison]::OrdinalIgnoreCase)) {
+        $normalized = $normalized.Substring(0, $normalized.Length - 4)
+    }
+
+    return (
+        ($normalized -ieq "git@github.com:LucDinhLe/hermes-agent-vietnamese") -or
+        ($normalized -ieq "ssh://git@github.com/LucDinhLe/hermes-agent-vietnamese")
+    )
+}
+
+function Use-PublicHttpsOriginForManagedInstall {
+    # The managed checkout is read-only application source. Older installers
+    # cloned the public repo over SSH first, leaving origin dependent on SSH
+    # host trust (and sometimes a hardware-backed key) during later GUI
+    # updates. Self-heal only the official SSH origin; forks and custom remotes
+    # remain untouched.
+    $originOut = @(git -c windows.appendAtomically=false remote get-url origin 2>$null)
+    $originExit = $LASTEXITCODE
+    if (($originExit -ne 0) -or ($originOut.Count -eq 0)) { return }
+
+    $originUrl = $originOut[0].ToString().Trim()
+    if (-not (Test-OfficialSshRemote $originUrl)) { return }
+
+    Write-Info "Switching the public Hermes update remote from SSH to HTTPS..."
+    git -c windows.appendAtomically=false remote set-url origin $RepoUrlHttps 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not switch the public Hermes update remote to HTTPS (exit $LASTEXITCODE)"
+    }
+}
+
 function Install-Repository {
     Write-Info "Installing to $InstallDir..."
 
@@ -2216,6 +2252,11 @@ function Install-Repository {
                 # users hit on update. Pin autocrlf=false so the dirt is never
                 # created in the first place.
                 git -c windows.appendAtomically=false config core.autocrlf false 2>$null
+                # Repair legacy managed clones before inspecting/stashing local
+                # changes. If SSH host verification is unavailable, failing
+                # here used to leave an avoidable autostash behind even though
+                # the official public repo needs no SSH authentication.
+                Use-PublicHttpsOriginForManagedInstall
                 Discard-LockfileChurn $InstallDir
                 # Preserve any real local changes before the checkout instead of
                 # discarding them with `reset --hard HEAD`. The old hard reset
@@ -2245,7 +2286,20 @@ function Install-Repository {
                     git -c windows.appendAtomically=false stash push --include-untracked -m "$stashName"
                     if ($LASTEXITCODE -eq 0) { $autostashRef = "stash@{0}" }
                 }
-                git -c windows.appendAtomically=false fetch origin $Branch
+                # Never accidentally unshallow a managed checkout during
+                # repair. A shallow checkout from an unrelated/local commit can
+                # otherwise make this fetch transfer the repository's complete
+                # history (hundreds of thousands of objects) before the pinned
+                # commit is even considered. A bounded window is enough to
+                # connect normal adjacent releases while keeping recovery fast.
+                $branchFetchArgs = @("fetch")
+                $isShallowOutput = git -c windows.appendAtomically=false rev-parse --is-shallow-repository 2>$null
+                if (("$isShallowOutput").Trim() -eq "true") {
+                    $branchFetchArgs += @("--depth", "64")
+                    Write-Info "Keeping shallow repository fetch bounded to 64 commits..."
+                }
+                $branchFetchArgs += @("origin", $Branch)
+                git -c windows.appendAtomically=false @branchFetchArgs
                 if ($LASTEXITCODE -ne 0) { throw "git fetch failed (exit $LASTEXITCODE)" }
                 # Precedence: Commit > Tag > Branch.  Commit and Tag check
                 # out as detached HEAD intentionally -- they're meant to be
@@ -2253,7 +2307,12 @@ function Install-Repository {
                 if ($Commit) {
                     # Make sure we have the commit locally (a tag-less commit
                     # SHA isn't always reachable from any one branch fetch).
-                    git -c windows.appendAtomically=false fetch origin $Commit
+                    $commitFetchArgs = @("fetch")
+                    if (("$isShallowOutput").Trim() -eq "true") {
+                        $commitFetchArgs += @("--depth", "64")
+                    }
+                    $commitFetchArgs += @("origin", $Commit)
+                    git -c windows.appendAtomically=false @commitFetchArgs
                     # A commit pin must never move an existing install
                     # BACKWARDS. hermes-setup.exe bakes its build-time commit
                     # into the binary (BUILD_PIN_COMMIT) and passes it as
@@ -2411,22 +2470,23 @@ function Install-Repository {
         $env:GIT_CONFIG_VALUE_1 = "true"
         git config --global windows.appendAtomically false 2>$null
 
-        # Try SSH first, then HTTPS, with -c flag for atomic write fix
-        Write-Info "Trying SSH clone..."
-        $env:GIT_SSH_COMMAND = "ssh -o BatchMode=yes -o ConnectTimeout=5"
+        # This is a public managed checkout, so prefer anonymous HTTPS. SSH is
+        # retained only as a fallback for networks where HTTPS is unavailable.
+        Write-Info "Trying HTTPS clone..."
         try {
-            Invoke-NativeWithRelaxedErrorAction { git -c windows.appendAtomically=false clone --depth 1 --branch $Branch $RepoUrlSsh $InstallDir }
+            Invoke-NativeWithRelaxedErrorAction { git -c windows.appendAtomically=false clone --depth 1 --branch $Branch $RepoUrlHttps $InstallDir }
             if ($LASTEXITCODE -eq 0) { $cloneSuccess = $true }
         } catch { }
-        $env:GIT_SSH_COMMAND = $null
 
         if (-not $cloneSuccess) {
             if (Test-Path $InstallDir) { Remove-Item -Recurse -Force $InstallDir -ErrorAction SilentlyContinue }
-            Write-Info "SSH failed, trying HTTPS..."
+            Write-Info "HTTPS failed, trying SSH..."
+            $env:GIT_SSH_COMMAND = "ssh -o BatchMode=yes -o ConnectTimeout=5"
             try {
-                Invoke-NativeWithRelaxedErrorAction { git -c windows.appendAtomically=false clone --depth 1 --branch $Branch $RepoUrlHttps $InstallDir }
+                Invoke-NativeWithRelaxedErrorAction { git -c windows.appendAtomically=false clone --depth 1 --branch $Branch $RepoUrlSsh $InstallDir }
                 if ($LASTEXITCODE -eq 0) { $cloneSuccess = $true }
             } catch { }
+            $env:GIT_SSH_COMMAND = $null
         }
 
         # Fallback: download ZIP archive (bypasses git file I/O issues entirely)
@@ -2462,7 +2522,7 @@ function Install-Repository {
                     Write-Success "Downloaded and extracted"
 
                     # Initialize git repo so updates work later. A bare
-                    # `git init` leaves NO HEAD -- desktop's write-build-stamp
+                    # `git init` leaves NO HEAD -- desktop's stamp step
                     # then hard-fails with "could not determine git commit"
                     # (#50823 / #61657). Fetch the requested ref and force-check
                     # it out (-f) so untracked ZIP files cannot block checkout.
@@ -2536,6 +2596,7 @@ function Install-Repository {
     # next `hermes update` checkout aborts on a "dirty" tree the user never
     # touched (see the update path above).
     git -c windows.appendAtomically=false config core.autocrlf false 2>$null
+    Use-PublicHttpsOriginForManagedInstall
 
     # Post-clone pin: when a clone (or ZIP-fallback init) just landed us on
     # $Branch's tip, honour the higher-precedence $Commit / $Tag by checking
@@ -2550,7 +2611,13 @@ function Install-Repository {
         try {
             if ($Commit) {
                 Write-Info "Pinning to commit $Commit..."
-                git -c windows.appendAtomically=false fetch origin $Commit
+                $pinFetchArgs = @("fetch")
+                $postCloneShallow = git -c windows.appendAtomically=false rev-parse --is-shallow-repository 2>$null
+                if (("$postCloneShallow").Trim() -eq "true") {
+                    $pinFetchArgs += @("--depth", "64")
+                }
+                $pinFetchArgs += @("origin", $Commit)
+                git -c windows.appendAtomically=false @pinFetchArgs
                 git -c windows.appendAtomically=false checkout --detach $Commit
                 if ($LASTEXITCODE -ne 0) {
                     throw "git checkout $Commit failed (exit $LASTEXITCODE)"
@@ -3758,7 +3825,7 @@ function Install-Desktop {
     Pop-Location
 
     # 2. Build apps/desktop. `npm run pack` runs:
-    #      assert-root-install + write-build-stamp + stage-native-deps +
+    #      assert-root-install + write_install_stamp + stage-native-deps +
     #      tsc -b + vite build + electron-builder --dir
     # The --dir mode produces an unpacked Hermes.exe in
     # apps/desktop/release/win-unpacked/ without bundling NSIS/MSI;
@@ -3779,7 +3846,7 @@ function Install-Desktop {
     # for some other tool, electron-builder would still try to sign.
     Write-Info "Building desktop app (this takes 1-3 minutes)..."
     $buildLog = "$env:TEMP\hermes-desktop-build-$(Get-Random).log"
-    # Seed GITHUB_SHA for write-build-stamp.mjs. The stamp prefers CI env vars
+    # Seed GITHUB_SHA for scripts/write_install_stamp.py. The stamp prefers CI env vars
     # over `git rev-parse`, so this covers: (1) node can't find git.exe on PATH
     # even though this PowerShell session can, (2) ZIP/init trees that still
     # lack a HEAD after a failed post-extract fetch. Without it the desktop
@@ -3812,7 +3879,7 @@ function Install-Desktop {
         $shaPreview = if ($env:GITHUB_SHA.Length -ge 12) { $env:GITHUB_SHA.Substring(0, 12) } else { $env:GITHUB_SHA }
         Write-Info "Desktop build stamp: $shaPreview ($($env:GITHUB_REF_NAME))"
     } else {
-        Write-Warn "Could not resolve a git commit for the desktop stamp -- write-build-stamp will use its non-git fallback"
+        Write-Warn "Could not resolve a git commit for the desktop stamp -- write_install_stamp will use its non-git fallback"
     }
     Push-Location $desktopDir
     $prevEAP = $ErrorActionPreference

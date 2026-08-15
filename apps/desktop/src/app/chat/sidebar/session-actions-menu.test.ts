@@ -1,7 +1,7 @@
 import { atom } from 'nanostores'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { $activeSessionId, $selectedStoredSessionId } from '@/store/session'
+import { $activeSessionId, $selectedStoredSessionId, $sessions } from '@/store/session'
 
 import { renameSessionPreferringRpc } from './session-actions-menu'
 
@@ -53,6 +53,7 @@ afterEach(() => {
   activeGateway.mockReturnValue({ request })
   $activeSessionId.set(null)
   $selectedStoredSessionId.set(null)
+  $sessions.set([])
 })
 
 describe('renameSessionPreferringRpc', () => {
@@ -63,6 +64,23 @@ describe('renameSessionPreferringRpc', () => {
     const result = await renameSessionPreferringRpc(STORED_ID, 'My branch')
 
     expect(request).toHaveBeenCalledWith('session.title', { session_id: RUNTIME_ID, title: 'My branch' })
+    expect(renameSession).not.toHaveBeenCalled()
+    expect(result.title).toBe('rpc-title')
+  })
+
+  it('recognizes the active row across a compression lineage id rotation', async () => {
+    const lineageRootId = 'stored-root-1'
+    const currentTipId = 'stored-tip-2'
+    $sessions.set([{ id: currentTipId, _lineage_root_id: lineageRootId }] as never)
+    $selectedStoredSessionId.set(lineageRootId)
+    $activeSessionId.set(RUNTIME_ID)
+
+    const result = await renameSessionPreferringRpc(currentTipId, 'Renamed after compression')
+
+    expect(request).toHaveBeenCalledWith('session.title', {
+      session_id: RUNTIME_ID,
+      title: 'Renamed after compression'
+    })
     expect(renameSession).not.toHaveBeenCalled()
     expect(result.title).toBe('rpc-title')
   })

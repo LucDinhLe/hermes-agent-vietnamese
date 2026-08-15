@@ -18,7 +18,10 @@ export const SIDEBAR_MAX_WIDTH = 360
 // want a narrow tree.
 export const FILE_BROWSER_DEFAULT_WIDTH = `${SIDEBAR_DEFAULT_WIDTH}px`
 export const FILE_BROWSER_MIN_WIDTH = '10rem'
-export const FILE_BROWSER_MAX_WIDTH = '20rem'
+// The persistent Files/Browser rail may grow into a real workspace. Its
+// neighboring chat pane still enforces its own 22vw floor, while the viewport
+// cap prevents an ultrawide display from producing an impractically huge rail.
+export const FILE_BROWSER_MAX_WIDTH = 'min(65vw, 90rem)'
 
 export const SIDEBAR_SESSIONS_PAGE_SIZE = 50
 // How deep the list reaches once a filter is on. A filter that only searches

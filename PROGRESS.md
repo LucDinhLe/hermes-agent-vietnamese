@@ -1,5 +1,260 @@
 # Tiến độ
 
+## Cập nhật 2026-08-16 — candidate v20 dựng đủ, dừng ở verifier draft
+
+- `vi-v0.20.0-20` đạt toàn bộ sáu build native và 12/12 Install & Update E2E;
+  macOS Intel đã dựng thành công `cryptography==50.0.0` từ sdist khóa hash với
+  OpenSSL 3.5.7 tĩnh, đóng blocker của v19.
+- Draft kín v20 upload đủ artifact và đối chiếu thành công mọi installer/gói
+  native. Verifier dừng vì dòng provenance trong `SHA256SUMS.txt` chứa tiền tố
+  `release-assets/`, trong khi bước tải lại đã đứng trong thư mục `uploaded`.
+  Đây là lỗi đường dẫn manifest của workflow; không phải sai byte artifact.
+- Workflow nay tạo checksum provenance ngay bên trong `release-assets`, nên
+  manifest luôn ghi basename giống toàn bộ asset khác. Regression cấm mẫu đường
+  dẫn cũ. Tag/draft v20 giữ bất biến; candidate kế tiếp là `vi-v0.20.0-21`.
+
+## Cập nhật 2026-08-16 — đóng blocker macOS Intel cho candidate v20
+
+- Candidate bất biến `vi-v0.20.0-19` đạt source contracts, Install & Update E2E
+  và năm job native: Windows x64/ARM64, macOS Apple Silicon, Linux x64/ARM64.
+  macOS Intel dừng đúng ở runtime payload vì `cryptography==50.0.0` không phát
+  hành wheel x86_64; không có draft hoặc artifact v19 nào được công bố.
+- Candidate kế tiếp giữ nguyên sàn bảo mật `cryptography==50.0.0` và chỉ cho
+  macOS Intel dựng sdist đã khóa hash. Workflow dựng OpenSSL 3.5.7 tĩnh từ URL
+  phiên bản bất biến, kiểm SHA-256
+  `a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8`,
+  rồi import-probe native payload trước khi đóng gói. macOS ARM64 vẫn bắt buộc
+  wheel; không nới ngoại lệ cho nền tảng khác.
+- Regression hiện tại: 75/75 kiểm thử desktop release, 21 kiểm thử Python,
+  typecheck/lint đạt (0 lỗi; 96 cảnh báo có sẵn), `uv lock --check` đạt và npm
+  runtime audit báo 0 lỗ hổng. Candidate vẫn là **NO-GO/candidate only** cho tới
+  khi tag v20 dựng đủ sáu nền tảng và exact artifact vượt runtime smoke.
+
+## Cập nhật 2026-08-15 — đóng blocker Windows ARM64 cho candidate v19
+
+- Native staging v18 xác nhận Windows ARM64 dừng ở `pywinpty==2.0.15`: bản này
+  không có wheel ARM64 nên pip biên dịch sdist và linker lấy nhầm
+  `C:\Program Files\Git\usr\lib\winpty.lib` x64, gây xung đột machine type cùng
+  15 symbol `winpty_*` không thể liên kết. Đây là lỗi runtime thật, không phải
+  lỗi mạng hoặc runner.
+- Runtime Windows nay ghim `pywinpty==3.0.5`, bản đầu tiên có wheel CPython
+  3.11/3.12 hoàn chỉnh cho cả x64 và ARM64. Không dùng 3.0.4 vì changelog chính
+  thức xác nhận wheel x64/ARM64 của bản đó thiếu native binary.
+- Windows ARM64 staging đã loại `pywinpty` khỏi danh sách cho phép build sdist;
+  lock chứa URL và SHA-256 riêng cho cả `win_amd64` lẫn `win_arm64`. Regression
+  chặn hạ pin, thiếu một trong hai kiến trúc hoặc đưa package quay lại đường
+  source-build.
+- Trên Windows x64, wheel 3.0.5 cài thật chứa `_winpty.pyd`, `conpty.dll`,
+  `winpty.dll`, `winpty-agent.exe`, `OpenConsole.exe`; toàn bộ spawn, đọc/ghi,
+  resize và đóng ConPTY đạt. Kiểm thử hiện tại: Python 21 đạt, đóng gói/Electron
+  27 đạt, `uv lock --check` đạt.
+- Candidate vẫn là `vi-v0.20.0-19`. Chưa tạo hoặc đẩy tag cho tới khi commit
+  cuối sạch, fetch được và CI nguồn mới đạt; v18 giữ bất biến.
+
+## Cập nhật 2026-08-15 — candidate v18 dừng ở verifier macOS, chuyển sang v19
+
+- Verify nguồn và Install & Update E2E v18 đều đạt; Windows x64, Linux x64 và
+  Linux ARM64 xanh trọn job native. Cả hai runner Mac dựng thành công ứng dụng,
+  DMG và ZIP `0.20.0-vi.18`, nhưng verifier tìm DMG theo phiên bản package nội
+  bộ `0.17.0`, tưởng artifact chưa có và kích hoạt một build thừa lần hai.
+- Bộ dò DMG nay khóa theo hậu tố `-mac-<arch>.dmg`, đúng cùng contract mà bước
+  chuẩn hóa artifact dùng, độc lập với release-version override. Regression xác
+  nhận cả Apple Silicon và Intel, loại blockmap/sai kiến trúc; bộ hợp đồng tăng
+  lên 74/74.
+- Candidate kế tiếp là `vi-v0.20.0-19`; tag v18 giữ bất biến. Không có draft hay
+  artifact v18 nào được công bố.
+
+## Cập nhật 2026-08-15 — candidate v17 dừng ở đóng gói, chuyển sang v18
+
+- Verify nguồn v17 đạt; Install & Update E2E tạo đúng ma trận tag `vi-v*` và
+  xanh toàn bộ 10 tuyến cài lại/nâng cấp từ v1, v5, v9, v12 và v16.
+- Sáu job native lộ ba lỗi đóng gói: biểu thức peel tag qua shell mất dấu `^`
+  trên Windows; biến chứng thư Apple rỗng bị electron-builder hiểu là đường dẫn
+  thư mục; electron-builder tự kích hoạt publish chỉ vì checkout đang ở tag.
+- Runtime staging nay gọi Git bằng argv xác định; build community prerelease
+  xóa hoàn toàn biến chứng thư rỗng; wrapper electron-builder luôn dùng
+  `--publish never`. Staging draft và public promotion tiếp tục là hai bước độc
+  lập. Regression đạt 73/73 và bộ UI đã chốt đạt 27/27; typecheck đạt.
+- Candidate kế tiếp là `vi-v0.20.0-18`. Tag v17 là bất biến, không di chuyển;
+  không có draft/artifact v17 nào đủ điều kiện công bố.
+
+## Cập nhật 2026-08-15 — candidate v16 dừng ở đóng gói, chuyển sang v17
+
+- Verify của tag bất biến `vi-v0.20.0-16` đạt, gồm 36/36 kiểm thử Python phát
+  hành. Ba runner native macOS Apple Silicon, Linux x64 và Linux ARM64 cùng dừng
+  ở `stage-agent-payloads.mjs`: Node 26 coi liên kết npm
+  `node_modules/.bin/agent-browser` là thư mục khi `cpSync` dereference. Workflow
+  được hủy sau khi đã chứng minh lỗi chung để không tiếp tục tốn runner; không có
+  draft release hoặc artifact v16 nào được tạo.
+- Runtime staging nay tạo ba launcher `agent-browser` xác định trực tiếp từ bin
+  contract của package, không sao chép chi tiết `.bin` phụ thuộc npm/hệ điều
+  hành. Regression tái tạo entry dạng thư mục đạt 17/17; launcher Windows chạy
+  thật và trả `agent-browser 0.26.0`. Exact-artifact verifier mới buộc launcher
+  Unix là tệp executable và launcher Windows là tệp, ngăn lỗi cấu trúc lọt qua.
+- Install/update E2E v16 tạo đúng matrix tag `vi-v*`; ba tuyến `hermes update`
+  từ v1/v5/v8/v12 đều đạt. Các tuyến installer re-run fetch HTTPS ra GitHub thật
+  thay vì bare repo cô lập nên lệch commit. Sandbox nay rewrite HTTPS GitHub qua
+  SSH shim/fake remote; contract test tăng lên 6/6. Candidate kế tiếp là
+  `vi-v0.20.0-17`; không di chuyển hoặc tái sử dụng tag v16.
+- Quyết định tiếp tục là **candidate only / NO-GO** cho tới khi v17 dựng đủ sáu
+  nền tảng và đúng artifact qua runtime smoke. Nếu công bố, đây chỉ là
+  **community prerelease chưa ký số**, đúng chấp thuận của chủ phát hành; không
+  quảng cáo stable và không dùng tiền lệ AICoworker thay cho bằng chứng Hermes.
+
+## Cập nhật 2026-08-15 — candidate v15 dừng trước build, chuyển sang v16
+
+- Tag bất biến `vi-v0.20.0-15` đã kích hoạt đúng workflow phát hành và
+  install/update E2E của fork, nhưng cổng verify dừng trước build vì workflow
+  gọi `pytest` khi chưa cài nhóm phụ thuộc `dev`. Không có artifact hoặc release
+  v15 nào được tạo.
+- Workflow nay cài nhóm kiểm thử từ `uv.lock` bằng
+  `uv sync --locked --python 3.11 --extra dev` và chạy bốn tệp release qua
+  wrapper chuẩn `scripts/run_tests.sh`. Contract test cấm tái xuất hiện lệnh
+  `uv run pytest` thiếu môi trường.
+- Xác minh bản sửa: release workflow contract 5/5; bốn tệp Python đạt 36/36
+  bằng runner cô lập chuẩn. Vì không di chuyển hoặc tái sử dụng tag bất biến,
+  candidate kế tiếp mang số `vi-v0.20.0-16`.
+- Install/update E2E của tag v15 đã tạo đủ matrix nhưng mọi leg fetch nhầm tag
+  Việt hóa từ repo upstream NousResearch; leg của chính v15 còn tự kiểm thử cập
+  nhật từ một commit sang chính nó. Reusable workflow nay truyền URL fork vào
+  sandbox và tag-trigger loại candidate hiện tại khỏi tập phiên bản nguồn.
+- Regression cho picker/fork route đạt 5/5; YAML và Bash syntax đều hợp lệ.
+
+## Cập nhật 2026-08-15 — cho phép community prerelease không ký, không hạ chuẩn stable
+
+- Chủ phát hành chấp nhận công bố đúng trạng thái hiện có và không mua Apple
+  Developer Program ở vòng này. Hồ sơ SignPath Foundation cho Windows đã được
+  gửi; chưa có kết quả phê duyệt hoặc cấu hình ký trong GitHub.
+- Commit `74cb448` thêm lớp phát hành tường minh `community-prerelease`. Lớp này
+  khóa Apple/SignPath secrets khỏi build, ghi `releaseClass` vào provenance,
+  bắt buộc release giữ nhãn prerelease và yêu cầu bằng chứng cảnh báo
+  SmartScreen/Gatekeeper trên từng artifact. Đường `stable` vẫn bắt buộc
+  Authenticode, Developer ID, notarization và stapling như trước.
+- Promotion tiếp tục tách khỏi build/staging và chỉ nhận đúng manifest, đúng
+  runtime-smoke run, đúng release class và đủ quyết định `GO` trên sáu nền tảng.
+  Chấp nhận unsigned không miễn fresh install, gateway, onboarding, persistence,
+  update, repair, uninstall hoặc rollback.
+- Xác minh cục bộ trong clone sạch tải độc lập từ GitHub: YAML parse đạt; workflow
+  contract 5/5; evidence/tag tests 9/9; Prettier đạt; Desktop typecheck đạt;
+  `uv lock --check` đạt; `npm audit --omit=dev --omit=optional --audit-level=high`
+  trả 0 lỗ hổng.
+- Hai thay đổi tài liệu có sẵn ở worktree cũ (`docs/community-release.md` và
+  `docs/release-engineering-rulebook.md`) không bị sửa, xóa hoặc đưa vào commit.
+- Quyết định vẫn **candidate only / NO-GO** cho public cho tới khi workflow tạo
+  đúng draft artifacts và runtime smoke exact-byte đạt đủ ma trận. Không dùng
+  tiền lệ AICoworker thay cho bằng chứng Hermes.
+
+## Cập nhật 2026-08-15 — tab Browser và checkpoint công khai v15
+
+- Commit `04345ecdf` thay Browser một-bề-mặt bằng thanh tab thật trong panel
+  phải: `+` tạo webview độc lập, `×` đóng từng tab, chuyển tab không tháo
+  webview, và đóng tab cuối tự trở về chế độ Tệp. URL do agent mở điều hướng tab
+  Browser đang chọn thay vì tự sinh tab ngoài ý muốn.
+- Bỏ nhãn chữ **Hệ thống tệp** ở đầu panel; nút biểu tượng Tệp vẫn giữ tooltip,
+  trạng thái chọn và tên trợ năng. Bổ sung bản dịch nhãn tab mới cho toàn bộ
+  locale Desktop.
+- 50/50 test trực tiếp cho store/tab/đọc trang/fit Browser đạt; typecheck và
+  lint đạt. UI đầy đủ đạt 421/424 tệp, 3.690/3.697 phép thử ở lượt tải cao; cả 7
+  ca trong 3 tệp timeout/chồng DOM đều đạt khi chạy riêng tuần tự.
+- Hợp đồng CVE/lock/workflow đạt 10/10; `npm audit --omit=optional` trả 0. Bộ
+  Electron mục tiêu đạt 124/128; 4 ca còn lại là quyền POSIX, đường dẫn Linux và
+  bash không có trên Windows, không đi qua mã thay đổi này.
+- Windows x64 build từ `04345ecdf` đạt. Installer 121.419.758 byte, SHA-256
+  `46D4EAD85DE96610232B4085047205A405BA9FA7810169661841D5B262A37804`;
+  app đã cài có SHA-256
+  `1BF43E7D75C000B4EFD6C358DFF34168519C2BA285B5E88B7C7E905D7044A7D6`.
+  Stamp sạch, đúng commit công khai trên nhánh; cả hai executable `NotSigned`.
+- Đã gỡ bản per-user cũ. Lượt cài nâng quyền đầu tiên chọn nhầm all-users nên đã
+  gỡ ngay và cài lại thành công bằng `/currentuser`; không xóa, nhập hoặc khôi
+  phục hồ sơ Hermes. Bản cài mới nằm đúng `%LOCALAPPDATA%\\Programs\\Hermes`.
+- Nhánh `chore/prepare-vi-v0.20.0-15` đã push. Tuyến mở tự động của đúng
+  executable mới bị Enterprise Application Control chặn vì hash chưa ký; công
+  cụ quan sát cửa sổ Windows cũng bị từ chối quyền. Không đổi hoặc lách chính
+  sách. Fresh bootstrap/UI máy thật của artifact cuối vì vậy chưa có bằng chứng
+  đạt.
+- Quyết định vẫn **NO-GO** cho merge/tag/release. Còn thiếu Windows smoke sau
+  khi executable được cho phép/ký, job GitHub thực với tag `vi-v*`, macOS Apple
+  Silicon thật và Linux x64 thật.
+
+## Cập nhật 2026-08-15 — mở rộng và tự fit Trình duyệt ở panel phải
+
+- Bỏ giới hạn cứng `20rem` (320 px) của panel Tệp/Trình duyệt. Panel nay có thể
+  kéo tới `min(65vw, 90rem)`; vùng hội thoại vẫn giữ sàn `22vw`, còn kích thước
+  người dùng kéo tiếp tục được lưu bằng pane state hiện có.
+- Webview tự tính zoom theo bề rộng thực: giữ trang ở 100% từ 960 px trở lên,
+  thu nhỏ tỷ lệ thuận khi panel hẹp và chặn ở 45% để nội dung vẫn đọc được.
+  Không chèn CSS/JavaScript riêng vào website.
+- Test hồi quy được viết trước và đạt 18/18 cho giới hạn panel, công thức fit,
+  lifecycle `dom-ready`/resize và chuyển Tệp/Trình duyệt. Typecheck đạt; lint 0
+  lỗi; production build đạt.
+- Toàn bộ UI suite đạt 421/424 tệp và 3.685/3.692 phép thử ở lượt tải cao; cả 3
+  tệp còn lại (13 phép thử) đều đạt khi chạy riêng tuần tự, xác nhận lỗi lượt đầu
+  là timeout/chồng DOM do nghẽn tài nguyên, không phải hồi quy panel.
+- Smoke production tại commit `b5b707511` dùng `HERMES_HOME` và user-data tạm
+  cô lập, bắt đầu với 0 phiên. Panel kéo thật từ 237 lên 645 px, lưu đúng 645 px
+  và giữ nguyên khi đổi Tệp ↔ Trình duyệt. Google ở 237 px dùng zoom 45%; ở 645
+  px dùng 67% và có `innerWidth = scrollWidth = 963`, không tràn ngang.
+- Không đọc, nhập hoặc khôi phục hồ sơ Hermes cũ. Quyết định phát hành vẫn
+  **NO-GO** vì fresh bootstrap đúng commit cuối, runner GitHub `vi-v*`, macOS
+  Apple Silicon thật và Linux x64 thật chưa đạt.
+
+## Cập nhật 2026-08-15 — quyết định NO-GO cho vi-v0.20.0-15
+
+- Lỗi tên phiên không tự hiện và đổi tên trả HTTP 500 được truy ra đúng
+  `state.db` cũ bị `database disk image is malformed`, không phải lỗi cài mới.
+  Theo quyết định bỏ dữ liệu cũ, toàn bộ session DB/sidecar/session files cũ đã
+  được **di chuyển để cách ly**, không nhập hoặc khôi phục. Hồ sơ mới bắt đầu từ
+  0 phiên.
+- Commit `b2fa5e368` làm đường đổi tên bền vững qua lineage root/tip sau nén;
+  commit `4148a5546` bổ sung `hermes doctor --fix` để đổi cơ sở dữ liệu WAL cũ
+  sang rollback journal khi chứng minh được không có tiến trình đang giữ DB.
+- Smoke thật trên ứng dụng đang cài và hồ sơ sạch đạt: tên tự sinh xuất hiện ở
+  panel trái; đổi thành **Kiểm thử đổi tên v15** lưu bền qua reload; tạo/đóng tab
+  và chuyển Tệp/Trình duyệt ở panel phải đều đạt; log hiện tại không còn 500,
+  malformed hay traceback.
+- Bộ cài Windows x64 cuối build thành công từ `4148a5546`, 121.419.143 byte,
+  SHA-256 `3B06CADCCA7BD1E2EB0A402CF672AC0E227E54D95F75968203A7595F2916907D`.
+  Stamp sạch, payload contract đạt, artifact `NotSigned` và không chứa `tar`,
+  `image-size`, state DB, `.env`, credentials hoặc dữ liệu cá nhân.
+- Artifact cuối nay chạy qua Application Control. Renderer đóng gói + backend
+  mã cuối khởi động khỏe trên `HERMES_HOME` cô lập, tạo 0 phiên và giữ
+  `journal_mode=delete` với SQLite 3.49.1. Fresh bootstrap thuần dừng ở 404 vì
+  stamp `4148a5546` là commit cục bộ chưa có trên GitHub; không thay stamp hoặc
+  push để lách cổng ghim commit.
+- Kiểm thử mục tiêu đạt; typecheck/build/lint tệp đổi đạt; `npm audit` trả 0.
+  UI đầy đủ đạt 3.680/3.687 ở lượt song song và cả 7 ca timeout/chồng DOM đều
+  đạt khi chạy riêng. Electron đạt 993/1.023; 27 ca POSIX/quyền/timing không phù
+  hợp Windows vẫn là lỗi nền và không thuộc lát cắt.
+- Website production build locale `en` đạt; typecheck website còn lỗi nền
+  TypeScript 6/Docusaurus/JSX và dữ liệu user stories, không thuộc lát cắt.
+- Quyết định: **NO-GO** cho phát hành công khai/thử nghiệm rộng. Còn thiếu runner
+  GitHub thật cho `vi-v*`, fresh bootstrap artifact cuối sau khi commit được
+  phép xuất hiện trên GitHub, macOS Apple Silicon thật và Linux x64 thật. Xem
+  `docs/release-vi-v0.20.0-15-go-no-go.md`.
+
+## Cập nhật 2026-08-15 — chuẩn bị checkpoint vi-v0.20.0-15
+
+- Tạo worktree tách biệt từ `origin/main` tại `771fd6df9`; không đụng nhánh
+  `docs/record-vi-v0.20.0-14` hoặc các hiện vật smoke cũ.
+- Nâng runtime `cryptography` từ `48.0.1` lên `50.0.0`, là sàn chung đã vá
+  CVE-2026-69247, CVE-2026-69248 và CVE-2026-69249. Môi trường cô lập cài thật
+  tập `[all]`, DingTalk, Teams, Azure và dev; 174 regression tests đạt.
+- Ép toàn cây Node build/optional lên `tar 7.5.22`; `npm ci` và
+  `npm rebuild get-windows` đạt; sáu test staging Windows và bảy test packaging
+  matrix đạt.
+- Nâng `nanoid` website lên `3.3.18`. OSV Scanner 2.3.8 hiện chỉ còn hai cảnh
+  báo `image-size 2.0.2` website-only chưa có fixed version; `cryptography`,
+  `tar` và `nanoid` đã biến mất khỏi kết quả quét cục bộ.
+- Sửa install/update E2E để trigger tag `vi-v*`, ưu tiên họ tag Việt hóa trên
+  fork, giữ tương thích tag upstream và thêm job chẩn đoán trigger. 4 test hợp
+  đồng workflow/tag đạt; YAML parse đạt. Chưa push nên GitHub chưa thể chứng minh
+  job mới tạo trên runner thật.
+- Desktop typecheck đạt; lint đạt với 0 lỗi và 91 cảnh báo có sẵn; 70/70 UI test
+  liên quan tab phiên, đóng tab và Browser panel phải đạt; production build đạt
+  ngoài sandbox.
+- Cổng tiếp theo: commit checkpoint để install-stamp ghim đúng mã v15, đóng gói
+  Windows x64, quét nội dung artifact và chạy fresh-install bằng hồ sơ cô lập.
+
 ## Cập nhật 2026-08-14 — khôi phục nút đóng tab phiên
 
 - Khôi phục nút `×` trên mọi tab ngang có thể đóng: tab đang hoạt động luôn hiển thị, tab nền hiện khi rê chuột hoặc focus bằng bàn phím.

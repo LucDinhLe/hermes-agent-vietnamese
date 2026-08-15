@@ -1225,6 +1225,39 @@ show_manual_install_hint() {
 # Installation
 # ============================================================================
 
+is_official_ssh_remote() {
+    local remote_url
+    remote_url="${1:-}"
+    remote_url="${remote_url%/}"
+    remote_url="${remote_url%.git}"
+    remote_url="$(printf '%s' "$remote_url" | tr '[:upper:]' '[:lower:]')"
+
+    case "$remote_url" in
+        git@github.com:lucdinhle/hermes-agent-vietnamese|\
+        ssh://git@github.com/lucdinhle/hermes-agent-vietnamese)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+use_public_https_origin_for_managed_install() {
+    # Older installers cloned the public managed repo over SSH first. That
+    # leaves later non-interactive GUI updates dependent on SSH host trust (or
+    # a hardware-backed key). Repair only the official remote; never rewrite a
+    # fork or another custom origin.
+    local origin_url
+    origin_url="$(git remote get-url origin 2>/dev/null || true)"
+    if ! is_official_ssh_remote "$origin_url"; then
+        return 0
+    fi
+
+    log_info "Switching the public Hermes update remote from SSH to HTTPS..."
+    git remote set-url origin "$REPO_URL_HTTPS"
+}
+
 clone_repo() {
     log_info "Installing to $INSTALL_DIR..."
 
@@ -1246,6 +1279,9 @@ clone_repo() {
             cd "$INSTALL_DIR"
 
             local autostash_ref=""
+            # Normalize before examining/stashing local changes. A failed SSH
+            # fetch must not strand an avoidable installer autostash.
+            use_public_https_origin_for_managed_install
             discard_update_lockfile_churn "$INSTALL_DIR"
             if [ -n "$(git status --porcelain)" ]; then
                 # A previously interrupted update can leave the index with
@@ -1273,7 +1309,15 @@ clone_repo() {
             # branches — on a non-single-branch checkout that turns each update
             # into a multi-minute download that can stall the installer.
             git remote set-branches origin "$BRANCH" 2>/dev/null || true
-            git fetch origin "$BRANCH"
+            local branch_fetch_args=()
+            if [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
+                # Do not turn an unrelated/local shallow checkout into a full
+                # clone during repair. A bounded window connects adjacent
+                # releases without downloading the entire repository history.
+                branch_fetch_args=(--depth 64)
+                log_info "Keeping shallow repository fetch bounded to 64 commits..."
+            fi
+            git fetch "${branch_fetch_args[@]}" origin "$BRANCH"
             git checkout "$BRANCH"
             # Managed installs should follow origin/$BRANCH exactly. If the
             # checkout has diverged (or has local-only commits), ff-only pull
@@ -1345,18 +1389,17 @@ EOF
             exit 1
         fi
     else
-        # Try SSH first (for private repo access), fall back to HTTPS
-        # GIT_SSH_COMMAND disables interactive prompts and sets a short timeout
-        # so SSH fails fast instead of hanging when no key is configured.
-        log_info "Trying SSH clone..."
-        if GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=5" \
-           git clone --depth 1 --branch "$BRANCH" "$REPO_URL_SSH" "$INSTALL_DIR" 2>/dev/null; then
-            log_success "Cloned via SSH"
+        # This is a public managed checkout, so prefer anonymous HTTPS. Keep
+        # SSH only as a fallback for networks where HTTPS is unavailable.
+        log_info "Trying HTTPS clone..."
+        if git clone --depth 1 --branch "$BRANCH" "$REPO_URL_HTTPS" "$INSTALL_DIR"; then
+            log_success "Cloned via HTTPS"
         else
-            rm -rf "$INSTALL_DIR" 2>/dev/null  # Clean up partial SSH clone
-            log_info "SSH failed, trying HTTPS..."
-            if git clone --depth 1 --branch "$BRANCH" "$REPO_URL_HTTPS" "$INSTALL_DIR"; then
-                log_success "Cloned via HTTPS"
+            rm -rf "$INSTALL_DIR" 2>/dev/null  # Clean up partial HTTPS clone
+            log_info "HTTPS failed, trying SSH..."
+            if GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=5" \
+               git clone --depth 1 --branch "$BRANCH" "$REPO_URL_SSH" "$INSTALL_DIR" 2>/dev/null; then
+                log_success "Cloned via SSH"
             else
                 log_error "Failed to clone repository"
                 exit 1
@@ -1365,6 +1408,7 @@ EOF
     fi
 
     cd "$INSTALL_DIR"
+    use_public_https_origin_for_managed_install
 
     if [ -n "$INSTALL_COMMIT" ]; then
         # A commit pin must never move an existing install BACKWARDS. The
@@ -1376,7 +1420,11 @@ EOF
         # current venv. Only pin when the target is not already an ancestor of
         # HEAD; a fresh clone has no such ancestry and pins normally.
         if ! git cat-file -e "$INSTALL_COMMIT^{commit}" 2>/dev/null; then
-            git fetch origin "$INSTALL_COMMIT" || true
+            local pin_fetch_args=()
+            if [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
+                pin_fetch_args=(--depth 64)
+            fi
+            git fetch "${pin_fetch_args[@]}" origin "$INSTALL_COMMIT" || true
         fi
         if git rev-parse --verify --quiet HEAD >/dev/null 2>&1 \
            && git merge-base --is-ancestor "$INSTALL_COMMIT" HEAD 2>/dev/null \

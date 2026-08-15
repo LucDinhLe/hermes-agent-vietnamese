@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { HermesReadDirResult } from '@/global'
 import { setRightSidebarView } from '@/store/layout'
-import { closeRightRail } from '@/store/preview'
+import { $previewTabs, closeRightRail } from '@/store/preview'
 import { $connection, setCurrentCwd } from '@/store/session'
 
 import { resetProjectTreeState } from './files/use-project-tree'
@@ -61,6 +61,15 @@ describe('RightSidebarPane', () => {
     expect(readDir).not.toHaveBeenCalled()
   })
 
+  it('keeps the file icon accessible without repeating a visible File system heading', async () => {
+    setCurrentCwd('')
+
+    render(<RightSidebarPane onActivateFile={vi.fn()} onActivateFolder={vi.fn()} />)
+
+    expect(await screen.findByRole('button', { name: 'File system' })).not.toBeNull()
+    expect(screen.queryByText('File system')).toBeNull()
+  })
+
   it('switches the right panel between local files and the shared Browser without unmounting either surface', async () => {
     setCurrentCwd('/repo')
 
@@ -87,6 +96,19 @@ describe('RightSidebarPane', () => {
     expect(filesSurface.getAttribute('aria-hidden')).toBe('true')
     expect(browserSurface.getAttribute('aria-hidden')).toBe('false')
     expect(screen.getByText('Shared browser surface')).not.toBeNull()
+    expect(screen.getByRole('tab', { name: 'Browser 1' })).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'New browser tab' })).not.toBeNull()
+    expect(screen.getByRole('button', { name: 'Close tab' })).not.toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'New browser tab' }))
+
+    expect(screen.getByRole('tab', { name: 'Browser 2' })).not.toBeNull()
+    expect($previewTabs.get().filter(tab => tab.target.kind === 'url')).toHaveLength(2)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Close tab' })[1])
+
+    expect(screen.queryByRole('tab', { name: 'Browser 2' })).toBeNull()
+    expect($previewTabs.get().filter(tab => tab.target.kind === 'url')).toHaveLength(1)
 
     fireEvent.click(filesButton)
 

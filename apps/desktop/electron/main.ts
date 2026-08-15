@@ -32,6 +32,7 @@ import {
 import nodePty from 'node-pty'
 
 import { classifyActiveRuntime, shouldRefreshManagedRuntime } from './active-runtime-state'
+import { applyAppUpdate, checkAppUpdate, shouldUseAppUpdater } from './app-updater'
 import { stopBackendChild as stopBackendChildImpl, stopBackendTreesForUpdate } from './backend-child'
 import { dashboardFallbackArgs, sourceDeclaresServe } from './backend-command'
 import { createBackendConnectionState } from './backend-connection-state'
@@ -49,6 +50,7 @@ import { shouldLatchBackendStartFailure, shouldLatchRemoteReauthFailure } from '
 import { detectRemoteDisplay, isWindowsBinaryPathInWsl, isWslEnvironment } from './bootstrap-platform'
 import { decideBootstrapRepair } from './bootstrap-repair-guard'
 import { runBootstrap } from './bootstrap-runner'
+import { decideResidentRuntime, findResidentPython, latestReleaseFromLsRemote, resolveChannel, resolvePayload } from './bundled-runtime'
 import { applyConnectionChange, resolveTerminalConnection } from './connection-apply'
 import {
   authModeFromStatus,
@@ -204,7 +206,7 @@ import {
   sandboxFallbackFromEnv,
   sandboxPreflight
 } from './update-relaunch'
-import { isOfficialSshRemote, OFFICIAL_REPO_HTTPS_URL } from './update-remote'
+import { isOfficialRemote, OFFICIAL_REPO_HTTPS_URL } from './update-remote'
 import {
   resolveStagedUpdaterBinary,
   resolveUpdateScriptHandoff,
@@ -461,7 +463,7 @@ const SOURCE_REPO_ROOT = path.resolve(APP_ROOT, '../..')
 
 // Build-time install stamp -- the git ref this .exe was built against.
 //
-// Written by apps/desktop/scripts/write-build-stamp.mjs during `npm run build`
+// Written by scripts/write_install_stamp.py during `npm run build`
 // and bundled into packaged apps via electron-builder's extraResources entry,
 // so the runtime stamp ends up at process.resourcesPath/install-stamp.json
 // after install. The bootstrap runner (Phase 1D) reads it to know which
@@ -471,8 +473,10 @@ const SOURCE_REPO_ROOT = path.resolve(APP_ROOT, '../..')
 // build hasn't been invoked, or schema mismatch). Callers must handle null.
 //
 // Schema:
-//   { schemaVersion: 1, commit, branch, builtAt, dirty, source }
-const INSTALL_STAMP_SCHEMA_VERSION = 1
+//   schema 1: { commit, branch, builtAt, dirty, source }
+//   schema 2 adds immutable-package provenance: baseVersion, displayVersion,
+//   distance, and distribution.
+const INSTALL_STAMP_SCHEMA_VERSION = 2
 
 function loadInstallStamp() {
   // Try packaged location first (resources/install-stamp.json), then the
@@ -490,7 +494,7 @@ function loadInstallStamp() {
       const parsed = JSON.parse(raw)
 
       if (parsed && typeof parsed === 'object' && typeof parsed.commit === 'string' && parsed.commit.length >= 7) {
-        if (parsed.schemaVersion !== INSTALL_STAMP_SCHEMA_VERSION) {
+        if (parsed.schemaVersion !== 1 && parsed.schemaVersion !== INSTALL_STAMP_SCHEMA_VERSION) {
           console.warn(
             `[hermes] install-stamp.json schemaVersion ${parsed.schemaVersion} != expected ${INSTALL_STAMP_SCHEMA_VERSION}; ignoring`
           )
@@ -502,9 +506,18 @@ function loadInstallStamp() {
           schemaVersion: parsed.schemaVersion,
           commit: parsed.commit,
           branch: parsed.branch || null,
+          baseVersion: typeof parsed.baseVersion === 'string' ? parsed.baseVersion : null,
+          displayVersion: typeof parsed.displayVersion === 'string' ? parsed.displayVersion : null,
+          distance: typeof parsed.distance === 'number' && parsed.distance >= 0 ? parsed.distance : null,
+          distribution: typeof parsed.distribution === 'string' ? parsed.distribution : null,
           builtAt: parsed.builtAt || null,
           dirty: Boolean(parsed.dirty),
           source: parsed.source || null,
+          // Bundled desktop builds: payload marks the artifact as carrying
+          // offline agent payloads, tag pins the release they came from.
+          // bundled-runtime.ts and the app updater key on these two.
+          payload: parsed.payload === true,
+          tag: typeof parsed.tag === 'string' && parsed.tag ? parsed.tag : null,
           path: p
         })
       }
@@ -2478,7 +2491,7 @@ async function resolveHealedBranch(updateRoot, branch) {
   }
 
   const originUrl = await getOriginUrl(updateRoot)
-  const remote = isOfficialSshRemote(originUrl) ? OFFICIAL_REPO_HTTPS_URL : 'origin'
+  const remote = isOfficialRemote(originUrl) ? OFFICIAL_REPO_HTTPS_URL : 'origin'
   const probe = await runGit(['ls-remote', '--exit-code', '--heads', remote, branch], { cwd: updateRoot })
 
   if (probe.code !== 2) {
@@ -2495,7 +2508,102 @@ async function resolveHealedBranch(updateRoot, branch) {
   return 'main'
 }
 
+/**
+ * Update check for a source checkout on the stable channel: how many
+ * releases is the checkout behind, not how many commits behind main.
+ * The apply path stays `hermes update` (which resolves the stable channel
+ * itself and fast-forwards to the tag).
+ */
+async function checkStableChannelUpdates() {
+  const updateRoot = resolveUpdateRoot()
+
+  if (!directoryExists(path.join(updateRoot, '.git'))) {
+    return {
+      supported: false,
+      reason: 'not-a-git-checkout',
+      message: `${updateRoot} is not a git checkout — desktop self-update only runs against a source install.`,
+      hermesRoot: updateRoot,
+      channel: 'stable'
+    }
+  }
+
+  const [tags, currentSha, dirtyStr] = await Promise.all([
+    runGit(['ls-remote', '--tags', OFFICIAL_REPO_HTTPS_URL, 'v*'], { cwd: updateRoot }),
+    runGit(['rev-parse', 'HEAD'], { cwd: updateRoot }).then(r => r.stdout.trim()),
+    runGit(['status', '--porcelain'], { cwd: updateRoot }).then(r => r.stdout.trim())
+  ])
+
+  if (tags.code !== 0) {
+    return {
+      supported: true,
+      channel: 'stable',
+      error: 'fetch-failed',
+      message: firstLine(tags.stderr) || 'git ls-remote --tags failed.',
+      hermesRoot: updateRoot,
+      fetchedAt: Date.now()
+    }
+  }
+
+  const latest = latestReleaseFromLsRemote(tags.stdout)
+
+  if (!latest) {
+    return {
+      supported: true,
+      channel: 'stable',
+      error: 'no-release-tags',
+      message: 'No final release tag (vX.Y.Z) exists on the remote yet.',
+      hermesRoot: updateRoot,
+      fetchedAt: Date.now()
+    }
+  }
+
+  // behind is release-granular on this channel: 0 = on the latest release,
+  // 1 = a newer release exists. The renderer shows the tag, not a count.
+  return {
+    supported: true,
+    channel: 'stable',
+    branch: null,
+    behind: currentSha === latest.sha ? 0 : 1,
+    currentSha,
+    targetSha: latest.sha,
+    latestTag: latest.tag,
+    commits: [],
+    dirty: dirtyStr.length > 0,
+    hermesRoot: updateRoot,
+    fetchedAt: Date.now()
+  }
+}
+
 async function checkUpdates() {
+  // Bundled installs update through the app updater (GitHub Releases feed),
+  // not through git. The gate reads the install manifest, so an ejected
+  // checkout falls through to the git paths below.
+  if (bundledUpdaterActive()) {
+    // checkForUpdates rejects on any network/feed failure. Map that to the
+    // structured shape the git paths return, so the renderer never sees a
+    // raw IPC rejection on an offline check.
+    try {
+      return await checkAppUpdate(app.getVersion())
+    } catch (error) {
+      return {
+        supported: true,
+        mechanism: 'app-updater',
+        channel: 'stable',
+        error: 'fetch-failed',
+        message: firstLine(error instanceof Error ? error.message : String(error)) || 'Update feed check failed.',
+        fetchedAt: Date.now()
+      }
+    }
+  }
+
+  // Source install on the stable channel (an ejected bundled install, or a
+  // manual channel switch): compare against the newest release tag, not
+  // against the tip of main. A commits-behind-main count is meaningless
+  // vocabulary on this channel and reads as an alarming +N.
+  if (resolveChannel(readJson(INSTALL_MANIFEST_PATH) as any) === 'stable') {
+    return checkStableChannelUpdates()
+  }
+
   const updateRoot = resolveUpdateRoot()
   let { branch } = readDesktopUpdateConfig()
   const gitDir = path.join(updateRoot, '.git')
@@ -2504,7 +2612,7 @@ async function checkUpdates() {
     return {
       supported: false,
       reason: 'not-a-git-checkout',
-      message: `${updateRoot} isn't a git checkout — desktop self-update only runs against a source install.`,
+      message: `${updateRoot} is not a git checkout — desktop self-update only runs against a source install.`,
       hermesRoot: updateRoot,
       branch
     }
@@ -2513,7 +2621,10 @@ async function checkUpdates() {
   branch = await resolveHealedBranch(updateRoot, branch)
   const originUrl = await getOriginUrl(updateRoot)
 
-  if (isOfficialSshRemote(originUrl)) {
+  // The official public repo never needs a mutating fetch for a passive check.
+  // `ls-remote` also avoids racing bootstrap's repository stage, which can
+  // otherwise start a second index-pack against the same shallow checkout.
+  if (isOfficialRemote(originUrl)) {
     const git = args => runGit(args, { cwd: updateRoot }).then(r => r.stdout.trim())
 
     const [currentSha, target, dirtyStr, currentBranch] = await Promise.all([
@@ -2854,6 +2965,52 @@ async function releaseBackendLock(updateRoot, tag) {
 async function applyUpdates(opts = {}) {
   if (updateInFlight) {
     throw new Error('An update is already in progress.')
+  }
+
+  // Bundled installs: download the new app from the GitHub Releases feed,
+  // then quit and install. After the relaunch, the marker-tag mismatch
+  // triggers the offline agent rebuild — no git, no venv mutation while
+  // the app runs, and the Windows setup-binary handoff is unnecessary.
+  if (bundledUpdaterActive()) {
+    updateInFlight = true
+    let installerHandoffStarted = false
+
+    try {
+      const result = await applyAppUpdate(
+        percent => emitUpdateProgress({ stage: 'download', message: 'Downloading the app update…', percent }),
+        () => {
+          // electron-updater closes every window before quitAndInstall returns.
+          // Mark this as a hand-off first so the active-work prompt and macOS
+          // keep-alive convention cannot strand the installer waiting for us.
+          installerHandoffStarted = true
+          isQuittingForHandoff = true
+          rememberLog('[updates] downloaded full app artifact; handing off to the platform installer')
+        }
+      )
+
+      if (installerHandoffStarted) {
+        // A wedged renderer/backend must not leave NSIS/ShipIt waiting forever
+        // for the old process. Graceful before-quit teardown gets 30 seconds;
+        // afterwards the platform installer already owns recovery + relaunch.
+        const forceExitTimer = setTimeout(() => {
+          rememberLog('[updates] installer hand-off did not exit in 30s; forcing process exit')
+          app.exit(0)
+        }, 30_000)
+
+        forceExitTimer.unref()
+      }
+
+      return result
+    } catch (error) {
+      // A thrown quitAndInstall means no platform hand-off owns recovery.
+      // Keep the working app usable instead of suppressing future quit guards.
+      installerHandoffStarted = false
+      isQuittingForHandoff = false
+
+      throw error
+    } finally {
+      updateInFlight = false
+    }
   }
 
   updateInFlight = true
@@ -3693,6 +3850,52 @@ function readBootstrapMarker() {
   return readJson(BOOTSTRAP_COMPLETE_MARKER)
 }
 
+// ─── Bundled-runtime decisions (resident mode) ──────────────────────────────
+
+const INSTALL_MANIFEST_PATH = path.join(ACTIVE_HERMES_ROOT, '.hermes-install.json')
+
+/**
+ * The resident-runtime decision for this launch: run the backend directly
+ * out of the payload in resources, with no materialized checkout. Facts
+ * are re-read on every call (cheap file reads) so an eject flips the
+ * answer without an app restart.
+ */
+function residentRuntimeDecision() {
+  const marker = readBootstrapMarker() as any
+
+  return decideResidentRuntime({
+    payload: resolvePayload(process.resourcesPath),
+    checkoutExists: directoryExists(ACTIVE_HERMES_ROOT),
+    checkoutManifest: readJson(INSTALL_MANIFEST_PATH) as any,
+    // desktopVersion has been written by every desktop bootstrap since the
+    // marker existed; its presence is desktop provenance for the checkout.
+    markerSaysDesktop: Boolean(marker && typeof marker.desktopVersion === 'string')
+  })
+}
+
+/**
+ * True when app updates go through electron-updater instead of git.
+ * Reads the manifest on every call. An eject flips the manifest to source
+ * mode, and the next check must honor that without an app restart.
+ *
+ * A resident launch is bundled BY CONSTRUCTION: the code came from the
+ * app's own resources, so the checkout manifest (which may not even
+ * exist) has no say.
+ */
+function bundledUpdaterActive(): boolean {
+  const stamp = INSTALL_STAMP as any
+
+  const manifest = residentRuntimeDecision().resident
+    ? { installMode: 'bundled' }
+    : (readJson(INSTALL_MANIFEST_PATH) as any)
+
+  return shouldUseAppUpdater({
+    stampHasPayload: Boolean(stamp && stamp.payload),
+    installMode: manifest && typeof manifest.installMode === 'string' ? manifest.installMode : null,
+    isPackaged: app.isPackaged
+  })
+}
+
 // Marker-independent: is the canonical install at ACTIVE_HERMES_ROOT actually
 // runnable right now? A complete CLI install (`install.sh --include-desktop`)
 // or a DMG launch over a prior CLI install satisfies this WITHOUT the desktop
@@ -3732,6 +3935,11 @@ function writeBootstrapMarker(payload) {
     schemaVersion: BOOTSTRAP_MARKER_SCHEMA_VERSION,
     pinnedCommit: payload.pinnedCommit || null,
     pinnedBranch: payload.pinnedBranch || null,
+    // Bundled builds: the payload tag that this bootstrap materialized. The
+    // value is null on thin and network bootstraps. At launch, a comparison
+    // against the stamp tag triggers offline re-materialization after an
+    // app update.
+    pinnedTag: payload.pinnedTag || null,
     completedAt: new Date().toISOString(),
     desktopVersion: app.getVersion()
   }
@@ -3957,11 +4165,99 @@ function createActiveBackend(backendArgs) {
   }
 }
 
-function resolveHermesBackend(backendArgs) {
-  // 1. Explicit override -- HERMES_DESKTOP_HERMES_ROOT points at a developer
-  //    checkout. Honour it as-is (no bootstrap; the user is driving).
-  const overrideRoot = process.env.HERMES_DESKTOP_HERMES_ROOT && path.resolve(process.env.HERMES_DESKTOP_HERMES_ROOT)
+// createResidentBackend — run the backend directly out of the payload in
+// the app's resources. Nothing is materialized: the payload CPython's
+// hermes-bundle.pth resolves repo/ and site-packages/ relative to itself,
+// so the spawn needs NO PYTHONPATH and survives renames, Gatekeeper
+// translocation, and read-only mounts. All writable state goes under
+// HERMES_HOME (the Docker /opt/hermes vs /opt/data split):
+// - PYTHONPYCACHEPREFIX: the sealed bundle must never see __pycache__
+//   writes (codesign would break; the mount may be read-only anyway).
+// - HERMES_LAZY_INSTALL_TARGET: plugin/lazy deps install into a writable
+//   overlay via the existing uv-pip --target machinery in lazy_deps.
+function createResidentBackend(backendArgs) {
+  const payload = resolvePayload(process.resourcesPath)
 
+  if (!payload) {
+    return null
+  }
+
+  const command = findResidentPython(payload.dir)
+
+  if (!command) {
+    rememberLog(`[resident] payload at ${payload.dir} has no runnable CPython; falling back to checkout resolution`)
+
+    return null
+  }
+
+  const repoRoot = path.join(payload.dir, 'repo')
+
+  const env = {
+    ...buildDesktopBackendEnv({
+      hermesHome: HERMES_HOME,
+      pythonPathEntries: [],
+      venvRoot: null
+    }),
+    PYTHONPYCACHEPREFIX: path.join(HERMES_HOME, 'pycache'),
+    HERMES_LAZY_INSTALL_TARGET: path.join(HERMES_HOME, 'lazy-packages')
+  }
+
+  // The .pth glue owns import resolution; an inherited PYTHONPATH from the
+  // parent env could shadow bundled modules with foreign ones.
+  if (!env.PYTHONPATH) {
+    delete env.PYTHONPATH
+  }
+
+  // The payload's own node and uv lead PATH so the backend's subprocesses
+  // (TUI builds never happen, but browser tools and lazy installs do)
+  // find the bundled runtimes before any system ones.
+  const pathKey = Object.keys(env).find(key => key.toUpperCase() === 'PATH') || 'PATH'
+
+  env[pathKey] = [path.join(payload.dir, 'node', 'bin'), path.join(payload.dir, 'node'), path.join(payload.dir, 'uv'), env[pathKey]]
+    .filter(Boolean)
+    .join(path.delimiter)
+
+  return {
+    kind: 'python',
+    label: `Hermes resident bundle (${payload.tag || 'untagged'})`,
+    command,
+    args: ['-m', 'hermes_cli.main', ...backendArgs],
+    env,
+    root: repoRoot,
+    resident: true,
+    bootstrap: false,
+    shell: false
+  }
+}
+
+function resolveHermesBackend(backendArgs) {
+  // 0. Resident bundle — the payload in resources IS the runtime. When the
+  //    decision says resident, nothing is materialized, no bootstrap runs,
+  //    and the checkout (if any) is simply not preferred: reversible, and
+  //    an eject flips the decision on the next resolution. This must come
+  //    before adoption: adoption exists to migrate legacy checkouts into
+  //    the MATERIALIZED bundled path, which a resident launch has no use
+  //    for. The HERMES_DESKTOP_HERMES_ROOT escape hatch still wins — it
+  //    exists precisely to point a packaged app at a developer checkout.
+  const overrideRoot = process.env.HERMES_DESKTOP_HERMES_ROOT && path.resolve(process.env.HERMES_DESKTOP_HERMES_ROOT)
+  const resident = overrideRoot ? { resident: false, reason: 'HERMES_DESKTOP_HERMES_ROOT override' } : residentRuntimeDecision()
+
+  if (resident.resident) {
+    const backend = createResidentBackend(backendArgs)
+
+    if (backend) {
+      rememberLog(`[resident] running from the app bundle: ${resident.reason}`)
+
+      return backend
+    }
+    // A complete manifest but an unusable payload (no CPython found) is a
+    // broken artifact; fall through to the checkout/bootstrap chain.
+  } else {
+    rememberLog(`[resident] not resident: ${resident.reason}`)
+  }
+
+  // 1. Explicit override -- HERMES_DESKTOP_HERMES_ROOT points at a developer
+  //    checkout. Honor it as-is (no bootstrap; the user is driving).
   if (overrideRoot && isHermesSourceRoot(overrideRoot)) {
     const backend = createPythonBackend(overrideRoot, `Hermes source at ${overrideRoot}`, backendArgs)
 
@@ -12013,35 +12309,16 @@ ipcMain.handle('hermes:updates:branch:set', async (_event, name) => {
   return { branch }
 })
 
-// Resolve the canonical Hermes version (the one `release.py` bumps in
-// hermes_cli/__init__.py + pyproject.toml) so the desktop About panel shows the
-// real Hermes version instead of the Electron app's own package.json version,
-// which historically drifted (stuck at 0.0.2). Falls back to app.getVersion()
-// when the source tree can't be read (e.g. a packaged build without the repo).
+// Resolve the canonical Hermes version from the build stamp rather than the
+// Electron app's own package.json version, which historically drifted (stuck
+// at 0.0.2). An unstamped legacy build falls back to app.getVersion().
 function resolveHermesVersion() {
-  try {
-    const root = resolveUpdateRoot()
-    const initPath = path.join(root, 'hermes_cli', '__init__.py')
-
-    if (fileExists(initPath)) {
-      const raw = fs.readFileSync(initPath, 'utf8')
-      const match = raw.match(/__version__\s*=\s*["']([^"']+)["']/)
-
-      if (match) {
-        return match[1]
-      }
-    }
-  } catch {
-    // Fall through to the Electron app version below.
-  }
-
-  return app.getVersion()
+  return INSTALL_STAMP?.displayVersion ?? INSTALL_STAMP?.baseVersion ?? app.getVersion()
 }
 
-// Re-resolve the live Hermes version and push it into the native About panel
-// just before showing it, so an in-place `hermes update` is reflected without
-// an app restart. macOS only — `showAboutPanel()` is a no-op elsewhere, and the
-// other platforms don't use this menu item.
+// The stamp is generated alongside the renderer, so the native About panel and
+// the renderer report the same build identity. macOS only — `showAboutPanel()`
+// is a no-op elsewhere, and the other platforms don't use this menu item.
 function showAboutPanelFresh() {
   app.setAboutPanelOptions({
     applicationName: APP_NAME,
@@ -12051,8 +12328,27 @@ function showAboutPanelFresh() {
   app.showAboutPanel()
 }
 
-ipcMain.handle('hermes:version', async () => ({
-  appVersion: resolveHermesVersion(),
+function resolveHermesVersionInfo() {
+  if (INSTALL_STAMP) {
+    return {
+      appVersion: resolveHermesVersion(),
+      baseVersion: INSTALL_STAMP.baseVersion ?? undefined,
+      distance: INSTALL_STAMP.distance ?? undefined,
+      commit: INSTALL_STAMP.commit,
+      branch: INSTALL_STAMP.branch,
+      source: INSTALL_STAMP.source ?? undefined,
+      distribution: INSTALL_STAMP.distribution ?? undefined,
+      dirty: INSTALL_STAMP.dirty
+    }
+  }
+
+  const appVersion = app.getVersion()
+
+  return { appVersion, baseVersion: appVersion }
+}
+
+ipcMain.handle('hermes:version', () => ({
+  ...resolveHermesVersionInfo(),
   electronVersion: process.versions.electron,
   nodeVersion: process.versions.node,
   platform: process.platform,

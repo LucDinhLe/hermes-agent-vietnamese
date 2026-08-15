@@ -11,8 +11,9 @@
  * key, triggers an unexplained hardware-touch prompt. isOfficialSshRemote
  * must reliably recognize the official SSH remote (in every URL form,
  * case-insensitively) so the caller can swap in the anonymous HTTPS path —
- * while NOT misclassifying forks, other hosts, or the HTTPS remote (which
- * never prompts and should keep the normal fetch path).
+ * while NOT misclassifying forks or other hosts. Both SSH and HTTPS forms of
+ * the official repo use the read-only passive-check path so first-run
+ * bootstrap never races a second mutating fetch.
  */
 
 import assert from 'node:assert/strict'
@@ -21,6 +22,7 @@ import { test } from 'vitest'
 
 import {
   canonicalGitHubRemote,
+  isOfficialRemote,
   isOfficialSshRemote,
   isSshRemote,
   OFFICIAL_REPO_CANONICAL,
@@ -66,11 +68,18 @@ test('isOfficialSshRemote does NOT match forks, other hosts, or HTTPS', () => {
   assert.equal(isOfficialSshRemote('git@github.com:someuser/hermes-agent.git'), false)
   // Same repo name on a different host is not the official repo.
   assert.equal(isOfficialSshRemote('git@gitlab.com:NousResearch/hermes-agent.git'), false)
-  // HTTPS to the official repo never prompts for SSH/FIDO2, so it keeps the
-  // normal fetch path — must not be flagged as an official SSH remote.
+  // HTTPS is official but is not an SSH remote.
   assert.equal(isOfficialSshRemote('https://github.com/LucDinhLe/hermes-agent-vietnamese.git'), false)
   assert.equal(isOfficialSshRemote(''), false)
   assert.equal(isOfficialSshRemote(null), false)
+})
+
+test('isOfficialRemote matches both public transports but preserves forks', () => {
+  assert.equal(isOfficialRemote('git@github.com:LucDinhLe/hermes-agent-vietnamese.git'), true)
+  assert.equal(isOfficialRemote('https://github.com/LucDinhLe/hermes-agent-vietnamese.git'), true)
+  assert.equal(isOfficialRemote('https://github.com/another-owner/hermes-agent-vietnamese.git'), false)
+  assert.equal(isOfficialRemote(''), false)
+  assert.equal(isOfficialRemote(null), false)
 })
 
 test('OFFICIAL_REPO_HTTPS_URL canonicalizes to OFFICIAL_REPO_CANONICAL', () => {

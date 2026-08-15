@@ -45,6 +45,7 @@ on:
       # Release tags only: the repo also carries backup/* and one-off tags.
       - 'v[0-9]+.[0-9]+.[0-9]+'
       - 'v[0-9]+.[0-9]+.[0-9]+.[0-9]+'
+      - 'vi-v*'
 
 permissions:
   contents: read
@@ -54,10 +55,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Keep a syntax-simple first job so scheduled/tag runs always expose their
+  # trigger context before the dynamic reusable-workflow matrices fan out.
+  diagnostics:
+    name: Describe trigger
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Report install E2E trigger
+        run: |
+          echo "event=${{ github.event_name }}"
+          echo "ref=${{ github.ref }}"
+          echo "sha=${{ github.sha }}"
+
   # Which released versions do we test updating FROM? Resolved once and shared
   # by both route matrices, so the two routes cover the same set.
   pick-releases:
     name: Pick release tags
+    needs: diagnostics
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -73,9 +88,18 @@ jobs:
           sparse-checkout: scripts/sandbox/pick-release-tags.sh
           sparse-checkout-cone-mode: false
       - id: pick
+        env:
+          TAG_COUNT: ${{ inputs['tag-count'] || '5' }}
+          EXCLUDE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
         run: |
           set -euo pipefail
-          tags="$(scripts/sandbox/pick-release-tags.sh --count '${{ inputs.tag-count || 5 }}')"
+          echo "Selecting release tags for event=${{ github.event_name }} ref=${{ github.ref }} count=$TAG_COUNT"
+          picker_args=(--count "$TAG_COUNT")
+          if [ -n "$EXCLUDE_TAG" ]; then
+            echo "Excluding current candidate tag from update-from matrix: $EXCLUDE_TAG"
+            picker_args+=(--exclude "$EXCLUDE_TAG")
+          fi
+          tags="$(scripts/sandbox/pick-release-tags.sh "${picker_args[@]}")"
           echo "Testing updates from: $tags"
           echo "tags=$tags" >> "$GITHUB_OUTPUT"
 

@@ -1,4 +1,4 @@
-name: Phát hành Hermes tiếng Việt đa nền tảng
+name: Dựng và staging Hermes tiếng Việt
 
 on:
   push:
@@ -7,75 +7,139 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Nhãn phát hành, ví dụ vi-v0.20.0-4'
+        description: 'Nhãn ứng viên đã tồn tại, ví dụ vi-v0.20.0-15'
         required: true
         type: string
-      prerelease:
-        description: 'Đánh dấu là bản thử nghiệm'
-        default: true
+      release_class:
+        description: 'Stable bắt buộc ký; community-prerelease cho phép unsigned và luôn công bố dạng prerelease'
         required: true
-        type: boolean
+        default: community-prerelease
+        type: choice
+        options:
+          - community-prerelease
+          - stable
 
 concurrency:
-  group: hermes-vietnamese-release-${{ github.ref }}-${{ inputs.tag || github.ref_name }}
+  group: hermes-vietnamese-candidate-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: read
 
 jobs:
   verify:
-    name: Kiểm tra mã nguồn và hợp đồng phát hành
+    name: Kiểm tra commit và hợp đồng ứng viên
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
-
+    timeout-minutes: 60
+    outputs:
+      tag: ${{ steps.candidate.outputs.tag }}
+      commit: ${{ steps.candidate.outputs.commit }}
+      release_class: ${{ steps.candidate.outputs.release_class }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.tag || github.ref_name }}
           fetch-depth: 0
+          fetch-tags: true
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0, Node 24
+      - name: Khóa nhãn và commit ứng viên
+        id: candidate
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_CLASS: ${{ inputs.release_class || 'community-prerelease' }}
+        run: |
+          node -e "import('./scripts/vietnamese-release.mjs').then(({parseVietnameseReleaseTag}) => parseVietnameseReleaseTag(process.env.RELEASE_TAG))"
+          case "$RELEASE_CLASS" in
+            community-prerelease|stable) ;;
+            *) echo "::error::unsupported release class: $RELEASE_CLASS"; exit 1 ;;
+          esac
+          git fetch --force origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          tag_commit="$(git rev-list -n 1 "$RELEASE_TAG")"
+          head_commit="$(git rev-parse HEAD)"
+          test "$tag_commit" = "$head_commit" || { echo "::error::tag $RELEASE_TAG points to $tag_commit, checkout is $head_commit"; exit 1; }
+          git diff --quiet
+          git diff --cached --quiet
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "commit=$head_commit" >> "$GITHUB_OUTPUT"
+          echo "release_class=$RELEASE_CLASS" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24
+          node-version: 26
           cache: npm
 
       - name: Cài npm 12
         run: npm install --global npm@12
 
-      - name: Cài phụ thuộc
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # 8.2.0
+        with:
+          version: '0.12.1'
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Cài phụ thuộc từ lockfile
         uses: ./.github/actions/retry
         with:
-          command: npm ci
+          command: npm ci --no-audit --no-fund
 
-      - name: Kiểm toán thư viện đi vào ứng dụng
-        run: npm audit --omit=optional --audit-level=high
+      - name: Cài phụ thuộc Python kiểm thử từ lockfile
+        uses: ./.github/actions/retry
+        with:
+          command: uv sync --locked --python 3.11 --extra dev
 
-      - name: Kiểm thử hợp đồng phân phối cộng đồng
+      - name: Kiểm tra đầu vào runtime bất biến
+        run: node --test scripts/vietnamese-release.test.mjs scripts/prepare-agent-browser-native.test.mjs
+
+      - name: Kiểm toán dependency runtime
+        run: |
+          npm audit --omit=dev --omit=optional --audit-level=high
+          uv lock --check
+          uv run python -c "import tomllib; from pathlib import Path; d=tomllib.loads(Path('pyproject.toml').read_text()); assert 'cryptography==50.0.0' in d['project']['dependencies']; text=Path('uv.lock').read_text(); assert 'name = \"cryptography\"' in text and 'version = \"50.0.0\"' in text"
+
+      - name: Kiểm thử hợp đồng release và runtime
         run: >-
           npm run --prefix apps/desktop test:desktop:platforms --
           scripts/community-distribution.test.mjs
           scripts/collect-community-artifacts.test.mjs
           scripts/packaged-layout.test.mjs
+          scripts/release-workflow-contract.test.mjs
+          scripts/stage-agent-payloads.test.mjs
+          electron/app-updater.test.ts
           electron/bootstrap-runner.test.ts
+          electron/bundled-runtime.test.ts
           electron/update-remote.test.ts
 
-      - name: Kiểm thử giao diện và ngôn ngữ
+      - name: Kiểm thử giao diện đã chốt
         run: >-
           npm run --prefix apps/desktop test:ui --
-          src/i18n/languages.test.ts
-          src/i18n/context.test.tsx
-          src/components/first-run-journey.test.tsx
-          src/components/desktop-install-overlay.test.tsx
-          src/components/onboarding/index.test.tsx
-          src/components/bilingual-quick-toggle.test.tsx
           src/app/chat/session-draft-title.test.tsx
+          src/app/chat/sidebar/session-actions-menu.test.tsx
+          src/app/chat/right-rail/preview-browser-fit.test.ts
+          src/app/right-sidebar/index.test.tsx
+          src/components/pane-shell/tree/renderer/track-model-absorber.test.ts
+          src/components/first-run-journey.test.tsx
+          src/components/onboarding/index.test.tsx
+          src/i18n/vi-community.test.ts
 
       - name: Kiểm tra kiểu dữ liệu
         run: npm run --prefix apps/desktop typecheck
 
+      - name: Kiểm thử Python liên quan phát hành
+        run: >-
+          ./scripts/run_tests.sh -q
+          tests/scripts/test_write_install_stamp.py
+          tests/hermes_cli/test_update_channel_stable.py
+          tests/hermes_cli/test_update_eject.py
+          tests/hermes_cli/test_version_info.py
+
   build:
-    name: Đóng gói ${{ matrix.label }}
+    name: Dựng một lần — ${{ matrix.label }}
     needs: verify
+    environment: release-signing
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -85,85 +149,117 @@ jobs:
             runner: windows-2025
             platform: win32
             arch: x64
-            command: dist:win:x64
           - id: windows-arm64
             label: Windows ARM64
             runner: windows-11-arm
             platform: win32
             arch: arm64
-            command: dist:win:arm64
           - id: macos-arm64
             label: macOS Apple Silicon
             runner: macos-15
             platform: darwin
             arch: arm64
-            command: dist:mac:arm64
           - id: macos-x64
             label: macOS Intel
             runner: macos-15-intel
             platform: darwin
             arch: x64
-            command: dist:mac:x64
           - id: linux-x64
             label: Linux x64
             runner: ubuntu-24.04
             platform: linux
             arch: x64
-            command: dist:linux:x64
           - id: linux-arm64
             label: Linux ARM64
             runner: ubuntu-24.04-arm
             platform: linux
             arch: arm64
-            command: dist:linux:arm64
-
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
-
+    env:
+      HERMES_DESKTOP_BUNDLED: '1'
+      HERMES_PAYLOAD_TAG: ${{ needs.verify.outputs.tag }}
+      HERMES_PAYLOAD_PYTHON: '3.11'
+      HERMES_RELEASE_CLASS: ${{ needs.verify.outputs.release_class }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.verify.outputs.tag }}
           fetch-depth: 0
+          fetch-tags: true
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0, Node 24
+      - name: Xác minh đúng commit ứng viên
+        shell: bash
+        env:
+          EXPECTED_COMMIT: ${{ needs.verify.outputs.commit }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24
+          node-version: 26
           cache: npm
 
       - name: Cài npm 12
         run: npm install --global npm@12
 
-      - name: Cài phụ thuộc đúng kiến trúc
+      - uses: actions/setup-python@e348410e00f449ece8581cb8e88be8f0e7712da6 # v5
+        with:
+          python-version: '3.12'
+
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # 8.2.0
+        with:
+          version: '0.12.1'
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        if: matrix.id == 'windows-arm64'
+        with:
+          toolchain: stable
+          targets: aarch64-pc-windows-msvc
+
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c
+        if: matrix.id == 'macos-x64'
+        with:
+          toolchain: stable
+
+      - name: Cài phụ thuộc từ lockfile
         uses: ./.github/actions/retry
         with:
-          command: npm ci
+          command: npm ci --no-audit --no-fund
 
-      - name: Kiểm thử đường đóng gói theo hệ điều hành
-        run: >-
-          npm run --prefix apps/desktop test:desktop:platforms --
-          electron/bootstrap-runner.test.ts
-          electron/update-remote.test.ts
-
-      - name: Kiểm tra trình cài runtime Windows
-        if: matrix.platform == 'win32'
-        shell: powershell
-        run: |
-          $manifest = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1 -Manifest | Select-Object -Last 1 | ConvertFrom-Json
-          if ($manifest.protocol_version -ne 1 -or $manifest.stages.Count -lt 1) { throw 'Invalid Windows bootstrap manifest' }
-
-      - name: Kiểm tra trình cài runtime macOS và Linux
-        if: matrix.platform != 'win32'
+      - name: Chuẩn bị OpenSSL ARM64 Windows
+        if: matrix.id == 'windows-arm64'
         shell: bash
         run: |
-          manifest="$(bash scripts/install.sh --manifest)"
-          node -e 'const m=JSON.parse(process.argv[1]); if(m.protocol_version!==1 || !m.stages?.length) process.exit(1)' "$manifest"
+          "$VCPKG_INSTALLATION_ROOT/vcpkg" install openssl:arm64-windows-static-md
+          printf 'OPENSSL_DIR=C:\\vcpkg\\installed\\arm64-windows-static-md\nOPENSSL_STATIC=1\n' >> "$GITHUB_ENV"
 
-      - name: Đóng gói Windows hoặc Linux
-        if: matrix.platform != 'darwin'
-        run: npm run --prefix apps/desktop ${{ matrix.command }}
+      - name: Chuẩn bị OpenSSL bất biến cho macOS Intel
+        if: matrix.id == 'macos-x64'
+        shell: bash
+        env:
+          OPENSSL_VERSION: '3.5.7'
+          OPENSSL_SHA256: 'a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8'
+        run: |
+          archive="$RUNNER_TEMP/openssl-$OPENSSL_VERSION.tar.gz"
+          source_dir="$RUNNER_TEMP/openssl-$OPENSSL_VERSION"
+          prefix="$RUNNER_TEMP/openssl-$OPENSSL_VERSION-install"
+          curl --fail --location --retry 5 --retry-all-errors \
+            --output "$archive" \
+            "https://www.openssl.org/source/openssl-$OPENSSL_VERSION.tar.gz"
+          printf '%s  %s\n' "$OPENSSL_SHA256" "$archive" | shasum -a 256 --check
+          tar -xzf "$archive" -C "$RUNNER_TEMP"
+          (
+            cd "$source_dir"
+            ./Configure darwin64-x86_64-cc no-shared no-tests \
+              --prefix="$prefix" --openssldir="$prefix/ssl"
+            make -j"$(sysctl -n hw.ncpu)"
+            make install_sw
+          )
+          printf 'OPENSSL_DIR=%s\nOPENSSL_STATIC=1\nPKG_CONFIG_PATH=%s/lib/pkgconfig\n' \
+            "$prefix" "$prefix" >> "$GITHUB_ENV"
 
-      - name: Đóng gói macOS
-        if: matrix.platform == 'darwin'
+      - name: Bắt buộc cấu hình ký và công chứng Apple
+        if: matrix.platform == 'darwin' && needs.verify.outputs.release_class == 'stable'
         shell: bash
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
@@ -172,108 +268,198 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
-          if [[ -z "${CSC_LINK:-}" ]]; then
-            unset CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER
-            export CSC_IDENTITY_AUTO_DISCOVERY=false
-          fi
-          npm run --prefix apps/desktop ${{ matrix.command }}
+          test -n "$CSC_LINK" || { echo "::error::MAC_CSC_LINK is missing"; exit 1; }
+          test -n "$CSC_KEY_PASSWORD" || { echo "::error::MAC_CSC_KEY_PASSWORD is missing"; exit 1; }
+          test -n "$APPLE_API_KEY" || { echo "::error::APPLE_API_KEY is missing"; exit 1; }
+          test -n "$APPLE_API_KEY_ID" || { echo "::error::APPLE_API_KEY_ID is missing"; exit 1; }
+          test -n "$APPLE_API_ISSUER" || { echo "::error::APPLE_API_ISSUER is missing"; exit 1; }
 
-      - name: Kiểm tra cấu trúc gói đã đóng
+      - name: Dựng runtime và gói native
+        shell: bash
+        env:
+          RELEASE_CLASS: ${{ needs.verify.outputs.release_class }}
+          CSC_LINK: ${{ needs.verify.outputs.release_class == 'stable' && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ needs.verify.outputs.release_class == 'stable' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          APPLE_API_KEY: ${{ needs.verify.outputs.release_class == 'stable' && secrets.APPLE_API_KEY || '' }}
+          APPLE_API_KEY_ID: ${{ needs.verify.outputs.release_class == 'stable' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ needs.verify.outputs.release_class == 'stable' && secrets.APPLE_API_ISSUER || '' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ needs.verify.outputs.release_class == 'stable' && 'true' || 'false' }}
+          HERMES_PAYLOAD_BUILD_PYTHON: ${{ matrix.platform == 'win32' && 'python' || 'python3' }}
+        run: |
+          if [ "$RELEASE_CLASS" != "stable" ]; then
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER
+          fi
+          node scripts/build-bundled-desktop.mjs --tag="$HERMES_PAYLOAD_TAG" --no-install
+
+      - name: Kiểm tra đúng payload đóng gói
+        shell: bash
         env:
           HERMES_DESKTOP_SKIP_BUILD: '1'
         run: npm run --prefix apps/desktop test:desktop:all
 
-      - name: Chuẩn hóa tên tệp và tạo mã SHA-256
+      - name: Chuẩn hóa artifact
         run: >-
           node apps/desktop/scripts/collect-community-artifacts.mjs collect
-          ${{ matrix.platform }}
-          ${{ matrix.arch }}
-          apps/desktop/release
-          release-assets
+          ${{ matrix.platform }} ${{ matrix.arch }} apps/desktop/release release-assets
 
-      - name: Lưu bản dựng
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1, Node 24
+      - name: Bắt buộc cấu hình SignPath cho Windows
+        if: matrix.platform == 'win32' && needs.verify.outputs.release_class == 'stable'
+        shell: bash
+        env:
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+        run: |
+          test -n "$SIGNPATH_API_TOKEN" || { echo "::error::SIGNPATH_API_TOKEN is missing"; exit 1; }
+          test -n "$SIGNPATH_ORGANIZATION_ID" || { echo "::error::SIGNPATH_ORGANIZATION_ID is missing"; exit 1; }
+          test -n "$SIGNPATH_PROJECT_SLUG" || { echo "::error::SIGNPATH_PROJECT_SLUG is missing"; exit 1; }
+          test -n "$SIGNPATH_SIGNING_POLICY_SLUG" || { echo "::error::SIGNPATH_SIGNING_POLICY_SLUG is missing"; exit 1; }
+          test -n "$SIGNPATH_ARTIFACT_CONFIGURATION_SLUG" || { echo "::error::SIGNPATH_ARTIFACT_CONFIGURATION_SLUG is missing"; exit 1; }
+
+      - name: Upload bộ cài Windows chưa ký cho SignPath
+        id: upload-unsigned-windows
+        if: matrix.platform == 'win32' && needs.verify.outputs.release_class == 'stable'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned-${{ matrix.id }}-${{ needs.verify.outputs.commit }}
+          path: release-assets/Hermes-Vietnamese-Windows-*-Setup.exe
+          archive: false
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Ký Authenticode bằng SignPath
+        if: matrix.platform == 'win32' && needs.verify.outputs.release_class == 'stable'
+        uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload-unsigned-windows.outputs.artifact-id }}
+          skip-decompress: true
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 1800
+          output-artifact-directory: signed-windows
+
+      - name: Thay bằng đúng byte đã ký và xác minh Authenticode
+        if: matrix.platform == 'win32' && needs.verify.outputs.release_class == 'stable'
+        shell: powershell
+        run: |
+          $expected = @(Get-ChildItem -LiteralPath release-assets -Filter 'Hermes-Vietnamese-Windows-*-Setup.exe')
+          if ($expected.Count -ne 1) { throw "Expected one normalized Windows installer, found $($expected.Count)" }
+          $signed = @(Get-ChildItem -LiteralPath signed-windows -Recurse -File -Filter $expected[0].Name)
+          if ($signed.Count -ne 1) { throw "Expected one signed $($expected[0].Name), found $($signed.Count)" }
+          Copy-Item -LiteralPath $signed[0].FullName -Destination $expected[0].FullName -Force
+          $signature = Get-AuthenticodeSignature -LiteralPath $expected[0].FullName
+          if ($signature.Status -ne 'Valid' -or $null -eq $signature.SignerCertificate) {
+            throw "Signed installer Authenticode is $($signature.Status), not Valid"
+          }
+
+      - name: Ghi lại checksum sau ký
+        run: >-
+          node apps/desktop/scripts/collect-community-artifacts.mjs checksums
+          release-assets SHA256SUMS-${{ matrix.platform }}-${{ matrix.arch }}.txt
+
+      - name: Ghi trạng thái ký/công chứng
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          {
+            echo "tag=$HERMES_PAYLOAD_TAG"
+            echo "commit=${{ needs.verify.outputs.commit }}"
+            echo "platform=${{ matrix.platform }}"
+            echo "arch=${{ matrix.arch }}"
+            echo "release_class=$HERMES_RELEASE_CLASS"
+            if [[ "${{ matrix.platform }}" == "win32" ]]; then
+              powershell.exe -NoProfile -Command "Get-ChildItem release-assets/*.exe | ForEach-Object { Get-AuthenticodeSignature -LiteralPath \$_.FullName | Select-Object Path,Status,StatusMessage,SignerCertificate } | ConvertTo-Json -Depth 4"
+            elif [[ "${{ matrix.platform }}" == "darwin" && "$HERMES_RELEASE_CLASS" == "stable" ]]; then
+              codesign --verify --deep --strict --verbose=2 apps/desktop/release/mac*/Hermes.app 2>&1
+              spctl --assess --type execute --verbose=4 apps/desktop/release/mac*/Hermes.app 2>&1
+              xcrun stapler validate apps/desktop/release/mac*/Hermes.app 2>&1
+            elif [[ "${{ matrix.platform }}" == "darwin" ]]; then
+              echo "signing=unsigned-community-prerelease"
+              codesign --display --verbose=4 apps/desktop/release/mac*/Hermes.app 2>&1 || true
+              spctl --assess --type execute --verbose=4 apps/desktop/release/mac*/Hermes.app 2>&1 || true
+              xcrun stapler validate apps/desktop/release/mac*/Hermes.app 2>&1 || true
+            else
+              echo "signing=sha256-only"
+            fi
+          } > "release-assets/signing-${{ matrix.id }}.txt"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: hermes-vietnamese-${{ matrix.id }}
           path: release-assets/*
           if-no-files-found: error
           retention-days: 30
 
-  release:
-    name: Gom gói và tạo GitHub Release
-    needs: build
+  stage:
+    name: Upload đúng byte vào draft
+    needs: [verify, build]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: write
-
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1, Node 24
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.verify.outputs.tag }}
 
-      - name: Tải toàn bộ gói cài
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1, Node 24
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: hermes-vietnamese-*
           path: release-assets
           merge-multiple: true
 
-      - name: Tạo bảng SHA-256 chung
-        run: node apps/desktop/scripts/collect-community-artifacts.mjs checksums release-assets SHA256SUMS.txt
-
-      - name: Xác định nhãn phát hành
-        id: release
+      - name: Lập manifest SHA-256 và provenance
         shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          INPUT_TAG: ${{ inputs.tag }}
-          REF_NAME: ${{ github.ref_name }}
         run: |
-          tag="$REF_NAME"
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            tag="$INPUT_TAG"
-          fi
-          if [[ ! "$tag" =~ ^vi-v[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$ ]]; then
-            echo "Nhãn không hợp lệ: $tag" >&2
-            exit 1
-          fi
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          node apps/desktop/scripts/collect-community-artifacts.mjs checksums release-assets SHA256SUMS.txt
+          node -e "const fs=require('fs'); fs.writeFileSync('release-assets/candidate-provenance.json', JSON.stringify({tag:process.env.TAG,commit:process.env.COMMIT,releaseClass:process.env.RELEASE_CLASS,runId:process.env.RUN_ID,workflow:process.env.WORKFLOW},null,2)+'\n')"
+          (cd release-assets && sha256sum candidate-provenance.json >> SHA256SUMS.txt)
+        env:
+          TAG: ${{ needs.verify.outputs.tag }}
+          COMMIT: ${{ needs.verify.outputs.commit }}
+          RELEASE_CLASS: ${{ needs.verify.outputs.release_class }}
+          RUN_ID: ${{ github.run_id }}
+          WORKFLOW: ${{ github.workflow }}
 
-      - name: Tạo hoặc cập nhật GitHub Release
+      - name: Tạo draft mới, tuyệt đối không public
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-          PRERELEASE: ${{ inputs.prerelease || false }}
+          TAG: ${{ needs.verify.outputs.tag }}
+          COMMIT: ${{ needs.verify.outputs.commit }}
+          RELEASE_CLASS: ${{ needs.verify.outputs.release_class }}
         run: |
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            if [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')" != "true" ]]; then
-              echo "Bản phát hành $RELEASE_TAG đã công bố. Hãy dùng nhãn mới; không ghi đè tệp đã công bố." >&2
-              exit 1
-            fi
-
-            echo "Tiếp tục bản nháp $RELEASE_TAG còn dang dở."
-            gh release edit "$RELEASE_TAG" --target "${{ github.sha }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::release $TAG already exists; use a new candidate tag instead of replacing accepted bytes"
+            exit 1
+          fi
+          if [[ "$RELEASE_CLASS" == "community-prerelease" ]]; then
+            gh release create "$TAG" --verify-tag --target "$COMMIT" --draft --prerelease --title "$TAG" --notes-file .github/release-notes-vietnamese.md
           else
-            gh release create "$RELEASE_TAG" \
-              --draft \
-              --title "Hermes tiếng Việt $RELEASE_TAG" \
-              --notes-file .github/release-notes-vietnamese.md \
-              --target "${{ github.sha }}"
+            gh release create "$TAG" --verify-tag --target "$COMMIT" --draft --title "$TAG" --notes-file .github/release-notes-vietnamese.md
           fi
+          gh release upload "$TAG" release-assets/*
 
-          gh release view "$RELEASE_TAG" --json assets --jq '.assets[].name' > existing-assets.txt
-          for asset in release-assets/*; do
-            name="$(basename "$asset")"
-            if grep -Fxq "$name" existing-assets.txt; then
-              echo "Đã có $name; bỏ qua tải lại."
-              continue
-            fi
-            gh release upload "$RELEASE_TAG" "$asset"
-          done
-
-          publish_flags=(--draft=false)
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "$PRERELEASE" == "true" ]]; then
-            publish_flags+=(--prerelease)
-          fi
-
-          gh release edit "$RELEASE_TAG" "${publish_flags[@]}"
+      - name: Tải lại và đối chiếu byte đã staging
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.verify.outputs.tag }}
+          RELEASE_CLASS: ${{ needs.verify.outputs.release_class }}
+        run: |
+          mkdir uploaded
+          gh release download "$TAG" --dir uploaded
+          cp uploaded/SHA256SUMS.txt uploaded/SHA256SUMS.verify
+          cd uploaded
+          sha256sum --check SHA256SUMS.verify
+          release_json="$(gh release view "$TAG" --json isDraft,isPrerelease)"
+          test "$(jq -r .isDraft <<<"$release_json")" = "true"
+          expected_prerelease=false
+          [[ "$RELEASE_CLASS" == "community-prerelease" ]] && expected_prerelease=true
+          test "$(jq -r .isPrerelease <<<"$release_json")" = "$expected_prerelease"

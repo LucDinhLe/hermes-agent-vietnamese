@@ -2199,6 +2199,7 @@ export interface Translations {
     aria: string
     panelsAria: string
     files: string
+    browserNewTab: string
     terminal: string
     noFolderSelected: string
     changeCwdTitle: string
