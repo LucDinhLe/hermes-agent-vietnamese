@@ -1,5 +1,29 @@
 # Tiến độ
 
+## Cập nhật 2026-08-15 — cho phép community prerelease không ký, không hạ chuẩn stable
+
+- Chủ phát hành chấp nhận công bố đúng trạng thái hiện có và không mua Apple
+  Developer Program ở vòng này. Hồ sơ SignPath Foundation cho Windows đã được
+  gửi; chưa có kết quả phê duyệt hoặc cấu hình ký trong GitHub.
+- Commit `74cb448` thêm lớp phát hành tường minh `community-prerelease`. Lớp này
+  khóa Apple/SignPath secrets khỏi build, ghi `releaseClass` vào provenance,
+  bắt buộc release giữ nhãn prerelease và yêu cầu bằng chứng cảnh báo
+  SmartScreen/Gatekeeper trên từng artifact. Đường `stable` vẫn bắt buộc
+  Authenticode, Developer ID, notarization và stapling như trước.
+- Promotion tiếp tục tách khỏi build/staging và chỉ nhận đúng manifest, đúng
+  runtime-smoke run, đúng release class và đủ quyết định `GO` trên sáu nền tảng.
+  Chấp nhận unsigned không miễn fresh install, gateway, onboarding, persistence,
+  update, repair, uninstall hoặc rollback.
+- Xác minh cục bộ trong clone sạch tải độc lập từ GitHub: YAML parse đạt; workflow
+  contract 5/5; evidence/tag tests 9/9; Prettier đạt; Desktop typecheck đạt;
+  `uv lock --check` đạt; `npm audit --omit=dev --omit=optional --audit-level=high`
+  trả 0 lỗ hổng.
+- Hai thay đổi tài liệu có sẵn ở worktree cũ (`docs/community-release.md` và
+  `docs/release-engineering-rulebook.md`) không bị sửa, xóa hoặc đưa vào commit.
+- Quyết định vẫn **candidate only / NO-GO** cho public cho tới khi workflow tạo
+  đúng draft artifacts và runtime smoke exact-byte đạt đủ ma trận. Không dùng
+  tiền lệ AICoworker thay cho bằng chứng Hermes.
+
 ## Cập nhật 2026-08-15 — tab Browser và checkpoint công khai v15
 
 - Commit `04345ecdf` thay Browser một-bề-mặt bằng thanh tab thật trong panel
