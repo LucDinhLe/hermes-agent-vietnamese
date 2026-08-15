@@ -1309,7 +1309,15 @@ clone_repo() {
             # branches — on a non-single-branch checkout that turns each update
             # into a multi-minute download that can stall the installer.
             git remote set-branches origin "$BRANCH" 2>/dev/null || true
-            git fetch origin "$BRANCH"
+            local branch_fetch_args=()
+            if [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
+                # Do not turn an unrelated/local shallow checkout into a full
+                # clone during repair. A bounded window connects adjacent
+                # releases without downloading the entire repository history.
+                branch_fetch_args=(--depth 64)
+                log_info "Keeping shallow repository fetch bounded to 64 commits..."
+            fi
+            git fetch "${branch_fetch_args[@]}" origin "$BRANCH"
             git checkout "$BRANCH"
             # Managed installs should follow origin/$BRANCH exactly. If the
             # checkout has diverged (or has local-only commits), ff-only pull
@@ -1412,7 +1420,11 @@ EOF
         # current venv. Only pin when the target is not already an ancestor of
         # HEAD; a fresh clone has no such ancestry and pins normally.
         if ! git cat-file -e "$INSTALL_COMMIT^{commit}" 2>/dev/null; then
-            git fetch origin "$INSTALL_COMMIT" || true
+            local pin_fetch_args=()
+            if [ "$(git rev-parse --is-shallow-repository 2>/dev/null)" = "true" ]; then
+                pin_fetch_args=(--depth 64)
+            fi
+            git fetch "${pin_fetch_args[@]}" origin "$INSTALL_COMMIT" || true
         fi
         if git rev-parse --verify --quiet HEAD >/dev/null 2>&1 \
            && git merge-base --is-ancestor "$INSTALL_COMMIT" HEAD 2>/dev/null \

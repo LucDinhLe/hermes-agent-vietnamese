@@ -3,10 +3,12 @@
  *
  * A public install can end up with `origin=git@github.com:LucDinhLe/hermes-agent-vietnamese.git`.
  * If the user's GitHub SSH key is FIDO2/passkey-backed, a background `git fetch
- * origin` triggers an unexplained hardware-touch prompt. For passive checks
- * against the official repo we substitute the public HTTPS `ls-remote` path,
- * which needs no auth and cannot prompt. The active installer update path has
- * the same policy and also repairs legacy official SSH origins in-place.
+ * origin` triggers an unexplained hardware-touch prompt. Even over HTTPS that
+ * fetch mutates the managed checkout and can race first-run bootstrap's own
+ * repository fetch. For passive checks against the official repo we therefore
+ * use public HTTPS `ls-remote`, which is read-only, needs no auth, and cannot
+ * compete for the same object database. The active installer update path also
+ * repairs legacy official SSH origins in-place.
  *
  * Extracted from main.ts so the security-critical remote detection is unit
  * testable without booting Electron (main.ts requires('electron') at load).
@@ -58,8 +60,19 @@ function isSshRemote(url) {
   return value.startsWith('git@') || value.startsWith('ssh://')
 }
 
-function isOfficialSshRemote(url) {
-  return isSshRemote(url) && canonicalGitHubRemote(url) === OFFICIAL_REPO_CANONICAL
+function isOfficialRemote(url) {
+  return canonicalGitHubRemote(url) === OFFICIAL_REPO_CANONICAL
 }
 
-export { canonicalGitHubRemote, isOfficialSshRemote, isSshRemote, OFFICIAL_REPO_CANONICAL, OFFICIAL_REPO_HTTPS_URL }
+function isOfficialSshRemote(url) {
+  return isSshRemote(url) && isOfficialRemote(url)
+}
+
+export {
+  canonicalGitHubRemote,
+  isOfficialRemote,
+  isOfficialSshRemote,
+  isSshRemote,
+  OFFICIAL_REPO_CANONICAL,
+  OFFICIAL_REPO_HTTPS_URL
+}

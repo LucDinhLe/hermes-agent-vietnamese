@@ -2286,7 +2286,20 @@ function Install-Repository {
                     git -c windows.appendAtomically=false stash push --include-untracked -m "$stashName"
                     if ($LASTEXITCODE -eq 0) { $autostashRef = "stash@{0}" }
                 }
-                git -c windows.appendAtomically=false fetch origin $Branch
+                # Never accidentally unshallow a managed checkout during
+                # repair. A shallow checkout from an unrelated/local commit can
+                # otherwise make this fetch transfer the repository's complete
+                # history (hundreds of thousands of objects) before the pinned
+                # commit is even considered. A bounded window is enough to
+                # connect normal adjacent releases while keeping recovery fast.
+                $branchFetchArgs = @("fetch")
+                $isShallowOutput = git -c windows.appendAtomically=false rev-parse --is-shallow-repository 2>$null
+                if (("$isShallowOutput").Trim() -eq "true") {
+                    $branchFetchArgs += @("--depth", "64")
+                    Write-Info "Keeping shallow repository fetch bounded to 64 commits..."
+                }
+                $branchFetchArgs += @("origin", $Branch)
+                git -c windows.appendAtomically=false @branchFetchArgs
                 if ($LASTEXITCODE -ne 0) { throw "git fetch failed (exit $LASTEXITCODE)" }
                 # Precedence: Commit > Tag > Branch.  Commit and Tag check
                 # out as detached HEAD intentionally -- they're meant to be
@@ -2294,7 +2307,12 @@ function Install-Repository {
                 if ($Commit) {
                     # Make sure we have the commit locally (a tag-less commit
                     # SHA isn't always reachable from any one branch fetch).
-                    git -c windows.appendAtomically=false fetch origin $Commit
+                    $commitFetchArgs = @("fetch")
+                    if (("$isShallowOutput").Trim() -eq "true") {
+                        $commitFetchArgs += @("--depth", "64")
+                    }
+                    $commitFetchArgs += @("origin", $Commit)
+                    git -c windows.appendAtomically=false @commitFetchArgs
                     # A commit pin must never move an existing install
                     # BACKWARDS. hermes-setup.exe bakes its build-time commit
                     # into the binary (BUILD_PIN_COMMIT) and passes it as
@@ -2593,7 +2611,13 @@ function Install-Repository {
         try {
             if ($Commit) {
                 Write-Info "Pinning to commit $Commit..."
-                git -c windows.appendAtomically=false fetch origin $Commit
+                $pinFetchArgs = @("fetch")
+                $postCloneShallow = git -c windows.appendAtomically=false rev-parse --is-shallow-repository 2>$null
+                if (("$postCloneShallow").Trim() -eq "true") {
+                    $pinFetchArgs += @("--depth", "64")
+                }
+                $pinFetchArgs += @("origin", $Commit)
+                git -c windows.appendAtomically=false @pinFetchArgs
                 git -c windows.appendAtomically=false checkout --detach $Commit
                 if ($LASTEXITCODE -ne 0) {
                     throw "git checkout $Commit failed (exit $LASTEXITCODE)"

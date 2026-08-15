@@ -155,7 +155,7 @@ def test_repair_happens_before_autostash_and_fetch_on_both_platforms() -> None:
     ) < shell_update.index("git status --porcelain")
     assert shell_update.index(
         "use_public_https_origin_for_managed_install"
-    ) < shell_update.index('git fetch origin "$BRANCH"')
+    ) < shell_update.index('git fetch "${branch_fetch_args[@]}" origin "$BRANCH"')
 
     powershell = INSTALL_PS1.read_text(encoding="utf-8")
     ps_update = powershell[
@@ -165,8 +165,21 @@ def test_repair_happens_before_autostash_and_fetch_on_both_platforms() -> None:
         "status --porcelain"
     )
     assert ps_update.index("Use-PublicHttpsOriginForManagedInstall") < ps_update.index(
-        "fetch origin $Branch"
+        "@branchFetchArgs"
     )
+
+
+def test_shallow_repository_fetches_are_bounded_on_both_platforms() -> None:
+    shell = INSTALL_SH.read_text(encoding="utf-8")
+    assert 'git rev-parse --is-shallow-repository' in shell
+    assert 'branch_fetch_args=(--depth 64)' in shell
+    assert 'pin_fetch_args=(--depth 64)' in shell
+
+    powershell = INSTALL_PS1.read_text(encoding="utf-8")
+    assert 'rev-parse --is-shallow-repository' in powershell
+    assert '$branchFetchArgs += @("--depth", "64")' in powershell
+    assert '$commitFetchArgs += @("--depth", "64")' in powershell
+    assert '$pinFetchArgs += @("--depth", "64")' in powershell
 
 
 def test_fresh_clone_prefers_public_https_on_both_platforms() -> None:
