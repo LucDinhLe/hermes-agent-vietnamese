@@ -68,7 +68,7 @@ _UPDATE_DOWNGRADE_GUARD_FLOORS = {
     # `hermes update` reinstalls exact pins from pyproject/lazy_deps. These
     # reviewed CVE pins must not slide back to stale versions that downgrade
     # already-patched user environments.
-    "cryptography": (48, 0, 1),
+    "cryptography": (50, 0, 0),
     "starlette": (1, 3, 1),
     "python-multipart": (0, 0, 32),
 }
@@ -146,6 +146,32 @@ def test_locked_starlette_is_not_vulnerable_to_cve_2026_48710():
             f"uv.lock resolves starlette=={ver}, below the CVE-2026-48710 fix "
             f"floor {'.'.join(map(str, _STARLETTE_CVE_FLOOR))} — regenerate the "
             f"lockfile after bumping the pin"
+        )
+
+
+def test_cryptography_pin_and_lock_cover_2026_advisories():
+    """Runtime and lock must cover CVE-2026-69247/69248/69249.
+
+    The highest fixed-version floor across the three advisories is 50.0.0.
+    Hermes imports cryptography on production authentication and messaging
+    paths, so a transitive-only or stale-lock fix is insufficient.
+    """
+    floor = _UPDATE_DOWNGRADE_GUARD_FLOORS["cryptography"]
+    pins = _pins_from_specs(_pyproject_pinned_specs()).get("cryptography")
+
+    assert pins, "cryptography must remain directly pinned on runtime install paths"
+    for version in pins:
+        assert _version_tuple(version) >= floor, (
+            f"pyproject pins cryptography=={version}, below the common fixed floor "
+            f"{'.'.join(map(str, floor))} for CVE-2026-69247/69248/69249"
+        )
+
+    locked = _locked_versions("cryptography")
+    assert locked, "cryptography not found in uv.lock"
+    for version in locked:
+        assert _version_tuple(version) >= floor, (
+            f"uv.lock resolves cryptography=={version}, below the common fixed "
+            f"floor {'.'.join(map(str, floor))}"
         )
 
 
