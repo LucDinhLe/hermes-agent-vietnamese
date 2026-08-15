@@ -2,23 +2,37 @@
 
 ## Cập nhật 2026-08-15 — quyết định NO-GO cho vi-v0.20.0-15
 
-- Windows fresh bootstrap trên hồ sơ cô lập hoàn tất đủ stage ở checkpoint
-  `18c00b4c3`; backend health HTTP 200, Hermes 0.20.0 và runtime thực tế dùng
-  `cryptography 50.0.0`. Không nhập hoặc khôi phục dữ liệu Hermes cũ.
-- Smoke test phát hiện tab draft đầu tiên vẫn giữ placeholder tiếng Anh sau khi
-  đổi sang tiếng Việt. Commit cục bộ `c646de336` chuyển tab này sang tiêu đề
-  dịch động; typecheck, lint và 4/4 test liên quan đạt.
-- Bộ cài Windows x64 cuối build thành công, 121.419.167 byte, SHA-256
-  `1140C2E1F654FBEA980B5386B3698264A249F32A9F9A44916B4BA665FE645372`, stamp
-  sạch đúng `c646de336`. Artifact vẫn `NotSigned` và không chứa runtime Node bị
-  cảnh báo hay dữ liệu cá nhân.
-- Windows Application Control chặn `Hermes.exe` cuối sau khi hash thay đổi, nên
-  chưa thể chạy lại UI smoke trên đúng commit cuối. Không tắt hoặc lách policy.
+- Lỗi tên phiên không tự hiện và đổi tên trả HTTP 500 được truy ra đúng
+  `state.db` cũ bị `database disk image is malformed`, không phải lỗi cài mới.
+  Theo quyết định bỏ dữ liệu cũ, toàn bộ session DB/sidecar/session files cũ đã
+  được **di chuyển để cách ly**, không nhập hoặc khôi phục. Hồ sơ mới bắt đầu từ
+  0 phiên.
+- Commit `b2fa5e368` làm đường đổi tên bền vững qua lineage root/tip sau nén;
+  commit `4148a5546` bổ sung `hermes doctor --fix` để đổi cơ sở dữ liệu WAL cũ
+  sang rollback journal khi chứng minh được không có tiến trình đang giữ DB.
+- Smoke thật trên ứng dụng đang cài và hồ sơ sạch đạt: tên tự sinh xuất hiện ở
+  panel trái; đổi thành **Kiểm thử đổi tên v15** lưu bền qua reload; tạo/đóng tab
+  và chuyển Tệp/Trình duyệt ở panel phải đều đạt; log hiện tại không còn 500,
+  malformed hay traceback.
+- Bộ cài Windows x64 cuối build thành công từ `4148a5546`, 121.419.143 byte,
+  SHA-256 `3B06CADCCA7BD1E2EB0A402CF672AC0E227E54D95F75968203A7595F2916907D`.
+  Stamp sạch, payload contract đạt, artifact `NotSigned` và không chứa `tar`,
+  `image-size`, state DB, `.env`, credentials hoặc dữ liệu cá nhân.
+- Artifact cuối nay chạy qua Application Control. Renderer đóng gói + backend
+  mã cuối khởi động khỏe trên `HERMES_HOME` cô lập, tạo 0 phiên và giữ
+  `journal_mode=delete` với SQLite 3.49.1. Fresh bootstrap thuần dừng ở 404 vì
+  stamp `4148a5546` là commit cục bộ chưa có trên GitHub; không thay stamp hoặc
+  push để lách cổng ghim commit.
+- Kiểm thử mục tiêu đạt; typecheck/build/lint tệp đổi đạt; `npm audit` trả 0.
+  UI đầy đủ đạt 3.680/3.687 ở lượt song song và cả 7 ca timeout/chồng DOM đều
+  đạt khi chạy riêng. Electron đạt 993/1.023; 27 ca POSIX/quyền/timing không phù
+  hợp Windows vẫn là lỗi nền và không thuộc lát cắt.
 - Website production build locale `en` đạt; typecheck website còn lỗi nền
   TypeScript 6/Docusaurus/JSX và dữ liệu user stories, không thuộc lát cắt.
 - Quyết định: **NO-GO** cho phát hành công khai/thử nghiệm rộng. Còn thiếu runner
-  GitHub thật cho `vi-v*`, fresh smoke artifact Windows cuối, macOS Apple Silicon
-  thật và Linux x64 thật. Xem `docs/release-vi-v0.20.0-15-go-no-go.md`.
+  GitHub thật cho `vi-v*`, fresh bootstrap artifact cuối sau khi commit được
+  phép xuất hiện trên GitHub, macOS Apple Silicon thật và Linux x64 thật. Xem
+  `docs/release-vi-v0.20.0-15-go-no-go.md`.
 
 ## Cập nhật 2026-08-15 — chuẩn bị checkpoint vi-v0.20.0-15
 
@@ -27,8 +41,9 @@
 - Nâng runtime `cryptography` từ `48.0.1` lên `50.0.0`, là sàn chung đã vá
   CVE-2026-69247, CVE-2026-69248 và CVE-2026-69249. Môi trường cô lập cài thật
   tập `[all]`, DingTalk, Teams, Azure và dev; 174 regression tests đạt.
-- Ép toàn cây Node build/optional lên `tar 7.5.22`; `npm ci`, `npm rebuild
-  get-windows`, sáu test staging Windows và bảy test packaging matrix đạt.
+- Ép toàn cây Node build/optional lên `tar 7.5.22`; `npm ci` và
+  `npm rebuild get-windows` đạt; sáu test staging Windows và bảy test packaging
+  matrix đạt.
 - Nâng `nanoid` website lên `3.3.18`. OSV Scanner 2.3.8 hiện chỉ còn hai cảnh
   báo `image-size 2.0.2` website-only chưa có fixed version; `cryptography`,
   `tar` và `nanoid` đã biến mất khỏi kết quả quét cục bộ.
