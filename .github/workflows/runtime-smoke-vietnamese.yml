@@ -11,6 +11,13 @@ on:
         description: 'SHA-256 của SHA256SUMS.txt trong draft'
         required: true
         type: string
+      release_class:
+        description: 'Lớp phát hành phải khớp provenance của draft'
+        required: true
+        type: choice
+        options:
+          - community-prerelease
+          - stable
 
 permissions:
   contents: read
@@ -62,7 +69,7 @@ jobs:
           node -e "const fs=require('fs'),c=require('crypto'); const h=p=>c.createHash('sha256').update(fs.readFileSync(p)).digest('hex'); if(h('candidate/SHA256SUMS.txt')!==process.env.EXPECTED_MANIFEST_SHA) process.exit(1); const line=fs.readFileSync('candidate/SHA256SUMS.txt','utf8').split(/\r?\n/).find(x=>x.endsWith('  '+process.env.ARTIFACT)); if(!line || h('candidate/'+process.env.ARTIFACT)!==line.slice(0,64)) process.exit(1)"
 
       - name: Xác minh Authenticode
-        if: runner.os == 'Windows'
+        if: runner.os == 'Windows' && inputs.release_class == 'stable'
         shell: powershell
         env:
           ARTIFACT: ${{ matrix.artifact }}
@@ -70,8 +77,18 @@ jobs:
           $signature = Get-AuthenticodeSignature -LiteralPath (Join-Path candidate $env:ARTIFACT)
           if ($signature.Status -ne 'Valid') { throw "Authenticode is $($signature.Status), not Valid" }
 
+      - name: Ghi nhận Windows unsigned cho community prerelease
+        if: runner.os == 'Windows' && inputs.release_class == 'community-prerelease'
+        shell: powershell
+        env:
+          ARTIFACT: ${{ matrix.artifact }}
+        run: |
+          $signature = Get-AuthenticodeSignature -LiteralPath (Join-Path candidate $env:ARTIFACT)
+          if ($signature.Status -eq 'Valid') { throw 'Community prerelease unexpectedly contains a signed installer' }
+          Write-Warning "Unsigned community prerelease: Authenticode=$($signature.Status)"
+
       - name: Xác minh Developer ID, Gatekeeper và stapling
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && inputs.release_class == 'stable'
         shell: bash
         env:
           ARTIFACT: ${{ matrix.artifact }}
@@ -82,6 +99,25 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$app"
           spctl --assess --type execute --verbose=4 "$app"
           xcrun stapler validate "$app"
+          hdiutil detach "$mount_point"
+
+      - name: Ghi nhận macOS chưa notarize cho community prerelease
+        if: runner.os == 'macOS' && inputs.release_class == 'community-prerelease'
+        shell: bash
+        env:
+          ARTIFACT: ${{ matrix.artifact }}
+        run: |
+          mount_point="$(mktemp -d)"
+          hdiutil attach "candidate/$ARTIFACT" -nobrowse -readonly -mountpoint "$mount_point"
+          app="$(find "$mount_point" -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "$app"
+          codesign --display --verbose=4 "$app" 2>&1 || true
+          spctl --assess --type execute --verbose=4 "$app" 2>&1 || true
+          if xcrun stapler validate "$app"; then
+            echo "::error::community prerelease unexpectedly contains a stapled notarization ticket"
+            hdiutil detach "$mount_point"
+            exit 1
+          fi
           hdiutil detach "$mount_point"
 
   evidence:
@@ -109,6 +145,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
           MANIFEST_SHA: ${{ inputs.sha256sums_sha256 }}
+          RELEASE_CLASS: ${{ inputs.release_class }}
         run: |
           candidate_commit="$(git rev-parse HEAD)"
           test "$candidate_commit" = "$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
@@ -118,6 +155,7 @@ jobs:
             "$TAG" \
             "$candidate_commit" \
             "$MANIFEST_SHA" \
+            "$RELEASE_CLASS" \
             > release-evidence.json
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

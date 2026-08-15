@@ -1,31 +1,33 @@
-import fs from "node:fs"
-import path from "node:path"
-import { fileURLToPath } from "node:url"
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export const RELEASE_PLATFORMS = Object.freeze([
-  "windows-x64",
-  "windows-arm64",
-  "macos-arm64",
-  "macos-x64",
-  "linux-x64",
-  "linux-arm64",
+  'windows-x64',
+  'windows-arm64',
+  'macos-arm64',
+  'macos-x64',
+  'linux-x64',
+  'linux-arm64'
 ])
 
 export const REQUIRED_RUNTIME_GATES = Object.freeze([
-  "architecture",
-  "residentRuntime",
-  "firstRunWithoutDeveloperTools",
-  "gateway",
-  "onboarding",
-  "sessionCreate",
-  "safeTool",
-  "persistenceAfterRestart",
-  "updateFromPrevious",
-  "repair",
-  "uninstallKeepData",
-  "uninstallDeleteData",
-  "rollback",
+  'architecture',
+  'residentRuntime',
+  'firstRunWithoutDeveloperTools',
+  'gateway',
+  'onboarding',
+  'sessionCreate',
+  'safeTool',
+  'persistenceAfterRestart',
+  'updateFromPrevious',
+  'repair',
+  'uninstallKeepData',
+  'uninstallDeleteData',
+  'rollback'
 ])
+
+export const RELEASE_CLASSES = Object.freeze(['community-prerelease', 'stable'])
 
 export function parseChecksumManifest(text) {
   const entries = new Map()
@@ -39,21 +41,28 @@ export function parseChecksumManifest(text) {
 }
 
 export function validateReleaseEvidence(evidence, checksumText, expected = {}) {
-  if (!evidence || evidence.schemaVersion !== 1) throw new Error("release evidence must use schemaVersion 1")
+  if (!evidence || evidence.schemaVersion !== 1) throw new Error('release evidence must use schemaVersion 1')
   if (expected.tag && evidence.tag !== expected.tag) throw new Error(`evidence tag mismatch: ${evidence.tag}`)
-  if (!/^[0-9a-f]{40}$/.test(evidence.commit ?? "")) throw new Error("evidence commit must be a full Git SHA")
+  if (!/^[0-9a-f]{40}$/.test(evidence.commit ?? '')) throw new Error('evidence commit must be a full Git SHA')
   if (expected.commit && evidence.commit !== expected.commit) {
     throw new Error(`evidence commit mismatch: ${evidence.commit}`)
   }
   if (expected.sha256sumsSha256 && evidence.sha256sumsSha256 !== expected.sha256sumsSha256) {
-    throw new Error("evidence SHA256SUMS digest does not match the promoted manifest")
+    throw new Error('evidence SHA256SUMS digest does not match the promoted manifest')
+  }
+  if (!RELEASE_CLASSES.includes(evidence.releaseClass)) {
+    throw new Error(`unsupported release class: ${evidence.releaseClass}`)
+  }
+  if (expected.releaseClass && evidence.releaseClass !== expected.releaseClass) {
+    throw new Error(`evidence release class mismatch: ${evidence.releaseClass}`)
   }
   const checksums = parseChecksumManifest(checksumText)
 
   for (const platform of RELEASE_PLATFORMS) {
     const record = evidence.platforms?.[platform]
-    if (!record || record.decision !== "GO") throw new Error(`${platform}: decision is not GO`)
-    if (!record.machine || !record.osVersion || !record.arch) throw new Error(`${platform}: machine evidence is incomplete`)
+    if (!record || record.decision !== 'GO') throw new Error(`${platform}: decision is not GO`)
+    if (!record.machine || !record.osVersion || !record.arch)
+      throw new Error(`${platform}: machine evidence is incomplete`)
     if (!record.artifact || checksums.get(record.artifact) !== record.sha256) {
       throw new Error(`${platform}: artifact SHA-256 is absent from or disagrees with SHA256SUMS.txt`)
     }
@@ -61,41 +70,71 @@ export function validateReleaseEvidence(evidence, checksumText, expected = {}) {
       if (record.gates?.[gate] !== true) throw new Error(`${platform}: missing runtime gate ${gate}`)
     }
     if (!Array.isArray(record.logs) || record.logs.length === 0) throw new Error(`${platform}: no logs recorded`)
-    if (!Array.isArray(record.screenshots) || record.screenshots.length === 0) throw new Error(`${platform}: no screenshots recorded`)
+    if (!Array.isArray(record.screenshots) || record.screenshots.length === 0)
+      throw new Error(`${platform}: no screenshots recorded`)
 
-    if (platform.startsWith("windows-")) {
-      if (record.signing?.installerAuthenticode !== "Valid") {
+    if (platform.startsWith('windows-') && evidence.releaseClass === 'stable') {
+      if (record.signing?.installerAuthenticode !== 'Valid') {
         throw new Error(`${platform}: installer Authenticode is not Valid`)
       }
-      if (record.signing?.installedAppAuthenticode !== "Valid") {
+      if (record.signing?.installedAppAuthenticode !== 'Valid') {
         throw new Error(`${platform}: installed Hermes.exe Authenticode is not Valid`)
       }
-      const installerPublisher = String(record.signing?.installerPublisher ?? "").trim()
-      const installedAppPublisher = String(record.signing?.installedAppPublisher ?? "").trim()
+      const installerPublisher = String(record.signing?.installerPublisher ?? '').trim()
+      const installedAppPublisher = String(record.signing?.installedAppPublisher ?? '').trim()
       if (!installerPublisher || installerPublisher !== installedAppPublisher) {
         throw new Error(`${platform}: installer and installed Hermes.exe publisher evidence does not match`)
       }
     }
-    if (platform.startsWith("macos-") &&
-        !(record.signing?.developerId === true && record.signing?.notarized === true && record.signing?.stapled === true)) {
+    if (platform.startsWith('windows-') && evidence.releaseClass === 'community-prerelease') {
+      if (
+        record.signing?.installerAuthenticode !== 'NotSigned' ||
+        record.signing?.installedAppAuthenticode !== 'NotSigned'
+      ) {
+        throw new Error(`${platform}: community prerelease must explicitly record unsigned Windows binaries`)
+      }
+      if (record.signing?.userWarningVerified !== true) {
+        throw new Error(`${platform}: unsigned Windows warning behavior was not verified`)
+      }
+    }
+    if (
+      platform.startsWith('macos-') &&
+      evidence.releaseClass === 'stable' &&
+      !(record.signing?.developerId === true && record.signing?.notarized === true && record.signing?.stapled === true)
+    ) {
       throw new Error(`${platform}: Developer ID/notarization/stapling evidence is incomplete`)
+    }
+    if (platform.startsWith('macos-') && evidence.releaseClass === 'community-prerelease') {
+      if (
+        record.signing?.developerId !== false ||
+        record.signing?.notarized !== false ||
+        record.signing?.stapled !== false
+      ) {
+        throw new Error(`${platform}: community prerelease must explicitly record missing Apple trust artifacts`)
+      }
+      if (record.signing?.userWarningVerified !== true) {
+        throw new Error(`${platform}: unsigned macOS warning behavior was not verified`)
+      }
     }
   }
   return evidence
 }
 
 function main() {
-  const [evidencePath, checksumPath, tag, commit, manifestSha] = process.argv.slice(2)
-  if (!evidencePath || !checksumPath || !tag || !commit || !manifestSha) {
-    throw new Error("usage: validate-release-evidence.mjs <evidence.json> <SHA256SUMS.txt> <tag> <commit> <manifest-sha256>")
+  const [evidencePath, checksumPath, tag, commit, manifestSha, releaseClass] = process.argv.slice(2)
+  if (!evidencePath || !checksumPath || !tag || !commit || !manifestSha || !releaseClass) {
+    throw new Error(
+      'usage: validate-release-evidence.mjs <evidence.json> <SHA256SUMS.txt> <tag> <commit> <manifest-sha256> <release-class>'
+    )
   }
-  const evidence = JSON.parse(fs.readFileSync(path.resolve(evidencePath), "utf8"))
-  validateReleaseEvidence(evidence, fs.readFileSync(path.resolve(checksumPath), "utf8"), {
+  const evidence = JSON.parse(fs.readFileSync(path.resolve(evidencePath), 'utf8'))
+  validateReleaseEvidence(evidence, fs.readFileSync(path.resolve(checksumPath), 'utf8'), {
     tag,
     commit,
     sha256sumsSha256: manifestSha,
+    releaseClass
   })
-  process.stdout.write(JSON.stringify(evidence, null, 2) + "\n")
+  process.stdout.write(JSON.stringify(evidence, null, 2) + '\n')
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

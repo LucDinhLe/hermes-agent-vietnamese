@@ -10,6 +10,14 @@ on:
         description: 'Nhãn ứng viên đã tồn tại, ví dụ vi-v0.20.0-15'
         required: true
         type: string
+      release_class:
+        description: 'Stable bắt buộc ký; community-prerelease cho phép unsigned và luôn công bố dạng prerelease'
+        required: true
+        default: community-prerelease
+        type: choice
+        options:
+          - community-prerelease
+          - stable
 
 concurrency:
   group: hermes-vietnamese-candidate-${{ inputs.tag || github.ref_name }}
@@ -27,6 +35,7 @@ jobs:
     outputs:
       tag: ${{ steps.candidate.outputs.tag }}
       commit: ${{ steps.candidate.outputs.commit }}
+      release_class: ${{ steps.candidate.outputs.release_class }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,8 +48,13 @@ jobs:
         shell: bash
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_CLASS: ${{ inputs.release_class || 'community-prerelease' }}
         run: |
           node -e "import('./scripts/vietnamese-release.mjs').then(({parseVietnameseReleaseTag}) => parseVietnameseReleaseTag(process.env.RELEASE_TAG))"
+          case "$RELEASE_CLASS" in
+            community-prerelease|stable) ;;
+            *) echo "::error::unsupported release class: $RELEASE_CLASS"; exit 1 ;;
+          esac
           git fetch --force origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
           tag_commit="$(git rev-list -n 1 "$RELEASE_TAG")"
           head_commit="$(git rev-parse HEAD)"
@@ -49,6 +63,7 @@ jobs:
           git diff --cached --quiet
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "commit=$head_commit" >> "$GITHUB_OUTPUT"
+          echo "release_class=$RELEASE_CLASS" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -158,6 +173,7 @@ jobs:
       HERMES_DESKTOP_BUNDLED: '1'
       HERMES_PAYLOAD_TAG: ${{ needs.verify.outputs.tag }}
       HERMES_PAYLOAD_PYTHON: '3.11'
+      HERMES_RELEASE_CLASS: ${{ needs.verify.outputs.release_class }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -208,7 +224,7 @@ jobs:
           printf 'OPENSSL_DIR=C:\\vcpkg\\installed\\arm64-windows-static-md\nOPENSSL_STATIC=1\n' >> "$GITHUB_ENV"
 
       - name: Bắt buộc cấu hình ký và công chứng Apple
-        if: matrix.platform == 'darwin'
+        if: matrix.platform == 'darwin' && needs.verify.outputs.release_class == 'stable'
         shell: bash
         env:
           CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
@@ -226,11 +242,12 @@ jobs:
       - name: Dựng runtime và gói native
         shell: bash
         env:
-          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
-          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          CSC_LINK: ${{ needs.verify.outputs.release_class == 'stable' && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ needs.verify.outputs.release_class == 'stable' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          APPLE_API_KEY: ${{ needs.verify.outputs.release_class == 'stable' && secrets.APPLE_API_KEY || '' }}
+          APPLE_API_KEY_ID: ${{ needs.verify.outputs.release_class == 'stable' && secrets.APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ needs.verify.outputs.release_class == 'stable' && secrets.APPLE_API_ISSUER || '' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ needs.verify.outputs.release_class == 'stable' && 'true' || 'false' }}
           HERMES_PAYLOAD_BUILD_PYTHON: ${{ matrix.platform == 'win32' && 'python' || 'python3' }}
         run: |
           node scripts/build-bundled-desktop.mjs --tag="$HERMES_PAYLOAD_TAG" --no-install
@@ -247,7 +264,7 @@ jobs:
           ${{ matrix.platform }} ${{ matrix.arch }} apps/desktop/release release-assets
 
       - name: Bắt buộc cấu hình SignPath cho Windows
-        if: matrix.platform == 'win32'
+        if: matrix.platform == 'win32' && needs.verify.outputs.release_class == 'stable'
         shell: bash
         env:
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -264,7 +281,7 @@ jobs:
 
       - name: Upload bộ cài Windows chưa ký cho SignPath
         id: upload-unsigned-windows
-        if: matrix.platform == 'win32'
+        if: matrix.platform == 'win32' && needs.verify.outputs.release_class == 'stable'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: unsigned-${{ matrix.id }}-${{ needs.verify.outputs.commit }}
@@ -274,7 +291,7 @@ jobs:
           retention-days: 1
 
       - name: Ký Authenticode bằng SignPath
-        if: matrix.platform == 'win32'
+        if: matrix.platform == 'win32' && needs.verify.outputs.release_class == 'stable'
         uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -289,7 +306,7 @@ jobs:
           output-artifact-directory: signed-windows
 
       - name: Thay bằng đúng byte đã ký và xác minh Authenticode
-        if: matrix.platform == 'win32'
+        if: matrix.platform == 'win32' && needs.verify.outputs.release_class == 'stable'
         shell: powershell
         run: |
           $expected = @(Get-ChildItem -LiteralPath release-assets -Filter 'Hermes-Vietnamese-Windows-*-Setup.exe')
@@ -316,12 +333,18 @@ jobs:
             echo "commit=${{ needs.verify.outputs.commit }}"
             echo "platform=${{ matrix.platform }}"
             echo "arch=${{ matrix.arch }}"
+            echo "release_class=$HERMES_RELEASE_CLASS"
             if [[ "${{ matrix.platform }}" == "win32" ]]; then
               powershell.exe -NoProfile -Command "Get-ChildItem release-assets/*.exe | ForEach-Object { Get-AuthenticodeSignature -LiteralPath \$_.FullName | Select-Object Path,Status,StatusMessage,SignerCertificate } | ConvertTo-Json -Depth 4"
-            elif [[ "${{ matrix.platform }}" == "darwin" ]]; then
+            elif [[ "${{ matrix.platform }}" == "darwin" && "$HERMES_RELEASE_CLASS" == "stable" ]]; then
               codesign --verify --deep --strict --verbose=2 apps/desktop/release/mac*/Hermes.app 2>&1
               spctl --assess --type execute --verbose=4 apps/desktop/release/mac*/Hermes.app 2>&1
               xcrun stapler validate apps/desktop/release/mac*/Hermes.app 2>&1
+            elif [[ "${{ matrix.platform }}" == "darwin" ]]; then
+              echo "signing=unsigned-community-prerelease"
+              codesign --display --verbose=4 apps/desktop/release/mac*/Hermes.app 2>&1 || true
+              spctl --assess --type execute --verbose=4 apps/desktop/release/mac*/Hermes.app 2>&1 || true
+              xcrun stapler validate apps/desktop/release/mac*/Hermes.app 2>&1 || true
             else
               echo "signing=sha256-only"
             fi
@@ -356,11 +379,12 @@ jobs:
         shell: bash
         run: |
           node apps/desktop/scripts/collect-community-artifacts.mjs checksums release-assets SHA256SUMS.txt
-          node -e "const fs=require('fs'); fs.writeFileSync('release-assets/candidate-provenance.json', JSON.stringify({tag:process.env.TAG,commit:process.env.COMMIT,runId:process.env.RUN_ID,workflow:process.env.WORKFLOW},null,2)+'\n')"
+          node -e "const fs=require('fs'); fs.writeFileSync('release-assets/candidate-provenance.json', JSON.stringify({tag:process.env.TAG,commit:process.env.COMMIT,releaseClass:process.env.RELEASE_CLASS,runId:process.env.RUN_ID,workflow:process.env.WORKFLOW},null,2)+'\n')"
           sha256sum release-assets/candidate-provenance.json >> release-assets/SHA256SUMS.txt
         env:
           TAG: ${{ needs.verify.outputs.tag }}
           COMMIT: ${{ needs.verify.outputs.commit }}
+          RELEASE_CLASS: ${{ needs.verify.outputs.release_class }}
           RUN_ID: ${{ github.run_id }}
           WORKFLOW: ${{ github.workflow }}
 
@@ -370,12 +394,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.verify.outputs.tag }}
           COMMIT: ${{ needs.verify.outputs.commit }}
+          RELEASE_CLASS: ${{ needs.verify.outputs.release_class }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "::error::release $TAG already exists; use a new candidate tag instead of replacing accepted bytes"
             exit 1
           fi
-          gh release create "$TAG" --verify-tag --target "$COMMIT" --draft --title "$TAG" --notes-file .github/release-notes-vietnamese.md
+          if [[ "$RELEASE_CLASS" == "community-prerelease" ]]; then
+            gh release create "$TAG" --verify-tag --target "$COMMIT" --draft --prerelease --title "$TAG" --notes-file .github/release-notes-vietnamese.md
+          else
+            gh release create "$TAG" --verify-tag --target "$COMMIT" --draft --title "$TAG" --notes-file .github/release-notes-vietnamese.md
+          fi
           gh release upload "$TAG" release-assets/*
 
       - name: Tải lại và đối chiếu byte đã staging
@@ -383,10 +412,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.verify.outputs.tag }}
+          RELEASE_CLASS: ${{ needs.verify.outputs.release_class }}
         run: |
           mkdir uploaded
           gh release download "$TAG" --dir uploaded
           cp uploaded/SHA256SUMS.txt uploaded/SHA256SUMS.verify
           cd uploaded
           sha256sum --check SHA256SUMS.verify
-          test "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = "true"
+          release_json="$(gh release view "$TAG" --json isDraft,isPrerelease)"
+          test "$(jq -r .isDraft <<<"$release_json")" = "true"
+          expected_prerelease=false
+          [[ "$RELEASE_CLASS" == "community-prerelease" ]] && expected_prerelease=true
+          test "$(jq -r .isPrerelease <<<"$release_json")" = "$expected_prerelease"

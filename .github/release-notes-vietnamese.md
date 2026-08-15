@@ -2,19 +2,19 @@
 
 Bản cộng đồng đa nền tảng với giao diện tiếng Việt mặc định và nút chuyển nhanh VI/EN. Tên model, thương hiệu, giao thức, câu lệnh và nội dung do AI agent sinh ra được giữ nguyên.
 
-> Bản draft chỉ là ứng viên nội bộ. Chỉ tải bản public sau khi chữ ký, SHA-256 và kiểm thử cài đặt trên đúng artifact đều đạt.
+> Đây là bản thử nghiệm cộng đồng **chưa ký số**. Chỉ tải bản public sau khi SHA-256 và kiểm thử cài đặt trên đúng artifact đều đạt. Windows SmartScreen/Application Control và macOS Gatekeeper có thể cảnh báo hoặc chặn; không tắt cơ chế bảo vệ hệ điều hành để cài.
 
 ### Chọn đúng tệp
 
-| Máy đang dùng | Tải trực tiếp |
-| --- | --- |
-| Windows 10/11 x64 | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-15/Hermes-Vietnamese-Windows-x64-Setup.exe) |
-| Windows 10/11 ARM64 | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-15/Hermes-Vietnamese-Windows-arm64-Setup.exe) |
+| Máy đang dùng           | Tải trực tiếp                                                                                                                                                |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Windows 10/11 x64       | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-15/Hermes-Vietnamese-Windows-x64-Setup.exe)           |
+| Windows 10/11 ARM64     | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-15/Hermes-Vietnamese-Windows-arm64-Setup.exe)       |
 | Mac chip Apple M-series | [Bộ cài macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-15/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
-| Mac chip Intel | [Bộ cài macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-15/Hermes-Vietnamese-macOS-Intel.dmg) |
-| Ubuntu/Debian | [Chọn `.deb` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài) |
-| Fedora/RHEL | [Chọn `.rpm` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài) |
-| Linux khác | [Chọn `.AppImage` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài) |
+| Mac chip Intel          | [Bộ cài macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-15/Hermes-Vietnamese-macOS-Intel.dmg)                 |
+| Ubuntu/Debian           | [Chọn `.deb` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                                   |
+| Fedora/RHEL             | [Chọn `.rpm` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                                   |
+| Linux khác              | [Chọn `.AppImage` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                              |
 
 ### Sửa lỗi và cải thiện
 
@@ -27,11 +27,11 @@ Bản cộng đồng đa nền tảng với giao diện tiếng Việt mặc đ�
 - Trình cập nhật đọc đúng release `vi-v*` của fork và giữ lịch sử, cấu hình, đăng nhập sau khi cập nhật/khởi động lại.
 - Nâng `cryptography` lên `50.0.0`, đóng CVE-2026-69247, CVE-2026-69248 và CVE-2026-69249 trong runtime.
 - Windows ARM64 có `agent-browser` ARM64 build từ source upstream đã khóa commit và SHA-256; không dùng helper x64 giả native.
-- Quy trình build/staging tách khỏi public promotion. Promotion chỉ chạy sau khi đúng byte đã qua smoke, chữ ký và bằng chứng trên đủ sáu nền tảng.
+- Quy trình build/staging tách khỏi public promotion. Promotion chỉ chạy sau khi đúng byte đã qua smoke và có bằng chứng trên đủ sáu nền tảng.
 
 ### Bảo mật, chữ ký và dữ liệu
 
-- Windows public artifact phải có Authenticode hợp lệ; macOS public artifact phải có Developer ID, notarization và stapling hợp lệ. Workflow tự chặn public nếu thiếu bất kỳ điều kiện nào.
+- Bản `vi-v0.20.0-15` được phát hành theo lớp **community prerelease**: Windows chưa có Authenticode; macOS chưa có Developer ID, notarization hoặc stapling. Workflow bắt buộc giữ nhãn prerelease, ghi nhận cảnh báo bảo mật thật trên từng hệ điều hành và không cho phép quảng cáo bản này là stable.
 - Đối chiếu tệp tải về với `SHA256SUMS.txt`. Không dùng artifact nếu SHA-256 không khớp.
 - Bản dựng không chứa tài khoản, OAuth token, khóa API, lịch sử trò chuyện hoặc hồ sơ vận hành của người đóng gói.
 - Thông tin đăng nhập và dữ liệu của mỗi người được lưu riêng trên máy của họ. Nội dung chỉ được gửi tới nhà cung cấp AI/công cụ mà người dùng chủ động cấu hình và sử dụng.

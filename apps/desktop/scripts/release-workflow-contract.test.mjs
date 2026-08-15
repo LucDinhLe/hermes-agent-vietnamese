@@ -3,14 +3,8 @@ import { readFileSync } from 'node:fs'
 
 import { test } from 'vitest'
 
-const candidate = readFileSync(
-  new URL('../../../.github/workflows/release-vietnamese.yml', import.meta.url),
-  'utf8'
-)
-const promotion = readFileSync(
-  new URL('../../../.github/workflows/promote-vietnamese.yml', import.meta.url),
-  'utf8'
-)
+const candidate = readFileSync(new URL('../../../.github/workflows/release-vietnamese.yml', import.meta.url), 'utf8')
+const promotion = readFileSync(new URL('../../../.github/workflows/promote-vietnamese.yml', import.meta.url), 'utf8')
 const runtimeSmoke = readFileSync(
   new URL('../../../.github/workflows/runtime-smoke-vietnamese.yml', import.meta.url),
   'utf8'
@@ -18,7 +12,14 @@ const runtimeSmoke = readFileSync(
 const jsTests = readFileSync(new URL('../../../.github/workflows/js-tests.yml', import.meta.url), 'utf8')
 
 test('candidate workflow builds the complete resident runtime on every advertised native target', () => {
-  for (const runner of ['windows-2025', 'windows-11-arm', 'macos-15', 'macos-15-intel', 'ubuntu-24.04', 'ubuntu-24.04-arm']) {
+  for (const runner of [
+    'windows-2025',
+    'windows-11-arm',
+    'macos-15',
+    'macos-15-intel',
+    'ubuntu-24.04',
+    'ubuntu-24.04-arm'
+  ]) {
     assert.match(candidate, new RegExp(runner.replaceAll('.', '\\.')))
   }
   assert.match(candidate, /HERMES_DESKTOP_BUNDLED: '1'/)
@@ -31,7 +32,9 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /SIGNPATH_ARTIFACT_CONFIGURATION_SLUG/)
   assert.match(candidate, /skip-decompress: true/)
   assert.match(candidate, /Bắt buộc cấu hình ký và công chứng Apple/)
-  assert.doesNotMatch(candidate, /CSC_IDENTITY_AUTO_DISCOVERY/)
+  assert.match(candidate, /CSC_IDENTITY_AUTO_DISCOVERY/)
+  assert.match(candidate, /community-prerelease/)
+  assert.match(candidate, /release_class/)
   assert.ok(
     candidate.indexOf('Thay bằng đúng byte đã ký') < candidate.indexOf('Ghi lại checksum sau ký'),
     'Windows checksum must be regenerated after replacing the unsigned installer'
@@ -43,7 +46,7 @@ test('candidate workflow builds the complete resident runtime on every advertise
 test('candidate workflow can only create a draft and never promotes it', () => {
   assert.match(candidate, /gh release create "\$TAG" --verify-tag --target "\$COMMIT" --draft/)
   assert.doesNotMatch(candidate, /--draft=false/)
-  assert.doesNotMatch(candidate, /--prerelease/)
+  assert.match(candidate, /--draft --prerelease/)
 })
 
 test('promotion is separate and requires exact manifest plus successful runtime smoke evidence', () => {
@@ -53,7 +56,9 @@ test('promotion is separate and requires exact manifest plus successful runtime 
   assert.match(promotion, /release-evidence\.json/)
   assert.match(promotion, /e\.commit!==process\.env\.CANDIDATE_COMMIT/)
   assert.match(promotion, /\.conclusion.*success/)
+  assert.match(promotion, /gh release edit "\$TAG" --draft=false --prerelease=true/)
   assert.match(promotion, /gh release edit "\$TAG" --draft=false --prerelease=false/)
+  assert.match(promotion, /releaseClass!==process\.env\.RELEASE_CLASS/)
 })
 
 test('runtime smoke refuses missing platform, update, persistence, signing, or real-machine evidence', () => {
@@ -62,6 +67,8 @@ test('runtime smoke refuses missing platform, update, persistence, signing, or r
   assert.match(runtimeSmoke, /macos-15-intel/)
   assert.match(runtimeSmoke, /validate-release-evidence\.mjs/)
   assert.match(runtimeSmoke, /release-runtime-evidence\.json/)
+  assert.match(runtimeSmoke, /community-prerelease/)
+  assert.match(runtimeSmoke, /release_class/)
   assert.match(runtimeSmoke, /candidate_commit="\$\(git rev-parse HEAD\)"/)
 })
 
