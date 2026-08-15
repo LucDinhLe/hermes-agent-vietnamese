@@ -1,5 +1,37 @@
 # Tiến độ
 
+## Cập nhật 2026-08-15 — tab Browser và checkpoint công khai v15
+
+- Commit `04345ecdf` thay Browser một-bề-mặt bằng thanh tab thật trong panel
+  phải: `+` tạo webview độc lập, `×` đóng từng tab, chuyển tab không tháo
+  webview, và đóng tab cuối tự trở về chế độ Tệp. URL do agent mở điều hướng tab
+  Browser đang chọn thay vì tự sinh tab ngoài ý muốn.
+- Bỏ nhãn chữ **Hệ thống tệp** ở đầu panel; nút biểu tượng Tệp vẫn giữ tooltip,
+  trạng thái chọn và tên trợ năng. Bổ sung bản dịch nhãn tab mới cho toàn bộ
+  locale Desktop.
+- 50/50 test trực tiếp cho store/tab/đọc trang/fit Browser đạt; typecheck và
+  lint đạt. UI đầy đủ đạt 421/424 tệp, 3.690/3.697 phép thử ở lượt tải cao; cả 7
+  ca trong 3 tệp timeout/chồng DOM đều đạt khi chạy riêng tuần tự.
+- Hợp đồng CVE/lock/workflow đạt 10/10; `npm audit --omit=optional` trả 0. Bộ
+  Electron mục tiêu đạt 124/128; 4 ca còn lại là quyền POSIX, đường dẫn Linux và
+  bash không có trên Windows, không đi qua mã thay đổi này.
+- Windows x64 build từ `04345ecdf` đạt. Installer 121.419.758 byte, SHA-256
+  `46D4EAD85DE96610232B4085047205A405BA9FA7810169661841D5B262A37804`;
+  app đã cài có SHA-256
+  `1BF43E7D75C000B4EFD6C358DFF34168519C2BA285B5E88B7C7E905D7044A7D6`.
+  Stamp sạch, đúng commit công khai trên nhánh; cả hai executable `NotSigned`.
+- Đã gỡ bản per-user cũ. Lượt cài nâng quyền đầu tiên chọn nhầm all-users nên đã
+  gỡ ngay và cài lại thành công bằng `/currentuser`; không xóa, nhập hoặc khôi
+  phục hồ sơ Hermes. Bản cài mới nằm đúng `%LOCALAPPDATA%\\Programs\\Hermes`.
+- Nhánh `chore/prepare-vi-v0.20.0-15` đã push. Tuyến mở tự động của đúng
+  executable mới bị Enterprise Application Control chặn vì hash chưa ký; công
+  cụ quan sát cửa sổ Windows cũng bị từ chối quyền. Không đổi hoặc lách chính
+  sách. Fresh bootstrap/UI máy thật của artifact cuối vì vậy chưa có bằng chứng
+  đạt.
+- Quyết định vẫn **NO-GO** cho merge/tag/release. Còn thiếu Windows smoke sau
+  khi executable được cho phép/ký, job GitHub thực với tag `vi-v*`, macOS Apple
+  Silicon thật và Linux x64 thật.
+
 ## Cập nhật 2026-08-15 — mở rộng và tự fit Trình duyệt ở panel phải
 
 - Bỏ giới hạn cứng `20rem` (320 px) của panel Tệp/Trình duyệt. Panel nay có thể
