@@ -99,6 +99,7 @@ def test_install_sh_clears_unmerged_index_then_stashes(tmp_path: Path) -> None:
     script = (
         "set -e\n"
         'log_info() { echo "INFO: $*"; }\n'
+        "use_public_https_origin_for_managed_install() { :; }\n"
         f'INSTALL_DIR="{repo}"\n'
         f"{_extract_install_sh_function('discard_update_lockfile_churn')}\n"
         "run() {\n"
