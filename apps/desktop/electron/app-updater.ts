@@ -85,6 +85,42 @@ export function describeFeedCheck(
 
 let cachedUpdater: AppUpdater | null = null
 
+type ConfigurableAutoUpdater = Pick<
+  AppUpdater,
+  'allowPrerelease' | 'autoDownload' | 'autoInstallOnAppQuit' | 'disableDifferentialDownload'
+>
+
+/**
+ * Apply the release-safety settings shared by every packaged desktop update.
+ *
+ * Full installers are deliberate. Reconstructing a large NSIS/AppImage update
+ * from old and new blocks creates bytes that were never uploaded, hashed, or
+ * smoke-tested by the release workflow. Downloading the complete asset keeps
+ * the updater on the exact candidate bytes that passed promotion.
+ */
+export function configureAutoUpdater(updater: ConfigurableAutoUpdater): void {
+  updater.autoDownload = false
+  updater.autoInstallOnAppQuit = true
+  updater.disableDifferentialDownload = true
+  // Community revision numbers are encoded as SemVer prerelease components
+  // (0.20.0-vi.15) even though the GitHub release itself is stable. Without
+  // this flag electron-updater filters the fork's update feed out entirely.
+  updater.allowPrerelease = true
+}
+
+/**
+ * Start the already-downloaded installer with a visible progress window and
+ * force a relaunch afterwards. `beforeInstall` lets main.ts disarm its normal
+ * quit guard before electron-updater begins closing windows.
+ */
+export function beginAppUpdateInstall(
+  updater: Pick<AppUpdater, 'quitAndInstall'>,
+  beforeInstall?: () => void
+): void {
+  beforeInstall?.()
+  updater.quitAndInstall(false, true)
+}
+
 /**
  * Lazy singleton for electron-updater's autoUpdater. The require sits inside
  * the function so thin builds and tests never pay for the module load.
@@ -98,12 +134,7 @@ export function getAutoUpdater(): AppUpdater {
 
   const { autoUpdater } = require('electron-updater') as { autoUpdater: AppUpdater }
 
-  autoUpdater.autoDownload = false
-  autoUpdater.autoInstallOnAppQuit = true
-  // Community revision numbers are encoded as SemVer prerelease components
-  // (0.20.0-vi.15) even though the GitHub release itself is stable. Without
-  // this flag electron-updater filters the fork's update feed out entirely.
-  autoUpdater.allowPrerelease = true
+  configureAutoUpdater(autoUpdater)
   cachedUpdater = autoUpdater
 
   return autoUpdater
@@ -122,7 +153,10 @@ export async function checkAppUpdate(currentVersion: string): Promise<ReturnType
  * values from electron-updater's download events. The returned promise
  * resolves after the download; quitAndInstall exits the process.
  */
-export async function applyAppUpdate(onProgress?: (percent: number) => void): Promise<{ ok: true }> {
+export async function applyAppUpdate(
+  onProgress?: (percent: number) => void,
+  beforeInstall?: () => void
+): Promise<{ ok: true }> {
   const updater = getAutoUpdater()
   const handler = onProgress ? (p: { percent: number }) => onProgress(p.percent) : null
 
@@ -141,7 +175,7 @@ export async function applyAppUpdate(onProgress?: (percent: number) => void): Pr
     }
   }
 
-  updater.quitAndInstall()
+  beginAppUpdateInstall(updater, beforeInstall)
 
   return { ok: true }
 }

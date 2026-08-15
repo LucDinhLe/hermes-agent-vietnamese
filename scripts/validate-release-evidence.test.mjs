@@ -28,7 +28,12 @@ function validEvidence() {
       logs: [`${platform}.log`],
       screenshots: [`${platform}.png`],
       signing: platform.startsWith("windows-")
-        ? { authenticode: "Valid" }
+        ? {
+            installerAuthenticode: "Valid",
+            installedAppAuthenticode: "Valid",
+            installerPublisher: "Hermes Release Test Publisher",
+            installedAppPublisher: "Hermes Release Test Publisher",
+          }
         : platform.startsWith("macos-")
           ? { developerId: true, notarized: true, stapled: true }
           : { sha256: true },
@@ -64,8 +69,16 @@ test("rejects evidence produced for another source commit", () => {
 
 test("rejects unsigned Windows, unnotarized macOS, or a mismatched artifact hash", () => {
   const unsigned = validEvidence()
-  unsigned.platforms["windows-x64"].signing.authenticode = "NotSigned"
+  unsigned.platforms["windows-x64"].signing.installerAuthenticode = "NotSigned"
   assert.throws(() => validateReleaseEvidence(unsigned, checksumText), /Authenticode/)
+
+  const unsignedInstalledApp = validEvidence()
+  unsignedInstalledApp.platforms["windows-x64"].signing.installedAppAuthenticode = "NotSigned"
+  assert.throws(() => validateReleaseEvidence(unsignedInstalledApp, checksumText), /Hermes\.exe Authenticode/)
+
+  const publisherMismatch = validEvidence()
+  publisherMismatch.platforms["windows-x64"].signing.installedAppPublisher = "Unexpected Publisher"
+  assert.throws(() => validateReleaseEvidence(publisherMismatch, checksumText), /publisher evidence does not match/)
 
   const mac = validEvidence()
   mac.platforms["macos-arm64"].signing.stapled = false

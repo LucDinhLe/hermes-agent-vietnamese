@@ -63,8 +63,18 @@ export function validateReleaseEvidence(evidence, checksumText, expected = {}) {
     if (!Array.isArray(record.logs) || record.logs.length === 0) throw new Error(`${platform}: no logs recorded`)
     if (!Array.isArray(record.screenshots) || record.screenshots.length === 0) throw new Error(`${platform}: no screenshots recorded`)
 
-    if (platform.startsWith("windows-") && record.signing?.authenticode !== "Valid") {
-      throw new Error(`${platform}: Authenticode is not Valid`)
+    if (platform.startsWith("windows-")) {
+      if (record.signing?.installerAuthenticode !== "Valid") {
+        throw new Error(`${platform}: installer Authenticode is not Valid`)
+      }
+      if (record.signing?.installedAppAuthenticode !== "Valid") {
+        throw new Error(`${platform}: installed Hermes.exe Authenticode is not Valid`)
+      }
+      const installerPublisher = String(record.signing?.installerPublisher ?? "").trim()
+      const installedAppPublisher = String(record.signing?.installedAppPublisher ?? "").trim()
+      if (!installerPublisher || installerPublisher !== installedAppPublisher) {
+        throw new Error(`${platform}: installer and installed Hermes.exe publisher evidence does not match`)
+      }
     }
     if (platform.startsWith("macos-") &&
         !(record.signing?.developerId === true && record.signing?.notarized === true && record.signing?.stapled === true)) {

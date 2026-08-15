@@ -2,7 +2,45 @@ import assert from 'node:assert/strict'
 
 import { test } from 'vitest'
 
-import { describeFeedCheck, releaseTagForAppVersion, shouldUseAppUpdater } from './app-updater'
+import {
+  beginAppUpdateInstall,
+  configureAutoUpdater,
+  describeFeedCheck,
+  releaseTagForAppVersion,
+  shouldUseAppUpdater
+} from './app-updater'
+
+test('packaged updates download the complete promoted artifact', () => {
+  const updater = {
+    allowPrerelease: false,
+    autoDownload: true,
+    autoInstallOnAppQuit: false,
+    disableDifferentialDownload: false
+  }
+
+  configureAutoUpdater(updater as any)
+
+  assert.deepEqual(updater, {
+    allowPrerelease: true,
+    autoDownload: false,
+    autoInstallOnAppQuit: true,
+    disableDifferentialDownload: true
+  })
+})
+
+test('install handoff disarms the quit guard and forces a relaunch', () => {
+  const calls: string[] = []
+
+  const updater = {
+    quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean) {
+      calls.push(`quitAndInstall:${isSilent}:${isForceRunAfter}`)
+    }
+  }
+
+  beginAppUpdateInstall(updater as any, () => calls.push('beforeInstall'))
+
+  assert.deepEqual(calls, ['beforeInstall', 'quitAndInstall:false:true'])
+})
 
 // ── shouldUseAppUpdater ─────────────────────────────────────────────
 
