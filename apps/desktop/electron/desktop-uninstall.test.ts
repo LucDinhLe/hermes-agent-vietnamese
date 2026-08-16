@@ -310,6 +310,7 @@ test('buildWindowsCleanupScript waits (bounded) for PID, runs uninstall, rmdir b
   assert.match(script, /del "%TASKLIST_TMP%" >nul 2>&1/)
   assert.doesNotMatch(script, /find "%PID%"/) // the old substring-prone form is gone
   // Removal is a retry loop (Windows releases dir handles lazily).
+  assert.match(script, /cd \/d "%~dp0"/)
   assert.match(script, /:rmloop/)
   assert.match(script, /rmdir \/s \/q "C:\\Users\\x\\AppData\\Local\\Programs\\Hermes" >nul 2>&1/)
   assert.match(script, /if %tries% geq 10 goto rmdone/)
@@ -317,21 +318,25 @@ test('buildWindowsCleanupScript waits (bounded) for PID, runs uninstall, rmdir b
 })
 
 test.skipIf(process.platform !== 'win32')(
-  'buildWindowsCleanupScript executes to completion without a detached tasklist pipe',
+  'buildWindowsCleanupScript executes to completion and removes its app tree',
   () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-uninstall-wait-'))
     const scriptPath = path.join(directory, 'cleanup.cmd')
+    const appPath = path.join(directory, 'app')
+    const agentRoot = path.join(appPath, 'resources', 'agent-payload', 'repo')
 
     try {
+      fs.mkdirSync(agentRoot, { recursive: true })
+      fs.writeFileSync(path.join(agentRoot, 'payload.txt'), 'runtime payload')
       fs.writeFileSync(
         scriptPath,
         buildWindowsCleanupScript({
           desktopPid: 2147483647,
           pythonExe: path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'where.exe'),
           pythonPath: null,
-          agentRoot: directory,
+          agentRoot,
           uninstallArgs: ['cmd.exe'],
-          appPath: null,
+          appPath,
           hermesHome: path.join(directory, 'home')
         })
       )
@@ -347,6 +352,7 @@ test.skipIf(process.platform !== 'win32')(
       assert.match(completed.stdout, /cmd\.exe/i)
       assert.equal(fs.existsSync(scriptPath), false)
       assert.equal(fs.existsSync(path.join(directory, 'cleanup-tasklist.tmp')), false)
+      assert.equal(fs.existsSync(appPath), false)
     } finally {
       fs.rmSync(directory, { recursive: true, force: true })
     }
