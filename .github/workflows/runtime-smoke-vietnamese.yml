@@ -58,7 +58,7 @@ jobs:
           ARTIFACT: ${{ matrix.artifact }}
         run: |
           mkdir candidate
-          gh release download "$TAG" --pattern "$ARTIFACT" --pattern SHA256SUMS.txt --dir candidate
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ARTIFACT" --pattern SHA256SUMS.txt --dir candidate
 
       - name: Xác minh manifest và byte
         shell: bash
@@ -137,7 +137,7 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           mkdir candidate
-          gh release download "$TAG" --pattern SHA256SUMS.txt --pattern release-runtime-evidence.json --dir candidate
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS.txt --pattern release-runtime-evidence.json --dir candidate
 
       - name: Bắt buộc đủ fresh/update/repair/uninstall/rollback trên cả sáu máy
         shell: bash

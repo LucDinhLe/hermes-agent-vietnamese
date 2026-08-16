@@ -68,8 +68,14 @@ test('promotion is separate and requires exact manifest plus successful runtime 
   assert.match(promotion, /release-evidence\.json/)
   assert.match(promotion, /e\.commit!==process\.env\.CANDIDATE_COMMIT/)
   assert.match(promotion, /\.conclusion.*success/)
-  assert.match(promotion, /gh release edit "\$TAG" --draft=false --prerelease=true/)
-  assert.match(promotion, /gh release edit "\$TAG" --draft=false --prerelease=false/)
+  assert.match(
+    promotion,
+    /gh release edit "\$TAG" --repo "\$GITHUB_REPOSITORY" --draft=false --prerelease=true/
+  )
+  assert.match(
+    promotion,
+    /gh release edit "\$TAG" --repo "\$GITHUB_REPOSITORY" --draft=false --prerelease=false/
+  )
   assert.match(promotion, /releaseClass!==process\.env\.RELEASE_CLASS/)
 })
 
@@ -82,6 +88,17 @@ test('runtime smoke refuses missing platform, update, persistence, signing, or r
   assert.match(runtimeSmoke, /community-prerelease/)
   assert.match(runtimeSmoke, /release_class/)
   assert.match(runtimeSmoke, /candidate_commit="\$\(git rev-parse HEAD\)"/)
+  assert.match(
+    runtimeSmoke,
+    /gh release download "\$TAG" --repo "\$GITHUB_REPOSITORY" --pattern "\$ARTIFACT"/
+  )
+})
+
+test('release verification commands identify the repository outside a checkout', () => {
+  assert.match(promotion, /gh release view "\$TAG" --repo "\$GITHUB_REPOSITORY"/)
+  assert.match(promotion, /gh release download "\$TAG" --repo "\$GITHUB_REPOSITORY"/)
+  assert.match(promotion, /gh run download "\$SMOKE_RUN_ID" --repo "\$GITHUB_REPOSITORY"/)
+  assert.match(promotion, /gh release edit "\$TAG" --repo "\$GITHUB_REPOSITORY"/)
 })
 
 test('the ordinary packaged desktop gate installs uv before invoking the build', () => {
