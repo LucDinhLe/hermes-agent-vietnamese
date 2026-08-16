@@ -1,8 +1,15 @@
 ## Hermes Vietnamese vi-v0.20.0-25
 
-Bản cộng đồng đa nền tảng với giao diện tiếng Việt mặc định và nút chuyển nhanh VI/EN. Tên model, thương hiệu, giao thức, câu lệnh và nội dung do AI agent sinh ra được giữ nguyên.
+Bản pilot cộng đồng đa nền tảng với giao diện tiếng Việt mặc định và nút chuyển nhanh VI/EN. Tên model, thương hiệu, giao thức, câu lệnh và nội dung do AI agent sinh ra được giữ nguyên.
 
 > Đây là bản thử nghiệm cộng đồng **chưa ký số**. Chỉ tải bản public sau khi SHA-256 và kiểm thử cài đặt trên đúng artifact đều đạt. Windows SmartScreen/Application Control và macOS Gatekeeper có thể cảnh báo hoặc chặn; không tắt cơ chế bảo vệ hệ điều hành để cài.
+
+### Tình trạng nghiệm thu
+
+- **Windows x64: exact-artifact smoke đạt** trên máy Windows 11 vật lý: cài mới với hồ sơ sạch, runtime đóng gói, gateway/onboarding, tạo và đổi tên phiên, tab phiên/trình duyệt, panel phải, restart giữ dữ liệu, repair và gỡ cài đặt giữ/xóa dữ liệu.
+- Windows x64 chưa chạy một tool bằng provider thật và chưa kiểm chứng desktop updater từ v14 bằng chính artifact này; hai mục được công khai là giới hạn pilot, không được ghi nhận GO.
+- **Windows ARM64, macOS Apple Silicon/Intel và Linux x64/ARM64 chưa có smoke trên máy người dùng.** Các gói đã build trên runner native và khớp SHA-256 nhưng vẫn là build-only pilot. Nếu thử nghiệm, hãy sao lưu dữ liệu và gửi hệ điều hành/kiến trúc, bước tái hiện cùng log không chứa khóa hoặc dữ liệu riêng khi gặp lỗi.
+- Bản ổn định/Latest vẫn là `vi-v0.20.0-14`; v25 không tự thay thế bản ổn định.
 
 ### Chọn đúng tệp
 
@@ -37,7 +44,7 @@ Bản cộng đồng đa nền tảng với giao diện tiếng Việt mặc đ�
 
 ### Bảo mật, chữ ký và dữ liệu
 
-- Bản `vi-v0.20.0-25` được phát hành theo lớp **community prerelease**: Windows chưa có Authenticode; macOS chưa có Developer ID, notarization hoặc stapling. Workflow bắt buộc giữ nhãn prerelease, ghi nhận cảnh báo bảo mật thật trên từng hệ điều hành và không cho phép quảng cáo bản này là stable.
+- Bản `vi-v0.20.0-25` được phát hành theo lớp **community prerelease pilot**: Windows chưa có Authenticode; macOS chưa có Developer ID, notarization hoặc stapling. Workflow bắt buộc giữ nhãn prerelease, ghi nhận đúng phạm vi đã/chưa kiểm thử và không cho phép quảng cáo bản này là stable/final.
 - Dự án đã nộp hồ sơ SignPath và đang chờ SignPath xét duyệt để ký bản Windows. Dự án chưa tham gia Apple Developer Program, vì vậy bản macOS chưa được Apple notarize; trạng thái này sẽ được cập nhật sau khi hoàn tất đăng ký và kiểm tra ký mã.
 - Đối chiếu tệp tải về với `SHA256SUMS.txt`. Không dùng artifact nếu SHA-256 không khớp.
 - Bản dựng không chứa tài khoản, OAuth token, khóa API, lịch sử trò chuyện hoặc hồ sơ vận hành của người đóng gói.

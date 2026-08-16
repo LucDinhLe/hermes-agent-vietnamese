@@ -64,6 +64,19 @@ Mỗi hệ điều hành phải vượt các bước sau:
 6. Gửi một tin nhắn, chạy một công cụ an toàn, đóng/mở lại và xác nhận phiên còn nguyên.
 7. Gỡ ứng dụng; xác nhận dữ liệu người dùng không bị xóa ngầm.
 
+## Pilot cộng đồng lấy phản hồi
+
+Chủ dự án có thể công khai một **community prerelease** đa nền tảng để lấy phản hồi trước khi đủ máy nghiệm thu, nhưng chỉ qua workflow `promote-pilot-vietnamese.yml` và phải thỏa tất cả điều kiện sau:
+
+- Cả sáu artifact được build một lần trên đúng runner native, staging dưới dạng draft và vượt đối chiếu SHA-256.
+- Windows x64 phải vượt exact-artifact smoke trên máy vật lý: cài mới không cần công cụ lập trình, runtime/gateway/onboarding, tạo và đổi tên phiên, tab phiên/trình duyệt, resize panel, restart giữ dữ liệu, repair và cả hai chế độ uninstall.
+- Mọi cổng chưa chạy như provider/tool thật hoặc update desktop từ bản trước phải ghi `false` trong evidence và nêu rõ trong release notes; không được chuyển thành kết quả GO.
+- Năm target chưa có máy thật phải mang trạng thái `BUILD-ONLY-PILOT`, ghi rõ chưa có smoke trên máy người dùng và mời báo lỗi. Thành công của runner không được gọi là bằng chứng tương thích thực tế.
+- Pilot luôn là prerelease, chưa được gọi là stable/final, không được đặt làm Latest và phải giữ nguyên bản ổn định trước làm rollback.
+- Promotion tải lại toàn bộ draft, kiểm manifest/provenance/evidence và công khai đúng byte đã staging. Không được sửa hoặc thay artifact sau promotion.
+
+Stable vẫn bắt buộc đủ toàn bộ runtime gate, máy thật, signing/notarization và workflow `promote-vietnamese.yml`; phản hồi cộng đồng không thay thế các cổng đó.
+
 ## Quay lui
 
 - Giữ nguyên bản phát hành ổn định trước đó và bảng SHA-256 của nó.

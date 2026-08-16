@@ -5,6 +5,10 @@ import { test } from 'vitest'
 
 const candidate = readFileSync(new URL('../../../.github/workflows/release-vietnamese.yml', import.meta.url), 'utf8')
 const promotion = readFileSync(new URL('../../../.github/workflows/promote-vietnamese.yml', import.meta.url), 'utf8')
+const pilotPromotion = readFileSync(
+  new URL('../../../.github/workflows/promote-pilot-vietnamese.yml', import.meta.url),
+  'utf8'
+)
 const runtimeSmoke = readFileSync(
   new URL('../../../.github/workflows/runtime-smoke-vietnamese.yml', import.meta.url),
   'utf8'
@@ -71,14 +75,8 @@ test('promotion is separate and requires exact manifest plus successful runtime 
   assert.match(promotion, /release-evidence\.json/)
   assert.match(promotion, /e\.commit!==process\.env\.CANDIDATE_COMMIT/)
   assert.match(promotion, /\.conclusion.*success/)
-  assert.match(
-    promotion,
-    /gh release edit "\$TAG" --repo "\$GITHUB_REPOSITORY" --draft=false --prerelease=true/
-  )
-  assert.match(
-    promotion,
-    /gh release edit "\$TAG" --repo "\$GITHUB_REPOSITORY" --draft=false --prerelease=false/
-  )
+  assert.match(promotion, /gh release edit "\$TAG" --repo "\$GITHUB_REPOSITORY" --draft=false --prerelease=true/)
+  assert.match(promotion, /gh release edit "\$TAG" --repo "\$GITHUB_REPOSITORY" --draft=false --prerelease=false/)
   assert.match(promotion, /releaseClass!==process\.env\.RELEASE_CLASS/)
 })
 
@@ -91,10 +89,20 @@ test('runtime smoke refuses missing platform, update, persistence, signing, or r
   assert.match(runtimeSmoke, /community-prerelease/)
   assert.match(runtimeSmoke, /release_class/)
   assert.match(runtimeSmoke, /candidate_commit="\$\(git rev-parse HEAD\)"/)
-  assert.match(
-    runtimeSmoke,
-    /gh release download "\$TAG" --repo "\$GITHUB_REPOSITORY" --pattern "\$ARTIFACT"/
-  )
+  assert.match(runtimeSmoke, /gh release download "\$TAG" --repo "\$GITHUB_REPOSITORY" --pattern "\$ARTIFACT"/)
+})
+
+test('pilot promotion stays prerelease, validates every byte, and discloses missing native smoke', () => {
+  assert.match(pilotPromotion, /environment: release-production/)
+  assert.match(pilotPromotion, /Dựng và staging Hermes tiếng Việt/)
+  assert.match(pilotPromotion, /sha256sum --check SHA256SUMS\.txt/)
+  assert.match(pilotPromotion, /windows-x64.*PILOT-GO/s)
+  assert.match(pilotPromotion, /BUILD-ONLY-PILOT/)
+  assert.match(pilotPromotion, /realMachineSmoke !== false/)
+  assert.match(pilotPromotion, /safeTool !== false/)
+  assert.match(pilotPromotion, /updateFromPrevious !== false/)
+  assert.match(pilotPromotion, /--draft=false --prerelease=true/)
+  assert.doesNotMatch(pilotPromotion, /--prerelease=false/)
 })
 
 test('release verification commands identify the repository outside a checkout', () => {
