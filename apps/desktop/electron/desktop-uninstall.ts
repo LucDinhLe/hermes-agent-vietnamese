@@ -281,6 +281,9 @@ function buildWindowsCleanupScript({
 
   if (appPath) {
     lines.push(
+      'rem Leave the app tree before removing it. Windows cannot delete the',
+      'rem current working directory of this cleanup cmd process.',
+      'cd /d "%~dp0"',
       'set /a tries=0',
       ':rmloop',
       `if not exist ${q(appPath)} goto rmdone`,
