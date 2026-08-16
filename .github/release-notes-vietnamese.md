@@ -1,4 +1,4 @@
-## Hermes Vietnamese vi-v0.20.0-19
+## Hermes Vietnamese vi-v0.20.0-22
 
 Bản cộng đồng đa nền tảng với giao diện tiếng Việt mặc định và nút chuyển nhanh VI/EN. Tên model, thương hiệu, giao thức, câu lệnh và nội dung do AI agent sinh ra được giữ nguyên.
 
@@ -8,10 +8,10 @@ Bản cộng đồng đa nền tảng với giao diện tiếng Việt mặc đ�
 
 | Máy đang dùng           | Tải trực tiếp                                                                                                                                                |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Windows 10/11 x64       | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-19/Hermes-Vietnamese-Windows-x64-Setup.exe)           |
-| Windows 10/11 ARM64     | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-19/Hermes-Vietnamese-Windows-arm64-Setup.exe)       |
-| Mac chip Apple M-series | [Bộ cài macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-19/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
-| Mac chip Intel          | [Bộ cài macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-19/Hermes-Vietnamese-macOS-Intel.dmg)                 |
+| Windows 10/11 x64       | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-22/Hermes-Vietnamese-Windows-x64-Setup.exe)           |
+| Windows 10/11 ARM64     | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-22/Hermes-Vietnamese-Windows-arm64-Setup.exe)       |
+| Mac chip Apple M-series | [Bộ cài macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-22/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
+| Mac chip Intel          | [Bộ cài macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-22/Hermes-Vietnamese-macOS-Intel.dmg)                 |
 | Ubuntu/Debian           | [Chọn `.deb` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                                   |
 | Fedora/RHEL             | [Chọn `.rpm` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                                   |
 | Linux khác              | [Chọn `.AppImage` x64 hoặc ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#chọn-đúng-bộ-cài)                              |
@@ -34,11 +34,12 @@ Bản cộng đồng đa nền tảng với giao diện tiếng Việt mặc đ�
 
 ### Bảo mật, chữ ký và dữ liệu
 
-- Bản `vi-v0.20.0-19` được phát hành theo lớp **community prerelease**: Windows chưa có Authenticode; macOS chưa có Developer ID, notarization hoặc stapling. Workflow bắt buộc giữ nhãn prerelease, ghi nhận cảnh báo bảo mật thật trên từng hệ điều hành và không cho phép quảng cáo bản này là stable.
+- Bản `vi-v0.20.0-22` được phát hành theo lớp **community prerelease**: Windows chưa có Authenticode; macOS chưa có Developer ID, notarization hoặc stapling. Workflow bắt buộc giữ nhãn prerelease, ghi nhận cảnh báo bảo mật thật trên từng hệ điều hành và không cho phép quảng cáo bản này là stable.
+- Dự án đã nộp hồ sơ SignPath và đang chờ SignPath xét duyệt để ký bản Windows. Dự án chưa tham gia Apple Developer Program, vì vậy bản macOS chưa được Apple notarize; trạng thái này sẽ được cập nhật sau khi hoàn tất đăng ký và kiểm tra ký mã.
 - Đối chiếu tệp tải về với `SHA256SUMS.txt`. Không dùng artifact nếu SHA-256 không khớp.
 - Bản dựng không chứa tài khoản, OAuth token, khóa API, lịch sử trò chuyện hoặc hồ sơ vận hành của người đóng gói.
 - Thông tin đăng nhập và dữ liệu của mỗi người được lưu riêng trên máy của họ. Nội dung chỉ được gửi tới nhà cung cấp AI/công cụ mà người dùng chủ động cấu hình và sử dụng.
 
 Xem [hướng dẫn cài đặt tiếng Việt](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md), [chính sách ký mã](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/CODE_SIGNING_POLICY.md) và [phạm vi miễn trừ](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/DISCLAIMER.md).
 
-Rollback: quay lại [vi-v0.20.0-14](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-14) theo hướng dẫn sao lưu/khôi phục trong ứng dụng. Các tag candidate v15–v18 đều dừng trước draft do cổng verify/đóng gói; không tag nào trong số đó có artifact phát hành để sử dụng.
+Rollback: quay lại [vi-v0.20.0-14](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-14) theo hướng dẫn sao lưu/khôi phục trong ứng dụng. Các candidate v15–v21 không được công khai; v21 đã tới staging nhưng promotion bị chặn bởi lỗi workflow tải draft, lỗi này đã được sửa và khóa bằng regression test trong v22.
