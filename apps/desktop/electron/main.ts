@@ -50,7 +50,13 @@ import { shouldLatchBackendStartFailure, shouldLatchRemoteReauthFailure } from '
 import { detectRemoteDisplay, isWindowsBinaryPathInWsl, isWslEnvironment } from './bootstrap-platform'
 import { decideBootstrapRepair } from './bootstrap-repair-guard'
 import { runBootstrap } from './bootstrap-runner'
-import { decideResidentRuntime, findResidentPython, latestReleaseFromLsRemote, resolveChannel, resolvePayload } from './bundled-runtime'
+import {
+  decideResidentRuntime,
+  findResidentPython,
+  latestReleaseFromLsRemote,
+  resolveChannel,
+  resolvePayload
+} from './bundled-runtime'
 import { applyConnectionChange, resolveTerminalConnection } from './connection-apply'
 import {
   authModeFromStatus,
@@ -87,6 +93,7 @@ import {
   modeRemovesAgent,
   modeRemovesUserData,
   resolveRemovableAppPath,
+  selectUninstallPython,
   shouldRemoveAppBundle,
   uninstallArgsForMode
 } from './desktop-uninstall'
@@ -12374,9 +12381,26 @@ function uninstallVenvPython() {
   return getVenvPython(VENV_ROOT)
 }
 
+function resolveDesktopUninstallRuntime() {
+  const resident = residentRuntimeDecision()
+
+  if (resident.resident) {
+    const payload = resolvePayload(process.resourcesPath)
+    const agentRoot = payload ? path.join(payload.dir, 'repo') : null
+    const python = payload ? findResidentPython(payload.dir) : null
+
+    if (agentRoot && python && isHermesSourceRoot(agentRoot) && fileExists(python)) {
+      return { agentRoot, python, resident: true }
+    }
+  }
+
+  return { agentRoot: ACTIVE_HERMES_ROOT, python: uninstallVenvPython(), resident: false }
+}
+
 async function getUninstallSummary() {
-  const py = uninstallVenvPython()
-  const agentRoot = ACTIVE_HERMES_ROOT
+  const runtime = resolveDesktopUninstallRuntime()
+  const py = runtime.python
+  const agentRoot = runtime.agentRoot
 
   // Fast JS-side fallback used when the agent venv is gone (lite client) or the
   // probe fails — the renderer still needs *something* to render options from.
@@ -12394,6 +12418,14 @@ async function getUninstallSummary() {
 
   if (!fileExists(py)) {
     return fallback()
+  }
+
+  // Resident builds intentionally have no writable checkout/venv under
+  // HERMES_HOME. The verified payload repo + Python above are authoritative;
+  // invoking hermes_cli.main would require rebuilding the backend's full
+  // PYTHONPATH only to return the same installation facts.
+  if (runtime.resident) {
+    return { ...fallback(), probe: 'resident' }
   }
 
   return new Promise(resolve => {
@@ -12457,36 +12489,53 @@ async function runDesktopUninstall(mode) {
     return { ok: false, error: 'invalid-mode', message: error.message }
   }
 
-  const venvPy = uninstallVenvPython()
+  const runtime = resolveDesktopUninstallRuntime()
 
-  if (!fileExists(venvPy)) {
+  if (!isHermesSourceRoot(runtime.agentRoot) || !fileExists(runtime.python)) {
     return {
       ok: false,
       error: 'agent-missing',
-      message: `Can't run the uninstaller: no Hermes agent venv at ${VENV_ROOT}.`
+      message: `Can't run the uninstaller: no usable Hermes runtime at ${runtime.agentRoot}.`
     }
   }
 
   // Interpreter choice (Finding 3): lite/full rmtree the venv that holds the
   // running python.exe. On Windows a running .exe is mandatory-locked, so the
-  // rmtree must NOT be driven by the venv's own interpreter — use a system
-  // Python with PYTHONPATH=<agentRoot> so `import hermes_cli` resolves from
-  // source while the venv is torn down. gui-only doesn't touch the venv, so the
-  // venv python is fine there. If no system Python exists (the Windows edge
-  // case), fall back to the venv python — gui-only is unaffected; lite/full may
-  // leave venv remnants the user can delete, which we log.
-  let py = venvPy
+  // rmtree must NOT be driven by the venv's own interpreter — use the packaged
+  // resident Python first, then a system Python for thin/source installs, with
+  // PYTHONPATH=<agentRoot> so `import hermes_cli` resolves while the active
+  // tree is torn down. gui-only uses the venv when one exists. The last-resort
+  // Windows venv fallback may leave locked remnants, which we log loudly.
+  const residentPy = runtime.resident ? runtime.python : null
+  const venvPy = runtime.resident ? null : runtime.python
+  let py = runtime.python
   let pythonPath = null
 
-  if (modeRemovesAgent(mode)) {
-    const sysPy = findSystemPython()
+  if (modeRemovesAgent(mode) || runtime.resident) {
+    // Do not even probe the host for Python when the packaged resident runtime
+    // is available. This keeps lite/full uninstall independent of developer
+    // tools and avoids Windows Store launcher side effects.
 
-    if (sysPy) {
-      py = sysPy
-      pythonPath = ACTIVE_HERMES_ROOT
-    } else if (IS_WINDOWS) {
+    const sysPy = residentPy || !modeRemovesAgent(mode) ? null : findSystemPython()
+
+    const selection = selectUninstallPython(mode, {
+      venvPython: venvPy,
+      residentPython: residentPy,
+      systemPython: sysPy,
+      isWindows: IS_WINDOWS
+    })
+
+    py = selection.pythonExe
+
+    if (selection.external) {
+      pythonPath = runtime.agentRoot
+    }
+
+    if (selection.source === 'resident') {
+      rememberLog(`[uninstall] using bundled resident Python outside the managed venv: ${py}`)
+    } else if (selection.degraded) {
       rememberLog(
-        '[uninstall] no system Python found for lite/full on Windows; falling back ' +
+        '[uninstall] no resident or system Python found for lite/full on Windows; falling back ' +
           'to the venv python — venv files locked by the running interpreter may ' +
           'remain and need manual deletion.'
       )
@@ -12503,7 +12552,7 @@ async function runDesktopUninstall(mode) {
   // lock would make the script's rmdir half-fail (#37532 for the update path).
   // Reuses the incident-hardened update teardown; no-op on macOS/Linux.
   try {
-    await releaseBackendLock(ACTIVE_HERMES_ROOT, 'uninstall')
+    await releaseBackendLock(runtime.agentRoot, 'uninstall')
   } catch (error) {
     rememberLog(`[uninstall] backend teardown errored (continuing): ${error.message}`)
   }
@@ -12512,7 +12561,7 @@ async function runDesktopUninstall(mode) {
     desktopPid: process.pid,
     pythonExe: py,
     pythonPath,
-    agentRoot: ACTIVE_HERMES_ROOT,
+    agentRoot: runtime.agentRoot,
     uninstallArgs,
     appPath: removeBundle,
     hermesHome: HERMES_HOME

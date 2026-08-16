@@ -19,6 +19,7 @@ import {
   modeRemovesAgent,
   modeRemovesUserData,
   resolveRemovableAppPath,
+  selectUninstallPython,
   shouldRemoveAppBundle,
   UNINSTALL_MODES,
   uninstallArgsForMode
@@ -51,6 +52,78 @@ test('mode predicates classify what each mode removes', () => {
   assert.equal(modeRemovesUserData('gui'), false)
   assert.equal(modeRemovesUserData('lite'), false)
   assert.equal(modeRemovesUserData('full'), true)
+})
+
+// --- selectUninstallPython ---
+
+test('selectUninstallPython prefers the bundled resident runtime for lite/full', () => {
+  const selection = selectUninstallPython('full', {
+    venvPython: 'C:\\home\\venv\\Scripts\\python.exe',
+    residentPython: 'C:\\app\\resources\\agent-payload\\python\\python.exe',
+    systemPython: 'C:\\Python313\\python.exe',
+    isWindows: true
+  })
+
+  assert.deepEqual(selection, {
+    degraded: false,
+    external: true,
+    pythonExe: 'C:\\app\\resources\\agent-payload\\python\\python.exe',
+    source: 'resident'
+  })
+})
+
+test('selectUninstallPython falls back to system Python for thin/source installs', () => {
+  const selection = selectUninstallPython('lite', {
+    venvPython: '/home/x/.hermes/venv/bin/python',
+    residentPython: null,
+    systemPython: '/usr/bin/python3'
+  })
+
+  assert.equal(selection.pythonExe, '/usr/bin/python3')
+  assert.equal(selection.external, true)
+  assert.equal(selection.degraded, false)
+  assert.equal(selection.source, 'system')
+})
+
+test('selectUninstallPython keeps gui mode on its venv and marks a Windows full fallback degraded', () => {
+  assert.deepEqual(
+    selectUninstallPython('gui', {
+      venvPython: 'C:\\home\\venv\\Scripts\\python.exe',
+      residentPython: 'C:\\app\\python.exe',
+      isWindows: true
+    }),
+    {
+      degraded: false,
+      external: false,
+      pythonExe: 'C:\\home\\venv\\Scripts\\python.exe',
+      source: 'venv'
+    }
+  )
+
+  const degraded = selectUninstallPython('full', {
+    venvPython: 'C:\\home\\venv\\Scripts\\python.exe',
+    isWindows: true
+  })
+
+  assert.equal(degraded.pythonExe, 'C:\\home\\venv\\Scripts\\python.exe')
+  assert.equal(degraded.external, false)
+  assert.equal(degraded.degraded, true)
+  assert.equal(degraded.source, 'venv-fallback')
+})
+
+test('selectUninstallPython lets a resident-only packaged app uninstall its GUI', () => {
+  const selection = selectUninstallPython('gui', {
+    venvPython: null,
+    residentPython: 'C:\\app\\resources\\agent-payload\\python\\python.exe',
+    isWindows: true
+  })
+
+  assert.deepEqual(selection, {
+    degraded: false,
+    external: true,
+    pythonExe: 'C:\\app\\resources\\agent-payload\\python\\python.exe',
+    source: 'resident'
+  })
 })
 
 // --- resolveRemovableAppPath ---
