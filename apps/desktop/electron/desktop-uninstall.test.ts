@@ -10,6 +10,10 @@
  */
 
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 
 import { test } from 'vitest'
 
@@ -299,7 +303,11 @@ test('buildWindowsCleanupScript waits (bounded) for PID, runs uninstall, rmdir b
   assert.match(script, /"C:\\Python313\\python.exe" "-m" "hermes_cli\.uninstall" "--mode" "full"/)
   // Bounded wait-loop (no infinite loop), whole-token PID match (no substring).
   assert.match(script, /if %waited% geq 60 goto waited_done/)
-  assert.match(script, /findstr \/r \/c:" %PID% "/)
+  assert.match(script, /set "TASKLIST_TMP=%~dpn0-tasklist\.tmp"/)
+  assert.match(script, /tasklist \/NH \/FI "PID eq %PID%" >"%TASKLIST_TMP%" 2>nul/)
+  assert.match(script, /findstr \/r \/c:" %PID% " "%TASKLIST_TMP%" >nul 2>&1/)
+  assert.doesNotMatch(script, /^tasklist[^\r\n]*\|[^\r\n]*findstr/m)
+  assert.match(script, /del "%TASKLIST_TMP%" >nul 2>&1/)
   assert.doesNotMatch(script, /find "%PID%"/) // the old substring-prone form is gone
   // Removal is a retry loop (Windows releases dir handles lazily).
   assert.match(script, /:rmloop/)
@@ -307,6 +315,43 @@ test('buildWindowsCleanupScript waits (bounded) for PID, runs uninstall, rmdir b
   assert.match(script, /if %tries% geq 10 goto rmdone/)
   assert.match(script, /del "%~f0"/)
 })
+
+test.skipIf(process.platform !== 'win32')(
+  'buildWindowsCleanupScript executes to completion without a detached tasklist pipe',
+  () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-uninstall-wait-'))
+    const scriptPath = path.join(directory, 'cleanup.cmd')
+
+    try {
+      fs.writeFileSync(
+        scriptPath,
+        buildWindowsCleanupScript({
+          desktopPid: 2147483647,
+          pythonExe: path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'where.exe'),
+          pythonPath: null,
+          agentRoot: directory,
+          uninstallArgs: ['cmd.exe'],
+          appPath: null,
+          hermesHome: path.join(directory, 'home')
+        })
+      )
+
+      const completed = spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/c', scriptPath], {
+        encoding: 'utf8',
+        timeout: 15_000,
+        windowsHide: true
+      })
+
+      assert.equal(completed.error, undefined)
+      assert.notEqual(completed.status, null, completed.stderr || completed.stdout)
+      assert.match(completed.stdout, /cmd\.exe/i)
+      assert.equal(fs.existsSync(scriptPath), false)
+      assert.equal(fs.existsSync(path.join(directory, 'cleanup-tasklist.tmp')), false)
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true })
+    }
+  }
+)
 
 test('buildWindowsCleanupScript omits PYTHONPATH + rmdir when not needed (gui, no bundle)', () => {
   const script = buildWindowsCleanupScript({
