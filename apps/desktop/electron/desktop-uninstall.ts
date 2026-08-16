@@ -56,6 +56,46 @@ function modeRemovesUserData(mode) {
 }
 
 /**
+ * Pick the interpreter that drives the detached uninstall process.
+ *
+ * lite/full delete the managed venv. On Windows a running python.exe is
+ * mandatory-locked, so the interpreter must live outside that venv. Packaged
+ * resident builds already ship exactly such an interpreter under
+ * resources/agent-payload; prefer it so an ordinary user never needs a
+ * separately installed Python. Thin/source builds may fall back to a system
+ * Python. The final venv fallback is retained only as an explicitly degraded
+ * last resort for legacy/thin installations.
+ */
+function selectUninstallPython(mode, { venvPython, residentPython = null, systemPython = null, isWindows = false }) {
+  if (!modeRemovesAgent(mode)) {
+    if (venvPython) {
+      return { degraded: false, external: false, pythonExe: venvPython, source: 'venv' }
+    }
+
+    if (residentPython) {
+      return { degraded: false, external: true, pythonExe: residentPython, source: 'resident' }
+    }
+
+    return { degraded: false, external: true, pythonExe: systemPython, source: 'system' }
+  }
+
+  if (residentPython) {
+    return { degraded: false, external: true, pythonExe: residentPython, source: 'resident' }
+  }
+
+  if (systemPython) {
+    return { degraded: false, external: true, pythonExe: systemPython, source: 'system' }
+  }
+
+  return {
+    degraded: Boolean(isWindows),
+    external: false,
+    pythonExe: venvPython,
+    source: 'venv-fallback'
+  }
+}
+
+/**
  * Resolve the on-disk app bundle/dir to remove for the running desktop app,
  * given the path to the running executable (`process.execPath`) and platform.
  *
@@ -262,6 +302,7 @@ export {
   modeRemovesAgent,
   modeRemovesUserData,
   resolveRemovableAppPath,
+  selectUninstallPython,
   shouldRemoveAppBundle,
   UNINSTALL_MODES,
   uninstallArgsForMode
