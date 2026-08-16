@@ -225,8 +225,11 @@ function buildPosixCleanupScript({ desktopPid, pythonExe, pythonPath, agentRoot,
  * either interpreter.
  *
  * Wait-loop: bounded (matches POSIX's ~30s cap) so a never-exiting / mismatched
- * PID can't wedge the cleanup forever. The `/FI "PID eq"` filter is an EXACT
- * match, so no redundant `| find` (which would substring-match 99→990).
+ * PID can't wedge the cleanup forever. `tasklist` and `findstr` deliberately
+ * run as separate commands through a temporary file. A detached `cmd.exe`
+ * pipeline can leave `findstr` holding an inherited pipe open forever, which
+ * wedges uninstall before Python ever runs. The whole-token match keeps PID
+ * 99 from matching 990.
  *
  * Removal: even after the desktop PID is gone, Windows releases directory
  * handles lazily, so a single `rmdir /s /q` can half-fail — retry up to 10x.
@@ -250,7 +253,8 @@ function buildWindowsCleanupScript({
     '@echo off',
     'setlocal enableextensions',
     `set "HERMES_HOME=${String(hermesHome).replace(/"/g, '')}"`,
-    `set "PID=${pid}"`
+    `set "PID=${pid}"`,
+    'set "TASKLIST_TMP=%~dpn0-tasklist.tmp"'
   ]
 
   if (pythonPath) {
@@ -260,17 +264,17 @@ function buildWindowsCleanupScript({
   lines.push(
     'set /a waited=0',
     ':waitloop',
-    'rem /FI "PID eq %PID%" is an EXACT filter — tasklist outputs the one task',
-    'rem row for that PID, or "INFO: No tasks..." otherwise. /NH drops the',
-    'rem header; findstr matches the PID as a whole space-delimited token so',
-    'rem PID 99 cannot match 990 (the substring trap of a bare `find`).',
-    'tasklist /NH /FI "PID eq %PID%" 2>nul | findstr /r /c:" %PID% " >nul',
+    'rem Avoid a shell pipeline here. Detached cmd pipelines can',
+    'rem inherit a write handle and leave findstr blocked forever waiting for EOF.',
+    'tasklist /NH /FI "PID eq %PID%" >"%TASKLIST_TMP%" 2>nul',
+    'findstr /r /c:" %PID% " "%TASKLIST_TMP%" >nul 2>&1',
     'if %ERRORLEVEL% neq 0 goto waited_done',
     'set /a waited+=1',
     'if %waited% geq 60 goto waited_done',
     'timeout /t 1 /nobreak >nul',
     'goto waitloop',
     ':waited_done',
+    'del "%TASKLIST_TMP%" >nul 2>&1',
     `cd /d ${q(agentRoot)}`,
     `${q(pythonExe)} ${uninstallArgs.map(q).join(' ')}`
   )
