@@ -133,11 +133,7 @@ export function ModelVisibilityDialog({
                       <span aria-hidden className="shrink-0 font-mono font-normal normal-case tracking-normal">
                         · {allFamilies.length}
                       </span>
-                      <DisclosureCaret
-                        className="shrink-0"
-                        open={!collapsed}
-                        size="0.625rem"
-                      />
+                      <DisclosureCaret className="shrink-0" open={!collapsed} size="0.625rem" />
                     </button>
                     <Checkbox
                       checked={checkState}

@@ -52,7 +52,9 @@ describe('shared preview page bridge', () => {
     document.querySelector('button')?.addEventListener('click', clicked)
     await readPreviewWebview(bridge())
 
-    await expect(interactPreviewWebview(bridge(), { action: 'type', ref: '@p1', text: 'Hermes' })).resolves.toMatchObject({
+    await expect(
+      interactPreviewWebview(bridge(), { action: 'type', ref: '@p1', text: 'Hermes' })
+    ).resolves.toMatchObject({
       ok: true
     })
     await expect(interactPreviewWebview(bridge(), { action: 'click', ref: '@p2' })).resolves.toMatchObject({ ok: true })
@@ -65,7 +67,9 @@ describe('shared preview page bridge', () => {
     document.body.innerHTML = '<label>Password <input type="password"></label>'
     await readPreviewWebview(bridge())
 
-    await expect(interactPreviewWebview(bridge(), { action: 'type', ref: '@p1', text: 'secret' })).resolves.toMatchObject({
+    await expect(
+      interactPreviewWebview(bridge(), { action: 'type', ref: '@p1', text: 'secret' })
+    ).resolves.toMatchObject({
       message: expect.stringContaining('user') as string,
       ok: false
     })

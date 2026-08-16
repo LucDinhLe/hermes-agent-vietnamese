@@ -113,7 +113,7 @@ export function decideResidentRuntime(facts: {
     return { resident: false, reason: 'payload predates the resident layout' }
   }
 
-  const missing = RESIDENT_RUNTIME_ITEMS.filter((item) => payload.items[item]?.status !== 'staged')
+  const missing = RESIDENT_RUNTIME_ITEMS.filter(item => payload.items[item]?.status !== 'staged')
 
   if (missing.length > 0) {
     return { resident: false, reason: `payload incomplete (missing: ${missing.join(', ')})` }
@@ -153,7 +153,10 @@ export function findResidentPython(
 
   // Prefer the patch-versioned real directory over the minor alias so the
   // resolved path is stable across launches (the alias is a symlink).
-  for (const entry of entries.filter((name) => name.startsWith('cpython-')).sort().reverse()) {
+  for (const entry of entries
+    .filter(name => name.startsWith('cpython-'))
+    .sort()
+    .reverse()) {
     const candidate =
       platform === 'win32'
         ? pathModule.join(pythonRoot, entry, 'python.exe')
@@ -203,9 +206,7 @@ export function latestReleaseFromLsRemote(output: string): { tag: string; sha: s
     // tags (v2026.7.20) would win every numeric sort. This mirrors
     // _RELEASE_TAG_RE in hermes_cli/update_cmd.py and _SEMVER_TAG_RE in
     // scripts/write_install_stamp.py.
-    const m = line.match(
-      /^([0-9a-f]{40})\trefs\/tags\/((?:vi-)?v(?:0|[1-9]\d{0,2})\.\d+\.\d+(?:-\d+)?)(\^\{\})?$/
-    )
+    const m = line.match(/^([0-9a-f]{40})\trefs\/tags\/((?:vi-)?v(?:0|[1-9]\d{0,2})\.\d+\.\d+(?:-\d+)?)(\^\{\})?$/)
 
     if (!m) {
       continue

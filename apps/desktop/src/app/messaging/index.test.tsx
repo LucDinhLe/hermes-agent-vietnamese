@@ -60,6 +60,7 @@ afterEach(() => {
 
 async function renderMessaging() {
   const { MessagingView } = await import('./index')
+
   return render(
     <MemoryRouter>
       <MessagingView />

@@ -57,6 +57,7 @@ describe('external provider sign-in', () => {
       name: 'Claude Pro / Max',
       status: { logged_in: true }
     }
+
     const calls: { body?: unknown; path: string }[] = []
 
     installApiMock(async ({ body, path }: { body?: unknown; path: string }) => {

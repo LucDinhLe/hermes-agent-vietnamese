@@ -377,11 +377,7 @@ export function ModelCatalogMenu({
                   <span aria-hidden className="shrink-0 font-mono font-normal normal-case tracking-normal">
                     · {group.families.length}
                   </span>
-                  <DisclosureCaret
-                    className="shrink-0 text-(--ui-text-tertiary)"
-                    open={!collapsed}
-                    size="0.625rem"
-                  />
+                  <DisclosureCaret className="shrink-0 text-(--ui-text-tertiary)" open={!collapsed} size="0.625rem" />
                 </DropdownMenuItem>
                 {!collapsed &&
                   group.families.map(family => {

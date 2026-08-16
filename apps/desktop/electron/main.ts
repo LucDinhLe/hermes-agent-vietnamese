@@ -4220,7 +4220,12 @@ function createResidentBackend(backendArgs) {
   // find the bundled runtimes before any system ones.
   const pathKey = Object.keys(env).find(key => key.toUpperCase() === 'PATH') || 'PATH'
 
-  env[pathKey] = [path.join(payload.dir, 'node', 'bin'), path.join(payload.dir, 'node'), path.join(payload.dir, 'uv'), env[pathKey]]
+  env[pathKey] = [
+    path.join(payload.dir, 'node', 'bin'),
+    path.join(payload.dir, 'node'),
+    path.join(payload.dir, 'uv'),
+    env[pathKey]
+  ]
     .filter(Boolean)
     .join(path.delimiter)
 
@@ -4247,7 +4252,9 @@ function resolveHermesBackend(backendArgs) {
   //    for. The HERMES_DESKTOP_HERMES_ROOT escape hatch still wins — it
   //    exists precisely to point a packaged app at a developer checkout.
   const overrideRoot = process.env.HERMES_DESKTOP_HERMES_ROOT && path.resolve(process.env.HERMES_DESKTOP_HERMES_ROOT)
-  const resident = overrideRoot ? { resident: false, reason: 'HERMES_DESKTOP_HERMES_ROOT override' } : residentRuntimeDecision()
+  const resident = overrideRoot
+    ? { resident: false, reason: 'HERMES_DESKTOP_HERMES_ROOT override' }
+    : residentRuntimeDecision()
 
   if (resident.resident) {
     const backend = createResidentBackend(backendArgs)

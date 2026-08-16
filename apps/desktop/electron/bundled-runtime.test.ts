@@ -14,7 +14,9 @@ import {
 // ─── resolvePayload ────────────────────────────────────────────────
 
 const readerFor = (manifest: unknown) => (p: string) => {
-  if (!p.endsWith('manifest.json')) {throw new Error('ENOENT')}
+  if (!p.endsWith('manifest.json')) {
+    throw new Error('ENOENT')
+  }
 
   return JSON.stringify(manifest)
 }
@@ -31,10 +33,7 @@ test('resolvePayload returns null for dev runs, thin stubs, and garbage', () => 
   )
   assert.equal(resolvePayload('/res', readerFor('not-an-object')), null)
   // A manifest with items but no staged item returns null (an all-skipped payload).
-  assert.equal(
-    resolvePayload('/res', readerFor({ tag: 'v1.0.0', items: { repo: { status: 'skipped' } } })),
-    null
-  )
+  assert.equal(resolvePayload('/res', readerFor({ tag: 'v1.0.0', items: { repo: { status: 'skipped' } } })), null)
 })
 
 test('resolvePayload returns dir + tag for a real payload', () => {
@@ -159,7 +158,9 @@ test('thin, pre-resident, and incomplete payloads never run resident', () => {
 test('findResidentPython picks the patch-versioned dir and needs a real binary', () => {
   const fsStub = (dirs: string[], files: string[]) => ({
     readdirSync: (p: string) => {
-      if (!p.endsWith('python')) {throw new Error('ENOENT')}
+      if (!p.endsWith('python')) {
+        throw new Error('ENOENT')
+      }
 
       return dirs
     },
@@ -232,7 +233,11 @@ test('release picking is numeric, skips prereleases, prefers peeled shas', () =>
   assert.equal(latest?.sha, 'c'.repeat(40))
 
   const semverOnly = latestReleaseFromLsRemote(
-    [`${'a'.repeat(40)}\trefs/tags/v0.9.0`, `${'b'.repeat(40)}\trefs/tags/v0.10.0`, `${'c'.repeat(40)}\trefs/tags/v0.10.0^{}`].join('\n')
+    [
+      `${'a'.repeat(40)}\trefs/tags/v0.9.0`,
+      `${'b'.repeat(40)}\trefs/tags/v0.10.0`,
+      `${'c'.repeat(40)}\trefs/tags/v0.10.0^{}`
+    ].join('\n')
   )
 
   assert.equal(semverOnly?.tag, 'v0.10.0')

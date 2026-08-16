@@ -146,6 +146,7 @@ function pickCopy(copies: IntroCopy[], seed = 0): IntroCopy {
 }
 
 const WORDMARK = 'HERMES AGENT'
+
 const VIETNAMESE_TAGLINE =
   'Nhập một nhiệm vụ, câu hỏi hoặc đoạn mã. Hermes ghi nhớ phiên làm việc, dẫn nguồn và sẽ hỏi lại khi chưa chắc chắn.'
 

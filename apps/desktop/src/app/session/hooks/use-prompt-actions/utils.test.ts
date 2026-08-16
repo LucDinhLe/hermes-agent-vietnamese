@@ -439,7 +439,7 @@ describe('renderRpcResult', () => {
   describe('session.usage', () => {
     it('formats calls / input / output / total with thousands separators', () => {
       expect(renderRpcResult({ calls: 12, input: 1_234_567, output: 89_012, total: 1_323_579 }, 'usage')).toBe(
-        `Usage: ${12..toLocaleString()} calls · ${1_234_567..toLocaleString()} in / ${89_012..toLocaleString()} out · ${1_323_579..toLocaleString()} total`
+        `Usage: ${(12).toLocaleString()} calls · ${(1_234_567).toLocaleString()} in / ${(89_012).toLocaleString()} out · ${(1_323_579).toLocaleString()} total`
       )
     })
 

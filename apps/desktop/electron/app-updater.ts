@@ -37,9 +37,7 @@ export function shouldUseAppUpdater(facts: UpdaterGateFacts): boolean {
 export function releaseTagForAppVersion(version: string): string {
   const community = /^(0|[1-9]\d{0,2})\.(\d+)\.(\d+)-vi\.(0|[1-9]\d*)$/.exec(version)
 
-  return community
-    ? `vi-v${community[1]}.${community[2]}.${community[3]}-${community[4]}`
-    : `v${version}`
+  return community ? `vi-v${community[1]}.${community[2]}.${community[3]}-${community[4]}` : `v${version}`
 }
 
 /**
@@ -113,10 +111,7 @@ export function configureAutoUpdater(updater: ConfigurableAutoUpdater): void {
  * force a relaunch afterwards. `beforeInstall` lets main.ts disarm its normal
  * quit guard before electron-updater begins closing windows.
  */
-export function beginAppUpdateInstall(
-  updater: Pick<AppUpdater, 'quitAndInstall'>,
-  beforeInstall?: () => void
-): void {
+export function beginAppUpdateInstall(updater: Pick<AppUpdater, 'quitAndInstall'>, beforeInstall?: () => void): void {
   beforeInstall?.()
   updater.quitAndInstall(false, true)
 }

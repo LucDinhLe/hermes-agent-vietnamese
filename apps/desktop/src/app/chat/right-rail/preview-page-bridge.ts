@@ -1,8 +1,4 @@
-import type {
-  PreviewInteractiveElement,
-  PreviewInteractOptions,
-  PreviewInteractResult
-} from './preview-reader'
+import type { PreviewInteractiveElement, PreviewInteractOptions, PreviewInteractResult } from './preview-reader'
 
 export interface PreviewWebviewBridge {
   canGoBack?: () => boolean
@@ -162,14 +158,18 @@ export async function interactPreviewWebview(
   }
 
   if (opts.action === 'back') {
-    if (webview.canGoBack?.() === false) {return result(webview, opts.action, false, 'No previous page is available.')}
+    if (webview.canGoBack?.() === false) {
+      return result(webview, opts.action, false, 'No previous page is available.')
+    }
     webview.goBack?.()
 
     return result(webview, opts.action, true, 'Went back.')
   }
 
   if (opts.action === 'forward') {
-    if (webview.canGoForward?.() === false) {return result(webview, opts.action, false, 'No next page is available.')}
+    if (webview.canGoForward?.() === false) {
+      return result(webview, opts.action, false, 'No next page is available.')
+    }
     webview.goForward?.()
 
     return result(webview, opts.action, true, 'Went forward.')
@@ -192,7 +192,9 @@ export async function interactPreviewWebview(
   if (opts.action === 'press') {
     const key = (opts.key || '').slice(0, 64)
 
-    if (!key) {return result(webview, opts.action, false, 'A key is required.')}
+    if (!key) {
+      return result(webview, opts.action, false, 'A key is required.')
+    }
 
     const raw = (await webview.executeJavaScript(`(() => {
       const target = document.activeElement || document.body
@@ -207,7 +209,9 @@ export async function interactPreviewWebview(
 
   const ref = normalizedRef(opts.ref)
 
-  if (!ref) {return result(webview, opts.action, false, 'A current element ref such as @p1 is required.')}
+  if (!ref) {
+    return result(webview, opts.action, false, 'A current element ref such as @p1 is required.')
+  }
 
   const raw = (await webview.executeJavaScript(elementActionScript(opts.action, ref, opts.text))) as {
     message?: unknown

@@ -60,6 +60,7 @@ function toolset(overrides: Record<string, unknown> = {}) {
 
 async function renderSkills() {
   const { SkillsView } = await import('./index')
+
   return render(
     // SkillsView reads skills/toolsets via useQuery, so it needs a provider.
     <QueryClientProvider client={queryClient}>

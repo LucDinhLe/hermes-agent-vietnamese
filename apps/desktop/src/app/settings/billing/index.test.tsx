@@ -593,7 +593,9 @@ describe('BillingSettings', () => {
     })
 
     await waitFor(() =>
-      expect(screen.getByText(text => text.includes('25') && text.endsWith(' added. Balance is refreshing.'))).toBeTruthy()
+      expect(
+        screen.getByText(text => text.includes('25') && text.endsWith(' added. Balance is refreshing.'))
+      ).toBeTruthy()
     )
   })
 
