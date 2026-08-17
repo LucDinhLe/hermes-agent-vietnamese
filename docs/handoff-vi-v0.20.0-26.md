@@ -7,15 +7,16 @@ sử chat dài. Trước khi sửa mã, đọc `AGENTS.md`,
 
 ## Trạng thái nguồn sự thật
 
-| Mục                    | Giá trị                                                            |
-| ---------------------- | ------------------------------------------------------------------ |
-| Repository             | <https://github.com/LucDinhLe/hermes-agent-vietnamese>             |
-| Public Latest          | `vi-v0.20.0-25`                                                    |
-| Candidate/tag commit   | `78d23ad2290521a8410d0aaa778e1566dc50f69a`                         |
-| Public docs checkpoint | `e56e13658f94145ccd5f12c791fe1fd0aa1abb96`                         |
-| Windows x64 SHA-256    | `0f31c4a23bbb7913300b3f3571ad346aae517d367705a965d451a1febf620e59` |
-| Release class          | `community-pilot`                                                  |
-| Rollback               | `vi-v0.20.0-14`                                                    |
+| Mục                              | Giá trị                                                            |
+| -------------------------------- | ------------------------------------------------------------------ |
+| Repository                       | <https://github.com/LucDinhLe/hermes-agent-vietnamese>             |
+| Public Latest                    | `vi-v0.20.0-25`                                                    |
+| Candidate/tag commit             | `78d23ad2290521a8410d0aaa778e1566dc50f69a`                         |
+| v25 docs trước bàn giao (PR #34) | `e56e13658f94145ccd5f12c791fe1fd0aa1abb96`                         |
+| Merge hồ sơ bàn giao (PR #35)    | `77c16765a2901819319e5108d4218ed16351baf8`                         |
+| Windows x64 SHA-256              | `0f31c4a23bbb7913300b3f3571ad346aae517d367705a965d451a1febf620e59` |
+| Release class                    | `community-pilot`                                                  |
+| Rollback                         | `vi-v0.20.0-14`                                                    |
 
 v25 là bất biến. Không rebuild, thay asset, di chuyển tag hoặc dùng tag v25 cho
 bất kỳ thay đổi mã nào. Sửa mô tả sau release là metadata-only và đã hoàn tất.
