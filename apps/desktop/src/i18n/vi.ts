@@ -689,6 +689,10 @@ export const vi: Translations = {
       backdropDesc: 'Hình ảnh bức tượng mờ nhạt đằng sau cuộc trò chuyện.',
       reactionsTitle: 'Cảm xúc tin nhắn',
       reactionsDesc: 'Gắn biểu tượng cảm xúc vào tin nhắn; Hermes cũng có thể bày tỏ cảm xúc với tin nhắn của bạn.',
+      reasoningSummaryTitle: 'Tóm tắt suy luận bằng tiếng Việt',
+      reasoningSummaryDesc:
+        'Sau khi lượt chạy kết thúc, phần suy luận công khai được gửi qua một model call bổ sung. Thao tác này có thể phát sinh chi phí và độ trễ; bản gốc và câu trả lời không thay đổi.',
+      reasoningSummaryClear: 'Xóa cache bản tóm tắt',
       embedsTitle: 'Nhúng nội tuyến',
       embedsDesc:
         'Tải bản xem trước từ trang web bên thứ ba như YouTube hoặc X. “Hỏi” chờ bạn cho phép từng nội dung; “Luôn luôn” tự động tải; “Tắt” chỉ hiển thị liên kết.',
@@ -1090,6 +1094,7 @@ export const vi: Translations = {
         approval: { label: 'Phê duyệt', hint: 'Tự động phê duyệt thông minh' },
         mcp: { label: 'MCP', hint: 'MCP định tuyến công cụ' },
         title_generation: { label: 'Tạo tiêu đề', hint: 'Đặt tiêu đề phiên' },
+        reasoning_summary_vi: { label: 'Tóm tắt suy luận', hint: 'Tóm tắt tiếng Việt sau lượt' },
         curator: { label: 'Quản lý kỹ năng', hint: 'Đánh giá việc sử dụng kỹ năng' }
       }
     },
@@ -3096,6 +3101,12 @@ export const vi: Translations = {
       thought: 'Suy nghĩ',
       thoughtBriefly: 'Đã suy nghĩ trong chốc lát',
       thoughtFor: duration => `Đã suy nghĩ trong ${duration}`,
+      reasoningSummary: 'Tóm tắt suy luận bằng tiếng Việt',
+      reasoningSummaryGenerated: 'Bản tóm tắt do model tạo',
+      reasoningSummaryLatency: duration => `Độ trễ ${duration}`,
+      reasoningSummaryCostUnavailable: 'Chi phí không được provider cung cấp',
+      reasoningSummaryUsage: tokens => `${tokens.toLocaleString('vi-VN')} token`,
+      reasoningSummaryFailed: 'Không thể tạo bản tóm tắt tiếng Việt. Phần suy luận gốc không bị thay đổi.',
       today: time => `Hôm nay, ${time}`,
       yesterday: time => `Hôm qua, ${time}`,
       copy: 'Sao chép',

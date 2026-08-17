@@ -669,6 +669,47 @@ def test_completion_handlers_are_pool_routed(completion_method, server):
     assert completion_method in server._LONG_HANDLERS
 
 
+def test_reasoning_summary_rejects_digest_mismatch_without_model_call(server):
+    handler = server._methods["reasoning.summarize"]
+
+    with patch("agent.oneshot.run_oneshot") as run:
+        response = handler(
+            1,
+            {
+                "message_id": "assistant-1",
+                "reasoning": "public reasoning",
+                "source_digest": "0" * 64,
+            },
+        )
+
+    assert response["error"]["code"] == 4037
+    run.assert_not_called()
+
+
+def test_reasoning_summary_uses_dedicated_stateless_template(server):
+    import hashlib
+
+    handler = server._methods["reasoning.summarize"]
+    reasoning = "public reasoning"
+    digest = hashlib.sha256(reasoning.encode("utf-8")).hexdigest()
+
+    with patch("agent.oneshot.run_oneshot", return_value="Bản tóm tắt") as run:
+        response = handler(
+            1,
+            {
+                "message_id": "assistant-1",
+                "reasoning": reasoning,
+                "source_digest": digest,
+            },
+        )
+
+    assert response["result"]["summary"] == "Bản tóm tắt"
+    assert response["result"]["source_digest"] == digest
+    assert response["result"]["usage"] is None
+    assert run.call_args.kwargs["template"] == "reasoning_summary_vi"
+    assert run.call_args.kwargs["task"] == "reasoning_summary_vi"
+
+
 def test_skin_live_switch_end_to_end(server, tmp_path, monkeypatch):
     """Real config + skin files: activating a skin (as `hermes config set` does)
     makes the per-tool reconcile broadcast skin.changed with the resolved palette.

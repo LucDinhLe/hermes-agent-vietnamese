@@ -323,6 +323,10 @@ export const zhHant = defineLocale({
       backdropDesc: '對話後方那張淡淡的雕像圖片。',
       reactionsTitle: '訊息回應',
       reactionsDesc: 'iMessage 風格的表情回應 — 你可以對訊息做出回應，Hermes 也能回應你的訊息。',
+      reasoningSummaryTitle: '以越南語摘要推理',
+      reasoningSummaryDesc:
+        '每輪結束後，透過一次額外的模型呼叫摘要公開推理。這可能增加費用與延遲；原始推理與回答不會改變。',
+      reasoningSummaryClear: '清除摘要快取',
       embedsTitle: '內嵌預覽',
       embedsDesc:
         '豐富預覽會從第三方網站（YouTube、X 等）載入。詢問會在你允許前顯示佔位符；一律會自動載入；關閉則保留純連結。',
@@ -855,6 +859,7 @@ export const zhHant = defineLocale({
         approval: { label: '核准', hint: '智慧自動核准' },
         mcp: { label: 'MCP', hint: 'MCP 工具路由' },
         title_generation: { label: '標題生成', hint: '工作階段標題' },
+        reasoning_summary_vi: { label: '越南語推理', hint: '輪次結束後的摘要' },
         curator: { label: '策展器', hint: '技能使用審查' }
       }
     },
@@ -2523,6 +2528,12 @@ export const zhHant = defineLocale({
       thought: '已思考',
       thoughtBriefly: '思考了片刻',
       thoughtFor: duration => `思考了 ${duration}`,
+      reasoningSummary: '越南語推理摘要',
+      reasoningSummaryGenerated: '模型產生的摘要',
+      reasoningSummaryLatency: duration => `延遲 ${duration}`,
+      reasoningSummaryCostUnavailable: '供應商未提供費用資訊',
+      reasoningSummaryUsage: tokens => `${tokens.toLocaleString()} 個權杖`,
+      reasoningSummaryFailed: '無法產生越南語摘要。原始推理未被更改。',
       today: time => `今天，${time}`,
       yesterday: time => `昨天，${time}`,
       copy: '複製',

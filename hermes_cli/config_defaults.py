@@ -971,6 +971,18 @@ DEFAULT_CONFIG = {
             "reasoning_effort": "",  # per-task thinking level: none|minimal|low|medium|high|xhigh|max|ultra (empty = provider default)
             "language": "",
         },
+        # Optional Desktop post-turn summary of provider-visible reasoning.
+        # The renderer owns the default-off consent switch; this slot only
+        # controls which auxiliary model serves calls after consent.
+        "reasoning_summary_vi": {
+            "provider": "auto",
+            "model": "",
+            "base_url": "",
+            "api_key": "",
+            "timeout": 90,
+            "extra_body": {},
+            "reasoning_effort": "",
+        },
         "memory_query_rewrite": {
             "provider": "auto",
             "model": "",

@@ -371,6 +371,9 @@ export interface Translations {
       backdropDesc: string
       reactionsTitle: string
       reactionsDesc: string
+      reasoningSummaryTitle: string
+      reasoningSummaryDesc: string
+      reasoningSummaryClear: string
       embedsTitle: string
       embedsDesc: string
       embedsAsk: string
@@ -2425,6 +2428,12 @@ export interface Translations {
       thought: string
       thoughtBriefly: string
       thoughtFor: (duration: string) => string
+      reasoningSummary: string
+      reasoningSummaryGenerated: string
+      reasoningSummaryLatency: (duration: string) => string
+      reasoningSummaryCostUnavailable: string
+      reasoningSummaryUsage: (tokens: number) => string
+      reasoningSummaryFailed: string
       today: (time: string) => string
       yesterday: (time: string) => string
       copy: string

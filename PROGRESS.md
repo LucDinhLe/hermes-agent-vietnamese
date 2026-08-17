@@ -1,5 +1,23 @@
 # Tiến độ
 
+## Cập nhật 2026-08-17 — hoàn thiện lát cắt tóm tắt reasoning tiếng Việt v26
+
+- Thêm RPC stateless `reasoning.summarize`: backend kiểm SHA-256, giới hạn
+  reasoning công khai ở 64 KiB và gọi riêng auxiliary task
+  `reasoning_summary_vi`; không ghi vào transcript hoặc prompt của phiên chính.
+- Tùy chọn **Tóm tắt suy luận bằng tiếng Việt** mặc định tắt. Khi tắt, đường
+  hậu xử lý dừng trước hash và tạo đúng zero model call; khi bật chỉ chạy sau
+  `message.complete`, tối đa một lần cho cùng digest.
+- Giữ nguyên reasoning và câu trả lời gốc; summary nằm trong panel riêng với
+  model, độ trễ và trạng thái chi phí/usage. Lỗi auxiliary chỉ hiện trong panel,
+  không đổi lượt chính thành lỗi.
+- Cache local tách transcript, không lưu reasoning nguồn, bị khóa theo
+  `profile + session lineage + message id + source SHA-256`, giới hạn 120 bản
+  ghi/1 MiB, phục hồi qua restart và có nút xóa trong Settings.
+- Bổ sung copy VI/EN/JA/ZH/ZH-Hant và cấu hình model riêng cho task. Kiểm thử
+  targeted hiện đạt 58 Python tests, 22 Desktop tests, Desktop typecheck và
+  lint thay đổi đều không lỗi/cảnh báo.
+
 ## Cập nhật 2026-08-17 — khóa threat model và đặc tả v26
 
 - Tạo worktree sạch `feat/v26-secure-connector` từ `origin/main` tại

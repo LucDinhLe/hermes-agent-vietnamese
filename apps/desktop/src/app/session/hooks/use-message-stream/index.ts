@@ -21,8 +21,10 @@ import {
   stripGeneratedImageEchoes
 } from '@/lib/generated-images'
 import { parseTodos } from '@/lib/todos'
+import { gatewayForProfile } from '@/store/gateway'
 import { dispatchNativeNotification } from '@/store/native-notifications'
 import { isDiskFullErrorMessage, notifyError } from '@/store/notifications'
+import { summarizeReasoningMessage } from '@/store/reasoning-summary'
 import { broadcastSessionsChanged } from '@/store/session-sync'
 import { upsertSubagent } from '@/store/subagents'
 import { setSessionTodos } from '@/store/todos'
@@ -536,8 +538,15 @@ export function useMessageStream({
   )
 
   const completeAssistantMessage = useCallback(
-    (sessionId: string, text: string, responsePreviewed?: boolean, failure?: { error: string; partial: boolean }) => {
+    (
+      sessionId: string,
+      text: string,
+      responsePreviewed?: boolean,
+      failure?: { error: string; partial: boolean },
+      eventProfile?: string
+    ) => {
       let shouldHydrate = false
+      let summaryEligible = false
 
       const completedState = updateSessionState(sessionId, state => {
         // Late completion from an already-cancelled turn: cancelRun has
@@ -666,6 +675,7 @@ export function useMessageStream({
           !hasInlineError &&
           !unresolvedUserTail &&
           (state.adoptedRunningTurn || !state.sawAssistantPayload || !finalText)
+        summaryEligible = !completionError
 
         return {
           ...state,
@@ -702,6 +712,35 @@ export function useMessageStream({
         void hydrateFromStoredSession(3, completedState.storedSessionId, sessionId)
       }
 
+      // This is intentionally post-completion and fire-and-forget: the main
+      // answer is already settled, and an auxiliary failure must never turn a
+      // successful assistant response into an error. Summarize only the last
+      // assistant bubble in this turn that contains provider-visible reasoning.
+      if (summaryEligible) {
+        const lastUserIndex = completedState.messages.findLastIndex(message => message.role === 'user')
+
+        const reasoningMessage = completedState.messages
+          .slice(lastUserIndex + 1)
+          .findLast(
+            message =>
+              message.role === 'assistant' &&
+              !message.hidden &&
+              message.parts.some(part => part.type === 'reasoning' && part.text.trim().length > 0)
+          )
+
+        if (reasoningMessage) {
+          const profile = eventProfile || activeGatewayProfile
+
+          void summarizeReasoningMessage({
+            gateway: gatewayForProfile(profile),
+            message: reasoningMessage,
+            profile,
+            runtimeSessionId: sessionId,
+            sessionLineage: completedState.storedSessionId || sessionId
+          })
+        }
+      }
+
       dispatchNativeNotification({
         body: text.slice(0, 140) || translateNow('notifications.native.turnDoneBody'),
         kind: 'turnDone',
@@ -709,7 +748,7 @@ export function useMessageStream({
         title: translateNow('notifications.native.turnDoneTitle')
       })
     },
-    [hydrateFromStoredSession, scheduleSessionsRefresh, updateSessionState]
+    [activeGatewayProfile, hydrateFromStoredSession, scheduleSessionsRefresh, updateSessionState]
   )
 
   const failAssistantMessage = useCallback(

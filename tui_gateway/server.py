@@ -220,6 +220,7 @@ _LONG_HANDLERS = frozenset(
         "complete.path",
         "complete.slash",
         "llm.oneshot",
+        "reasoning.summarize",
         # model.options builds the full picker payload — per-provider credential
         # pool checks, pricing fetch, Nous tier check, optional custom-provider
         # probe — measured seconds inline. While it runs on the reader thread,
