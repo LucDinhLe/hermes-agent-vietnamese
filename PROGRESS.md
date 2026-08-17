@@ -1,5 +1,23 @@
 # Tiến độ
 
+## Cập nhật 2026-08-17 — khóa threat model và đặc tả v26
+
+- Tạo worktree sạch `feat/v26-secure-connector` từ `origin/main` tại
+  `4d597f74600cdc3791edf7d34566534182946c55`; không chạm các worktree cũ và giữ
+  nguyên release/tag/asset v25.
+- Xác minh baseline: 6/6 public-release tests, 18/18 preview/reasoning UI tests,
+  26/26 bundled-runtime/hardening tests và Desktop typecheck đều đạt trong môi
+  trường cô lập, dùng đúng lockfile.
+- Khóa threat model tại `docs/hermes-connector-v26-threat-model.md`: consent hai
+  phía, optional domain permissions, loopback một lần, metadata-only IPC,
+  RAM-only payload, import đúng `persist:hermes-preview` và revoke theo ledger.
+- Khóa quyết định bỏ qua có cảnh báo đối với partitioned cookie vì Electron 41
+  chưa có API giữ `partitionKey`; không hạ cấp thành cookie không phân vùng.
+- Khóa đặc tả tại `docs/hermes-v26-spec.md`; nền móng trust v26 chỉ dành cho
+  companion chính chủ. Extension Manager tổng quát được hoãn sang v27.
+- Tạo `docs/release-vi-v0.20.0-26-plan.md` với cổng Chrome/Edge profile cô lập,
+  exact Windows x64, update v25 -> v26, redaction và public GO/NO-GO.
+
 ## Cập nhật 2026-08-17 — bàn giao v25 và khởi động phạm vi v26
 
 - Đóng gói toàn bộ hành trình từ tiếp nhận v15 tới public thành công v25 tại
