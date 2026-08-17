@@ -12,6 +12,56 @@ import type { QuickEntryStatePush, QuickEntryStatus, QuickEntrySubmitPayload } f
 export {}
 
 declare global {
+  type BrowserConnectorResult<T> = { ok: true; value: T } | { ok: false; error: string }
+
+  type BrowserConnectorPairing = {
+    attemptId: string
+    hostname: string
+    expiresAt: number
+    state: 'pairing' | 'preview' | 'approved' | 'ready' | 'consumed' | 'cancelled' | 'expired'
+    pairingCode?: string
+    preview?: {
+      browser: 'chrome' | 'edge'
+      hostname: string
+      cookieCount: number
+      unsupportedCount: number
+      expiredCount: number
+      sessionCount: number
+      earliestExpiry?: number
+      latestExpiry?: number
+    }
+  }
+
+  type BrowserConnectorImport = {
+    id: string
+    hostname: string
+    cookieCount: number
+    importedAt: number
+    persistentUntil?: number
+  }
+
+  type BrowserConnectorStatus = {
+    enabled: boolean
+    imports: BrowserConnectorImport[]
+    trust: {
+      extensionId: string
+      version: string
+      manifestVersion: number
+      permissions: string[]
+      optionalPermissions: string[]
+      optionalHostPermissions: string[]
+      sha256: string
+      extensionPath: string
+      verified: boolean
+    }
+  }
+
+  type BrowserConnectorImportSummary = BrowserConnectorImport & {
+    skippedExpired: number
+    skippedUnsupported: number
+    sessionCount: number
+  }
+
   interface Window {
     hermesDesktop: {
       // Resolve a backend connection. Omit `profile` (or pass the primary) for
@@ -169,6 +219,16 @@ declare global {
       saveClipboardImage: () => Promise<string>
       getPathForFile: (file: File) => string
       normalizePreviewTarget: (target: string, baseDir?: string) => Promise<HermesPreviewTarget | null>
+      browserConnector?: {
+        status: () => Promise<BrowserConnectorResult<BrowserConnectorStatus>>
+        setEnabled: (enabled: boolean) => Promise<BrowserConnectorResult<{ enabled: boolean }>>
+        start: (url: string) => Promise<BrowserConnectorResult<BrowserConnectorPairing>>
+        pairingStatus: (attemptId: string) => Promise<BrowserConnectorResult<BrowserConnectorPairing>>
+        approve: (attemptId: string) => Promise<BrowserConnectorResult<BrowserConnectorImportSummary>>
+        cancel: (attemptId?: string) => Promise<BrowserConnectorResult<{ cancelled: boolean }>>
+        revoke: (importId: string) => Promise<BrowserConnectorResult<{ revoked: boolean }>>
+        openExtensionFolder: () => Promise<{ ok: boolean; error?: string }>
+      }
       watchPreviewFile: (url: string) => Promise<HermesPreviewWatch>
       /** Watch a directory for entry churn (disk-plugin door); same watcher
        *  registry + onPreviewFileChanged channel as watchPreviewFile. Optional:
