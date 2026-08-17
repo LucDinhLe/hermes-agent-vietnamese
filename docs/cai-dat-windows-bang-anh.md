@@ -6,11 +6,13 @@ Hướng dẫn này dành cho người tải Hermes Vietnamese bằng Microsoft 
 
 ## 1. Chọn đúng bộ cài
 
-1. Mở [bản phát hành vi-v0.20.0-14](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-14).
+1. Mở [bản phát hành vi-v0.20.0-25](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-25).
 2. Trong phần **Assets**, chọn:
    - Máy Windows x64 thông dụng: `Hermes-Vietnamese-Windows-x64-Setup.exe`.
    - Máy Windows ARM64: `Hermes-Vietnamese-Windows-arm64-Setup.exe`.
 3. Chỉ tải tệp từ kho `LucDinhLe/hermes-agent-vietnamese` trên GitHub.
+
+Với Windows x64, tệp đúng có kích thước `332.776.297` byte và SHA-256 `0f31c4a23bbb7913300b3f3571ad346aae517d367705a965d451a1febf620e59`.
 
 Nếu chưa biết máy dùng x64 hay ARM64, nhấn `Windows + I`, chọn **Hệ thống → Giới thiệu** và xem dòng **Loại hệ thống**.
 
