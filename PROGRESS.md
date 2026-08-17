@@ -1,5 +1,21 @@
 # Tiến độ
 
+## Cập nhật 2026-08-17 — bàn giao v25 và khởi động phạm vi v26
+
+- Đóng gói toàn bộ hành trình từ tiếp nhận v15 tới public thành công v25 tại
+  `docs/release-vi-v0.20.0-25-retrospective.md`, gồm sự cố, nguyên nhân gốc,
+  candidate v15–v24, cổng hồi quy, workflow bằng chứng và audit sau public.
+- Đưa `docs/release-engineering-rulebook.md` vào repository làm hợp đồng phát
+  hành chính thức; bổ sung cổng điều hướng công khai để chặn README/Latest trỏ
+  nhầm phiên bản sau promotion.
+- Tạo `docs/handoff-vi-v0.20.0-26.md` với nguồn sự thật, ranh giới bất biến của
+  v25, gaps còn mở, bản đồ mã và prompt tiếp quản cho phiên mới.
+- Phạm vi định hướng v26 gồm Hermes Connector cho Chrome/Edge để chuyển cookie
+  theo domain với consent rõ ràng, nền móng extension tin cậy và tùy chọn tóm
+  tắt reasoning công khai bằng tiếng Việt. Không hứa tương thích mọi extension
+  Chrome Web Store và không cố lấy chain-of-thought ẩn.
+- Chưa viết mã v26, chưa tạo candidate/tag/artifact và không thay release v25.
+
 ## Cập nhật 2026-08-17 — viết lại mô tả và hướng dẫn cài v25
 
 - Viết lại phần giới thiệu công khai theo hành trình của người mới: lý do dự án
