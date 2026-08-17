@@ -1,8 +1,14 @@
 # Cài Hermes Vietnamese trên Windows bằng hình ảnh
 
-Hướng dẫn này dành cho người tải Hermes Vietnamese bằng Microsoft Edge trên Windows 10 hoặc Windows 11. Bạn không cần mở Terminal hay sửa tệp cấu hình.
+Hướng dẫn này dành cho người tải Hermes Vietnamese bằng Microsoft Edge trên Windows 10 hoặc Windows 11. Bạn không cần mở Terminal, cài Git, cài Python hoặc sửa tệp cấu hình.
 
-> **Vì sao Windows cảnh báo?** Bản cộng đồng hiện đang chờ xét duyệt ký số từ SignPath Foundation. Vì tệp chưa có chữ ký xác minh nhà phát hành và chưa có nhiều lượt tải, Edge hoặc Windows SmartScreen có thể hiện cảnh báo uy tín. Đây không phải kết luận rằng tệp có mã độc.
+> **Vì sao Windows cảnh báo?** Bản cộng đồng đã nộp hồ sơ SignPath Foundation và đang chờ xét duyệt ký số. Tệp hiện chưa có chữ ký xác minh nhà phát hành và chưa có nhiều lượt tải, nên Edge hoặc Windows SmartScreen có thể hiện cảnh báo uy tín. Dòng `Publisher: Unknown` trong các ảnh dưới đây phản ánh trạng thái chưa ký, không phải kết luận tệp an toàn hoặc có mã độc.
+
+Chỉ tiếp tục khi đủ ba điều kiện:
+
+1. Đường tải thuộc `github.com/LucDinhLe/hermes-agent-vietnamese`.
+2. Tên tệp đúng với kiến trúc máy.
+3. SHA-256 khớp `SHA256SUMS.txt` của chính bản phát hành đang tải.
 
 ## 1. Chọn đúng bộ cài
 
@@ -12,47 +18,63 @@ Hướng dẫn này dành cho người tải Hermes Vietnamese bằng Microsoft 
    - Máy Windows ARM64: `Hermes-Vietnamese-Windows-arm64-Setup.exe`.
 3. Chỉ tải tệp từ kho `LucDinhLe/hermes-agent-vietnamese` trên GitHub.
 
-Với Windows x64, tệp đúng có kích thước `332.776.297` byte và SHA-256 `0f31c4a23bbb7913300b3f3571ad346aae517d367705a965d451a1febf620e59`.
+Với bản v25 Windows x64, tệp đúng có kích thước `332.776.297` byte và SHA-256 `0f31c4a23bbb7913300b3f3571ad346aae517d367705a965d451a1febf620e59`.
 
 Nếu chưa biết máy dùng x64 hay ARM64, nhấn `Windows + I`, chọn **Hệ thống → Giới thiệu** và xem dòng **Loại hệ thống**.
 
 ## 2. Khi Edge báo tệp không được tải xuống phổ biến
 
-Edge có thể hiện dòng `isn't commonly downloaded`. Tệp sẽ không tự tiếp tục nếu bạn chỉ chờ.
+Edge có thể hiện dòng `isn't commonly downloaded`. Đây là cảnh báo về độ phổ biến của tệp tải xuống. Tệp sẽ không tự tiếp tục nếu bạn chỉ chờ.
 
 1. Bấm **See more**.
 
-![Edge cảnh báo tệp Hermes chưa được tải xuống phổ biến, cần bấm See more](assets/windows-install/edge-warning-see-more.png)
+![Edge cảnh báo tệp Hermes chưa được tải xuống phổ biến, cần bấm See more](assets/windows-install/edge-warning-see-more-v25.jpg)
 
-2. Ở màn hình tiếp theo, bấm mũi tên `▼` cạnh nút **Delete**.
-3. Chọn **Keep anyway** để giữ tệp.
+2. Tùy phiên bản Edge, mở menu của tệp rồi chọn **Keep**.
 
-![Mở mũi tên cạnh Delete rồi chọn Keep anyway](assets/windows-install/edge-warning-keep-anyway.png)
+![Menu tệp tải xuống của Edge có lựa chọn Keep](assets/windows-install/edge-download-menu-keep-v25.jpg)
 
-Không cần chọn **Report this app as safe** để tiếp tục tải.
+3. Khi Edge hiện màn hình **Make sure you trust...**, kiểm tra lại tên tệp và nguồn tải. Dòng `Publisher: Unknown` là trạng thái hiện tại vì bộ cài chưa ký số. Bấm mũi tên `▼` cạnh **Delete**.
+
+![Edge yêu cầu xác nhận tệp Hermes có Publisher Unknown](assets/windows-install/edge-publisher-unknown-v25.jpg)
+
+4. Chọn **Keep anyway** để giữ tệp.
+
+![Mở mũi tên cạnh Delete rồi chọn Keep anyway](assets/windows-install/edge-keep-anyway-v25.jpg)
+
+Một số bản Edge đi thẳng từ **See more** tới màn hình có nút **Keep anyway**, nên bạn có thể không thấy đủ cả bốn màn hình. Không cần chọn **Report this app as safe** hoặc **Report this file as safe** để tiếp tục tải.
+
+Nếu Edge tự thêm `(1)`, `(2)` vào tên vì tệp đã từng được tải, nội dung tệp có thể vẫn giống nhau. Hãy dùng SHA-256 để xác nhận, đừng chỉ dựa vào tên.
 
 ## 3. Mở bộ cài
 
 1. Khi Edge báo tải xong, bấm biểu tượng thư mục hoặc mở thư mục **Downloads/Tải xuống**.
 2. Mở `Hermes-Vietnamese-Windows-x64-Setup.exe` hoặc bản ARM64 tương ứng.
-3. Nếu Windows SmartScreen hiện cửa sổ **Windows protected your PC**, chọn **More info/Thông tin thêm → Run anyway/Vẫn chạy**.
+3. Nếu Windows SmartScreen hiện cửa sổ **Windows protected your PC**, kiểm tra lại nguồn và SHA-256 rồi chọn **More info/Thông tin thêm → Run anyway/Vẫn chạy**.
 
-Chỉ tiếp tục khi tên tệp và nguồn tải đúng như phần 1. Nếu Microsoft Defender Antivirus thông báo đã phát hiện một mối đe dọa cụ thể, hãy dừng lại và [gửi báo lỗi](https://github.com/LucDinhLe/hermes-agent-vietnamese/issues), không tự bỏ qua cảnh báo đó.
+Chỉ tiếp tục khi nguồn tải, tên tệp và SHA-256 đúng như phần 1. Nếu Microsoft Defender Antivirus nêu tên một mối đe dọa cụ thể, hãy dừng lại, giữ ảnh chụp và [gửi báo lỗi](https://github.com/LucDinhLe/hermes-agent-vietnamese/issues). Không tắt Defender, SmartScreen hoặc chính sách bảo mật của toàn máy để cài Hermes.
 
 ## 4. Hoàn tất thiết lập ba bước
 
 1. Chọn **Tiếng Việt** hoặc **English**.
 2. Chọn cài Hermes trên máy và chờ ứng dụng chuẩn bị môi trường chạy. Lần đầu cần Internet và có thể mất vài phút.
-3. Chọn **ChatGPT**, **Claude Pro/Max**, **Gemini** hoặc một nhà cung cấp khác. Bạn cũng có thể chọn **Tôi sẽ chọn nhà cung cấp sau**.
-4. Chọn model và bắt đầu giao việc.
+3. Tại **Kết nối model**, chọn một trong các đường phù hợp:
+   - **OpenAI OAuth (ChatGPT):** đăng nhập tài khoản ChatGPT có quyền dùng Codex.
+   - **Claude Pro / Max:** đăng nhập qua Claude Code.
+   - **Google Gemini:** nhập khóa API tạo tại Google AI Studio.
+   - **Nhà cung cấp khác:** nhập tài khoản, API key hoặc endpoint tương ứng.
+4. Chọn model, tạo phiên đầu tiên và giao một việc thử không quan trọng.
+
+Nếu chưa có tài khoản hoặc khóa API, chọn **Tôi sẽ chọn nhà cung cấp sau**. Sau đó mở **Cài đặt → Model/Nhà cung cấp** để kết nối. Bộ cài không kèm tài khoản model, API key hoặc hạn mức trả phí.
 
 ## Kiểm tra tăng cường nếu bạn quen dùng PowerShell
 
-Bạn có thể đối chiếu mã SHA-256 bằng tệp `SHA256SUMS.txt` trong cùng bản phát hành. Mỗi bản có mã riêng, vì vậy không dùng mã của bản cũ để kiểm tra bản mới. Việc kiểm tra mã băm là bước tăng cường; luồng cài đặt bằng giao diện ở trên không yêu cầu dùng dòng lệnh.
+Bạn có thể đối chiếu mã SHA-256 bằng tệp `SHA256SUMS.txt` trong cùng bản phát hành. Mỗi bản có mã riêng, vì vậy không dùng mã của bản cũ để kiểm tra bản mới. Trên Windows, mở PowerShell trong thư mục tải xuống và chạy `Get-FileHash .\Hermes-Vietnamese-Windows-x64-Setup.exe -Algorithm SHA256`, rồi so kết quả với tệp tổng kiểm tra.
 
 ## Nếu vẫn không cài được
 
 - **Chỉ thấy Delete và Cancel:** bấm mũi tên `▼` cạnh **Delete**, rồi chọn **Keep anyway**.
+- **Chỉ thấy menu Delete/Keep:** chọn **Keep**, sau đó làm tiếp màn hình xác nhận nếu Edge hỏi lại.
 - **Không thấy Run anyway:** máy có thể đang áp dụng chính sách bảo mật của cơ quan hoặc Smart App Control. Không tắt chính sách bảo mật chỉ để cài; hãy gửi ảnh cảnh báo vào mục Issues để được kiểm tra đúng trường hợp.
 - **Bộ cài mở nhưng Hermes không khởi động:** chụp toàn bộ thông báo lỗi và chọn **Mở nhật ký** nếu nút này xuất hiện.
 
