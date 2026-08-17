@@ -1,5 +1,24 @@
 # Tiến độ
 
+## Cập nhật 2026-08-17 — khóa cổng candidate và promotion v26
+
+- Workflow tạo candidate nay gọi đích danh test extension MV3, ba lớp Connector
+  Electron, consent UI, preview pane, reasoning UI/store và RPC Python; không còn
+  dựa vào việc test mới vô tình được suite tổng quát thu thập.
+- Promotion community pilot bắt buộc bằng chứng Windows x64 cho Chrome/Edge
+  profile cô lập, consent/revoke/persistence/redaction, reasoning bật/tắt và giữ
+  nguyên bản gốc, safe tool, update exact v25, repair/uninstall và rollback.
+- Cổng release local sau thay đổi đạt 119/119 Electron/release tests, 61/61 UI
+  tests và 36/36 Python release tests. Desktop typecheck, `uv lock --check`,
+  dependency production audit (0 vulnerability) và scan mẫu secret trên toàn bộ
+  diff v26 đều đạt.
+- Full UI trước đó đạt 3.700 test và có 4 timeout không tái hiện khi chạy riêng;
+  full Electron có 20 lỗi thuộc giả định POSIX/quyền Windows, trong khi đúng bộ
+  release workflow đạt sạch. Hai kết quả full-suite này được giữ là cảnh báo môi
+  trường, không được ghi thành gate xanh.
+- Release notes được chuyển sang v26 và cố ý ghi candidate-only. Public Latest
+  vẫn là `vi-v0.20.0-25`; chưa có tag, draft hoặc artifact v26 tại thời điểm này.
+
 ## Cập nhật 2026-08-17 — hoàn thiện lát cắt tóm tắt reasoning tiếng Việt v26
 
 - Thêm RPC stateless `reasoning.summarize`: backend kiểm SHA-256, giới hạn
