@@ -54,3 +54,25 @@ def test_windows_guide_matches_published_x64_identity() -> None:
     windows_x64 = PUBLIC_RELEASE["windowsX64"]
     assert f"{windows_x64['size']:,}".replace(",", ".") in text
     assert windows_x64["sha256"] in text
+
+
+def test_windows_warning_images_are_published_and_referenced() -> None:
+    image_dir = REPO_ROOT / "docs/assets/windows-install"
+    required_docs = (
+        "README.vi.md",
+        "docs/cai-dat-windows-bang-anh.md",
+        ".github/release-notes-vietnamese.md",
+    )
+    for filename in PUBLIC_RELEASE["windowsInstallImages"]:
+        image = image_dir / filename
+        assert image.is_file() and image.stat().st_size > 0, (
+            f"missing Windows installation image: {filename}"
+        )
+        for path in required_docs:
+            assert filename in _read(path), f"{path} must reference {filename}"
+
+
+def test_public_introduction_does_not_duplicate_v25_changelog() -> None:
+    text = _read(".github/release-notes-vietnamese.md")
+    assert "Cải thiện trong bản v25" not in text
+    assert "Điểm mạnh so với cách tự cài Hermes Agent từ mã nguồn" in text

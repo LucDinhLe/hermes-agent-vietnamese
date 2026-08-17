@@ -1,12 +1,32 @@
 # Hướng dẫn cài đặt và kết nối Hermes Vietnamese
 
-Tài liệu này dành cho người muốn cài Hermes bằng giao diện, kết nối tài khoản AI của mình và bắt đầu giao việc mà không cần dùng dòng lệnh.
+Tài liệu này dành cho người muốn cài Hermes bằng giao diện, kết nối tài khoản AI của mình và bắt đầu giao việc mà không cần tự dựng môi trường lập trình.
 
 > **Bản tải mặc định:** [vi-v0.20.0-25](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-25)
 >
 > **Trạng thái:** bản pilot cộng đồng công khai **Latest**; Windows x64 đã được cài thử bằng chính artifact công khai, năm target còn lại đã build native và đang chờ thêm phản hồi máy thật; hồ sơ ký số SignPath đã nộp và đang chờ xét duyệt
 >
 > **Nền tảng:** Windows x64/ARM64, macOS Apple Silicon/Intel, Linux x64/ARM64
+
+## Vì sao có Hermes Vietnamese?
+
+Hermes Agent có năng lực làm việc với tệp, dòng lệnh, trình duyệt, bộ nhớ, kỹ năng, lịch chạy và nhiều nhà cung cấp AI. Đường cài từ mã nguồn phù hợp với người kỹ thuật nhưng tạo ra nhiều bước khó với người dùng phổ thông Việt Nam. Hermes Vietnamese đóng gói phần lõi đó thành ứng dụng Desktop, thêm giao diện Việt/Anh, hướng dẫn cài đặt, kết nối model và cơ chế cập nhật riêng để người mới đi được từ tải về tới phiên đầu tiên.
+
+Bản này phù hợp với người dùng cá nhân, người làm nội dung, đào tạo, nghiên cứu, vận hành và nhóm nhỏ muốn thử một AI agent chạy trên máy của mình. Người cần phần mềm đã ký số, hỗ trợ thương mại, bảo hành hoặc nghiệm thu đầy đủ trên mọi nền tảng nên chờ bản stable.
+
+Dự án được phát triển từ [Hermes Agent](https://github.com/NousResearch/hermes-agent) của Nous Research theo [giấy phép MIT](LICENSE), do [Lê Đình Lực](https://github.com/LucDinhLe) phát triển và duy trì như một dự án cá nhân vì cộng đồng. Đây là bản phân phối độc lập, không phải bản phát hành chính thức của Nous Research hoặc các nhà cung cấp model.
+
+### Những gì bản cộng đồng bổ sung
+
+- Bộ cài có giao diện cho Windows, macOS và Linux; người dùng phổ thông không phải tự cài Git, Python, Node.js hoặc chạy lệnh để hoàn tất lần đầu.
+- Giao diện tiếng Việt mặc định, chuyển nhanh VI/EN và giữ nguyên tên model cùng giá trị kỹ thuật.
+- Quy trình ba bước từ chọn ngôn ngữ, chuẩn bị runtime, kết nối model tới phiên làm việc đầu tiên.
+- Tab nhiều phiên, danh sách phiên, Terminal tích hợp, vùng Tệp và Trình duyệt dùng chung trong cùng cửa sổ Desktop.
+- Runtime thiết yếu, source snapshot và dependency của đúng bản phát hành được đóng gói hoặc khóa để lần chạy đầu không phụ thuộc nhánh Git động.
+- SHA-256, luồng repair, gỡ cài đặt giữ/xóa dữ liệu, hướng dẫn sao lưu và kênh cập nhật `vi-v*` dành riêng cho bản cộng đồng.
+- Giữ hệ thống model, công cụ, bộ nhớ, kỹ năng, lịch chạy, AI agent phụ và Gateway của Hermes Agent gốc.
+
+Hermes Vietnamese không tặng kèm model AI, tài khoản trả phí, API key hoặc hạn mức sử dụng.
 
 ## Trước khi cài
 
@@ -229,7 +249,15 @@ Trước khi tiếp tục:
 
 Trên Microsoft Edge, người dùng có thể gặp thêm hai màn hình trước SmartScreen. Xem đúng vị trí **See more**, mũi tên cạnh **Delete** và **Keep anyway** trong [hướng dẫn cài Windows bằng hình ảnh](docs/cai-dat-windows-bang-anh.md).
 
-Cảnh báo trong thời gian chờ ký số không tự chứng minh tệp an toàn hoặc nguy hiểm. Mã băm và nguồn tải giúp bạn xác minh tệp có đúng với bản GitHub đã công bố hay không. Trạng thái hồ sơ được cập nhật tại [Code signing policy](CODE_SIGNING_POLICY.md).
+| 1. Bấm See more                                                                                                 | 2. Chọn Keep trong menu tải xuống                                                                        |
+| --------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| ![Edge báo Hermes chưa được tải xuống phổ biến](docs/assets/windows-install/edge-warning-see-more-v25.jpg)      | ![Menu tải xuống của Edge có lựa chọn Keep](docs/assets/windows-install/edge-download-menu-keep-v25.jpg) |
+| **3. Kiểm tra tên tệp và nguồn tải**                                                                            | **4. Mở mũi tên và chọn Keep anyway**                                                                    |
+| ![Edge hiện Publisher Unknown vì bộ cài chưa ký số](docs/assets/windows-install/edge-publisher-unknown-v25.jpg) | ![Edge hiện lựa chọn Keep anyway](docs/assets/windows-install/edge-keep-anyway-v25.jpg)                  |
+
+Các phiên bản Edge có thể bỏ qua một trong các màn hình trên. Dòng `Publisher: Unknown` phản ánh trạng thái chưa ký số. Nếu tệp bị tải lặp và có thêm `(1)` hoặc `(2)` trong tên, hãy xác nhận bằng SHA-256 thay vì chỉ nhìn tên tệp.
+
+Cảnh báo trong thời gian chờ ký số không tự chứng minh tệp an toàn hoặc nguy hiểm. Mã băm và nguồn tải giúp bạn xác minh tệp có đúng với bản GitHub đã công bố hay không. Nếu Microsoft Defender nêu tên một mối đe dọa cụ thể, hãy dừng cài đặt và gửi báo cáo; không tắt Defender, SmartScreen hoặc chính sách bảo mật của toàn máy. Trạng thái hồ sơ được cập nhật tại [Code signing policy](CODE_SIGNING_POLICY.md).
 
 ## Riêng tư và dữ liệu
 

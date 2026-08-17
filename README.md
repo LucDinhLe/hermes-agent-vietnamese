@@ -4,17 +4,33 @@
 
 # Hermes Vietnamese
 
-**Bản cộng đồng giúp người Việt cài đặt, kết nối model và sử dụng Hermes Agent dễ dàng hơn, kể cả khi không thạo tiếng Anh.**
+**Bản cộng đồng giúp người Việt cài Hermes Agent như một ứng dụng thông thường, kết nối model của mình và bắt đầu giao việc mà không phải tự dựng môi trường lập trình.**
 
-Hermes là một AI agent có thể làm việc với tệp, dòng lệnh, trình duyệt, bộ nhớ, kỹ năng và lịch tự động. Bản này bổ sung giao diện Việt/Anh, quy trình thiết lập ba bước và bộ cài cho Windows, macOS, Linux. Các tab phiên luôn nằm ở vùng giữa; Trình duyệt dùng chung mở trong panel bên phải để làm việc song song và giữ phiên đăng nhập. Không gian làm việc, Terminal tích hợp, thuật toán và tính năng lõi của Hermes vẫn được giữ theo dự án gốc.
+Hermes là một AI agent có thể trò chuyện, làm việc với tệp, chạy lệnh, dùng trình duyệt, ghi nhớ qua nhiều phiên, học kỹ năng và chạy tác vụ theo lịch. Dự án này ra đời vì đường tiếp cận từ mã nguồn của Hermes Agent vẫn là một rào cản với người dùng phổ thông Việt Nam. Việc tự chuẩn bị Git, Python, Node.js, dependency, dòng lệnh và tài liệu tiếng Anh dễ làm người mới dừng lại trước khi thấy được năng lực thật của Hermes.
 
-Đây là **dự án cá nhân vì cộng đồng** do [Lê Đình Lực](https://github.com/LucDinhLe) duy trì, phát triển từ Hermes Agent theo giấy phép MIT. Người dùng kết nối bằng tài khoản hoặc API key do từng dịch vụ cung cấp; dự án này tập trung vào Việt hóa, đóng gói và giúp người Việt thực hiện việc đó dễ dàng hơn.
+Hermes Vietnamese đóng gói phần lõi đó thành trải nghiệm Desktop Việt/Anh có hướng dẫn rõ từ lúc tải về tới phiên làm việc đầu tiên. Dự án phục vụ người dùng cá nhân, người làm nội dung, đào tạo, nghiên cứu, vận hành và các nhóm nhỏ muốn thử một AI agent có thể thao tác trên máy dưới quyền kiểm soát của chính họ. Đây vẫn là bản pilot cộng đồng, chưa phù hợp với công việc trọng yếu cần phần mềm đã ký số, hỗ trợ thương mại hoặc cam kết bảo hành.
+
+Dự án được phát triển từ [Hermes Agent](https://github.com/NousResearch/hermes-agent) của Nous Research theo [giấy phép MIT](LICENSE), do [Lê Đình Lực](https://github.com/LucDinhLe) phát triển và duy trì như một dự án cá nhân vì cộng đồng. Đây là bản phân phối độc lập, không phải bản phát hành chính thức của Nous Research, OpenAI, Anthropic, Google, Microsoft hoặc Apple.
 
 <p align="center">
   <a href="https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-25"><img src="https://img.shields.io/badge/Tải_bản_vi--v0.20.0--25-Windows_%7C_macOS_%7C_Linux-F97316?style=for-the-badge" alt="Tải Hermes Vietnamese"></a>
   <a href="README.vi.md"><img src="https://img.shields.io/badge/Hướng_dẫn-Cài_đặt_%26_kết_nối-DC2626?style=for-the-badge" alt="Hướng dẫn cài đặt và kết nối"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/Giấy_phép-MIT-16A34A?style=for-the-badge" alt="Giấy phép MIT"></a>
 </p>
+
+## Điểm mạnh so với cách tự cài Hermes Agent từ mã nguồn
+
+| Nhu cầu của người dùng          | Hermes Vietnamese bổ sung                                                                                                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cài như ứng dụng thông thường   | Bộ cài có giao diện cho Windows, macOS và Linux; người dùng phổ thông không phải tự cài Git, Python, Node.js hoặc chạy lệnh để hoàn tất lần đầu.                                |
+| Bắt đầu bằng tiếng Việt         | Giao diện tiếng Việt mặc định, chuyển nhanh VI/EN; tên model, thương hiệu và giá trị kỹ thuật vẫn giữ nguyên để dễ đối chiếu tài liệu quốc tế.                                  |
+| Đi từ cài đặt tới giao việc     | Quy trình ba bước gồm chọn ngôn ngữ, chuẩn bị Hermes, kết nối model; có hướng dẫn riêng cho ChatGPT, Claude, Gemini, API key và model cục bộ.                                   |
+| Làm nhiều việc trong một cửa sổ | Tab nhiều phiên có nút `+`/`×`, danh sách phiên, Terminal tích hợp, vùng Tệp và Trình duyệt dùng chung ở panel phải.                                                            |
+| Giảm lỗi do môi trường máy      | Runtime thiết yếu, source snapshot và dependency của đúng bản phát hành được đóng gói hoặc khóa theo hợp đồng; lần chạy đầu không phụ thuộc một nhánh Git động.                 |
+| Dễ kiểm tra và phục hồi         | Có SHA-256 cho artifact, luồng repair, lựa chọn giữ/xóa dữ liệu khi gỡ cài đặt, hướng dẫn sao lưu và kênh cập nhật `vi-v*` riêng.                                               |
+| Giữ năng lực lõi Hermes         | Vẫn dùng hệ thống model, công cụ, bộ nhớ, kỹ năng, lịch chạy, AI agent phụ và Gateway của dự án gốc; bản cộng đồng tập trung vào trải nghiệm cài đặt và sử dụng cho người Việt. |
+
+Hermes Vietnamese không tặng kèm model AI, tài khoản trả phí hoặc hạn mức API. Người dùng tự chọn nhà cung cấp và chịu điều khoản, chi phí của dịch vụ đó.
 
 ## Từ tải về đến giao việc trong ba bước
 
@@ -46,6 +62,12 @@ Người dùng kỹ thuật có thể xem mã trình cài Windows tại [`script
 | Linux khác ARM64             | [Gói Linux ARM64 `.AppImage`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-arm64.AppImage)   |
 
 > **Windows báo `isn't commonly downloaded` hoặc chỉ hiện nút Delete?** Xem [hướng dẫn cài Windows từng bước bằng hình ảnh](docs/cai-dat-windows-bang-anh.md). Tệp sẽ không tự tiếp tục nếu chỉ chờ; người dùng cần mở **See more**, bấm mũi tên cạnh **Delete** và chọn **Keep anyway**.
+
+| Edge báo tệp chưa được tải phổ biến                                                     | Mở mũi tên cạnh Delete và chọn Keep anyway                                              |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| ![Edge yêu cầu bấm See more](docs/assets/windows-install/edge-warning-see-more-v25.jpg) | ![Edge hiện lựa chọn Keep anyway](docs/assets/windows-install/edge-keep-anyway-v25.jpg) |
+
+`Publisher: Unknown` hiện vì bộ cài chưa ký số. Chỉ bỏ chặn khi tải đúng kho này và SHA-256 khớp; nếu Microsoft Defender nêu tên một mối đe dọa cụ thể thì dừng cài đặt. Không tắt SmartScreen hoặc Defender trên toàn máy.
 
 ### Kiểm tra máy trước khi tải
 

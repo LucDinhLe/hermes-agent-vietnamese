@@ -1,5 +1,22 @@
 # Tiến độ
 
+## Cập nhật 2026-08-17 — viết lại mô tả và hướng dẫn cài v25
+
+- Viết lại phần giới thiệu công khai theo hành trình của người mới: lý do dự án
+  tồn tại, nhóm người dùng, nguồn gốc Hermes Agent, giấy phép MIT và phạm vi duy
+  trì độc lập của Lê Đình Lực.
+- Bổ sung bảng điểm mạnh so với cách tự cài Hermes Agent từ mã nguồn, hướng dẫn
+  kiểm tra kiến trúc máy, chọn đúng artifact và kết nối ChatGPT, Claude,
+  Gemini hoặc nhà cung cấp khác sau cài đặt.
+- Loại mục liệt kê thay đổi kỹ thuật của v25 khỏi phần giới thiệu release; giữ
+  riêng tình trạng kiểm thử, ký số, nền tảng build-only và rollback để người dùng
+  hiểu đúng rủi ro.
+- Thêm bốn ảnh cảnh báo Edge do người duy trì cung cấp vào hướng dẫn Windows,
+  README tiếng Việt và ghi chú phát hành. Hướng dẫn chỉ cho phép bỏ chặn khi đúng
+  nguồn, đúng tên và đúng SHA-256; cảnh báo phát hiện mối đe dọa cụ thể phải dừng.
+- Thêm regression khóa sự tồn tại và liên kết của bốn ảnh, đồng thời cấm đưa
+  lại mục `Cải thiện trong bản v25` vào phần giới thiệu công khai.
+
 ## Cập nhật 2026-08-17 — sửa đường tải công khai v14 trỏ nhầm
 
 - Sau khi `vi-v0.20.0-25` được công bố, README, hướng dẫn cài Windows và GitHub
