@@ -1,5 +1,15 @@
 # Quy trình phát hành Hermes tiếng Việt đa nền tảng
 
+## Hồ sơ vận hành hiện tại
+
+- [Quy tắc phát hành bắt buộc](release-engineering-rulebook.md)
+- [Hồi cứu vi-v0.20.0-25](release-vi-v0.20.0-25-retrospective.md)
+- [Bàn giao từ v25 sang v26](handoff-vi-v0.20.0-26.md)
+
+Ba tài liệu trên là điểm bắt đầu bắt buộc cho mọi phiên chuẩn bị candidate mới.
+Khi thông tin cũ mâu thuẫn với public release hoặc rulebook hiện tại, phải kiểm
+tra GitHub/repository và ghi lại xung đột thay vì tự suy diễn.
+
 ## Mục tiêu và tiêu chí đạt
 
 Một commit được phát hành khi cùng mã nguồn tạo được các gói sau và mọi gói đều vượt kiểm tra cấu trúc:
