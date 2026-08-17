@@ -10,6 +10,40 @@ phép MIT.
 > stable.** Public Latest vẫn là `vi-v0.20.0-25`. Chỉ promotion đúng artifact đã
 > vượt toàn bộ exact-artifact gate mới được phép thay đổi trạng thái này.
 
+### Bản tải công khai hiện hành
+
+`vi-v0.20.0-25` vẫn là **bản tải mặc định/Latest** trong thời gian v26 được
+nghiệm thu. Người dùng thông thường nên tiếp tục tải đúng tệp v25 dưới đây:
+
+| Máy đang dùng           | Tải bản Public Latest v25                                                                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Windows 10/11 x64       | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Windows-x64-Setup.exe)           |
+| Windows 10/11 ARM64     | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Windows-arm64-Setup.exe)       |
+| Mac chip Apple M-series | [Bộ cài macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
+| Mac chip Intel          | [Bộ cài macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-macOS-Intel.dmg)                 |
+| Ubuntu/Debian x64       | [Gói DEB x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-x64.deb)                          |
+| Ubuntu/Debian ARM64     | [Gói DEB ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-arm64.deb)                      |
+| Fedora/RHEL x64         | [Gói RPM x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-x64.rpm)                          |
+| Fedora/RHEL ARM64       | [Gói RPM ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-arm64.rpm)                      |
+| Linux khác x64          | [AppImage x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-x64.AppImage)                    |
+| Linux khác ARM64        | [AppImage ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-arm64.AppImage)                |
+
+Nếu Edge hoặc SmartScreen cảnh báo vì bản v25 chưa ký số, chỉ tiếp tục sau khi
+đã kiểm đúng nguồn, tên tệp và SHA-256:
+
+| 1. Bấm See more                                                                                                                                                                          | 2. Chọn Keep trong menu tải xuống                                                                                                                                                 |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ![Edge báo Hermes chưa được tải xuống phổ biến](https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/docs/assets/windows-install/edge-warning-see-more-v25.jpg)      | ![Menu tải xuống của Edge có lựa chọn Keep](https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/docs/assets/windows-install/edge-download-menu-keep-v25.jpg) |
+| **3. Kiểm tra tên tệp và nguồn tải**                                                                                                                                                     | **4. Mở mũi tên và chọn Keep anyway**                                                                                                                                             |
+| ![Edge hiện Publisher Unknown vì bộ cài chưa ký số](https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/docs/assets/windows-install/edge-publisher-unknown-v25.jpg) | ![Edge hiện lựa chọn Keep anyway](https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/docs/assets/windows-install/edge-keep-anyway-v25.jpg)                  |
+
+### Điểm mạnh so với cách tự cài Hermes Agent từ mã nguồn
+
+Hermes Vietnamese đóng gói Desktop, runtime và hướng dẫn VI/EN thành một đường
+cài có thể kiểm tra, thay vì yêu cầu người dùng phổ thông tự chuẩn bị Git,
+Python, Node.js và dependency. Bản phân phối không kèm model, tài khoản trả phí,
+API key hoặc hạn mức sử dụng.
+
 ### Điểm mới trong v26
 
 #### Hermes Connector cho Chrome và Edge
@@ -100,7 +134,7 @@ log chưa làm sạch vào issue hay bằng chứng.
 ### Quay lui
 
 - Public Latest hiện tại: [`vi-v0.20.0-25`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-25).
-- Rollback target đã phê duyệt: [`vi-v0.20.0-14`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-14).
+- [`vi-v0.20.0-14`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-14) được giữ nguyên làm bản quay lui.
 - Thu hồi cookie chỉ xóa giá trị đã nhập; ledger không lưu giá trị cũ nên không
   thể khôi phục cookie sau khi revoke.
 
