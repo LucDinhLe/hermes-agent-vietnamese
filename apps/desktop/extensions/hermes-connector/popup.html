@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title data-i18n="extensionName">Hermes Connector</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <span class="mark" aria-hidden="true">H</span>
+        <div>
+          <h1 data-i18n="extensionName">Hermes Connector</h1>
+          <p data-i18n="privacyPromise">Chỉ chuyển cookie của website bạn chọn.</p>
+        </div>
+      </header>
+
+      <section class="site-card" aria-labelledby="site-label">
+        <span id="site-label" class="eyebrow" data-i18n="currentSite">Website hiện tại</span>
+        <strong id="hostname">—</strong>
+      </section>
+
+      <p id="status" class="status" role="status" aria-live="polite" data-i18n="readyToPreview">
+        Xem trước trước khi cấp quyền và gửi.
+      </p>
+
+      <section id="preview" class="preview" hidden aria-labelledby="preview-title">
+        <h2 id="preview-title" data-i18n="previewTitle">Nội dung sẽ chuyển</h2>
+        <dl>
+          <div>
+            <dt data-i18n="cookieCount">Cookie có thể nhập</dt>
+            <dd id="cookie-count">0</dd>
+          </div>
+          <div>
+            <dt data-i18n="sessionCount">Cookie phiên</dt>
+            <dd id="session-count">0</dd>
+          </div>
+          <div>
+            <dt data-i18n="unsupportedCount">Không hỗ trợ</dt>
+            <dd id="unsupported-count">0</dd>
+          </div>
+          <div>
+            <dt data-i18n="expiry">Hết hạn muộn nhất</dt>
+            <dd id="expiry">—</dd>
+          </div>
+        </dl>
+        <p class="notice" data-i18n="partitionNotice">
+          Cookie phân vùng được bỏ qua vì Hermes chưa thể giữ thuộc tính phân vùng an toàn.
+        </p>
+      </section>
+
+      <button id="preview-button" class="primary" type="button" data-i18n="previewButton">Xem trước cookie</button>
+
+      <form id="pair-form" hidden>
+        <label for="pairing-code" data-i18n="pairingCode">Mã ghép nối từ Hermes</label>
+        <input
+          id="pairing-code"
+          name="pairing-code"
+          type="text"
+          inputmode="text"
+          autocomplete="off"
+          spellcheck="false"
+          required
+          aria-describedby="pair-help"
+        />
+        <p id="pair-help" class="help" data-i18n="pairingHelp">Mã hết hạn sau hai phút và chỉ dùng được một lần.</p>
+        <button class="primary" type="submit" data-i18n="sendButton">Dùng phiên này trong Hermes</button>
+      </form>
+
+      <button id="revoke-permission" class="secondary" type="button" hidden data-i18n="revokePermission">
+        Thu hồi quyền website này
+      </button>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
