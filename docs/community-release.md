@@ -72,7 +72,7 @@ Chủ dự án có thể công khai một **community prerelease** đa nền t�
 - Windows x64 phải vượt exact-artifact smoke trên máy vật lý: cài mới không cần công cụ lập trình, runtime/gateway/onboarding, tạo và đổi tên phiên, tab phiên/trình duyệt, resize panel, restart giữ dữ liệu, repair và cả hai chế độ uninstall.
 - Mọi cổng chưa chạy như provider/tool thật hoặc update desktop từ bản trước phải ghi `false` trong evidence và nêu rõ trong release notes; không được chuyển thành kết quả GO.
 - Năm target chưa có máy thật phải mang trạng thái `BUILD-ONLY-PILOT`, ghi rõ chưa có smoke trên máy người dùng và mời báo lỗi. Thành công của runner không được gọi là bằng chứng tương thích thực tế.
-- Pilot luôn là prerelease, chưa được gọi là stable/final, không được đặt làm Latest và phải giữ nguyên bản ổn định trước làm rollback.
+- Pilot chưa được gọi là stable/final. Chủ dự án có thể cho pilot làm bản tải mặc định/Latest sau khi Windows x64 vượt exact-artifact smoke và chấp thuận rõ phạm vi lấy phản hồi cộng đồng; tài liệu và release notes phải ghi nổi bật target nào chỉ mới build, tình trạng ký số và bản rollback. Không được suy diễn trạng thái Latest thành bằng chứng stable.
 - Promotion tải lại toàn bộ draft, kiểm manifest/provenance/evidence và công khai đúng byte đã staging. Không được sửa hoặc thay artifact sau promotion.
 
 Stable vẫn bắt buộc đủ toàn bộ runtime gate, máy thật, signing/notarization và workflow `promote-vietnamese.yml`; phản hồi cộng đồng không thay thế các cổng đó.

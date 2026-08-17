@@ -4,7 +4,7 @@ Hermes Vietnamese là bản cộng đồng đa nền tảng của [Hermes Agent]
 
 Đây là dự án cá nhân, độc lập, nhằm giúp người dùng Việt tiếp cận Hermes thuận tiện hơn. Phần lõi, kiến trúc và giấy phép đến từ dự án gốc; bản tiếng Việt bổ sung trải nghiệm Desktop, bộ cài, bootstrap, cập nhật, bản địa hóa và các bản vá tương thích cho người dùng phổ thông.
 
-> **Đây là bản pilot cộng đồng, chưa phải bản stable.** Windows x64 đã được cài thử bằng chính tệp đang công khai. Windows ARM64, macOS Apple Silicon/Intel và Linux x64/ARM64 đã build trên runner native nhưng chưa được smoke trên máy người dùng thật. Bản ổn định/Latest vẫn là [vi-v0.20.0-14](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-14).
+> **Đây là bản pilot cộng đồng và là bản tải mặc định/Latest, chưa phải bản stable.** Windows x64 đã được cài thử bằng chính tệp đang công khai. Windows ARM64, macOS Apple Silicon/Intel và Linux x64/ARM64 đã build trên runner native nhưng chưa được smoke trên máy người dùng thật. [vi-v0.20.0-14](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-14) được giữ nguyên làm bản quay lui.
 
 ### Bản này dành cho ai?
 

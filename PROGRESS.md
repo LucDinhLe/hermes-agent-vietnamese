@@ -1,5 +1,20 @@
 # Tiến độ
 
+## Cập nhật 2026-08-17 — sửa đường tải công khai v14 trỏ nhầm
+
+- Sau khi `vi-v0.20.0-25` được công bố, README, hướng dẫn cài Windows và GitHub
+  `Latest` vẫn trỏ `vi-v0.20.0-14`. Người duy trì và ít nhất một người dùng đã
+  tải nhầm v14; đây là lỗi đồng bộ phát hành, không phải lỗi hồ sơ cục bộ.
+- Bản Windows x64 v25 đã được người duy trì tải trực tiếp và cài thành công.
+  Artifact công khai giữ nguyên 332.776.297 byte, SHA-256
+  `0f31c4a23bbb7913300b3f3571ad346aae517d367705a965d451a1febf620e59`.
+- Theo quyết định sản phẩm mới, v25 được dùng làm bản tải mặc định để lấy phản
+  hồi cộng đồng nhưng vẫn giữ nhãn pilot, công khai rõ năm target build-only và
+  tình trạng chưa ký số. v14 chỉ còn là mục tiêu rollback.
+- Hợp đồng tài liệu mới khóa tag tải mặc định và toàn bộ tên asset giữa README,
+  hướng dẫn và release notes để chặn tái diễn việc công bố một bản nhưng hướng
+  người dùng sang bản khác.
+
 ## Cập nhật 2026-08-16 — candidate v20 dựng đủ, dừng ở verifier draft
 
 - `vi-v0.20.0-20` đạt toàn bộ sáu build native và 12/12 Install & Update E2E;
