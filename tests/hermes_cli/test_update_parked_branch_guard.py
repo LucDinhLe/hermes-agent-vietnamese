@@ -242,6 +242,12 @@ def _patch_update_flow(monkeypatch, repo, run_real_git=True):
         lambda *a, **k: "https://github.com/NousResearch/hermes-agent.git",
     )
     monkeypatch.setattr(hermes_main, "_is_fork", lambda *a, **k: False)
+    # These tests exercise parked-branch recovery, not fork/upstream remote
+    # enrollment. The community build's official origin differs from the
+    # upstream fixture URL, which would otherwise prompt on stdin mid-test.
+    monkeypatch.setattr(
+        hermes_main, "_sync_with_upstream_if_needed", lambda *a, **k: None
+    )
     monkeypatch.setattr(hermes_main, "_discard_lockfile_churn", lambda *a, **k: None)
     monkeypatch.setattr(update_cmd, "_discard_lockfile_churn", lambda *a, **k: None)
     monkeypatch.setattr(update_cmd, "_normalize_managed_eol", lambda *a, **k: None)

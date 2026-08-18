@@ -108,6 +108,7 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
   const [triggerPlacement, setTriggerPlacement] = useState<'bottom' | 'top'>('top')
   const [focusRequestId, setFocusRequestId] = useState(0)
   const [submitting, setSubmitting] = useState(false)
+  const submitCooldownRef = useRef<number | null>(null)
   // True while OS-drop files are being staged/uploaded into the session. Blocks
   // submit and shows a spinner so confirming the edit can't race the async
   // upload and drop the gateway-side ref before it lands in the draft.
@@ -117,6 +118,15 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
   const at = useAtCompletions({ cwd, gateway, sessionId })
   const slash = useSlashCompletions({ gateway })
   const emoji = useEmojiCompletions()
+
+  useEffect(
+    () => () => {
+      if (submitCooldownRef.current !== null) {
+        window.clearTimeout(submitCooldownRef.current)
+      }
+    },
+    []
+  )
 
   // This is the one composer that routinely unmounts, so it is where the focus
   // bus leaks: confirming or cancelling an edit tears the composer down while
@@ -602,7 +612,8 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
       // Clear latch after cooldown to allow re-submission. This prevents rapid
       // double-Enter but doesn't require tracking when onEdit settles (which may
       // be synchronous or async, and whose promise we don't have access to).
-      window.setTimeout(() => {
+      submitCooldownRef.current = window.setTimeout(() => {
+        submitCooldownRef.current = null
         setSubmitting(false)
       }, 200)
     } catch {
