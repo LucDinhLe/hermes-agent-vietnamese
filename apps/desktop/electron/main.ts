@@ -1864,6 +1864,7 @@ function hideFirstRunSetupChoice() {
 function getFirstRunSetupGate() {
   if (!firstRunSetupGate) {
     firstRunSetupGate = createFirstRunSetupGate({
+      autoContinue: process.env.HERMES_DESKTOP_TEST_MODE === 'fresh-install-auto',
       hideChoice: hideFirstRunSetupChoice,
       log: rememberLog,
       onStuck: (_backend, stuckAfterMs) => {
