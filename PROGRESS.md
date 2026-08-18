@@ -21,6 +21,14 @@
   E2E kế tiếp `32174589129` xác nhận bộ dò tìm đúng toàn bộ rename target nhưng
   npm tiếp tục tự dừng với `Exit handler never called`; cây `node_modules` bị
   gián đoạn trên diện rộng nên không còn an toàn để sửa từng thư mục.
+- Checkpoint `df8f41dbc1ce78f2f9ae7e41f8c0936bee87a366` đã qua CI
+  `32175819273` và Docker `32175818327`. E2E `32176441666` xác nhận việc dựng
+  lại toàn bộ cây dependency vẫn kết thúc sau khoảng 71 giây với cùng lỗi npm.
+  Ba lượt npm của bản v25 cũng dừng theo cùng nhịp; proxy ghi hàng loạt TLS EOF.
+  Đối chiếu cấu hình cho thấy sandbox chỉ đưa CA Internet thật vào
+  `NODE_EXTRA_CA_CERTS`, trong khi chính proxy E2E cấp chứng thư bằng CA tạm của
+  sandbox. Bản sửa hiện dùng bundle kết hợp hai CA, giữ xác minh TLS và đồng
+  thời lưu `~/.npm/_logs` vào artifact nếu còn lỗi.
 - Bộ cài nay chỉ kích hoạt phục hồi khi thấy staging npm hậu tố 8 ký tự đồng
   thời có package gốc cùng tên. Khi đó nó dựng lại ba cây dependency có thể tái
   tạo của root, TUI và web; source, lockfile, config và dữ liệu người dùng không
