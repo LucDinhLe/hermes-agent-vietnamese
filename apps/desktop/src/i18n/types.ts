@@ -407,6 +407,9 @@ export interface Translations {
       reactionsDesc: string
       composerPopoutTitle: string
       composerPopoutDesc: string
+      reasoningSummaryTitle: string
+      reasoningSummaryDesc: string
+      reasoningSummaryClear: string
       embedsTitle: string
       embedsDesc: string
       embedsAsk: string
@@ -2585,6 +2588,12 @@ export interface Translations {
       thoughtBriefly: string
       thoughtFor: (duration: string) => string
       turnDuration: (duration: string) => string
+      reasoningSummary: string
+      reasoningSummaryGenerated: string
+      reasoningSummaryLatency: (duration: string) => string
+      reasoningSummaryCostUnavailable: string
+      reasoningSummaryUsage: (tokens: number) => string
+      reasoningSummaryFailed: string
       today: (time: string) => string
       yesterday: (time: string) => string
       copy: string

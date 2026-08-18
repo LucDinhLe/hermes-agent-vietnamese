@@ -508,6 +508,10 @@ export const en: Translations = {
       reactionsDesc: 'iMessage-style emoji tapbacks — react to messages, and Hermes can react to yours.',
       composerPopoutTitle: 'Floating Composer',
       composerPopoutDesc: 'Allow dragging the composer out of its dock. Turn this off to keep it locked at the bottom.',
+      reasoningSummaryTitle: 'Summarize reasoning in Vietnamese',
+      reasoningSummaryDesc:
+        'After a turn finishes, send its public reasoning to one extra model call. This can add cost and latency; the original reasoning and answer stay unchanged.',
+      reasoningSummaryClear: 'Clear summary cache',
       embedsTitle: 'Inline Embeds',
       embedsDesc:
         'Rich previews load from third-party sites (YouTube, X, …). Ask shows a placeholder until you allow each one; Always loads them automatically; Off keeps plain links.',
@@ -987,6 +991,7 @@ export const en: Translations = {
         approval: { label: 'Approval', hint: 'Smart auto-approve' },
         mcp: { label: 'MCP', hint: 'MCP tool routing' },
         title_generation: { label: 'Title gen', hint: 'Session titles' },
+        reasoning_summary_vi: { label: 'Vietnamese reasoning', hint: 'Post-turn summaries' },
         curator: { label: 'Curator', hint: 'Skill-usage review' }
       }
     },
@@ -3017,6 +3022,12 @@ export const en: Translations = {
       thoughtBriefly: 'Thought briefly',
       thoughtFor: duration => `Thought for ${duration}`,
       turnDuration: duration => `This turn took ${duration}`,
+      reasoningSummary: 'Vietnamese reasoning summary',
+      reasoningSummaryGenerated: 'Model-generated summary',
+      reasoningSummaryLatency: duration => `Latency ${duration}`,
+      reasoningSummaryCostUnavailable: 'Cost not provided by provider',
+      reasoningSummaryUsage: tokens => `${tokens.toLocaleString()} tokens`,
+      reasoningSummaryFailed: 'Could not generate the Vietnamese summary. The original reasoning is unchanged.',
       today: time => `Today, ${time}`,
       yesterday: time => `Yesterday, ${time}`,
       copy: 'Copy',

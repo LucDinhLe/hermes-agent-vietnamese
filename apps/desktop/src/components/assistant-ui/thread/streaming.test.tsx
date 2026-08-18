@@ -4,6 +4,13 @@ import { useEffect, useState } from 'react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { $reasoningCollapsedByDefault } from '@/store/reasoning-disclosure'
+import {
+  $reasoningSummaries,
+  clearReasoningSummaryCache,
+  reasoningSourceDigest,
+  reasoningSummaryContextKey
+} from '@/store/reasoning-summary'
+import { $selectedStoredSessionId } from '@/store/session'
 
 import { Thread } from '.'
 
@@ -478,6 +485,8 @@ describe('assistant-ui streaming renderer', () => {
   beforeEach(() => {
     resizeObservers.clear()
     $reasoningCollapsedByDefault.set(false)
+    clearReasoningSummaryCache()
+    $selectedStoredSessionId.set(null)
   })
 
   it('renders assistant text incrementally before completion', async () => {
@@ -644,6 +653,45 @@ describe('assistant-ui streaming renderer', () => {
     expect(reasoningParts.length).toBe(2)
     expect(reasoningParts[0]?.textContent).toBe('First thought.')
     expect(reasoningParts[1]?.textContent).toBe('Second thought.')
+  })
+
+  it('renders a cached Vietnamese summary separately while preserving original reasoning and answer', async () => {
+    const reasoning = 'Original public reasoning.'
+    const digest = await reasoningSourceDigest(reasoning)
+    const baseMessage = assistantReasoningMessage(reasoning)
+
+    const message = {
+      ...baseMessage,
+      content: [...baseMessage.content, { type: 'text', text: 'Original assistant answer.' }]
+    } as ThreadMessage
+
+    const key = reasoningSummaryContextKey('default', 'session-1', message.id, digest)
+
+    $selectedStoredSessionId.set('session-1')
+    $reasoningSummaries.set({
+      [key]: {
+        key,
+        profile: 'default',
+        sessionLineage: 'session-1',
+        messageId: message.id,
+        sourceDigest: digest,
+        summary: 'Bản tóm tắt tiếng Việt.',
+        provider: 'test-provider',
+        model: 'test-model',
+        latencyMs: 125,
+        usage: null,
+        createdAt: Date.now()
+      }
+    })
+
+    const { container } = render(<MessageHarness message={message} />)
+
+    await waitFor(() => expect(container.textContent).toContain('Bản tóm tắt tiếng Việt.'))
+    expect(container.textContent).toContain('Original assistant answer.')
+
+    fireEvent.click(within(container).getByRole('button', { name: /thought/i }))
+    expect(container.textContent).toContain(reasoning)
+    expect(container.textContent).toContain('Cost not provided by provider')
   })
 
   it('does not reopen an earlier completed thinking group when a later group is running', () => {

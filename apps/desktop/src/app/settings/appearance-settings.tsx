@@ -19,6 +19,11 @@ import { $activeGatewayProfile, $profiles, normalizeProfileKey } from '@/store/p
 import { $reactionsEnabled, setReactionsEnabled } from '@/store/reactions-enabled'
 import { $reasoningCollapsedByDefault, setReasoningCollapsedByDefault } from '@/store/reasoning-disclosure'
 import { $sessionListDensity, type SessionListDensity, setSessionListDensity } from '@/store/session-list-density'
+import {
+  $reasoningSummaryEnabled,
+  clearReasoningSummaryCache,
+  setReasoningSummaryEnabled
+} from '@/store/reasoning-summary'
 import { $toolViewMode, setToolViewMode } from '@/store/tool-view'
 import {
   $translucency,
@@ -288,6 +293,7 @@ export function AppearanceSettings() {
   const composerPopoutGesturesEnabled = useStore($composerPopoutGesturesEnabled)
   const translucency = useStore($translucency)
   const reactionsEnabled = useStore($reactionsEnabled)
+  const reasoningSummaryEnabled = useStore($reasoningSummaryEnabled)
   const backdrop = useStore($backdrop)
   const installs = useStore($marketplaceInstalls)
   const profiles = useStore($profiles)
@@ -638,6 +644,23 @@ export function AppearanceSettings() {
             }
             description={a.reactionsDesc}
             title={a.reactionsTitle}
+          />
+
+          <ToggleRow
+            checked={reasoningSummaryEnabled}
+            description={a.reasoningSummaryDesc}
+            label={a.reasoningSummaryTitle}
+            onChange={setReasoningSummaryEnabled}
+          />
+
+          <ListRow
+            action={
+              <Button onClick={clearReasoningSummaryCache} size="inline" variant="text">
+                {a.reasoningSummaryClear}
+              </Button>
+            }
+            description={a.reasoningSummaryDesc}
+            title={a.reasoningSummaryClear}
           />
 
           <ListRow

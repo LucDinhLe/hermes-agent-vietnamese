@@ -497,6 +497,10 @@ export const zh: Translations = {
       reactionsDesc: 'iMessage 风格的表情回应 — 你可以给消息添加回应，Hermes 也能回应你的消息。',
       composerPopoutTitle: '悬浮输入框',
       composerPopoutDesc: '允许将输入框拖出底部停靠区。关闭后，输入框会锁定在底部。',
+      reasoningSummaryTitle: '用越南语总结推理',
+      reasoningSummaryDesc:
+        '每轮结束后，通过一次额外模型调用总结公开推理。这可能增加费用和延迟；原始推理与回答不会改变。',
+      reasoningSummaryClear: '清除总结缓存',
       embedsTitle: '内嵌预览',
       embedsDesc:
         '富预览会从第三方网站（YouTube、X 等）加载。询问会在你允许前显示占位符；总是会自动加载；关闭则保留纯链接。',
@@ -1184,6 +1188,7 @@ export const zh: Translations = {
         approval: { label: '审批', hint: '智能自动批准' },
         mcp: { label: 'MCP', hint: 'MCP 工具路由' },
         title_generation: { label: '标题生成', hint: '会话标题' },
+        reasoning_summary_vi: { label: '越南语推理', hint: '轮次结束后的总结' },
         curator: { label: '维护器', hint: '技能使用审查' }
       }
     },
@@ -3178,6 +3183,12 @@ export const zh: Translations = {
       thoughtBriefly: '思考了片刻',
       thoughtFor: duration => `思考了 ${duration}`,
       turnDuration: duration => `本轮耗时 ${duration}`,
+      reasoningSummary: '越南语推理总结',
+      reasoningSummaryGenerated: '模型生成的总结',
+      reasoningSummaryLatency: duration => `延迟 ${duration}`,
+      reasoningSummaryCostUnavailable: '提供商未提供费用信息',
+      reasoningSummaryUsage: tokens => `${tokens.toLocaleString()} 个令牌`,
+      reasoningSummaryFailed: '无法生成越南语总结。原始推理未被更改。',
       today: time => `今天，${time}`,
       yesterday: time => `昨天，${time}`,
       copy: '复制',

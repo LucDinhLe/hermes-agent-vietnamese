@@ -366,6 +366,10 @@ export const ja = defineLocale({
         'iMessage風の絵文字タップバック — メッセージにリアクションでき、Hermesもあなたのメッセージにリアクションします。',
       composerPopoutTitle: 'フローティング入力欄',
       composerPopoutDesc: '入力欄をドックからドラッグして外せるようにします。オフにすると画面下部に固定されます。',
+      reasoningSummaryTitle: '推論をベトナム語で要約',
+      reasoningSummaryDesc:
+        'ターン完了後、公開された推論を追加のモデル呼び出しで要約します。料金と遅延が発生する場合がありますが、元の推論と回答は変更されません。',
+      reasoningSummaryClear: '要約キャッシュを消去',
       embedsTitle: 'インライン埋め込み',
       embedsDesc:
         'リッチプレビューは第三者サイト（YouTube、X など）から読み込まれます。確認は許可するまでプレースホルダーを表示し、常には自動で読み込み、オフはリンクのままにします。',
@@ -948,6 +952,7 @@ export const ja = defineLocale({
         approval: { label: '承認', hint: 'スマート自動承認' },
         mcp: { label: 'MCP', hint: 'MCP ツールルーティング' },
         title_generation: { label: 'タイトル生成', hint: 'セッションタイトル' },
+        reasoning_summary_vi: { label: 'ベトナム語推論', hint: 'ターン後の要約' },
         curator: { label: 'キュレーター', hint: 'スキル使用レビュー' }
       }
     },
@@ -2697,6 +2702,12 @@ export const ja = defineLocale({
       thoughtBriefly: '少し思考',
       thoughtFor: duration => `${duration} 思考`,
       turnDuration: duration => `このターンの所要時間: ${duration}`,
+      reasoningSummary: 'ベトナム語の推論要約',
+      reasoningSummaryGenerated: 'モデルが生成した要約',
+      reasoningSummaryLatency: duration => `遅延 ${duration}`,
+      reasoningSummaryCostUnavailable: 'プロバイダーから料金情報は提供されていません',
+      reasoningSummaryUsage: tokens => `${tokens.toLocaleString()} トークン`,
+      reasoningSummaryFailed: 'ベトナム語の要約を生成できませんでした。元の推論は変更されていません。',
       today: time => `今日 ${time}`,
       yesterday: time => `昨日 ${time}`,
       copy: 'コピー',
