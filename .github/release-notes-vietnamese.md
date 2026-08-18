@@ -16,7 +16,7 @@ Lực](https://github.com/LucDinhLe) phát triển cho cộng đồng theo giấ
 
 ### Bản tải công khai hiện hành
 
-`vi-v0.20.0-25` vẫn là **bản tải mặc định/Latest** trong thời gian v26 được
+`vi-v0.20.0-25` vẫn là **bản tải mặc định/Latest** trong thời gian v28 được
 nghiệm thu. Người dùng thông thường nên tiếp tục tải đúng tệp v25 dưới đây:
 
 | Máy đang dùng           | Tải bản Public Latest v25                                                                                                                                    |
