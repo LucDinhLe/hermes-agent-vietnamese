@@ -3582,11 +3582,41 @@ async function applyUpdates(opts: { stopSafeBlockers?: boolean } = {}) {
   // the app runs, and the Windows setup-binary handoff is unnecessary.
   if (bundledUpdaterActive()) {
     updateInFlight = true
+    let installerHandoffStarted = false
 
     try {
-      return await applyAppUpdate(percent =>
-        emitUpdateProgress({ stage: 'download', message: 'Downloading the app update…', percent })
+      const result = await applyAppUpdate(
+        percent => emitUpdateProgress({ stage: 'download', message: 'Downloading the app update…', percent }),
+        () => {
+          // electron-updater closes every window before quitAndInstall returns.
+          // Mark this as a hand-off first so the active-work prompt and macOS
+          // keep-alive convention cannot strand the installer waiting for us.
+          installerHandoffStarted = true
+          isQuittingForHandoff = true
+          rememberLog('[updates] downloaded full app artifact; handing off to the platform installer')
+        }
       )
+
+      if (installerHandoffStarted) {
+        // A wedged renderer/backend must not leave NSIS/ShipIt waiting forever
+        // for the old process. Graceful before-quit teardown gets 30 seconds;
+        // afterwards the platform installer already owns recovery + relaunch.
+        const forceExitTimer = setTimeout(() => {
+          rememberLog('[updates] installer hand-off did not exit in 30s; forcing process exit')
+          app.exit(0)
+        }, 30_000)
+
+        forceExitTimer.unref()
+      }
+
+      return result
+    } catch (error) {
+      // A thrown quitAndInstall means no platform hand-off owns recovery.
+      // Keep the working app usable instead of suppressing future quit guards.
+      installerHandoffStarted = false
+      isQuittingForHandoff = false
+
+      throw error
     } finally {
       updateInFlight = false
     }
