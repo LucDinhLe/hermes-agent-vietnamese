@@ -6,6 +6,7 @@ import {
   AGENT_BROWSER_PACKAGE,
   AGENT_BROWSER_SOURCE,
   agentBrowserBinaryName,
+  hostTarBin,
   peMachine,
 } from "./prepare-agent-browser-native.mjs"
 
@@ -22,6 +23,14 @@ test("Windows ARM64 source is locked to a full commit and digest", () => {
   assert.match(AGENT_BROWSER_SOURCE.commit, /^[0-9a-f]{40}$/)
   assert.match(AGENT_BROWSER_SOURCE.sha256, /^[0-9a-f]{64}$/)
   assert.match(AGENT_BROWSER_SOURCE.url, new RegExp(AGENT_BROWSER_SOURCE.commit))
+})
+
+test("Windows archive extraction always uses the inbox tar executable", () => {
+  assert.equal(hostTarBin("win32", "C:\\Windows"), "C:\\Windows\\System32\\tar.exe")
+  assert.equal(hostTarBin("linux"), "tar")
+
+  const source = fs.readFileSync(new URL("./prepare-agent-browser-native.mjs", import.meta.url), "utf8")
+  assert.doesNotMatch(source, /run\(["']tar\.exe["']/)
 })
 
 test("resident runtime pins agent-browser outside the root workspace graph", () => {

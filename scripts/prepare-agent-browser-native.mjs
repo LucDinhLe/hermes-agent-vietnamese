@@ -62,9 +62,9 @@ export function sha512IntegrityFile(filePath) {
   return `sha512-${digest}`
 }
 
-function hostTarBin() {
-  return process.platform === "win32"
-    ? path.join(process.env.SystemRoot || "C:\\Windows", "System32", "tar.exe")
+export function hostTarBin(platform = process.platform, systemRoot = process.env.SystemRoot || "C:\\Windows") {
+  return platform === "win32"
+    ? path.join(systemRoot, "System32", "tar.exe")
     : "tar"
 }
 
@@ -126,7 +126,9 @@ export function prepareAgentBrowserNative(platform = process.platform, arch = pr
     if (actual !== AGENT_BROWSER_SOURCE.sha256) {
       throw new Error(`agent-browser source SHA-256 mismatch: expected ${AGENT_BROWSER_SOURCE.sha256}, got ${actual}`)
     }
-    run("tar.exe", ["-xf", archive, "-C", work])
+    // Resolve the Windows inbox bsdtar explicitly. Git for Windows also ships a
+    // tar.exe which treats drive-letter paths as remote archives ("C:" host).
+    run(hostTarBin(), ["-xf", archive, "-C", work])
     run("cargo.exe", [
       "build",
       "--locked",
