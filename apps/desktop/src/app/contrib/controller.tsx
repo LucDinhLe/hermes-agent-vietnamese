@@ -546,11 +546,10 @@ $panesFlipped.listen(flipped => {
 bindTreeSideVisibility('left', $sidebarOpen, setSidebarOpen)
 bindTreeSideVisibility('right', $fileBrowserOpen, setFileBrowserOpen)
 
-// Workspace-scoped surfaces: the file tree and git diff only mean something
-// inside a project. A detached chat (no cwd) hides them — their zones
-// collapse and the chat absorbs the width; picking a project brings them
-// back. The terminal is NOT workspace-gated: unlike the old shell (where it
-// rode the rail's row and vanished with it), its zone stands on its own.
+// Review remains workspace-scoped. The right rail itself is not: it also owns
+// the persistent Browser, so a detached chat must still be able to reveal it.
+// In Files mode without a cwd, the mounted rail shows the existing no-project
+// hint instead of collapsing the whole right side.
 const $hasWorkspace = computed($currentCwd, cwd => Boolean(cwd.trim()))
 
 // The tree pane's own presence tracks ⌘J directly, not just the column's
@@ -565,7 +564,7 @@ const $hasWorkspace = computed($currentCwd, cwd => Boolean(cwd.trim()))
 // is about.
 bindPaneVisibility(
   'files',
-  computed([$hasWorkspace, $fileBrowserOpen], (workspace, open) => workspace && open),
+  $fileBrowserOpen,
   () => setFileBrowserOpen(false),
   () => setFileBrowserOpen(true)
 )
