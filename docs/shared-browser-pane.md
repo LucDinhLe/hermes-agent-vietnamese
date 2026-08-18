@@ -7,7 +7,7 @@ Hermes Desktop có một trình duyệt nằm ngay trong không gian làm việc
 ## Trải nghiệm đã triển khai
 
 - **Trình duyệt** xuất hiện ở thanh điều hướng bên trái.
-- Khi mở lần đầu, Trình duyệt nằm cùng vùng với **Phiên** để người dùng chuyển tab nhanh.
+- Nút **Trình duyệt** nằm ở thanh điều hướng bên trái; khi bấm, trang web mở thành tab trong vùng làm việc ở giữa, ngay cạnh các tab phiên.
 - Có thể kéo tab Trình duyệt sang cạnh vùng làm việc để xem song song.
 - Có thể kéo vạch chia để mở rộng hoặc thu hẹp từng vùng.
 - Thanh địa chỉ có các nút quay lại, tiến tới và tải lại.

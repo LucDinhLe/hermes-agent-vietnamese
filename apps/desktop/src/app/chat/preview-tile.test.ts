@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 import type { PreviewTarget } from '@/store/preview'
 
-import { isLayoutPreviewTarget, previewTileDock } from './preview-tile'
+import { previewTileDock } from './preview-tile'
 
 describe('previewTileDock', () => {
-  it('keeps the shared Browser out of the center workspace tab strip', () => {
+  it('opens the shared Browser as a center workspace tab', () => {
     const browser: PreviewTarget = {
       kind: 'url',
       label: 'Browser',
@@ -13,7 +13,7 @@ describe('previewTileDock', () => {
       url: 'https://example.com'
     }
 
-    expect(isLayoutPreviewTarget(browser)).toBe(false)
+    expect(previewTileDock(browser)).toEqual({ anchor: 'workspace', dir: 'center' })
   })
 
   it('keeps file previews beside the workspace', () => {
@@ -24,7 +24,6 @@ describe('previewTileDock', () => {
       url: 'file:///work/notes.md'
     }
 
-    expect(isLayoutPreviewTarget(file)).toBe(true)
     expect(previewTileDock(file)).toEqual({ anchor: 'workspace', dir: 'right' })
   })
 })
