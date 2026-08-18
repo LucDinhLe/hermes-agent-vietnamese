@@ -22,8 +22,13 @@
   tệp ảnh hưởng và đúng suite workflow đều xanh. Full Electron có 1.463 test đạt,
   28 lỗi và 3 skip do giả định POSIX/quyền/timing trên Windows; đúng suite release
   workflow đạt sạch. Hai full-suite này không được diễn giải thành toàn bộ xanh.
-- Chưa khóa candidate commit/tag, chưa push, chưa tạo draft PR/release và chưa
-  công khai. Cổng tiếp theo là commit sạch, tag bất biến `vi-v0.20.0-28`, build
+- Draft PR #38 đã mở và gắn `ci-reviewed`; CI nguồn cùng Docker xanh tại commit
+  `cd701e873ec43c04c93c200929237a62b1d074e0`.
+- Candidate bất biến `vi-v0.20.0-28` bị cổng build từ chối trước khi tạo draft vì
+  tag mang version `0.20.0` không khớp version nguồn upstream `0.20.4`. Tag lỗi
+  được giữ nguyên làm bằng chứng, không di chuyển hoặc tái sử dụng.
+- Candidate thay thế phải dùng tag đúng sự thật `vi-v0.20.4-28`, trên một commit
+  mới chỉ cập nhật tài liệu/tag release. Sau khi CI nguồn xanh lại mới được dựng
   native sáu target, tải lại exact artifact và chạy smoke/rollback theo workflow.
 - Public Latest vẫn là `vi-v0.20.0-25`; rollback giữ `vi-v0.20.0-14`. Candidate
   v28 chỉ được công khai dạng community prerelease sau toàn bộ exact-artifact gate.
