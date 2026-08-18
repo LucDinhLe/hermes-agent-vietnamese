@@ -41,7 +41,6 @@ export function releaseTagForAppVersion(version: string): string {
     ? `vi-v${community[1]}.${community[2]}.${community[3]}-${community[4]}`
     : `v${version}`
 }
-
 /**
  * Map an electron-updater check result to the renderer's update-check shape
  * (the shape hermes:updates:check already returns for the git path). The
@@ -120,7 +119,6 @@ export function beginAppUpdateInstall(
   beforeInstall?.()
   updater.quitAndInstall(false, true)
 }
-
 /**
  * Lazy singleton for electron-updater's autoUpdater. The require sits inside
  * the function so thin builds and tests never pay for the module load.

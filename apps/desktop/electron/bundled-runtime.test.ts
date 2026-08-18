@@ -252,7 +252,6 @@ test('release picking understands Vietnamese iterations', () => {
     sha: 'd'.repeat(40)
   })
 })
-
 test('release picking returns null when no final release tag exists', () => {
   assert.equal(latestReleaseFromLsRemote(''), null)
   assert.equal(latestReleaseFromLsRemote(`${'d'.repeat(40)}\trefs/tags/v1.0.0-beta.2`), null)
