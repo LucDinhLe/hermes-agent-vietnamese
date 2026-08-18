@@ -113,7 +113,7 @@ def test_root_node_dependency_failure_is_fatal(tmp_path: Path) -> None:
     assert not (install_dir / "node_modules").exists()
 
 
-def test_tui_node_dependency_failure_is_fatal(tmp_path: Path) -> None:
+def test_tui_dependencies_are_part_of_the_scoped_root_install(tmp_path: Path) -> None:
     install_dir = tmp_path / "install"
     tui_dir = install_dir / "ui-tui"
     proc, _, calls = _run_node_deps_stage(
@@ -121,11 +121,11 @@ def test_tui_node_dependency_failure_is_fatal(tmp_path: Path) -> None:
         fail_directory=str(tui_dir),
     )
 
-    assert proc.returncode != 0
-    assert _stage_result(proc)["ok"] is False
-    assert calls == [str(install_dir), str(tui_dir)]
+    assert proc.returncode == 0, proc.stderr
+    assert _stage_result(proc)["ok"] is True
+    assert calls == [str(install_dir)]
     assert "Node.js dependencies installed" in proc.stdout
-    assert "TUI dependencies installed" not in proc.stdout
+    assert "TUI dependencies installed" in proc.stdout
 
 
 def test_node_dependency_success_remains_successful(tmp_path: Path) -> None:
@@ -140,6 +140,13 @@ def test_node_dependency_success_remains_successful(tmp_path: Path) -> None:
         "stage": "node-deps",
         "skipped": False,
     }
-    assert calls == [str(install_dir), str(install_dir / "ui-tui")]
+    assert calls == [str(install_dir)]
     assert "Node.js dependencies installed" in proc.stdout
     assert "TUI dependencies installed" in proc.stdout
+
+
+def test_node_dependency_install_excludes_desktop_workspace() -> None:
+    text = INSTALL_SH.read_text(encoding="utf-8")
+
+    assert "--workspace ui-tui --workspace web --include-workspace-root" in text
+    assert "--workspace apps/desktop" not in text

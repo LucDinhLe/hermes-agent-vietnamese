@@ -2374,7 +2374,14 @@ install_node_deps() {
         # Capture npm output so failures are diagnosable (#87340).
         local npm_log
         npm_log="$(mktemp)"
+        # Root is a monorepo. A bare `npm install` also pulls apps/desktop
+        # (Electron + native build tooling), which is unnecessary for the
+        # CLI installer and can exceed the bounded install window on a clean
+        # machine. Match `hermes update`: install only the root, TUI, and web
+        # workspaces. Desktop dependencies are installed by the desktop path.
         if ! run_with_timeout "$NODE_DEPS_TIMEOUT" npm install --silent \
+                --no-fund --no-audit --prefer-offline --progress=false \
+                --workspace ui-tui --workspace web --include-workspace-root \
                 >"$npm_log" 2>&1; then
             log_error "npm install failed or timed out; Node.js dependencies were not installed"
             if [ -s "$npm_log" ]; then
@@ -2387,6 +2394,9 @@ install_node_deps() {
         fi
         rm -f "$npm_log"
         log_success "Node.js dependencies installed"
+        if [ -f "$INSTALL_DIR/ui-tui/package.json" ]; then
+            log_success "TUI dependencies installed"
+        fi
 
         # Install Playwright browser + system dependencies.
         # Playwright's --with-deps only supports apt-based systems natively.
@@ -2478,31 +2488,6 @@ install_node_deps() {
         fi
         fi
         log_success "Browser engine setup complete"
-    fi
-
-    # Install TUI dependencies
-    if [ -f "$INSTALL_DIR/ui-tui/package.json" ]; then
-        log_info "Installing TUI dependencies..."
-        cd "$INSTALL_DIR/ui-tui"
-        # Time-boxed: a stalled registry fetch would otherwise hang here (#39219).
-        # Report success only on actual success, same as node-deps above
-        # (#77003) — and fail the install outright (#85297).
-        # Capture npm output so failures are diagnosable (#87340).
-        local tui_npm_log
-        tui_npm_log="$(mktemp)"
-        if ! run_with_timeout "$NODE_DEPS_TIMEOUT" npm install --silent \
-                >"$tui_npm_log" 2>&1; then
-            log_error "TUI npm install failed or timed out; TUI dependencies were not installed"
-            if [ -s "$tui_npm_log" ]; then
-                log_error "npm output:"
-                cat "$tui_npm_log" >&2
-            fi
-            rm -f "$tui_npm_log"
-            restore_dirty_lockfiles "$INSTALL_DIR"
-            return 1
-        fi
-        rm -f "$tui_npm_log"
-        log_success "TUI dependencies installed"
     fi
 
     # Keep the checkout clean so `hermes update` doesn't autostash every run.
