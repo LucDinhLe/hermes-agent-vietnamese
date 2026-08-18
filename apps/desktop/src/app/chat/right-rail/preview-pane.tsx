@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
 import { $previewServerRestart, failPreviewServerRestart, type PreviewTarget } from '@/store/preview'
 
+import { BrowserConnectorDialog } from './browser-connector-dialog'
 import { ArtifactPreview } from './preview-artifact'
 import { normalizeBrowserAddress } from './preview-browser-address'
 import { previewBrowserZoomFactor } from './preview-browser-fit'
@@ -163,6 +164,7 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<PreviewLoadErrorState | null>(null)
   const [localReloadKey, setLocalReloadKey] = useState(0)
+  const [connectorOpen, setConnectorOpen] = useState(false)
 
   const applyBrowserFit = useCallback((width: number) => {
     browserWidthRef.current = width
@@ -843,8 +845,20 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
               {copy.sharedWithAgent}
             </span>
           </Tip>
+          <Tip label={copy.connector.openButton}>
+            <Button
+              aria-label={copy.connector.openButton}
+              onClick={() => setConnectorOpen(true)}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <Codicon name="key" size="0.85rem" />
+            </Button>
+          </Tip>
         </form>
       )}
+      <BrowserConnectorDialog onOpenChange={setConnectorOpen} open={connectorOpen} url={currentUrl} />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {!embedded && target.kind !== 'url' && (
           <div className="pointer-events-none flex min-h-(--titlebar-height) items-center gap-1.5 border-b border-border/60 bg-background px-2 py-1">

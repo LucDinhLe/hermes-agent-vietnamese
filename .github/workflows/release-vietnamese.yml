@@ -106,8 +106,12 @@ jobs:
           scripts/packaged-layout.test.mjs
           scripts/release-workflow-contract.test.mjs
           scripts/stage-agent-payloads.test.mjs
+          scripts/browser-connector-extension.test.mjs
           electron/app-updater.test.ts
           electron/bootstrap-runner.test.ts
+          electron/browser-connector/controller.test.ts
+          electron/browser-connector/cookie-import.test.ts
+          electron/browser-connector/pairing-server.test.ts
           electron/bundled-runtime.test.ts
           electron/desktop-uninstall.test.ts
           electron/update-remote.test.ts
@@ -123,6 +127,16 @@ jobs:
           src/components/first-run-journey.test.tsx
           src/components/onboarding/index.test.tsx
           src/i18n/vi-community.test.ts
+          src/app/chat/right-rail/browser-connector-dialog.test.tsx
+          src/app/chat/right-rail/preview-pane.test.tsx
+          src/components/assistant-ui/thread/streaming.test.tsx
+          src/store/reasoning-summary.test.ts
+
+      - name: Kiểm thử giao diện Advisor và ngôn ngữ
+        run: >-
+          npm run --prefix apps/desktop test:ui --
+          src/app/settings/model-settings.test.tsx
+          src/i18n/languages.test.ts
 
       - name: Kiểm tra kiểu dữ liệu
         run: npm run --prefix apps/desktop typecheck
@@ -134,6 +148,10 @@ jobs:
           tests/hermes_cli/test_update_channel_stable.py
           tests/hermes_cli/test_update_eject.py
           tests/hermes_cli/test_version_info.py
+          tests/agent/test_oneshot.py
+          tests/agent/test_advisor.py
+          tests/run_agent/test_advisor_checkpoints.py
+          tests/tui_gateway/test_protocol.py
 
   build:
     name: Dựng một lần — ${{ matrix.label }}

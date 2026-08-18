@@ -4,8 +4,10 @@ import {
   useAuiState,
   useMessagePartReasoning
 } from '@assistant-ui/react'
+import { useStore } from '@nanostores/react'
 import { type ComponentProps, type FC, type ReactNode, useEffect, useRef, useState } from 'react'
 
+import { useSessionView } from '@/app/chat/session-view'
 import { ClarifyTool } from '@/components/assistant-ui/clarify-tool'
 import { MarkdownText, MarkdownTextContent } from '@/components/assistant-ui/markdown-text'
 import { DelegateTool } from '@/components/assistant-ui/tool/delegate'
@@ -19,6 +21,14 @@ import { generatedImageFromResult } from '@/lib/generated-images'
 import { separateGluedReasoningBlocks } from '@/lib/reasoning-blocks'
 import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
+import { $activeGatewayProfile } from '@/store/profile'
+import {
+  $reasoningSummaries,
+  $reasoningSummaryErrors,
+  findReasoningSummary,
+  reasoningSourceDigest,
+  reasoningSummaryContextKey
+} from '@/store/reasoning-summary'
 
 const ImageGenerateTool: FC<ToolCallMessagePartProps> = props => {
   const { args, result } = props
@@ -206,6 +216,48 @@ const ReasoningAccordionGroup: FC<{ children?: ReactNode; endIndex: number; star
         .some(p => p?.type === 'reasoning' && p.status?.type !== 'complete')
   )
 
+  const messageReasoning = useAuiState(s =>
+    s.message.parts
+      .filter(part => part?.type === 'reasoning' && typeof part.text === 'string' && part.text.trim())
+      .map(part => (part.type === 'reasoning' ? part.text.trim() : ''))
+      .filter(Boolean)
+      .join('\n\n')
+  )
+
+  const isLastReasoningGroup = useAuiState(s =>
+    s.message.parts.slice(endIndex + 1).every(part => part?.type !== 'reasoning')
+  )
+
+  const view = useSessionView()
+  const storedSessionId = useStore(view.$storedId)
+  const profile = useStore($activeGatewayProfile)
+  const summaries = useStore($reasoningSummaries)
+  const errors = useStore($reasoningSummaryErrors)
+  const copy = useI18n().t.assistant.thread
+  const [sourceDigest, setSourceDigest] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (pending || !isLastReasoningGroup || !messageReasoning) {
+      setSourceDigest('')
+
+      return () => {
+        cancelled = true
+      }
+    }
+
+    void reasoningSourceDigest(messageReasoning).then(digest => {
+      if (!cancelled) {
+        setSourceDigest(digest)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isLastReasoningGroup, messageReasoning, pending])
+
   // A reasoning group with no actual text is pure noise — drop the whole
   // "Thinking" disclosure rather than leave an empty header eating a row. This
   // applies live too: encrypted/spinner-coerced reasoning (Opus reasoning max)
@@ -222,18 +274,60 @@ const ReasoningAccordionGroup: FC<{ children?: ReactNode; endIndex: number; star
     return null
   }
 
+  const lineage = storedSessionId ?? ''
+
+  const summary = sourceDigest
+    ? findReasoningSummary(summaries, profile, lineage, messageId, sourceDigest)
+    : undefined
+
+  const error = sourceDigest
+    ? errors[reasoningSummaryContextKey(profile, lineage, messageId, sourceDigest)]
+    : undefined
+
+  const latency = summary ? (summary.latencyMs < 1000 ? `${summary.latencyMs} ms` : `${(summary.latencyMs / 1000).toFixed(1)} s`) : ''
+  const usageTokens = summary?.usage?.totalTokens
+
   return (
-    // Keyed per block, not per message: the timer registry hands every caller
-    // of a key the same origin, so a turn that thinks three separate times used
-    // to measure the second and third blocks from the first one's start and
-    // report the running total as each block's duration.
-    <ThinkingDisclosure
-      messageRunning={messageRunning}
-      pending={pending}
-      timerKey={`reasoning:${messageId}:${startIndex}`}
-    >
-      {children}
-    </ThinkingDisclosure>
+    <>
+      {/* Keyed per block, not per message: the timer registry hands every caller
+          of a key the same origin, so separate blocks retain separate durations. */}
+      <ThinkingDisclosure
+        messageRunning={messageRunning}
+        pending={pending}
+        timerKey={`reasoning:${messageId}:${startIndex}`}
+      >
+        {children}
+      </ThinkingDisclosure>
+
+      {isLastReasoningGroup && !pending && (summary || error) && (
+        <section
+          className="mt-2 rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary)/55 px-3 py-2"
+          data-slot="aui_reasoning-summary"
+        >
+          <div className="text-[length:var(--conversation-caption-font-size)] font-medium text-(--ui-text-secondary)">
+            {copy.reasoningSummary}
+          </div>
+          {summary ? (
+            <>
+              <MarkdownTextContent
+                containerClassName="mt-1 text-xs leading-snug text-muted-foreground/90"
+                containerProps={{ 'data-slot': 'aui_reasoning-summary-text' } as ComponentProps<'div'>}
+                disableArtifacts
+                isRunning={false}
+                text={summary.summary}
+              />
+              <div className="mt-1.5 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
+                {copy.reasoningSummaryGenerated} · {summary.model || summary.provider} ·{' '}
+                {copy.reasoningSummaryLatency(latency)} ·{' '}
+                {usageTokens ? copy.reasoningSummaryUsage(usageTokens) : copy.reasoningSummaryCostUnavailable}
+              </div>
+            </>
+          ) : (
+            <p className="mt-1 text-xs text-(--ui-red)">{copy.reasoningSummaryFailed}</p>
+          )}
+        </section>
+      )}
+    </>
   )
 }
 

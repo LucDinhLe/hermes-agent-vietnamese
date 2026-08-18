@@ -1,0 +1,32 @@
+{
+  "extensionName": { "message": "Hermes Connector" },
+  "extensionDescription": { "message": "Securely transfer cookies for the current website to Hermes Browser." },
+  "actionTitle": { "message": "Use this signed-in session in Hermes" },
+  "privacyPromise": { "message": "Only transfers cookies for the website you choose." },
+  "currentSite": { "message": "Current website" },
+  "readyToPreview": { "message": "Preview before granting access or sending." },
+  "previewTitle": { "message": "What will be transferred" },
+  "cookieCount": { "message": "Importable cookies" },
+  "sessionCount": { "message": "Session cookies" },
+  "unsupportedCount": { "message": "Unsupported" },
+  "expiry": { "message": "Latest expiry" },
+  "partitionNotice": {
+    "message": "Partitioned cookies are skipped because Hermes cannot safely preserve their partition yet."
+  },
+  "previewButton": { "message": "Preview cookies" },
+  "pairingCode": { "message": "Pairing code from Hermes" },
+  "pairingHelp": { "message": "The code expires after two minutes and works once." },
+  "sendButton": { "message": "Use this session in Hermes" },
+  "revokePermission": { "message": "Revoke access to this website" },
+  "sessionOnly": { "message": "When the session closes" },
+  "previewReady": { "message": "Ready. Check the counts, then enter the code from Hermes." },
+  "noCookies": { "message": "This website has no supported cookies to transfer." },
+  "previewFailed": { "message": "Could not preview. Check website access and try again." },
+  "waitingForHermes": { "message": "Waiting for your confirmation in Hermes…" },
+  "pairExpired": { "message": "The code expired. Create a new code in Hermes." },
+  "transferFailed": { "message": "Transfer failed. The extension did not store any cookies." },
+  "transferComplete": { "message": "Sent securely to Hermes. You may close this window." },
+  "permissionRevoked": { "message": "Access to this website was revoked." },
+  "permissionRevokeFailed": { "message": "Could not revoke access. Try the browser extension settings." },
+  "unsupportedPage": { "message": "Only HTTP or HTTPS websites are supported." }
+}

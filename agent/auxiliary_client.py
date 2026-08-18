@@ -900,7 +900,7 @@ _API_KEY_PROVIDER_AUX_MODELS: Dict[str, str] = _API_KEY_PROVIDER_AUX_MODELS_FALL
 # main chat model when running in "auto" mode. Restricted to tasks where
 # latency is user-visible and the output is short enough that a small model
 # matches a frontier one. Every other task keeps "auto = my chat model".
-_FAST_MODEL_TASKS: frozenset = frozenset({"title_generation"})
+_FAST_MODEL_TASKS: frozenset = frozenset({"title_generation", "reasoning_summary_vi"})
 
 
 # Vision-specific model overrides for direct providers.

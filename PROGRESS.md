@@ -1,5 +1,86 @@
 # Tiến độ
 
+## Cập nhật 2026-08-18 — bổ sung Giám sát (Advisor) và mở candidate kế tiếp
+
+- Xác nhận `vi-v0.20.0-26` đã là tag bất biến tại
+  `8ea73dcb475e32b8171bb970cc98ba809119f9b8`; không di chuyển hoặc dựng lại tag.
+  Phạm vi v26 mở rộng chỉ có thể đi vào candidate kế tiếp
+  `vi-v0.20.0-27` sau khi commit sạch, push và CI nguồn xanh.
+- Thêm Advisor mặc định tắt, chỉ đọc và không có tools. Khi bật, Hermes tự rà
+  soát trước mutating batch đầu tiên, khi đổi nhóm công cụ/lặp lỗi và trước kết
+  quả cuối; verdict `PASS/REVISE/ASK_USER/BLOCK`, mặc định tối đa hai vòng sửa.
+- Batch bị yêu cầu sửa được đóng đủ synthetic tool result theo từng
+  `tool_call_id`; final candidate bị từ chối chỉ là scaffolding tạm và bị loại
+  khỏi transcript bền vững. Review packet redaction secret và không chứa hidden
+  chain-of-thought.
+- Settings → Model có mục **Giám sát (Advisor)** ngay sau model chính, chỉ gồm
+  công tắc bật/tắt và bộ chọn provider/model. Không thêm nút gọi thủ công trong
+  chat. Cấu hình/model tách profile và áp dụng cho phiên mới.
+- Cổng release nay gọi đích danh test Advisor Python, vòng hội thoại, model UI
+  và i18n; promotion pilot yêu cầu evidence off-zero-call, plan/recovery/final,
+  read-only, bounded revision và model persistence.
+- Kiểm thử hiện tại: 119/119 Electron/release, 61/61 UI v26 cũ,
+  26/26 Advisor UI+i18n, 107/107 Python release và Desktop typecheck đều đạt.
+  Một lượt chạy hai suite UI đồng thời từng timeout do tải máy; workflow đã tách
+  suite Advisor và cả hai suite đều xanh khi chạy tuần tự. Chưa build candidate mới, chưa tạo tag,
+  draft hay public release. GitHub CLI hiện không xác thực được nên chưa thể
+  push/tạo draft PR hoặc đọc CI từ máy này.
+
+## Cập nhật 2026-08-17 — khóa cổng candidate và promotion v26
+
+- Workflow tạo candidate nay gọi đích danh test extension MV3, ba lớp Connector
+  Electron, consent UI, preview pane, reasoning UI/store và RPC Python; không còn
+  dựa vào việc test mới vô tình được suite tổng quát thu thập.
+- Promotion community pilot bắt buộc bằng chứng Windows x64 cho Chrome/Edge
+  profile cô lập, consent/revoke/persistence/redaction, reasoning bật/tắt và giữ
+  nguyên bản gốc, safe tool, update exact v25, repair/uninstall và rollback.
+- Cổng release local sau thay đổi đạt 119/119 Electron/release tests, 61/61 UI
+  tests và 36/36 Python release tests. Desktop typecheck, `uv lock --check`,
+  dependency production audit (0 vulnerability) và scan mẫu secret trên toàn bộ
+  diff v26 đều đạt.
+- Full UI trước đó đạt 3.700 test và có 4 timeout không tái hiện khi chạy riêng;
+  full Electron có 20 lỗi thuộc giả định POSIX/quyền Windows, trong khi đúng bộ
+  release workflow đạt sạch. Hai kết quả full-suite này được giữ là cảnh báo môi
+  trường, không được ghi thành gate xanh.
+- Release notes được chuyển sang v26 và cố ý ghi candidate-only. Public Latest
+  vẫn là `vi-v0.20.0-25`; chưa có tag, draft hoặc artifact v26 tại thời điểm này.
+
+## Cập nhật 2026-08-17 — hoàn thiện lát cắt tóm tắt reasoning tiếng Việt v26
+
+- Thêm RPC stateless `reasoning.summarize`: backend kiểm SHA-256, giới hạn
+  reasoning công khai ở 64 KiB và gọi riêng auxiliary task
+  `reasoning_summary_vi`; không ghi vào transcript hoặc prompt của phiên chính.
+- Tùy chọn **Tóm tắt suy luận bằng tiếng Việt** mặc định tắt. Khi tắt, đường
+  hậu xử lý dừng trước hash và tạo đúng zero model call; khi bật chỉ chạy sau
+  `message.complete`, tối đa một lần cho cùng digest.
+- Giữ nguyên reasoning và câu trả lời gốc; summary nằm trong panel riêng với
+  model, độ trễ và trạng thái chi phí/usage. Lỗi auxiliary chỉ hiện trong panel,
+  không đổi lượt chính thành lỗi.
+- Cache local tách transcript, không lưu reasoning nguồn, bị khóa theo
+  `profile + session lineage + message id + source SHA-256`, giới hạn 120 bản
+  ghi/1 MiB, phục hồi qua restart và có nút xóa trong Settings.
+- Bổ sung copy VI/EN/JA/ZH/ZH-Hant và cấu hình model riêng cho task. Kiểm thử
+  targeted hiện đạt 58 Python tests, 22 Desktop tests, Desktop typecheck và
+  lint thay đổi đều không lỗi/cảnh báo.
+
+## Cập nhật 2026-08-17 — khóa threat model và đặc tả v26
+
+- Tạo worktree sạch `feat/v26-secure-connector` từ `origin/main` tại
+  `4d597f74600cdc3791edf7d34566534182946c55`; không chạm các worktree cũ và giữ
+  nguyên release/tag/asset v25.
+- Xác minh baseline: 6/6 public-release tests, 18/18 preview/reasoning UI tests,
+  26/26 bundled-runtime/hardening tests và Desktop typecheck đều đạt trong môi
+  trường cô lập, dùng đúng lockfile.
+- Khóa threat model tại `docs/hermes-connector-v26-threat-model.md`: consent hai
+  phía, optional domain permissions, loopback một lần, metadata-only IPC,
+  RAM-only payload, import đúng `persist:hermes-preview` và revoke theo ledger.
+- Khóa quyết định bỏ qua có cảnh báo đối với partitioned cookie vì Electron 41
+  chưa có API giữ `partitionKey`; không hạ cấp thành cookie không phân vùng.
+- Khóa đặc tả tại `docs/hermes-v26-spec.md`; nền móng trust v26 chỉ dành cho
+  companion chính chủ. Extension Manager tổng quát được hoãn sang v27.
+- Tạo `docs/release-vi-v0.20.0-26-plan.md` với cổng Chrome/Edge profile cô lập,
+  exact Windows x64, update v25 -> v26, redaction và public GO/NO-GO.
+
 ## Cập nhật 2026-08-17 — bàn giao v25 và khởi động phạm vi v26
 
 - Đóng gói toàn bộ hành trình từ tiếp nhận v15 tới public thành công v25 tại

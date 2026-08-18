@@ -689,6 +689,10 @@ export const vi: Translations = {
       backdropDesc: 'Hình ảnh bức tượng mờ nhạt đằng sau cuộc trò chuyện.',
       reactionsTitle: 'Cảm xúc tin nhắn',
       reactionsDesc: 'Gắn biểu tượng cảm xúc vào tin nhắn; Hermes cũng có thể bày tỏ cảm xúc với tin nhắn của bạn.',
+      reasoningSummaryTitle: 'Tóm tắt suy luận bằng tiếng Việt',
+      reasoningSummaryDesc:
+        'Sau khi lượt chạy kết thúc, phần suy luận công khai được gửi qua một model call bổ sung. Thao tác này có thể phát sinh chi phí và độ trễ; bản gốc và câu trả lời không thay đổi.',
+      reasoningSummaryClear: 'Xóa cache bản tóm tắt',
       embedsTitle: 'Nhúng nội tuyến',
       embedsDesc:
         'Tải bản xem trước từ trang web bên thứ ba như YouTube hoặc X. “Hỏi” chờ bạn cho phép từng nội dung; “Luôn luôn” tự động tải; “Tắt” chỉ hiển thị liên kết.',
@@ -1071,6 +1075,12 @@ export const vi: Translations = {
       reasoning: 'Lý luận',
       reasoningOff: 'Tắt',
       defaultsFailed: 'Không lưu được giá trị mặc định của model',
+      advisorTitle: 'Giám sát (Advisor)',
+      advisorDesc:
+        'Một model độc lập rà soát kế hoạch, lúc đổi hướng hoặc lặp lỗi, và kết quả cuối trước khi Hermes trả lời.',
+      advisorEnabled: 'Bật Giám sát',
+      advisorCost: 'Khi bật, mỗi nhịp rà soát tạo thêm model call, độ trễ và chi phí.',
+      advisorModel: 'Model Giám sát',
       auxiliaryTitle: 'Model phụ trợ',
       resetAllToMain: 'Đặt lại tất cả về model chính',
       auxiliaryDesc:
@@ -1090,6 +1100,7 @@ export const vi: Translations = {
         approval: { label: 'Phê duyệt', hint: 'Tự động phê duyệt thông minh' },
         mcp: { label: 'MCP', hint: 'MCP định tuyến công cụ' },
         title_generation: { label: 'Tạo tiêu đề', hint: 'Đặt tiêu đề phiên' },
+        reasoning_summary_vi: { label: 'Tóm tắt suy luận', hint: 'Tóm tắt tiếng Việt sau lượt' },
         curator: { label: 'Quản lý kỹ năng', hint: 'Đánh giá việc sử dụng kỹ năng' }
       }
     },
@@ -2993,7 +3004,52 @@ export const vi: Translations = {
       invalidAddressTitle: 'Địa chỉ web không hợp lệ',
       invalidAddressMessage: 'Hãy nhập địa chỉ http hoặc https.',
       sharedWithAgent: 'Dùng chung với agent',
-      sharedWithAgentHint: 'Bạn và agent đang dùng cùng trang và cùng phiên đăng nhập này.'
+      sharedWithAgentHint: 'Bạn và agent đang dùng cùng trang và cùng phiên đăng nhập này.',
+      connector: {
+        openButton: 'Dùng phiên Chrome hoặc Edge',
+        title: 'Hermes Connector',
+        description: 'Chuyển cookie của website này từ companion Chrome hoặc Edge chính chủ.',
+        loading: 'Đang kiểm tra connector…',
+        officialExtension: 'Companion extension chính chủ',
+        trustVerified: 'Digest bundle và chính sách quyền đã được xác minh.',
+        trustFailed: 'Bundle extension không đạt xác minh. Hãy giữ connector ở trạng thái tắt.',
+        openFolder: 'Mở thư mục',
+        extensionId: 'ID extension',
+        digest: 'SHA-256',
+        enabled: 'Connector đang bật',
+        disabled: 'Connector đang tắt',
+        enableDescription: 'Bật để cho phép ghép nối loopback ngắn hạn. Mỗi website vẫn cần bạn đồng ý.',
+        enable: 'Bật',
+        disable: 'Tắt',
+        currentSite: 'Website trong Hermes Browser',
+        createCode: 'Tạo mã dùng một lần',
+        pairingTitle: 'Ghép nối extension trình duyệt',
+        pairingInstructions:
+          'Mở Hermes Connector trên cùng website trong Chrome hoặc Edge, xem trước cookie rồi nhập mã này.',
+        copy: 'Sao chép',
+        expiresAt: time => `Hết hạn lúc ${time}`,
+        previewReady: 'Kiểm tra trước khi nhập',
+        browser: 'Trình duyệt',
+        domain: 'Domain',
+        cookies: 'Cookie có thể nhập',
+        sessionCookies: 'Cookie phiên',
+        unsupported: 'Không hỗ trợ',
+        expiry: 'Hết hạn muộn nhất',
+        sessionOnly: 'Khi đóng phiên',
+        importWarning: 'Import có thể thay cookie cùng định danh trong Hermes Browser. Cookie phân vùng sẽ bị bỏ qua.',
+        confirmImport: (count, hostname) => `Nhập ${count} cookie cho ${hostname}`,
+        importing: 'Đang chờ an toàn và nhập…',
+        imported: (count, hostname) => `Đã nhập ${count} cookie cho ${hostname}.`,
+        skippedUnsupported: count => `Đã bỏ qua ${count} cookie phân vùng chưa hỗ trợ.`,
+        importedSessions: 'Phiên website đã nhập',
+        noImports: 'Chưa có phiên website nào được nhập.',
+        importRecord: (count, time) => `${count} cookie · ${time}`,
+        revoke: 'Xóa',
+        revokeWarning:
+          'Xóa chỉ tác động các định danh đã ghi. Cookie được website làm mới cùng định danh cũng sẽ bị xóa.',
+        error: code => `Connector không thể tiếp tục (${code}). Không có giá trị cookie nào được ghi vào log.`,
+        close: 'Đóng'
+      }
     }
   },
 
@@ -3051,6 +3107,12 @@ export const vi: Translations = {
       thought: 'Suy nghĩ',
       thoughtBriefly: 'Đã suy nghĩ trong chốc lát',
       thoughtFor: duration => `Đã suy nghĩ trong ${duration}`,
+      reasoningSummary: 'Tóm tắt suy luận bằng tiếng Việt',
+      reasoningSummaryGenerated: 'Bản tóm tắt do model tạo',
+      reasoningSummaryLatency: duration => `Độ trễ ${duration}`,
+      reasoningSummaryCostUnavailable: 'Chi phí không được provider cung cấp',
+      reasoningSummaryUsage: tokens => `${tokens.toLocaleString('vi-VN')} token`,
+      reasoningSummaryFailed: 'Không thể tạo bản tóm tắt tiếng Việt. Phần suy luận gốc không bị thay đổi.',
       today: time => `Hôm nay, ${time}`,
       yesterday: time => `Hôm qua, ${time}`,
       copy: 'Sao chép',

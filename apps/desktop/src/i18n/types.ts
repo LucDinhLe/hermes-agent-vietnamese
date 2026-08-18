@@ -371,6 +371,9 @@ export interface Translations {
       backdropDesc: string
       reactionsTitle: string
       reactionsDesc: string
+      reasoningSummaryTitle: string
+      reasoningSummaryDesc: string
+      reasoningSummaryClear: string
       embedsTitle: string
       embedsDesc: string
       embedsAsk: string
@@ -728,6 +731,11 @@ export interface Translations {
       reasoning: string
       reasoningOff: string
       defaultsFailed: string
+      advisorTitle: string
+      advisorDesc: string
+      advisorEnabled: string
+      advisorCost: string
+      advisorModel: string
       auxiliaryTitle: string
       resetAllToMain: string
       auxiliaryDesc: string
@@ -2327,6 +2335,49 @@ export interface Translations {
       invalidAddressMessage: string
       sharedWithAgent: string
       sharedWithAgentHint: string
+      connector: {
+        openButton: string
+        title: string
+        description: string
+        loading: string
+        officialExtension: string
+        trustVerified: string
+        trustFailed: string
+        openFolder: string
+        extensionId: string
+        digest: string
+        enabled: string
+        disabled: string
+        enableDescription: string
+        enable: string
+        disable: string
+        currentSite: string
+        createCode: string
+        pairingTitle: string
+        pairingInstructions: string
+        copy: string
+        expiresAt: (time: string) => string
+        previewReady: string
+        browser: string
+        domain: string
+        cookies: string
+        sessionCookies: string
+        unsupported: string
+        expiry: string
+        sessionOnly: string
+        importWarning: string
+        confirmImport: (count: number, hostname: string) => string
+        importing: string
+        imported: (count: number, hostname: string) => string
+        skippedUnsupported: (count: number) => string
+        importedSessions: string
+        noImports: string
+        importRecord: (count: number, time: string) => string
+        revoke: string
+        revokeWarning: string
+        error: (code: string) => string
+        close: string
+      }
     }
   }
 
@@ -2382,6 +2433,12 @@ export interface Translations {
       thought: string
       thoughtBriefly: string
       thoughtFor: (duration: string) => string
+      reasoningSummary: string
+      reasoningSummaryGenerated: string
+      reasoningSummaryLatency: (duration: string) => string
+      reasoningSummaryCostUnavailable: string
+      reasoningSummaryUsage: (tokens: number) => string
+      reasoningSummaryFailed: string
       today: (time: string) => string
       yesterday: (time: string) => string
       copy: string
