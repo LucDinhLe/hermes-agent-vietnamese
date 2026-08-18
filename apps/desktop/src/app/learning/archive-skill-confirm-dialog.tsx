@@ -54,7 +54,7 @@ export function ArchiveSkillConfirmDialog({
 
   return (
     <ConfirmDialog
-      confirmLabel="Archive"
+      confirmLabel={t.skills.archive}
       description={ARCHIVE_SKILL_DESCRIPTION}
       destructive
       dismissOnConfirm

@@ -2,6 +2,7 @@ import { useStore } from '@nanostores/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
+import { useI18n } from '@/i18n'
 import { $gateway } from '@/store/gateway'
 
 import { useBillingApi } from './api'
@@ -26,6 +27,8 @@ interface StepUpVerificationPayload {
 }
 
 export function useStepUpFlow() {
+  const { locale } = useI18n()
+  const isVi = locale === 'vi'
   const api = useBillingApi()
   const gateway = useStore($gateway)
   const queryClient = useQueryClient()
@@ -107,7 +110,7 @@ export function useStepUpFlow() {
     unsubscribe()
 
     if (!result.ok) {
-      const resolved = resolveRefusal(result.refusal)
+      const resolved = resolveRefusal(result.refusal, locale)
 
       setMessage({
         kind: 'error',
@@ -121,8 +124,10 @@ export function useStepUpFlow() {
     if (!result.data.granted) {
       setMessage({
         kind: 'error',
-        text: 'Verification finished without allowing Remote Spending for this terminal.',
-        title: 'Verification was not approved'
+        text: isVi
+          ? 'Đã xác minh xong nhưng Remote Spending vẫn chưa được cấp cho máy này.'
+          : 'Verification finished without allowing Remote Spending for this terminal.',
+        title: isVi ? 'Chưa phê duyệt xác minh' : 'Verification was not approved'
       })
 
       return
@@ -134,10 +139,10 @@ export function useStepUpFlow() {
     ])
     setMessage({
       kind: 'success',
-      text: 'Remote Spending is allowed for this terminal.',
-      title: 'Verification complete'
+      text: isVi ? 'Remote Spending đã được cấp cho máy này.' : 'Remote Spending is allowed for this terminal.',
+      title: isVi ? 'Xác minh hoàn tất' : 'Verification complete'
     })
-  }, [api, gateway, queryClient, unsubscribe])
+  }, [api, gateway, isVi, locale, queryClient, unsubscribe])
 
   return { dismiss, message, openVerification, phase, start, verification }
 }

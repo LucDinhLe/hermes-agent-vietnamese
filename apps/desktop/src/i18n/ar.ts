@@ -812,6 +812,11 @@ export const ar = defineLocale({
       reasoning: 'الاستدلال',
       reasoningOff: 'إيقاف',
       defaultsFailed: 'فشل حفظ افتراضيات النموذج',
+      advisorTitle: 'المستشار',
+      advisorDesc: 'يراجع نموذج مستقل الخطة والتغييرات الكبيرة أو الأخطاء المتكررة والنتيجة النهائية قبل أن يجيب Hermes.',
+      advisorEnabled: 'تفعيل المستشار',
+      advisorCost: 'عند التفعيل، تضيف كل نقطة مراجعة استدعاء نموذج وزمنا وتكلفة.',
+      advisorModel: 'نموذج المستشار',
       auxiliaryTitle: 'النماذج المساعدة',
       resetAllToMain: 'إعادة تعيين الكل إلى النموذج الرئيسي',
       auxiliaryDesc: 'تعمل المهام المساعدة على النموذج الرئيسي افتراضيا. عيّن نموذجا مخصصا لأي مهمة لتجاوز ذلك.',
@@ -1973,9 +1978,12 @@ export const ar = defineLocale({
       skipped: 'تم التخطي',
       failed: 'فشل'
     },
+    journeySteps: ['التثبيت', 'ربط نموذج', 'بدء العمل'],
+    chooseLanguage: 'لغة الإعداد',
+    noTerminalRequired: 'لا يتطلب الإعداد أوامر طرفية أو تعديل ملفات الإعداد.',
     oneTimeTitle: 'يحتاج Hermes إلى تثبيت لمرة واحدة',
     unsupportedDesc: platform =>
-      `التثبيت التلقائي عند أول تشغيل غير متاح على ${platform} بعد. افتح الطرفية وشغّل الأمر أدناه، ثم أعد تشغيل هذا التطبيق. ستتخطى عمليات التشغيل اللاحقة هذه الخطوة.`,
+      `تعذر على جلسة الإعداد القديمة هذه بدء مثبت ${platform}. أعد التحميل لاستخدام المثبت التلقائي الحالي؛ لا حاجة إلى أوامر الطرفية.`,
     installCommand: 'أمر التثبيت',
     copyCommand: 'نسخ الأمر',
     viewDocs: 'عرض مستندات التثبيت',
@@ -2011,6 +2019,8 @@ export const ar = defineLocale({
     lookingUpProviders: 'جار البحث عن المزوّدين...',
     collapse: 'طي',
     otherProviders: 'مزودون آخرون',
+    apiKeyProviders: 'مزوّدو مفتاح API والسحابة والنماذج المحلية',
+    apiKeyProviderPitch: 'اتصل باستخدام مفتاح API الخاص بك.',
     haveApiKey: 'لديك مفتاح API',
     chooseLater: 'سأختار مزوّدا لاحقا',
     recommended: 'موصى به',
@@ -2028,8 +2038,9 @@ export const ar = defineLocale({
         description: 'وصول مباشر إلى نماذج OpenAI.'
       },
       gemini: {
+        title: 'Google Gemini (مفتاح API)',
         short: 'نماذج Gemini',
-        description: 'وصول مباشر إلى نماذج Google Gemini.'
+        description: 'استخدم مفتاح API من Google AI Studio للوصول إلى نماذج Gemini.'
       },
       xai: {
         short: 'نماذج Grok',
@@ -2197,6 +2208,7 @@ export const ar = defineLocale({
     aria: 'الشريط الجانبي الأيمن',
     panelsAria: 'لوحات الشريط الأيمن',
     files: 'الملفات',
+    browserNewTab: 'علامة تبويب متصفح جديدة',
     terminal: 'الطرفية',
     noFolderSelected: 'لم يتم اختيار مجلد',
     changeCwdTitle: 'تغيير مجلد العمل',

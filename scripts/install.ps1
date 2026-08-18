@@ -374,9 +374,11 @@ $script:ResolvedPathReport = @{
 # Configuration
 # ============================================================================
 
-$RepoUrlSsh = "git@github.com:NousResearch/hermes-agent.git"
-$RepoUrlHttps = "https://github.com/NousResearch/hermes-agent.git"
+$RepoUrlSsh = "git@github.com:LucDinhLe/hermes-agent-vietnamese.git"
+$RepoUrlHttps = "https://github.com/LucDinhLe/hermes-agent-vietnamese.git"
 $PythonVersion = "3.11"
+$WindowsOfficialPythonVersion = "3.12.10"
+$WindowsOfficialPythonMinor = "3.12"
 # Minor versions the installer accepts when the requested $PythonVersion isn't
 # available, in preference order.  uv discovers both uv-managed and system
 # interpreters, so this list also matches a pre-existing system Python.  Single
@@ -490,6 +492,232 @@ function Invoke-NativeWithRelaxedErrorAction {
         $ErrorActionPreference = $prevEAP
     }
 }
+
+function Get-WindowsOfficialPythonSpec {
+    $arch = Get-WindowsArch
+    $fileName = switch ($arch) {
+        "x64" { "python-$WindowsOfficialPythonVersion-amd64.exe" }
+        "arm64" { "python-$WindowsOfficialPythonVersion-arm64.exe" }
+        default { throw "Hermes Desktop supports official Python bootstrap only on Windows x64 and ARM64 (detected $arch)." }
+    }
+    $sha256 = switch ($arch) {
+        "x64" { "67B5635E80EA51072B87941312D00EC8927C4DB9BA18938F7AD2D27B328B95FB" }
+        "arm64" { "377AC8FD478987940088E879441E702A71B53164D2A1E6F1D51FF77A7E470258" }
+    }
+
+    return @{
+        Arch = $arch
+        FileName = $fileName
+        Minor = $WindowsOfficialPythonMinor
+        Sha256 = $sha256
+        Url = "https://www.python.org/ftp/python/$WindowsOfficialPythonVersion/$fileName"
+        Version = $WindowsOfficialPythonVersion
+    }
+}
+
+function Get-WindowsOfficialPythonExe {
+    $spec = Get-WindowsOfficialPythonSpec
+    return Join-Path $HermesHome "python\cpython-$($spec.Version)-$($spec.Arch)\python.exe"
+}
+
+function Get-TrustedWindowsPythonMarker {
+    return Join-Path $HermesHome "python\trusted-python-path.txt"
+}
+
+function Test-TrustedWindowsPython {
+    param([Parameter(Mandatory = $true)][string]$PythonExe)
+
+    if (-not (Test-Path -LiteralPath $PythonExe)) { return $false }
+
+    try {
+        $signature = Get-AuthenticodeSignature -LiteralPath $PythonExe
+        $signer = if ($signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { "" }
+        if ($signature.Status -ne "Valid" -or $signer -notlike "*Python Software Foundation*") {
+            return $false
+        }
+
+        $previousEAP = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            $versionOutput = & $PythonExe --version 2>&1
+            $exitCode = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $previousEAP
+        }
+
+        return $exitCode -eq 0 -and $versionOutput -match "Python $WindowsOfficialPythonMinor\."
+    } catch {
+        return $false
+    }
+}
+
+function Resolve-TrustedWindowsPython {
+    $candidates = [System.Collections.Generic.List[string]]::new()
+    $marker = Get-TrustedWindowsPythonMarker
+
+    if (Test-Path -LiteralPath $marker) {
+        try {
+            $savedPath = (Get-Content -LiteralPath $marker -Raw -ErrorAction Stop).Trim()
+            if ($savedPath) { $null = $candidates.Add($savedPath) }
+        } catch { }
+    }
+
+    $null = $candidates.Add((Get-WindowsOfficialPythonExe))
+
+    $registryPaths = @(
+        "HKCU:\Software\Python\PythonCore\$WindowsOfficialPythonMinor\InstallPath",
+        "HKLM:\Software\Python\PythonCore\$WindowsOfficialPythonMinor\InstallPath",
+        "HKLM:\Software\WOW6432Node\Python\PythonCore\$WindowsOfficialPythonMinor\InstallPath"
+    )
+    foreach ($registryPath in $registryPaths) {
+        try {
+            $installPath = (Get-Item -LiteralPath $registryPath -ErrorAction Stop).GetValue("")
+            if ($installPath) { $null = $candidates.Add((Join-Path $installPath "python.exe")) }
+        } catch { }
+    }
+
+    $knownPaths = @(
+        (Join-Path $env:LOCALAPPDATA "Programs\Python\Python312\python.exe"),
+        (Join-Path $env:ProgramFiles "Python312\python.exe")
+    )
+    foreach ($knownPath in $knownPaths) {
+        if ($knownPath) { $null = $candidates.Add($knownPath) }
+    }
+
+    foreach ($commandName in @("python.exe", "python3.exe")) {
+        try {
+            foreach ($command in @(Get-Command $commandName -All -ErrorAction SilentlyContinue)) {
+                if ($command.Source) { $null = $candidates.Add($command.Source) }
+            }
+        } catch { }
+    }
+
+    $seen = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::OrdinalIgnoreCase
+    )
+    foreach ($candidate in $candidates) {
+        if (-not $candidate) { continue }
+        try { $fullPath = [System.IO.Path]::GetFullPath($candidate) } catch { continue }
+        if (-not $seen.Add($fullPath)) { continue }
+        $isTrusted = Test-TrustedWindowsPython -PythonExe $fullPath
+        if ($env:HERMES_DEBUG_INSTALL -eq "1") {
+            Write-Info "Trusted Python candidate: $fullPath (accepted=$isTrusted)"
+        }
+        if (-not $isTrusted) { continue }
+
+        try {
+            $markerDir = Split-Path -Parent $marker
+            New-Item -ItemType Directory -Path $markerDir -Force | Out-Null
+            Set-Content -LiteralPath $marker -Value $fullPath -Encoding UTF8
+        } catch { }
+        return $fullPath
+    }
+
+    return $null
+}
+
+function Install-WindowsOfficialPython {
+    $spec = Get-WindowsOfficialPythonSpec
+    $targetDir = Join-Path $HermesHome "python\cpython-$($spec.Version)-$($spec.Arch)"
+    $pythonExe = Join-Path $targetDir "python.exe"
+
+    $trustedPython = Resolve-TrustedWindowsPython
+    if ($trustedPython) {
+        $script:PythonVersion = $spec.Minor
+        Write-Success "Trusted Python found (Python $($spec.Minor), signed by Python Software Foundation)"
+        return $true
+    }
+
+    $cacheDir = Join-Path $HermesHome "bootstrap-cache\python.org"
+    $installerPath = Join-Path $cacheDir $spec.FileName
+    $partialPath = "$installerPath.partial"
+
+    try {
+        New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+
+        if (Test-Path -LiteralPath $installerPath) {
+            $cachedHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash
+            if ($cachedHash -ne $spec.Sha256) {
+                Write-Warn "Cached Python installer hash mismatch; downloading a clean copy."
+                Remove-Item -LiteralPath $installerPath -Force
+            }
+        }
+
+        if (-not (Test-Path -LiteralPath $installerPath)) {
+            Write-Info "Downloading signed CPython $($spec.Version) for Windows $($spec.Arch) ..."
+            Remove-Item -LiteralPath $partialPath -Force -ErrorAction SilentlyContinue
+            Invoke-WebRequest -Uri $spec.Url -OutFile $partialPath -UseBasicParsing
+
+            $downloadHash = (Get-FileHash -LiteralPath $partialPath -Algorithm SHA256).Hash
+            if ($downloadHash -ne $spec.Sha256) {
+                throw "Python installer SHA-256 mismatch (expected $($spec.Sha256), got $downloadHash)"
+            }
+
+            Move-Item -LiteralPath $partialPath -Destination $installerPath -Force
+        }
+
+        $installerHash = (Get-FileHash -LiteralPath $installerPath -Algorithm SHA256).Hash
+        if ($installerHash -ne $spec.Sha256) {
+            throw "Cached Python installer SHA-256 mismatch"
+        }
+
+        $installerSignature = Get-AuthenticodeSignature -LiteralPath $installerPath
+        $installerSigner = if ($installerSignature.SignerCertificate) { $installerSignature.SignerCertificate.Subject } else { "" }
+        if ($installerSignature.Status -ne "Valid" -or $installerSigner -notlike "*Python Software Foundation*") {
+            throw "Python installer is not validly signed by the Python Software Foundation"
+        }
+
+        Unblock-File -LiteralPath $installerPath -ErrorAction SilentlyContinue
+        New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+
+        $arguments = @(
+            "/quiet",
+            "InstallAllUsers=0",
+            "TargetDir=`"$targetDir`"",
+            "Include_launcher=0",
+            "Include_test=0",
+            "Include_doc=0",
+            "Include_tcltk=0",
+            "Include_pip=0",
+            "PrependPath=0",
+            "Shortcuts=0",
+            "AssociateFiles=0",
+            "CompileAll=0"
+        )
+        $process = Start-Process -FilePath $installerPath -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
+        if ($process.ExitCode -ne 0) {
+            throw "Official Python installer exited with code $($process.ExitCode)"
+        }
+
+        $trustedPython = Resolve-TrustedWindowsPython
+        if (-not $trustedPython) {
+            # The python.org bundle is a registered installer. If Hermes data
+            # was moved or removed while that registration remained, a later
+            # install enters Modify mode and reports success without restoring
+            # files into the new Hermes home. Force Repair once so the cached
+            # PSF-signed components are written back to the current TargetDir.
+            Write-Warn "Python is registered but its files are missing; repairing the trusted installation."
+            $repairArguments = @("/repair") + $arguments
+            $repairProcess = Start-Process -FilePath $installerPath -ArgumentList $repairArguments -Wait -PassThru -WindowStyle Hidden
+            if ($repairProcess.ExitCode -ne 0) {
+                throw "Official Python repair exited with code $($repairProcess.ExitCode)"
+            }
+            $trustedPython = Resolve-TrustedWindowsPython
+        }
+        if (-not $trustedPython) {
+            throw "Installed Python could not run or did not retain its trusted publisher signature after repair"
+        }
+
+        $script:PythonVersion = $spec.Minor
+        Write-Success "Trusted Python installed (Python $($spec.Version), $($spec.Arch))"
+        return $true
+    } catch {
+        Remove-Item -LiteralPath $partialPath -Force -ErrorAction SilentlyContinue
+        Write-Warn "Official Python install failed: $($_.Exception.Message)"
+        return $false
+    }
+}
+
 function Discard-LockfileChurn {
     param([string]$Repo = $InstallDir)
 
@@ -733,6 +961,71 @@ function Get-PowerShellHostExe {
     return "powershell"
 }
 
+function Install-UvFromPyPI {
+    param([string]$ManagedUv)
+
+    # Smart App Control can reject uv when it arrives through a nested
+    # download-and-execute installer, even though the same official binary is
+    # accepted when extracted from uv's hash-published PyPI wheel. Prefer the
+    # wheel path for Desktop bootstrap: download data, verify its SHA-256 from
+    # PyPI metadata, extract it, then execute only the verified uv.exe.
+    $arch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()
+    $wheelTag = if ($arch -eq "Arm64") { "win_arm64" } elseif ($arch -eq "X64") { "win_amd64" } else { $null }
+    if (-not $wheelTag) {
+        Write-Warn "No PyPI uv wheel mapping for Windows architecture $arch"
+        return $false
+    }
+
+    $cacheDir = Join-Path $HermesHome "bootstrap-cache\uv-pypi"
+    $wheelPath = Join-Path $cacheDir "uv-$wheelTag.whl"
+    $zipPath = Join-Path $cacheDir "uv-$wheelTag.zip"
+    $extractDir = Join-Path $cacheDir "expanded-$wheelTag"
+
+    try {
+        New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
+        Write-Info "Fetching verified uv wheel metadata from PyPI ..."
+        $metadata = Invoke-RestMethod -Uri "https://pypi.org/pypi/uv/json" -UseBasicParsing
+        $asset = $metadata.urls |
+            Where-Object { $_.packagetype -eq "bdist_wheel" -and -not $_.yanked -and $_.filename -like "*-$wheelTag.whl" } |
+            Select-Object -First 1
+
+        if (-not $asset -or -not $asset.url -or -not $asset.digests.sha256) {
+            throw "PyPI did not publish a usable uv wheel for $wheelTag"
+        }
+
+        Invoke-WebRequest -Uri $asset.url -OutFile $wheelPath -UseBasicParsing
+        $actualHash = (Get-FileHash -Path $wheelPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        $expectedHash = ([string]$asset.digests.sha256).ToLowerInvariant()
+        if ($actualHash -ne $expectedHash) {
+            throw "uv wheel SHA-256 mismatch (expected $expectedHash, got $actualHash)"
+        }
+
+        Copy-Item -Path $wheelPath -Destination $zipPath -Force
+        if (Test-Path $extractDir) { Remove-Item -Path $extractDir -Recurse -Force }
+        Expand-Archive -Path $zipPath -DestinationPath $extractDir -Force
+        $wheelUv = Get-ChildItem -Path $extractDir -Filter "uv.exe" -File -Recurse |
+            Select-Object -First 1
+        if (-not $wheelUv) {
+            throw "Verified uv wheel did not contain uv.exe"
+        }
+
+        Copy-Item -Path $wheelUv.FullName -Destination $ManagedUv -Force
+        Unblock-File -Path $ManagedUv -ErrorAction SilentlyContinue
+        $version = & $ManagedUv --version
+        if ($LASTEXITCODE -ne 0) {
+            throw "verified uv.exe could not run (exit $LASTEXITCODE)"
+        }
+
+        $script:UvCmd = $ManagedUv
+        Write-Success "Managed uv installed from verified PyPI wheel ($version)"
+        return $true
+    } catch {
+        Write-Warn "Verified PyPI uv install failed: $_"
+        Remove-Item -Path $ManagedUv -Force -ErrorAction SilentlyContinue
+        return $false
+    }
+}
+
 function Install-Uv {
     # Hermes owns its own uv at $HermesHome\bin\uv.exe.  Always install there --
     # no PATH probing, no conda guards, no multi-location resolution chains.
@@ -749,6 +1042,10 @@ function Install-Uv {
 
     Write-Info "Installing managed uv into $HermesHome\bin ..."
     New-Item -ItemType Directory -Path (Join-Path $HermesHome "bin") -Force | Out-Null
+
+    if (Install-UvFromPyPI -ManagedUv $managedUv) {
+        return $true
+    }
 
     # UV_INSTALL_DIR tells the astral installer to place the binary
     # directly into $HermesHome\bin instead of ~/.local/bin.
@@ -822,8 +1119,12 @@ function Install-Uv {
         $ErrorActionPreference = $prevEAP
 
         if (Test-Path $managedUv) {
+            Unblock-File -Path $managedUv -ErrorAction SilentlyContinue
             $script:UvCmd = $managedUv
             $version = & $managedUv --version
+            if ($LASTEXITCODE -ne 0) {
+                throw "managed uv.exe could not run (exit $LASTEXITCODE)"
+            }
             Write-Success "Managed uv installed ($version)"
             return $true
         }
@@ -1109,6 +1410,20 @@ function Resolve-AvailablePythonVersion {
 }
 
 function Test-Python {
+    # uv-managed Python comes from python-build-standalone. Its Windows
+    # executables are not Authenticode-signed and are rejected by enforced
+    # Application Control for Business policies. Use the official CPython
+    # installer on Windows, verify both its pinned SHA-256 and PSF publisher
+    # signature, and create the Hermes venv from that trusted interpreter.
+    if ($env:OS -eq "Windows_NT") {
+        Write-Info "Checking trusted Python $WindowsOfficialPythonMinor for Windows..."
+        if (Install-WindowsOfficialPython) { return $true }
+
+        Write-Err "Failed to install trusted Python for Windows"
+        Write-Info "Check access to https://www.python.org and retry."
+        return $false
+    }
+
     Write-Info "Checking Python $PythonVersion..."
     
     # Let uv find or install Python
@@ -1986,6 +2301,42 @@ function Install-SystemPackages {
 # Installation
 # ============================================================================
 
+function Test-OfficialSshRemote {
+    param([AllowNull()][string]$RemoteUrl)
+
+    if ([string]::IsNullOrWhiteSpace($RemoteUrl)) { return $false }
+
+    $normalized = $RemoteUrl.Trim().TrimEnd("/")
+    if ($normalized.EndsWith(".git", [StringComparison]::OrdinalIgnoreCase)) {
+        $normalized = $normalized.Substring(0, $normalized.Length - 4)
+    }
+
+    return (
+        ($normalized -ieq "git@github.com:LucDinhLe/hermes-agent-vietnamese") -or
+        ($normalized -ieq "ssh://git@github.com/LucDinhLe/hermes-agent-vietnamese")
+    )
+}
+
+function Use-PublicHttpsOriginForManagedInstall {
+    # The managed checkout is read-only application source. Older installers
+    # cloned the public repo over SSH first, leaving origin dependent on SSH
+    # host trust (and sometimes a hardware-backed key) during later GUI
+    # updates. Self-heal only the official SSH origin; forks and custom remotes
+    # remain untouched.
+    $originOut = @(git -c windows.appendAtomically=false remote get-url origin 2>$null)
+    $originExit = $LASTEXITCODE
+    if (($originExit -ne 0) -or ($originOut.Count -eq 0)) { return }
+
+    $originUrl = $originOut[0].ToString().Trim()
+    if (-not (Test-OfficialSshRemote $originUrl)) { return }
+
+    Write-Info "Switching the public Hermes update remote from SSH to HTTPS..."
+    git -c windows.appendAtomically=false remote set-url origin $RepoUrlHttps 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not switch the public Hermes update remote to HTTPS (exit $LASTEXITCODE)"
+    }
+}
+
 function Install-Repository {
     Write-Info "Installing to $InstallDir..."
 
@@ -2052,6 +2403,11 @@ function Install-Repository {
                 # users hit on update. Pin autocrlf=false so the dirt is never
                 # created in the first place.
                 git -c windows.appendAtomically=false config core.autocrlf false 2>$null
+                # Repair legacy managed clones before inspecting/stashing local
+                # changes. If SSH host verification is unavailable, failing
+                # here used to leave an avoidable autostash behind even though
+                # the official public repo needs no SSH authentication.
+                Use-PublicHttpsOriginForManagedInstall
                 Discard-LockfileChurn $InstallDir
                 # Preserve any real local changes before the checkout instead of
                 # discarding them with `reset --hard HEAD`. The old hard reset
@@ -2081,7 +2437,20 @@ function Install-Repository {
                     git -c windows.appendAtomically=false stash push --include-untracked -m "$stashName"
                     if ($LASTEXITCODE -eq 0) { $autostashRef = "stash@{0}" }
                 }
-                git -c windows.appendAtomically=false fetch origin $Branch
+                # Never accidentally unshallow a managed checkout during
+                # repair. A shallow checkout from an unrelated/local commit can
+                # otherwise make this fetch transfer the repository's complete
+                # history (hundreds of thousands of objects) before the pinned
+                # commit is even considered. A bounded window is enough to
+                # connect normal adjacent releases while keeping recovery fast.
+                $branchFetchArgs = @("fetch")
+                $isShallowOutput = git -c windows.appendAtomically=false rev-parse --is-shallow-repository 2>$null
+                if (("$isShallowOutput").Trim() -eq "true") {
+                    $branchFetchArgs += @("--depth", "64")
+                    Write-Info "Keeping shallow repository fetch bounded to 64 commits..."
+                }
+                $branchFetchArgs += @("origin", $Branch)
+                git -c windows.appendAtomically=false @branchFetchArgs
                 if ($LASTEXITCODE -ne 0) { throw "git fetch failed (exit $LASTEXITCODE)" }
                 # Precedence: Commit > Tag > Branch.  Commit and Tag check
                 # out as detached HEAD intentionally -- they're meant to be
@@ -2089,7 +2458,12 @@ function Install-Repository {
                 if ($Commit) {
                     # Make sure we have the commit locally (a tag-less commit
                     # SHA isn't always reachable from any one branch fetch).
-                    git -c windows.appendAtomically=false fetch origin $Commit
+                    $commitFetchArgs = @("fetch")
+                    if (("$isShallowOutput").Trim() -eq "true") {
+                        $commitFetchArgs += @("--depth", "64")
+                    }
+                    $commitFetchArgs += @("origin", $Commit)
+                    git -c windows.appendAtomically=false @commitFetchArgs
                     # A commit pin must never move an existing install
                     # BACKWARDS. hermes-setup.exe bakes its build-time commit
                     # into the binary (BUILD_PIN_COMMIT) and passes it as
@@ -2240,27 +2614,30 @@ function Install-Repository {
         # config lock files) due to antivirus, OneDrive, or NTFS filter drivers.
         # The -c flag injects config before any file I/O occurs.
         Write-Info "Configuring git for Windows compatibility..."
-        $env:GIT_CONFIG_COUNT = "1"
+        $env:GIT_CONFIG_COUNT = "2"
         $env:GIT_CONFIG_KEY_0 = "windows.appendAtomically"
         $env:GIT_CONFIG_VALUE_0 = "false"
+        $env:GIT_CONFIG_KEY_1 = "core.longpaths"
+        $env:GIT_CONFIG_VALUE_1 = "true"
         git config --global windows.appendAtomically false 2>$null
 
-        # Try SSH first, then HTTPS, with -c flag for atomic write fix
-        Write-Info "Trying SSH clone..."
-        $env:GIT_SSH_COMMAND = "ssh -o BatchMode=yes -o ConnectTimeout=5"
+        # This is a public managed checkout, so prefer anonymous HTTPS. SSH is
+        # retained only as a fallback for networks where HTTPS is unavailable.
+        Write-Info "Trying HTTPS clone..."
         try {
-            Invoke-NativeWithRelaxedErrorAction { git -c windows.appendAtomically=false clone --depth 1 --branch $Branch $RepoUrlSsh $InstallDir }
+            Invoke-NativeWithRelaxedErrorAction { git -c windows.appendAtomically=false clone --depth 1 --branch $Branch $RepoUrlHttps $InstallDir }
             if ($LASTEXITCODE -eq 0) { $cloneSuccess = $true }
         } catch { }
-        $env:GIT_SSH_COMMAND = $null
 
         if (-not $cloneSuccess) {
             if (Test-Path $InstallDir) { Remove-Item -Recurse -Force $InstallDir -ErrorAction SilentlyContinue }
-            Write-Info "SSH failed, trying HTTPS..."
+            Write-Info "HTTPS failed, trying SSH..."
+            $env:GIT_SSH_COMMAND = "ssh -o BatchMode=yes -o ConnectTimeout=5"
             try {
-                Invoke-NativeWithRelaxedErrorAction { git -c windows.appendAtomically=false clone --depth 1 --branch $Branch $RepoUrlHttps $InstallDir }
+                Invoke-NativeWithRelaxedErrorAction { git -c windows.appendAtomically=false clone --depth 1 --branch $Branch $RepoUrlSsh $InstallDir }
                 if ($LASTEXITCODE -eq 0) { $cloneSuccess = $true }
             } catch { }
+            $env:GIT_SSH_COMMAND = $null
         }
 
         # Fallback: download ZIP archive (bypasses git file I/O issues entirely)
@@ -2272,13 +2649,13 @@ function Install-Repository {
                 # for.  GitHub supports archive URLs for commits, tags, and
                 # branches; we honour Commit > Tag > Branch.
                 if ($Commit) {
-                    $zipUrl = "https://github.com/NousResearch/hermes-agent/archive/$Commit.zip"
+                    $zipUrl = "https://github.com/LucDinhLe/hermes-agent-vietnamese/archive/$Commit.zip"
                     $zipLabel = $Commit
                 } elseif ($Tag) {
-                    $zipUrl = "https://github.com/NousResearch/hermes-agent/archive/refs/tags/$Tag.zip"
+                    $zipUrl = "https://github.com/LucDinhLe/hermes-agent-vietnamese/archive/refs/tags/$Tag.zip"
                     $zipLabel = $Tag
                 } else {
-                    $zipUrl = "https://github.com/NousResearch/hermes-agent/archive/refs/heads/$Branch.zip"
+                    $zipUrl = "https://github.com/LucDinhLe/hermes-agent-vietnamese/archive/refs/heads/$Branch.zip"
                     $zipLabel = $Branch
                 }
                 $zipPath = "$env:TEMP\hermes-agent-$zipLabel.zip"
@@ -2296,7 +2673,7 @@ function Install-Repository {
                     Write-Success "Downloaded and extracted"
 
                     # Initialize git repo so updates work later. A bare
-                    # `git init` leaves NO HEAD -- desktop's write-build-stamp
+                    # `git init` leaves NO HEAD -- desktop's stamp step
                     # then hard-fails with "could not determine git commit"
                     # (#50823 / #61657). Fetch the requested ref and force-check
                     # it out (-f) so untracked ZIP files cannot block checkout.
@@ -2370,6 +2747,7 @@ function Install-Repository {
     # next `hermes update` checkout aborts on a "dirty" tree the user never
     # touched (see the update path above).
     git -c windows.appendAtomically=false config core.autocrlf false 2>$null
+    Use-PublicHttpsOriginForManagedInstall
 
     # Post-clone pin: when a clone (or ZIP-fallback init) just landed us on
     # $Branch's tip, honour the higher-precedence $Commit / $Tag by checking
@@ -2384,7 +2762,13 @@ function Install-Repository {
         try {
             if ($Commit) {
                 Write-Info "Pinning to commit $Commit..."
-                git -c windows.appendAtomically=false fetch origin $Commit
+                $pinFetchArgs = @("fetch")
+                $postCloneShallow = git -c windows.appendAtomically=false rev-parse --is-shallow-repository 2>$null
+                if (("$postCloneShallow").Trim() -eq "true") {
+                    $pinFetchArgs += @("--depth", "64")
+                }
+                $pinFetchArgs += @("origin", $Commit)
+                git -c windows.appendAtomically=false @pinFetchArgs
                 git -c windows.appendAtomically=false checkout --detach $Commit
                 if ($LASTEXITCODE -ne 0) {
                     throw "git checkout $Commit failed (exit $LASTEXITCODE)"
@@ -2411,19 +2795,37 @@ function Install-Venv {
         return
     }
 
+    $pythonLabel = $PythonVersion
+
+    # On Windows, use the exact path to the PSF-signed interpreter installed by
+    # the python stage. Asking uv for a minor version would prefer its unsigned
+    # managed distribution and recreate the Application Control failure.
+    if ($env:OS -eq "Windows_NT") {
+        $trustedPython = Resolve-TrustedWindowsPython
+        if (-not $trustedPython) {
+            throw "Trusted Windows Python is missing or blocked. Re-run the python install stage."
+        }
+        $spec = Get-WindowsOfficialPythonSpec
+        $script:PythonVersion = $trustedPython
+        $pythonLabel = $spec.Minor
+    }
+
     # Re-resolve the interpreter before creating the venv.  Under Hermes-Setup.exe
     # each stage runs in its own powershell.exe, so the fallback the `python`
     # stage picked (e.g. 3.12 when 3.11 is absent) did NOT propagate into this
     # fresh process -- $PythonVersion is back at its "3.11" default.  Trusting it
     # here made `uv venv venv --python 3.11` fail with exit 2 on machines without
     # 3.11 even though the `python` stage reported success (issue #50769).
-    $resolved = Resolve-AvailablePythonVersion
-    if ($resolved -and $resolved -ne $PythonVersion) {
-        Write-Info "Python $PythonVersion not available; using detected Python $resolved"
-        $script:PythonVersion = $resolved
+    if ($env:OS -ne "Windows_NT") {
+        $resolved = Resolve-AvailablePythonVersion
+        if ($resolved -and $resolved -ne $PythonVersion) {
+            Write-Info "Python $PythonVersion not available; using detected Python $resolved"
+            $script:PythonVersion = $resolved
+            $pythonLabel = $resolved
+        }
     }
 
-    Write-Info "Creating virtual environment with Python $PythonVersion..."
+    Write-Info "Creating virtual environment with Python $pythonLabel..."
     
     Push-Location $InstallDir
 
@@ -2472,10 +2874,12 @@ function Install-Venv {
             } catch {
                 Write-Warn "Could not enumerate gateway scheduled tasks: $($_.Exception.Message)"
             }
-            # The launcher CLI (hermes.exe) plus its child tree.
-            & taskkill /F /T /IM hermes.exe /FI "PID ne $myPid" 2>$null | Out-Null
-            # taskkill /IM hermes.exe is NOT enough: the gateway/agent that a
-            # scheduled task or watchdog autostarts runs as
+            # Do NOT kill by image name here. The native Desktop executable is
+            # also named Hermes.exe; an in-app managed-runtime refresh would
+            # terminate its own parent midway through this stage. The path-
+            # scoped sweep below catches the venv's hermes.exe shim as well as
+            # its Python gateway/agent children without touching Desktop.
+            # A gateway/agent that a scheduled task or watchdog autostarts runs as
             # `pythonw.exe -m hermes_cli.main gateway run` straight out of
             # venv\Scripts\, so its image name is python/pythonw, not hermes.exe.
             # That process holds the venv's .pyd files open and re-triggers the
@@ -2645,7 +3049,7 @@ function Install-Venv {
         }
     }
 
-    Write-Success "Virtual environment ready (Python $PythonVersion)"
+    Write-Success "Virtual environment ready (Python $pythonLabel)"
 }
 
 function Get-PendingVenvBackup {
@@ -3921,7 +4325,7 @@ function Install-Desktop {
     Pop-Location
 
     # 2. Build apps/desktop. `npm run pack` runs:
-    #      assert-root-install + write-build-stamp + stage-native-deps +
+    #      assert-root-install + write_install_stamp + stage-native-deps +
     #      tsc -b + vite build + electron-builder --dir
     # The --dir mode produces an unpacked Hermes.exe in
     # apps/desktop/release/win-unpacked/ without bundling NSIS/MSI;
@@ -3942,7 +4346,7 @@ function Install-Desktop {
     # for some other tool, electron-builder would still try to sign.
     Write-Info "Building desktop app (this takes 1-3 minutes)..."
     $buildLog = "$env:TEMP\hermes-desktop-build-$(Get-Random).log"
-    # Seed GITHUB_SHA for write-build-stamp.mjs. The stamp prefers CI env vars
+    # Seed GITHUB_SHA for scripts/write_install_stamp.py. The stamp prefers CI env vars
     # over `git rev-parse`, so this covers: (1) node can't find git.exe on PATH
     # even though this PowerShell session can, (2) ZIP/init trees that still
     # lack a HEAD after a failed post-extract fetch. Without it the desktop
@@ -3975,7 +4379,7 @@ function Install-Desktop {
         $shaPreview = if ($env:GITHUB_SHA.Length -ge 12) { $env:GITHUB_SHA.Substring(0, 12) } else { $env:GITHUB_SHA }
         Write-Info "Desktop build stamp: $shaPreview ($($env:GITHUB_REF_NAME))"
     } else {
-        Write-Warn "Could not resolve a git commit for the desktop stamp -- write-build-stamp will use its non-git fallback"
+        Write-Warn "Could not resolve a git commit for the desktop stamp -- write_install_stamp will use its non-git fallback"
     }
     Push-Location $desktopDir
     $prevEAP = $ErrorActionPreference
@@ -4513,9 +4917,10 @@ function Write-Completion {
 # implements it.  ``Title`` is what UIs show; ``Category`` lets UIs group
 # stages; ``NeedsUserInput`` tells UIs "this stage prompts -- either skip it
 # or arrange to provide answers another way."
+$PythonStageVersion = if ($env:OS -eq "Windows_NT") { $WindowsOfficialPythonMinor } else { $PythonVersion }
 $InstallStages = @(
     @{ Name = "uv";               Title = "Installing uv package manager";        Category = "prereqs";      NeedsUserInput = $false; Worker = "Stage-Uv" }
-    @{ Name = "python";           Title = "Verifying Python $PythonVersion";      Category = "prereqs";      NeedsUserInput = $false; Worker = "Stage-Python" }
+    @{ Name = "python";           Title = "Verifying Python $PythonStageVersion"; Category = "prereqs";      NeedsUserInput = $false; Worker = "Stage-Python" }
     @{ Name = "git";              Title = "Installing Git";                       Category = "prereqs";      NeedsUserInput = $false; Worker = "Stage-Git" }
     @{ Name = "node";             Title = "Detecting Node.js";                    Category = "prereqs";      NeedsUserInput = $false; Worker = "Stage-Node" }
     @{ Name = "system-packages";  Title = "Installing ripgrep and ffmpeg";        Category = "prereqs";      NeedsUserInput = $false; Worker = "Stage-SystemPackages" }
@@ -4553,7 +4958,7 @@ $InstallStages += @(
 # (the default-invocation case where Main runs everything in one
 # process), and throws cleanly if uv truly isn't installed yet.
 function Stage-Uv               { if (-not (Install-Uv))     { throw "uv installation failed" } }
-function Stage-Python           { Resolve-UvCmd; if (-not (Test-Python))    { throw "Python $PythonVersion not available" } }
+function Stage-Python           { Resolve-UvCmd; if (-not (Test-Python))    { throw "Python $PythonStageVersion not available" } }
 function Stage-Git              {
     if (-not (Install-Git)) {
         if ($script:GitInstallFailureReason) { throw $script:GitInstallFailureReason }

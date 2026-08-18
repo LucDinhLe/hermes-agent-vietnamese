@@ -50,6 +50,10 @@ function isPinnedCommit(commit) {
   return typeof commit === 'string' && STAMP_COMMIT_RE.test(commit) && !FALLBACK_COMMIT_RE.test(commit)
 }
 
+function shouldPinPackagedCommit(installStamp) {
+  return Boolean(installStamp && isPinnedCommit(installStamp.commit))
+}
+
 type ExecGitFn = (args: string[], cwd: string) => string
 type ResolveHeadFn = (activeRoot: string | null | undefined) => string | null
 
@@ -233,7 +237,7 @@ function downloadInstallScript(ref, destPath) {
   // ref so local builds can still bootstrap without pretending the all-zero
   // placeholder is a real GitHub commit.
   const scriptName = installScriptName()
-  const url = `https://raw.githubusercontent.com/NousResearch/hermes-agent/${ref}/scripts/${scriptName}`
+  const url = `https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/${ref}/scripts/${scriptName}`
 
   return new Promise((resolve, reject) => {
     fs.mkdirSync(path.dirname(destPath), { recursive: true })
@@ -374,7 +378,7 @@ async function resolveInstallScript({
   } catch (err) {
     // The pinned commit may not be fetchable from GitHub -- most commonly a
     // locally-built desktop app stamped to an unpushed HEAD (see
-    // write-build-stamp.mjs fromLocalGit). Fall back to the installer that
+    // scripts/write_install_stamp.py). Fall back to the installer that
     // ships inside the already-installed agent checkout so dev/self-builds can
     // still bootstrap instead of dying with a fatal 404.
     const installed = installedAgentInstallScript(hermesHome)
@@ -915,14 +919,18 @@ async function runBootstrap(opts) {
 
   try {
     const existingCheckout = hasExistingGitCheckout(activeRoot)
-    const pinCommit = !existingCheckout
+    // Pin upgrades as well as fresh installs. The platform installers already
+    // refuse to roll a newer checkout backwards and preserve local changes via
+    // autostash, so this keeps backend code aligned with the packaged renderer
+    // without sacrificing user work.
+    const pinCommit = shouldPinPackagedCommit(installStamp)
 
     if (existingCheckout && installStamp && installStamp.commit) {
       emit({
         type: 'log',
         line:
           `[bootstrap] existing checkout detected at ${activeRoot}; ` +
-          `not pinning to packaged install stamp ${installStamp.commit.slice(0, 12)}`
+          `${pinCommit ? 'syncing to' : 'following branch for'} packaged install stamp ${installStamp.commit.slice(0, 12)}`
       })
     }
 
@@ -999,7 +1007,12 @@ async function runBootstrap(opts) {
 
     const markerPayload = {
       pinnedCommit,
-      pinnedBranch: installStamp ? installStamp.branch : null
+      pinnedBranch: installStamp ? installStamp.branch : null,
+      // Bundled builds: record the payload tag that this bootstrap
+      // materialized. At launch, main.ts compares this tag against the
+      // stamp tag, which can be newer. The comparison decides offline
+      // re-materialization after an app update.
+      pinnedTag: installStamp && (installStamp as any).payload === true ? (installStamp as any).tag || null : null
     }
 
     const marker = typeof writeMarker === 'function' ? writeMarker(markerPayload) : markerPayload
@@ -1033,5 +1046,6 @@ export {
   resolveInstallScript,
   resolveLocalInstallScript,
   resolveMarkerPinnedCommit,
-  runBootstrap
+  runBootstrap,
+  shouldPinPackagedCommit
 }

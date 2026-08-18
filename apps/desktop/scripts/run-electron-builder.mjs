@@ -46,6 +46,10 @@ if (dist && fs.existsSync(distBinary(dist))) {
       "via @electron/get (electronVersion + ELECTRON_MIRROR)."
   )
 }
+// A candidate is built from an immutable tag, which makes electron-builder
+// implicitly publish unless told otherwise. Publishing belongs to the separate
+// staging/promotion workflows; this wrapper only produces local bytes.
+args.push("--publish", "never")
 args.push(...process.argv.slice(2))
 
 const result = spawnSync(process.execPath, [electronBuilderCli(), ...args], {

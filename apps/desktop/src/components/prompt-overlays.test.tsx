@@ -14,7 +14,7 @@ vi.mock('@/store/notifications', () => ({ notifyError: vi.fn() }))
 
 function renderPrompts(sessionId: string | null = 's1') {
   render(
-    <I18nProvider configClient={null}>
+    <I18nProvider configClient={null} initialLocale="en">
       <PromptOverlays sessionId={sessionId} />
     </I18nProvider>
   )

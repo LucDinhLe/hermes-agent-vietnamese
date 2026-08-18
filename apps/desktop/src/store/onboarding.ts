@@ -1,5 +1,6 @@
 import { atom } from 'nanostores'
 
+import { runInTerminal } from '@/app/right-sidebar/store'
 import {
   cancelOAuthSession,
   getGlobalModelOptions,
@@ -605,7 +606,24 @@ export async function startProviderOAuth(provider: OAuthProvider, ctx: Onboardin
   clearPoll()
 
   if (provider.flow === 'external') {
+    // The official CLI may already be signed in. In that case, selecting the
+    // provider means "use it now", not "open another login terminal". Resolve
+    // and persist its default model immediately, then show model confirmation.
+    if (provider.status?.logged_in) {
+      setFlow({ status: 'success', provider })
+      await completeWithModelConfirm(ctx, provider.name, [provider.id], reason =>
+        setFlow({
+          status: 'error',
+          provider,
+          message: providerResolutionFailure(reason)
+        })
+      )
+
+      return
+    }
+
     setFlow({ status: 'external_pending', provider, copied: false })
+    runInTerminal(provider.cli_command)
 
     return
   }
@@ -747,6 +765,14 @@ export async function copyExternalCommand() {
 
   const id = flow.provider.id
   await copyAndFlash(flow.provider.cli_command, f => f.status === 'external_pending' && f.provider.id === id)
+}
+
+export function runExternalSigninCommand() {
+  const { flow } = $desktopOnboarding.get()
+
+  if (flow.status === 'external_pending') {
+    runInTerminal(flow.provider.cli_command)
+  }
 }
 
 export async function recheckExternalSignin(ctx: OnboardingContext) {

@@ -1350,6 +1350,81 @@ def _(rid, params: dict) -> dict:
     return _ok(rid, {"text": text})
 
 
+@method("reasoning.summarize")
+def _(rid, params: dict) -> dict:
+    """Summarize provider-visible reasoning without mutating the conversation."""
+    import hashlib
+    import re
+    import time
+
+    reasoning = params.get("reasoning")
+    source_digest = str(params.get("source_digest") or "").strip().lower()
+    message_id = str(params.get("message_id") or "").strip()
+
+    if not isinstance(reasoning, str) or not reasoning.strip():
+        return _err(rid, 4033, "reasoning must be a non-empty string")
+    if len(reasoning.encode("utf-8")) > 65536:
+        return _err(rid, 4034, "reasoning exceeds the 64 KiB limit")
+    if not message_id or len(message_id) > 256:
+        return _err(rid, 4035, "message_id is required and must be at most 256 characters")
+    if not re.fullmatch(r"[0-9a-f]{64}", source_digest):
+        return _err(rid, 4036, "source_digest must be a lowercase SHA-256 digest")
+
+    actual_digest = hashlib.sha256(reasoning.encode("utf-8")).hexdigest()
+    if actual_digest != source_digest:
+        return _err(rid, 4037, "source_digest does not match reasoning")
+
+    session = _sessions.get(params.get("session_id") or "")
+    main_runtime = _main_runtime_from_agent(session.get("agent")) if session else None
+    started = time.perf_counter()
+
+    try:
+        from agent.auxiliary_client import _resolve_task_provider_model
+        from agent.oneshot import run_oneshot
+
+        configured_provider, configured_model, _, _, _ = _resolve_task_provider_model(
+            "reasoning_summary_vi", None, None, None, None
+        )
+
+        summary = run_oneshot(
+            template="reasoning_summary_vi",
+            variables={"reasoning": reasoning},
+            task="reasoning_summary_vi",
+            max_tokens=800,
+            temperature=0.2,
+            timeout=90.0,
+            main_runtime=main_runtime,
+        )
+    except Exception as e:
+        logger.warning("reasoning summary failed: %s", e)
+        return _err(rid, 5031, f"reasoning summary failed: {e}")
+
+    if not summary:
+        return _err(rid, 5032, "reasoning summary returned no text")
+
+    runtime = main_runtime or {}
+    result_provider = (
+        str(runtime.get("provider") or "auxiliary")
+        if configured_provider in {"", "auto", None}
+        else str(configured_provider)
+    )
+    result_model = str(configured_model or runtime.get("model") or "")
+    return _ok(
+        rid,
+        {
+            "summary": summary,
+            "source_digest": source_digest,
+            "provider": result_provider,
+            "model": result_model,
+            "latency_ms": round((time.perf_counter() - started) * 1000),
+            # Provider adapters already account usage centrally, but not every
+            # SDK returns per-call usage. Null is explicit and the Desktop
+            # labels cost as unavailable instead of inventing an estimate.
+            "usage": None,
+        },
+    )
+
+
 @method("handoff.request")
 def _(rid, params: dict) -> dict:
     """Queue a handoff of this session to a messaging platform.

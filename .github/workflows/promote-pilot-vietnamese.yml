@@ -1,0 +1,163 @@
+name: Công khai pilot Hermes tiếng Việt
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Draft community prerelease cần công khai'
+        required: true
+        type: string
+      sha256sums_sha256:
+        description: 'SHA-256 của SHA256SUMS.txt trong draft'
+        required: true
+        type: string
+      staging_run_id:
+        description: 'Run ID dựng/staging đã xanh trên toàn bộ artifact'
+        required: true
+        type: string
+
+concurrency:
+  group: hermes-vietnamese-pilot-promotion-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  promote:
+    name: Kiểm pilot Windows x64 và công khai community prerelease
+    runs-on: ubuntu-24.04
+    environment: release-production
+    steps:
+      - name: Xác minh draft, byte, provenance và staging run
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          EXPECTED_MANIFEST_SHA: ${{ inputs.sha256sums_sha256 }}
+          STAGING_RUN_ID: ${{ inputs.staging_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^vi-v(0|[1-9][0-9]{0,2})\.[0-9]+\.[0-9]+-(0|[1-9][0-9]*)$ ]]
+          release_json="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,body)"
+          test "$(jq -r .isDraft <<<"$release_json")" = "true"
+          test "$(jq -r .isPrerelease <<<"$release_json")" = "true"
+          body="$(jq -r .body <<<"$release_json")"
+          grep -Fq 'Windows x64: exact-artifact smoke đạt' <<<"$body"
+          grep -Fq 'chưa có smoke trên máy người dùng' <<<"$body"
+          grep -Fq 'SignPath' <<<"$body"
+          grep -Fq 'chưa tham gia Apple Developer Program' <<<"$body"
+
+          mkdir candidate
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir candidate
+          actual_manifest_sha="$(sha256sum candidate/SHA256SUMS.txt | cut -d' ' -f1)"
+          test "$actual_manifest_sha" = "$EXPECTED_MANIFEST_SHA"
+          (cd candidate && sha256sum --check SHA256SUMS.txt)
+
+          candidate_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID")"
+          test "$(jq -r .name <<<"$run_json")" = "Dựng và staging Hermes tiếng Việt"
+          test "$(jq -r .conclusion <<<"$run_json")" = "success"
+          test "$(jq -r .head_sha <<<"$run_json")" = "$candidate_commit"
+
+          TAG="$TAG" COMMIT="$candidate_commit" MANIFEST_SHA="$EXPECTED_MANIFEST_SHA" \
+            STAGING_RUN_ID="$STAGING_RUN_ID" node <<'NODE'
+          const fs = require('fs')
+          const crypto = require('crypto')
+          const requiredWindowsGates = [
+            'exactBytes',
+            'freshInstall',
+            'firstRunWithoutDeveloperTools',
+            'bundledRuntime',
+            'gateway',
+            'onboarding',
+            'sessionCreate',
+            'sessionRename',
+            'sessionTabs',
+            'browserTabs',
+            'rightPanelResize',
+            'connectorChromeIsolated',
+            'connectorEdgeIsolated',
+            'connectorConsentPreview',
+            'connectorRevoke',
+            'connectorPersistence',
+            'connectorRedaction',
+            'reasoningSummaryEnabled',
+            'reasoningSummaryDisabledZeroCalls',
+            'reasoningOriginalPreserved',
+            'advisorDisabledZeroCalls',
+            'advisorPlanCheckpoint',
+            'advisorRecoveryCheckpoint',
+            'advisorFinalCheckpoint',
+            'advisorReadOnly',
+            'advisorRevisionBounded',
+            'advisorModelPersistence',
+            'persistenceAfterRestart',
+            'safeTool',
+            'updateFromV25',
+            'repair',
+            'uninstallKeepData',
+            'uninstallDeleteData',
+            'rollback'
+          ]
+          const pilotTargets = ['windows-arm64', 'macos-arm64', 'macos-x64', 'linux-x64', 'linux-arm64']
+          const provenance = JSON.parse(fs.readFileSync('candidate/candidate-provenance.json', 'utf8'))
+          const evidence = JSON.parse(fs.readFileSync('candidate/pilot-release-evidence.json', 'utf8'))
+          const manifest = fs.readFileSync('candidate/SHA256SUMS.txt', 'utf8')
+          const manifestEntries = new Map(
+            manifest.trim().split(/\r?\n/).map(line => [line.slice(66), line.slice(0, 64)])
+          )
+          const expected = {
+            tag: process.env.TAG,
+            commit: process.env.COMMIT,
+            releaseClass: 'community-prerelease'
+          }
+          for (const [key, value] of Object.entries(expected)) {
+            if (provenance[key] !== value || evidence[key] !== value) throw new Error(`${key} mismatch`)
+          }
+          if (String(provenance.runId) !== process.env.STAGING_RUN_ID) throw new Error('staging run mismatch')
+          if (evidence.policy !== 'community-pilot') throw new Error('pilot policy mismatch')
+          if (evidence.sha256sumsSha256 !== process.env.MANIFEST_SHA) throw new Error('manifest digest mismatch')
+          const windows = evidence.platforms?.['windows-x64']
+          if (windows?.decision !== 'PILOT-GO') throw new Error('windows-x64 is not PILOT-GO')
+          if (manifestEntries.get(windows.artifact) !== windows.sha256) throw new Error('windows-x64 byte mismatch')
+          for (const gate of requiredWindowsGates) {
+            if (windows.gates?.[gate] !== true) throw new Error(`windows-x64 missing ${gate}`)
+          }
+          if (!Array.isArray(windows.limitations)) {
+            throw new Error('windows-x64 pilot limitations must be an array')
+          }
+          for (const target of pilotTargets) {
+            const record = evidence.platforms?.[target]
+            if (record?.decision !== 'BUILD-ONLY-PILOT') throw new Error(`${target} status is not build-only pilot`)
+            if (record.realMachineSmoke !== false) throw new Error(`${target} must disclose missing real-machine smoke`)
+            if (manifestEntries.get(record.artifact) !== record.sha256) throw new Error(`${target} byte mismatch`)
+          }
+          const calculated = crypto.createHash('sha256').update(fs.readFileSync('candidate/SHA256SUMS.txt')).digest('hex')
+          if (calculated !== evidence.sha256sumsSha256) throw new Error('manifest digest was not reproduced')
+          NODE
+
+      - name: Công khai đúng community prerelease đã mô tả
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=true
+
+      - name: Kiểm lại URL công khai và toàn bộ SHA-256
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          EXPECTED_MANIFEST_SHA: ${{ inputs.sha256sums_sha256 }}
+        run: |
+          set -euo pipefail
+          release_json="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,url)"
+          test "$(jq -r .isDraft <<<"$release_json")" = "false"
+          test "$(jq -r .isPrerelease <<<"$release_json")" = "true"
+          mkdir public
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir public
+          test "$(sha256sum public/SHA256SUMS.txt | cut -d' ' -f1)" = "$EXPECTED_MANIFEST_SHA"
+          (cd public && sha256sum --check SHA256SUMS.txt)
+          jq -r .url <<<"$release_json"

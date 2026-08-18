@@ -3,6 +3,7 @@ import { useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 
 import { ListRow, Pill } from '../primitives'
@@ -24,6 +25,8 @@ export function AutoReloadRow({
   bounds: Pick<BillingStateResponse, 'max_usd' | 'min_usd'>
   row: BillingAccountRowView
 }) {
+  const { locale, t } = useI18n()
+  const isVi = locale === 'vi'
   const api = useBillingApi()
   const queryClient = useQueryClient()
   const [confirmDisable, setConfirmDisable] = useState(false)
@@ -45,7 +48,7 @@ export function AutoReloadRow({
     initialAutoReloadAmount(autoReload.threshold_usd, autoReload.threshold_display)
   )
 
-  const validation = validateAutoReloadInputs(threshold, reloadTo, bounds)
+  const validation = validateAutoReloadInputs(threshold, reloadTo, bounds, locale)
   const busy = saving
   const maxBound = bounds.max_usd ?? undefined
   const minBound = bounds.min_usd ?? undefined
@@ -95,7 +98,7 @@ export function AutoReloadRow({
     }
 
     await queryClient.invalidateQueries({ queryKey: ['billing', 'state'] })
-    setMessage({ kind: 'success', text: 'Auto-refill updated.' })
+    setMessage({ kind: 'success', text: isVi ? 'Đã cập nhật tự động nạp thêm.' : 'Auto-refill updated.' })
     setEditing(false)
   }
 
@@ -125,7 +128,7 @@ export function AutoReloadRow({
     }
 
     await queryClient.invalidateQueries({ queryKey: ['billing', 'state'] })
-    setMessage({ kind: 'success', text: 'Auto-refill turned off.' })
+    setMessage({ kind: 'success', text: isVi ? 'Đã tắt tự động nạp thêm.' : 'Auto-refill turned off.' })
     setEditing(false)
   }
 
@@ -178,9 +181,9 @@ export function AutoReloadRow({
             <div aria-hidden={!editing} className={cn('space-y-2 [grid-area:stack]', !editing && 'invisible')}>
               <div className="grid gap-2 @2xl:grid-cols-2">
                 <label className="min-w-0 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
-                  Threshold
+                  {isVi ? 'Ngưỡng' : 'Threshold'}
                   <Input
-                    aria-label="Auto-refill threshold"
+                    aria-label={isVi ? 'Ngưỡng tự động nạp thêm' : 'Auto-refill threshold'}
                     className="mt-1 py-[3px]"
                     disabled={busy || !editing}
                     inputMode="decimal"
@@ -195,9 +198,9 @@ export function AutoReloadRow({
                   />
                 </label>
                 <label className="min-w-0 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
-                  Reload to
+                  {isVi ? 'Nạp đến mức' : 'Reload to'}
                   <Input
-                    aria-label="Auto-refill reload-to amount"
+                    aria-label={isVi ? 'Số dư sau khi tự động nạp' : 'Auto-refill reload-to amount'}
                     className="mt-1 py-[3px]"
                     disabled={busy || !editing}
                     inputMode="decimal"
@@ -218,9 +221,9 @@ export function AutoReloadRow({
               </div>
               {confirmDisable ? (
                 <div className="flex min-w-0 flex-wrap items-center gap-2 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
-                  <span>Turn off auto-refill?</span>
+                  <span>{isVi ? 'Tắt tự động nạp thêm?' : 'Turn off auto-refill?'}</span>
                   <Button disabled={busy} onClick={() => void disable()} size="sm" type="button" variant="outline">
-                    Turn off
+                    {isVi ? 'Tắt' : 'Turn off'}
                   </Button>
                   <Button
                     disabled={busy}
@@ -229,7 +232,7 @@ export function AutoReloadRow({
                     type="button"
                     variant="ghost"
                   >
-                    Cancel
+                    {t.common.cancel}
                   </Button>
                 </div>
               ) : (
@@ -241,7 +244,7 @@ export function AutoReloadRow({
                   type="button"
                   variant="outline"
                 >
-                  Disable
+                  {isVi ? 'Tắt' : 'Disable'}
                 </Button>
               )}
               {/* Refusal stays INSIDE the reserved layer so it never pushes Usage. */}
@@ -261,15 +264,15 @@ export function AutoReloadRow({
           {editing ? (
             <>
               <Button disabled={busy || !validation.values} onClick={() => void save()} size="sm" type="button">
-                {busy ? 'Saving…' : 'Save'}
+                {busy ? t.common.saving : t.common.save}
               </Button>
               <Button disabled={busy} onClick={cancelEdit} size="sm" type="button" variant="outline">
-                Cancel
+                {t.common.cancel}
               </Button>
             </>
           ) : (
             <Button onClick={openEdit} size="sm" type="button" variant="outline">
-              Manage
+              {isVi ? 'Quản lý' : 'Manage'}
             </Button>
           )}
         </div>

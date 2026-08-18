@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url'
 import { listPackage } from '@electron/asar'
 
 import PACKAGE_JSON from '../package.json' with { type: 'json' }
+import { freshInstallSandboxPrefix } from './fresh-install-sandbox.mjs'
+import { isMacDmgArtifactName, packagedAppDirectoryName } from './packaged-layout.mjs'
 
 const MODE = process.argv[2] || 'help'
 const ARCH = process.arch === 'arm64' ? 'arm64' : 'x64'
@@ -13,13 +15,12 @@ const DESKTOP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 
 const RELEASE_ROOT = path.join(DESKTOP_ROOT, 'release')
 const PLATFORM = process.platform
 
-// Platform-specific packaged-app layout. The thin installer ships an Electron
-// app shell plus extraResources (install-stamp.json + native-deps/) -- it
-// no longer bundles the Hermes Agent Python payload (that's fetched at first
-// launch via install.ps1 / install.sh, per the Phase 1 thin-installer flow).
+// Platform-specific packaged-app layout. Candidate release builds ship a
+// complete resources-resident runtime; ordinary development packs may still
+// carry the thin stub manifest.
 const APP = (() => {
   if (PLATFORM === 'darwin') {
-    const appPath = path.join(RELEASE_ROOT, `mac-${ARCH}`, 'Hermes.app')
+    const appPath = path.join(RELEASE_ROOT, packagedAppDirectoryName(PLATFORM, ARCH), 'Hermes.app')
     return {
       appPath,
       binary: path.join(appPath, 'Contents', 'MacOS', 'Hermes'),
@@ -29,7 +30,7 @@ const APP = (() => {
     }
   }
   if (PLATFORM === 'win32') {
-    const unpacked = path.join(RELEASE_ROOT, 'win-unpacked')
+    const unpacked = path.join(RELEASE_ROOT, packagedAppDirectoryName(PLATFORM, ARCH))
     return {
       appPath: unpacked,
       binary: path.join(unpacked, 'Hermes.exe'),
@@ -39,7 +40,7 @@ const APP = (() => {
     }
   }
   // linux unpacked layout matches windows but with different binary name
-  const unpacked = path.join(RELEASE_ROOT, 'linux-unpacked')
+  const unpacked = path.join(RELEASE_ROOT, packagedAppDirectoryName(PLATFORM, ARCH))
   return {
     appPath: unpacked,
     binary: path.join(unpacked, 'Hermes'),
@@ -60,7 +61,12 @@ const DEFAULT_HERMES_HOME = (() => {
   return path.join(os.homedir(), '.hermes')
 })()
 const VENV_ROOT = path.join(DEFAULT_HERMES_HOME, 'hermes-agent', 'venv')
-const FRESH_SANDBOX_ROOT = path.join(os.tmpdir(), 'hermes-desktop-fresh-install')
+const FRESH_SANDBOX_PREFIX = freshInstallSandboxPrefix({
+  platform: PLATFORM,
+  localAppData: process.env.LOCALAPPDATA || '',
+  homeDir: os.homedir(),
+  tempDir: os.tmpdir()
+})
 
 function die(message) {
   console.error(`\n${message}`)
@@ -109,9 +115,7 @@ function ensurePlatformBuilds() {
   if (PLATFORM === 'darwin') return
   if (PLATFORM === 'win32') return
   if (PLATFORM === 'linux') return
-  die(
-    `Desktop bundle validation is only wired for darwin / win32 / linux; platform=${PLATFORM} is not supported.`
-  )
+  die(`Desktop bundle validation is only wired for darwin / win32 / linux; platform=${PLATFORM} is not supported.`)
 }
 
 function ensurePackagedApp() {
@@ -127,12 +131,9 @@ function resolveDmgPath() {
     return path.join(RELEASE_ROOT, `Hermes-${PACKAGE_JSON.version}-${ARCH}.dmg`)
   }
 
-  const prefix = `Hermes-${PACKAGE_JSON.version}`
   const candidates = fs
     .readdirSync(RELEASE_ROOT)
-    .filter(name => name.endsWith('.dmg'))
-    .filter(name => name.startsWith(prefix))
-    .filter(name => name.includes(ARCH))
+    .filter(name => isMacDmgArtifactName(name, ARCH))
     .sort((a, b) => {
       const aMtime = fs.statSync(path.join(RELEASE_ROOT, a)).mtimeMs
       const bMtime = fs.statSync(path.join(RELEASE_ROOT, b)).mtimeMs
@@ -240,7 +241,8 @@ function launchFresh() {
     die(`Missing app executable: ${APP.binary}`)
   }
 
-  const sandbox = fs.mkdtempSync(`${FRESH_SANDBOX_ROOT}-`)
+  fs.mkdirSync(path.dirname(FRESH_SANDBOX_PREFIX), { recursive: true })
+  const sandbox = fs.mkdtempSync(FRESH_SANDBOX_PREFIX)
   const userDataDir = path.join(sandbox, 'electron-user-data')
   const hermesHome = path.join(sandbox, 'hermes-home')
   const cwd = path.join(sandbox, 'workspace')
@@ -258,7 +260,7 @@ function launchFresh() {
 
   env.HERMES_DESKTOP_CWD = cwd
   env.HERMES_DESKTOP_IGNORE_EXISTING = '1'
-  env.HERMES_DESKTOP_TEST_MODE = 'fresh-install'
+  env.HERMES_DESKTOP_TEST_MODE = 'fresh-install-auto'
   env.HERMES_DESKTOP_USER_DATA_DIR = userDataDir
   env.HERMES_HOME = hermesHome
   delete env.HERMES_DESKTOP_HERMES
@@ -281,10 +283,105 @@ function launchFresh() {
   return { runtimeRoot: path.join(hermesHome, 'hermes-agent', 'venv') }
 }
 
-// Validate the packaged bundle matches the thin-installer architecture:
-//   - The Hermes Agent Python payload is NOT shipped (it's fetched at first
-//     launch via install.ps1's stage protocol).
-//   - install-stamp.json IS shipped in resources/ with a valid commit + branch.
+function resolvePayloadPython(payloadRoot) {
+  const pythonRoot = path.join(payloadRoot, 'python')
+  if (!exists(pythonRoot)) return null
+  const binaryName = PLATFORM === 'win32' ? 'python.exe' : 'python3'
+  for (const entry of fs.readdirSync(pythonRoot).filter(name => name.startsWith('cpython-')).sort().reverse()) {
+    const candidate = PLATFORM === 'win32'
+      ? path.join(pythonRoot, entry, binaryName)
+      : path.join(pythonRoot, entry, 'bin', binaryName)
+    if (exists(candidate)) return candidate
+  }
+  return null
+}
+
+function validateResidentPayload(stamp) {
+  const payloadRoot = path.join(APP.resourcesPath, 'agent-payload')
+  const manifestPath = path.join(payloadRoot, 'manifest.json')
+  if (!exists(manifestPath)) die(`Missing resident payload manifest: ${manifestPath}`)
+
+  let manifest
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+  } catch (err) {
+    die(`Resident payload manifest is not valid JSON: ${err.message}`)
+  }
+  if (manifest.schemaVersion !== 2 || manifest.thin === true) {
+    die(`Release artifact does not carry a schema-2 resident payload: ${JSON.stringify(manifest)}`)
+  }
+  if (!/^vi-v(?:0|[1-9]\d{0,2})\.\d+\.\d+-(?:0|[1-9]\d*)$/.test(manifest.tag || '')) {
+    die(`Resident payload has an invalid Vietnamese release tag: ${manifest.tag}`)
+  }
+  for (const item of ['repo', 'uv', 'python', 'site-packages', 'node']) {
+    if (manifest.items?.[item]?.status !== 'staged') {
+      die(`Resident payload item is not staged: ${item}`)
+    }
+  }
+  if (!stamp.payload || stamp.tag !== manifest.tag || stamp.commit !== manifest.commit) {
+    die(`Install stamp and resident manifest provenance disagree: ${JSON.stringify({ stamp, manifest })}`)
+  }
+
+  const browserLauncher = path.join(
+    payloadRoot,
+    'repo',
+    'node_modules',
+    '.bin',
+    PLATFORM === 'win32' ? 'agent-browser.cmd' : 'agent-browser'
+  )
+  const required = [
+    path.join(payloadRoot, 'repo', 'hermes_cli', 'main.py'),
+    path.join(payloadRoot, 'repo', '.hermes-install.json'),
+    path.join(payloadRoot, 'repo', '.hermes_build_info.json'),
+    path.join(payloadRoot, 'repo', 'node_modules', 'agent-browser', 'package.json'),
+    path.join(
+      payloadRoot,
+      'repo',
+      'node_modules',
+      'agent-browser',
+      'bin',
+      `agent-browser-${PLATFORM === 'win32' ? 'win32' : PLATFORM}-${ARCH}${PLATFORM === 'win32' ? '.exe' : ''}`
+    ),
+    path.join(payloadRoot, 'site-packages', 'cryptography', '__init__.py'),
+    browserLauncher,
+    path.join(payloadRoot, 'node', PLATFORM === 'win32' ? 'node.exe' : path.join('bin', 'node')),
+    path.join(payloadRoot, 'uv', PLATFORM === 'win32' ? 'uv.exe' : 'uv')
+  ]
+  for (const file of required) {
+    if (!exists(file)) die(`Resident payload is incomplete: ${file}`)
+  }
+  if (!fs.statSync(browserLauncher).isFile()) {
+    die(`Resident agent-browser launcher is not a file: ${browserLauncher}`)
+  }
+  if (PLATFORM !== 'win32' && (fs.statSync(browserLauncher).mode & 0o111) === 0) {
+    die(`Resident agent-browser launcher is not executable: ${browserLauncher}`)
+  }
+  if (exists(path.join(payloadRoot, 'repo', '.git'))) {
+    die(`Resident payload must be a Git-independent source snapshot: ${path.join(payloadRoot, 'repo', '.git')}`)
+  }
+
+  const python = resolvePayloadPython(payloadRoot)
+  if (!python) die(`Resident payload has no runnable Python for ${PLATFORM}-${ARCH}`)
+  const probe = spawnSync(python, ['-c', [
+    'import json, cryptography, hermes_cli, pydantic_core',
+    'major = int(cryptography.__version__.split(".", 1)[0])',
+    'assert major >= 50, cryptography.__version__',
+    'print(json.dumps({"cryptography": cryptography.__version__, "hermes": hermes_cli.__version__}))'
+  ].join('; ')], {
+    cwd: os.tmpdir(),
+    env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1', PYTHONUTF8: '1' },
+    encoding: 'utf8'
+  })
+  if (probe.status !== 0) {
+    die(`Resident Python import probe failed (${probe.status}): ${(probe.stderr || probe.stdout || '').trim()}`)
+  }
+  console.log(`  resident runtime: ${probe.stdout.trim()}`)
+  return { manifest, python }
+}
+
+// Validate the packaged bundle:
+//   - candidate mode requires the complete resident Python/Node/uv payload;
+//   - install-stamp.json agrees with the payload's immutable provenance;
 //   - node-pty IS shipped inside app.asar.unpacked/dist/node_modules/node-pty
 //     with package.json + lib/ + at least one .node binary (the renderer's
 //     integrated terminal needs this; see Phase 1F.6).
@@ -295,17 +392,7 @@ function validateBundle() {
     die(`Missing packaged app binary: ${APP.binary}`)
   }
 
-  // Negative assertion: the OLD fat-installer factory payload must NOT be
-  // present anymore. If a stray ship of hermes_cli sneaks back in we want
-  // to fail loudly rather than re-introduce the 400MB delta we just removed.
-  const staleFactoryMarker = path.join(APP.resourcesPath, 'hermes-agent', 'hermes_cli', 'main.py')
-  if (exists(staleFactoryMarker)) {
-    die(
-      `Thin-installer regression: factory-payload file should NOT be in the package: ${staleFactoryMarker}`
-    )
-  }
-
-  // Positive assertion: install-stamp.json carries a sane commit + branch
+  // Positive assertion: install-stamp.json carries a sane immutable commit.
   const stampPath = path.join(APP.resourcesPath, 'install-stamp.json')
   if (!exists(stampPath)) {
     die(`Missing install-stamp.json (required for first-launch bootstrap pinning): ${stampPath}`)
@@ -319,9 +406,9 @@ function validateBundle() {
   if (!stamp.commit || typeof stamp.commit !== 'string' || stamp.commit.length < 7) {
     die(`install-stamp.json is missing a usable commit field: ${JSON.stringify(stamp)}`)
   }
-  if (!stamp.branch || typeof stamp.branch !== 'string') {
-    die(`install-stamp.json is missing the branch field: ${JSON.stringify(stamp)}`)
-  }
+  const resident = process.env.HERMES_DESKTOP_BUNDLED === '1'
+    ? validateResidentPayload(stamp)
+    : null
 
   // Positive assertion: node-pty native deps shipped
   const native = expectedNativeDepPaths()
@@ -341,18 +428,14 @@ function validateBundle() {
         `${native.prebuildsDir} nor ${native.buildReleaseDir} exists`
     )
   }
-  const nodeBinaries = nativeBinaryDirs.flatMap(dir =>
-    fs.readdirSync(dir).filter(name => name.endsWith('.node'))
-  )
+  const nodeBinaries = nativeBinaryDirs.flatMap(dir => fs.readdirSync(dir).filter(name => name.endsWith('.node')))
   if (nodeBinaries.length === 0) {
     die(`No .node native binaries found in: ${nativeBinaryDirs.join(', ')}`)
   }
   // Darwin requires a runtime-execed spawn-helper alongside pty.node; missing
   // it manifests as "ENOENT: spawn-helper" on first pty.spawn() call.
   if (PLATFORM === 'darwin') {
-    const spawnHelper = nativeBinaryDirs
-      .map(dir => path.join(dir, 'spawn-helper'))
-      .find(exists)
+    const spawnHelper = nativeBinaryDirs.map(dir => path.join(dir, 'spawn-helper')).find(exists)
     if (!spawnHelper) {
       die(`Missing node-pty spawn-helper (required on darwin) in: ${nativeBinaryDirs.join(', ')}`)
     }
@@ -360,7 +443,7 @@ function validateBundle() {
 
   // Renderer payload check (either unpacked or in the asar)
   if (exists(APP.unpackedDistIndex)) {
-    return { stamp, nodeBinaries }
+    return { stamp, nodeBinaries, resident }
   }
   if (!exists(APP.asarPath)) {
     die(`Missing renderer payload: neither ${APP.unpackedDistIndex} nor ${APP.asarPath} exists`)
@@ -373,7 +456,7 @@ function validateBundle() {
   if (!normalized.includes('dist/index.html')) {
     die(`Missing renderer payload file in app.asar: ${APP.asarPath} (expected dist/index.html)`)
   }
-  return { stamp, nodeBinaries }
+  return { stamp, nodeBinaries, resident }
 }
 
 function printArtifacts(options = {}) {
@@ -390,7 +473,7 @@ function printArtifacts(options = {}) {
   }
   console.log(`  runtime: ${runtimeRoot}`)
   if (stamp) {
-    console.log(`  install-stamp: ${stamp.commit.slice(0, 12)} on ${stamp.branch}`)
+    console.log(`  install-stamp: ${stamp.commit.slice(0, 12)} (${stamp.tag || stamp.branch || 'detached'})`)
   }
   if (options.nodeBinaries && options.nodeBinaries.length > 0) {
     console.log(`  node-pty binaries: ${options.nodeBinaries.join(', ')}`)

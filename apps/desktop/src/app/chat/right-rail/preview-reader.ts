@@ -23,6 +23,7 @@ export interface PreviewReadOptions {
 }
 
 export interface PreviewReadResult {
+  elements?: PreviewInteractiveElement[]
   end: number
   kind: string
   note?: string
@@ -34,20 +35,53 @@ export interface PreviewReadResult {
   url: string
 }
 
+export interface PreviewInteractiveElement {
+  disabled: boolean
+  name: string
+  ref: string
+  role: string
+}
+
+export type PreviewInteractAction = 'back' | 'click' | 'forward' | 'press' | 'reload' | 'scroll' | 'type'
+
+export interface PreviewInteractOptions {
+  action: PreviewInteractAction
+  delta_y?: number
+  key?: string
+  ref?: string
+  text?: string
+}
+
+export interface PreviewInteractResult {
+  action: PreviewInteractAction
+  message: string
+  ok: boolean
+  title: string
+  url: string
+}
+
 /** What a pane's page reader extracts — the reader module owns the windowing. */
 interface PreviewPage {
+  elements?: PreviewInteractiveElement[]
   text: string
   title: string
   url: string
 }
 
 type PageReader = () => Promise<PreviewPage>
+type PageInteractor = (opts: PreviewInteractOptions) => Promise<PreviewInteractResult>
+
+export interface PreviewPageController {
+  interact: PageInteractor
+  read: PageReader
+}
 
 /** Default + hard cap on one read — a page's innerText can be megabytes, and
  *  this crosses the gateway into model context. Page with start/count. */
 export const PREVIEW_READ_MAX_CHARS = 24_000
 
 const readers = new Map<string, PageReader>()
+const interactors = new Map<string, PageInteractor>()
 
 /** Register a live preview's page reader; returns an idempotent unregister. */
 export function registerPreviewPageReader(tabId: string, reader: PageReader): () => void {
@@ -56,6 +90,22 @@ export function registerPreviewPageReader(tabId: string, reader: PageReader): ()
   return () => {
     if (readers.get(tabId) === reader) {
       readers.delete(tabId)
+    }
+  }
+}
+
+/** Register the live reader + interaction bridge owned by one preview pane. */
+export function registerPreviewPageController(tabId: string, controller: PreviewPageController): () => void {
+  readers.set(tabId, controller.read)
+  interactors.set(tabId, controller.interact)
+
+  return () => {
+    if (readers.get(tabId) === controller.read) {
+      readers.delete(tabId)
+    }
+
+    if (interactors.get(tabId) === controller.interact) {
+      interactors.delete(tabId)
     }
   }
 }
@@ -90,7 +140,13 @@ export async function readActivePreview(opts: PreviewReadOptions = {}): Promise<
       const page = await reader()
 
       return windowText(
-        { kind: target.kind, path: target.path, title: page.title || target.label, url: page.url || target.url },
+        {
+          elements: page.elements,
+          kind: target.kind,
+          path: target.path,
+          title: page.title || target.label,
+          url: page.url || target.url
+        },
         page.text,
         opts
       )
@@ -119,4 +175,37 @@ export async function readActivePreview(opts: PreviewReadOptions = {}): Promise<
     '',
     opts
   )
+}
+
+/** Interact with the ACTIVE live preview, keeping the agent on the page the user sees. */
+export async function interactActivePreview(opts: PreviewInteractOptions): Promise<PreviewInteractResult> {
+  const tabs = $previewTabs.get()
+  const tab = tabs.find(t => t.id === $rightRailActiveTabId.get()) ?? tabs[0]
+
+  const fallback = {
+    action: opts.action,
+    message: 'No live Browser pane is open. Open or mount a URL preview, then retry.',
+    ok: false,
+    title: tab?.target.label ?? '',
+    url: tab?.target.url ?? ''
+  }
+
+  if (!tab) {
+    return fallback
+  }
+
+  const interact = interactors.get(tab.id)
+
+  if (!interact) {
+    return fallback
+  }
+
+  try {
+    return await interact(opts)
+  } catch (error) {
+    return {
+      ...fallback,
+      message: error instanceof Error ? error.message : String(error)
+    }
+  }
 }

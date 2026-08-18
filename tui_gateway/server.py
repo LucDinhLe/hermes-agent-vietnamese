@@ -221,6 +221,7 @@ _LONG_HANDLERS = frozenset(
         "complete.path",
         "complete.slash",
         "llm.oneshot",
+        "reasoning.summarize",
         # model.options builds the full picker payload — per-provider credential
         # pool checks, pricing fetch, Nous tier check, optional custom-provider
         # probe — measured seconds inline. While it runs on the reader thread,
@@ -3505,6 +3506,7 @@ def _block(event: str, sid: str, payload: dict, timeout: float | None = 300) -> 
         "clarify.request",
         "terminal.read.request",
         "preview.read.request",
+        "preview.interact.request",
         "window.read.request",
         "mcp.setup.request",
     }:
@@ -5592,7 +5594,12 @@ def _session_info(agent, session: dict | None = None) -> dict:
         "stored_session_id": session_key or "",
         "desktop_contract": DESKTOP_BACKEND_CONTRACT,
         "version": "",
-        "release_date": "",
+        "version_base": "",
+        "version_distance": None,
+        "version_commit": "",
+        "version_branch": "",
+        "version_source": "",
+        "version_dirty": False,
         "update_behind": None,
         "update_command": "",
         "usage": _session_usage_snapshot(session),
@@ -5605,10 +5612,17 @@ def _session_info(agent, session: dict | None = None) -> dict:
         else _current_profile_name(),
     }
     try:
-        from hermes_cli import __version__, __release_date__
+        from hermes_cli.version_info import get_version_info
 
-        info["version"] = __version__
-        info["release_date"] = __release_date__
+        version_info = get_version_info()
+        info["version"] = version_info.derived_version
+        info["version_base"] = version_info.base_version
+        info["version_distance"] = version_info.distance
+        info["version_commit"] = version_info.commit or ""
+        info["version_branch"] = version_info.branch or ""
+        info["version_source"] = version_info.source
+        info["version_distribution"] = version_info.distribution or ""
+        info["version_dirty"] = version_info.dirty
     except Exception:
         pass
     if agent is not None and not (session or {}).get("_compute_host_active"):
@@ -6207,6 +6221,24 @@ def _agent_cbs(sid: str) -> dict:
             "preview.read.request",
             sid,
             {k: v for k, v in (("start", start), ("count", count)) if v is not None},
+            timeout=45,
+        ),
+        # interact_preview tool (desktop GUI): route actions to the exact live
+        # webview the user sees, then wait for preview.interact.respond.
+        "interact_preview_callback": lambda action, ref=None, text=None, key=None, delta_y=None: _block(
+            "preview.interact.request",
+            sid,
+            {
+                k: v
+                for k, v in (
+                    ("action", action),
+                    ("ref", ref),
+                    ("text", text),
+                    ("key", key),
+                    ("delta_y", delta_y),
+                )
+                if v is not None
+            },
             timeout=45,
         ),
         # read_window_below tool (desktop GUI): the renderer asks its main

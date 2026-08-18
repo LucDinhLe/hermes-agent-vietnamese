@@ -10,6 +10,10 @@
  */
 
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 
 import { test } from 'vitest'
 
@@ -19,6 +23,7 @@ import {
   modeRemovesAgent,
   modeRemovesUserData,
   resolveRemovableAppPath,
+  selectUninstallPython,
   shouldRemoveAppBundle,
   UNINSTALL_MODES,
   uninstallArgsForMode
@@ -51,6 +56,78 @@ test('mode predicates classify what each mode removes', () => {
   assert.equal(modeRemovesUserData('gui'), false)
   assert.equal(modeRemovesUserData('lite'), false)
   assert.equal(modeRemovesUserData('full'), true)
+})
+
+// --- selectUninstallPython ---
+
+test('selectUninstallPython prefers the bundled resident runtime for lite/full', () => {
+  const selection = selectUninstallPython('full', {
+    venvPython: 'C:\\home\\venv\\Scripts\\python.exe',
+    residentPython: 'C:\\app\\resources\\agent-payload\\python\\python.exe',
+    systemPython: 'C:\\Python313\\python.exe',
+    isWindows: true
+  })
+
+  assert.deepEqual(selection, {
+    degraded: false,
+    external: true,
+    pythonExe: 'C:\\app\\resources\\agent-payload\\python\\python.exe',
+    source: 'resident'
+  })
+})
+
+test('selectUninstallPython falls back to system Python for thin/source installs', () => {
+  const selection = selectUninstallPython('lite', {
+    venvPython: '/home/x/.hermes/venv/bin/python',
+    residentPython: null,
+    systemPython: '/usr/bin/python3'
+  })
+
+  assert.equal(selection.pythonExe, '/usr/bin/python3')
+  assert.equal(selection.external, true)
+  assert.equal(selection.degraded, false)
+  assert.equal(selection.source, 'system')
+})
+
+test('selectUninstallPython keeps gui mode on its venv and marks a Windows full fallback degraded', () => {
+  assert.deepEqual(
+    selectUninstallPython('gui', {
+      venvPython: 'C:\\home\\venv\\Scripts\\python.exe',
+      residentPython: 'C:\\app\\python.exe',
+      isWindows: true
+    }),
+    {
+      degraded: false,
+      external: false,
+      pythonExe: 'C:\\home\\venv\\Scripts\\python.exe',
+      source: 'venv'
+    }
+  )
+
+  const degraded = selectUninstallPython('full', {
+    venvPython: 'C:\\home\\venv\\Scripts\\python.exe',
+    isWindows: true
+  })
+
+  assert.equal(degraded.pythonExe, 'C:\\home\\venv\\Scripts\\python.exe')
+  assert.equal(degraded.external, false)
+  assert.equal(degraded.degraded, true)
+  assert.equal(degraded.source, 'venv-fallback')
+})
+
+test('selectUninstallPython lets a resident-only packaged app uninstall its GUI', () => {
+  const selection = selectUninstallPython('gui', {
+    venvPython: null,
+    residentPython: 'C:\\app\\resources\\agent-payload\\python\\python.exe',
+    isWindows: true
+  })
+
+  assert.deepEqual(selection, {
+    degraded: false,
+    external: true,
+    pythonExe: 'C:\\app\\resources\\agent-payload\\python\\python.exe',
+    source: 'resident'
+  })
 })
 
 // --- resolveRemovableAppPath ---
@@ -226,14 +303,61 @@ test('buildWindowsCleanupScript waits (bounded) for PID, runs uninstall, rmdir b
   assert.match(script, /"C:\\Python313\\python.exe" "-m" "hermes_cli\.uninstall" "--mode" "full"/)
   // Bounded wait-loop (no infinite loop), whole-token PID match (no substring).
   assert.match(script, /if %waited% geq 60 goto waited_done/)
-  assert.match(script, /findstr \/r \/c:" %PID% "/)
+  assert.match(script, /set "TASKLIST_TMP=%~dpn0-tasklist\.tmp"/)
+  assert.match(script, /tasklist \/NH \/FI "PID eq %PID%" >"%TASKLIST_TMP%" 2>nul/)
+  assert.match(script, /findstr \/r \/c:" %PID% " "%TASKLIST_TMP%" >nul 2>&1/)
+  assert.doesNotMatch(script, /^tasklist[^\r\n]*\|[^\r\n]*findstr/m)
+  assert.match(script, /del "%TASKLIST_TMP%" >nul 2>&1/)
   assert.doesNotMatch(script, /find "%PID%"/) // the old substring-prone form is gone
   // Removal is a retry loop (Windows releases dir handles lazily).
+  assert.match(script, /cd \/d "%~dp0"/)
   assert.match(script, /:rmloop/)
   assert.match(script, /rmdir \/s \/q "C:\\Users\\x\\AppData\\Local\\Programs\\Hermes" >nul 2>&1/)
   assert.match(script, /if %tries% geq 10 goto rmdone/)
   assert.match(script, /del "%~f0"/)
 })
+
+test.skipIf(process.platform !== 'win32')(
+  'buildWindowsCleanupScript executes to completion and removes its app tree',
+  () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-uninstall-wait-'))
+    const scriptPath = path.join(directory, 'cleanup.cmd')
+    const appPath = path.join(directory, 'app')
+    const agentRoot = path.join(appPath, 'resources', 'agent-payload', 'repo')
+
+    try {
+      fs.mkdirSync(agentRoot, { recursive: true })
+      fs.writeFileSync(path.join(agentRoot, 'payload.txt'), 'runtime payload')
+      fs.writeFileSync(
+        scriptPath,
+        buildWindowsCleanupScript({
+          desktopPid: 2147483647,
+          pythonExe: path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'where.exe'),
+          pythonPath: null,
+          agentRoot,
+          uninstallArgs: ['cmd.exe'],
+          appPath,
+          hermesHome: path.join(directory, 'home')
+        })
+      )
+
+      const completed = spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/c', scriptPath], {
+        encoding: 'utf8',
+        timeout: 15_000,
+        windowsHide: true
+      })
+
+      assert.equal(completed.error, undefined)
+      assert.notEqual(completed.status, null, completed.stderr || completed.stdout)
+      assert.match(completed.stdout, /cmd\.exe/i)
+      assert.equal(fs.existsSync(scriptPath), false)
+      assert.equal(fs.existsSync(path.join(directory, 'cleanup-tasklist.tmp')), false)
+      assert.equal(fs.existsSync(appPath), false)
+    } finally {
+      fs.rmSync(directory, { recursive: true, force: true })
+    }
+  }
+)
 
 test('buildWindowsCleanupScript omits PYTHONPATH + rmdir when not needed (gui, no bundle)', () => {
   const script = buildWindowsCleanupScript({

@@ -305,9 +305,15 @@ PROVIDER_REGISTRY: Dict[str, ProviderConfig] = {
         inference_base_url=DEFAULT_COPILOT_ACP_BASE_URL,
         base_url_env_var="COPILOT_ACP_BASE_URL",
     ),
+    "claude-code": ProviderConfig(
+        id="claude-code",
+        name="Claude Pro / Max (Claude Code)",
+        auth_type="external_process",
+        inference_base_url="claude-code://local",
+    ),
     "gemini": ProviderConfig(
         id="gemini",
-        name="Google AI Studio",
+        name="Google AI Studio (API)",
         auth_type="api_key",
         inference_base_url="https://generativelanguage.googleapis.com/v1beta",
         api_key_env_vars=("GOOGLE_API_KEY", "GEMINI_API_KEY"),
@@ -2106,7 +2112,7 @@ def resolve_provider(
         "minimax-portal": "minimax-oauth", "minimax-global": "minimax-oauth", "minimax_oauth": "minimax-oauth",
         "alibaba_coding": "alibaba-coding-plan", "alibaba-coding": "alibaba-coding-plan",
         "alibaba_coding_plan": "alibaba-coding-plan",
-        "claude": "anthropic", "claude-code": "anthropic",
+        "claude": "anthropic", "claude-code": "claude-code", "claude-pro": "claude-code",
         "github": "copilot", "github-copilot": "copilot",
         "github-models": "copilot", "github-model": "copilot",
         "github-copilot-acp": "copilot-acp", "copilot-acp-agent": "copilot-acp",
@@ -7123,6 +7129,17 @@ def get_external_process_provider_status(provider_id: str) -> Dict[str, Any]:
     if not pconfig or pconfig.auth_type != "external_process":
         return {"configured": False}
 
+    if provider_id == "claude-code":
+        from agent.claude_code_client import probe_claude_code_auth
+
+        status = probe_claude_code_auth()
+        return {
+            "configured": bool(status.get("logged_in")),
+            "provider": provider_id,
+            "name": pconfig.name,
+            **status,
+        }
+
     command = (
         os.getenv("HERMES_COPILOT_ACP_COMMAND", "").strip()
         or os.getenv("COPILOT_CLI_PATH", "").strip()
@@ -7164,7 +7181,7 @@ def get_auth_status(provider_id: Optional[str] = None) -> Dict[str, Any]:
         return get_qwen_auth_status()
     if target == "minimax-oauth":
         return get_minimax_oauth_auth_status()
-    if target == "copilot-acp":
+    if target in {"copilot-acp", "claude-code"}:
         return get_external_process_provider_status(target)
     if target == "azure-foundry":
         return _get_azure_foundry_auth_status()
@@ -7349,6 +7366,32 @@ def resolve_external_process_provider_credentials(provider_id: str) -> Dict[str,
             provider=provider_id,
             code="invalid_provider",
         )
+
+    if provider_id == "claude-code":
+        from agent.claude_code_client import probe_claude_code_auth, resolve_claude_command
+
+        command = resolve_claude_command()
+        status = probe_claude_code_auth(command)
+        if not status.get("installed"):
+            raise AuthError(
+                "Claude Code CLI is not installed or is not on PATH.",
+                provider=provider_id,
+                code="missing_claude_code_cli",
+            )
+        if not status.get("logged_in"):
+            raise AuthError(
+                str(status.get("error") or "Run `claude auth login` first."),
+                provider=provider_id,
+                code="claude_code_not_logged_in",
+            )
+        return {
+            "provider": provider_id,
+            "api_key": "claude-code-subscription",
+            "base_url": pconfig.inference_base_url,
+            "command": command,
+            "args": [],
+            "source": "claude-code-cli",
+        }
 
     base_url = os.getenv(pconfig.base_url_env_var, "").strip() if pconfig.base_url_env_var else ""
     if not base_url:

@@ -527,6 +527,7 @@ def init_agent(
     clarify_callback: callable = None,
     read_terminal_callback: callable = None,
     read_preview_callback: callable = None,
+    interact_preview_callback: callable = None,
     read_window_below_callback: callable = None,
     setup_mcp_callback: callable = None,
     step_callback: callable = None,
@@ -822,6 +823,7 @@ def init_agent(
     agent.clarify_callback = clarify_callback
     agent.read_terminal_callback = read_terminal_callback
     agent.read_preview_callback = read_preview_callback
+    agent.interact_preview_callback = interact_preview_callback
     agent.read_window_below_callback = read_window_below_callback
     agent.setup_mcp_callback = setup_mcp_callback
     agent.step_callback = step_callback
@@ -1243,7 +1245,7 @@ def init_agent(
                 client_kwargs = {"api_key": api_key, "base_url": base_url}
             if _provider_timeout is not None:
                 client_kwargs["timeout"] = _provider_timeout
-            if agent.provider == "copilot-acp":
+            if agent.provider in {"copilot-acp", "claude-code"}:
                 client_kwargs["command"] = agent.acp_command
                 client_kwargs["args"] = agent.acp_args
             effective_base = base_url
@@ -1709,6 +1711,18 @@ def init_agent(
         _agent_cfg = _load_agent_config()
     except Exception:
         _agent_cfg = {}
+
+    # Snapshot Advisor posture for this agent/session. Settings explicitly say
+    # they apply to new sessions, so a mid-turn config write cannot silently
+    # introduce extra provider calls or change a checkpoint decision.
+    try:
+        from agent.advisor import settings_from_config as _advisor_settings_from_config
+
+        agent._advisor_settings = _advisor_settings_from_config(_agent_cfg)
+    except Exception:
+        from agent.advisor import AdvisorSettings as _AdvisorSettings
+
+        agent._advisor_settings = _AdvisorSettings()
 
     # Codex commentary visibility (display.show_commentary, default true).
     # When true, completed Codex phase=commentary messages are delivered as

@@ -4018,6 +4018,8 @@ _AUX_TASKS: list[tuple[str, str, str]] = [
     ("approval", "Approval", "smart command approval"),
     ("mcp", "MCP", "MCP tool reasoning"),
     ("title_generation", "Title generation", "session titles"),
+    ("reasoning_summary_vi", "Vietnamese reasoning summary", "post-turn public reasoning summaries"),
+    ("advisor", "Advisor", "read-only plan, recovery, and final review"),
     ("memory_query_rewrite", "Memory query rewrite", "memory retrieval queries"),
     ("tts_audio_tags", "TTS audio tags", "Gemini TTS tag insertion"),
     ("skills_hub", "Skills hub", "skills search/install"),
@@ -5641,14 +5643,22 @@ def cmd_import(args):
 
 
 def _print_version_info(*, check_updates: bool = True) -> None:
-    from hermes_cli.config import detect_install_method
     from hermes_cli.slash_exec import CommandContext, execute_command
+    from hermes_cli.version_info import get_version_info
 
     # Core version line is registry-owned (shared with the gateway /version);
     # the install/python/SDK detail below is CLI-only decoration.
     print(execute_command("version", CommandContext(surface="cli")).text)
+    version_info = get_version_info()
+    if version_info.branch:
+        print(f"Branch: {version_info.branch}")
+    if version_info.commit:
+        print(f"Commit: {version_info.commit}")
+    print(f"Working tree: {'dirty' if version_info.dirty else 'clean'}")
+    print(f"Source: {version_info.source}")
+    if version_info.distribution:
+        print(f"Distribution: {version_info.distribution}")
     print(f"Install directory: {PROJECT_ROOT}")
-    print(f"Install method: {detect_install_method(PROJECT_ROOT)}")
 
     # Show Python version
     print(f"Python: {sys.version.split()[0]}")
@@ -9924,6 +9934,27 @@ def cmd_update(args):
 
     if install_method in {"nix", "nixos", "apt"}:
         print(recommended_update_command_for_method(install_method))
+        sys.exit(1)
+
+    # --eject runs BEFORE the bundled-install refusal below. The eject
+    # operation is the one update operation that must work on a bundled
+    # install. It is the exit from desktop management. On source installs
+    # it only sets the channel or does nothing.
+    if getattr(args, "eject", False):
+        from hermes_cli.update_cmd import cmd_update_eject
+
+        sys.exit(cmd_update_eject(args))
+
+    # Bundled desktop installs are materialized from payloads shipped inside
+    # the desktop app. The updater of the app re-materializes the checkout
+    # after the app updates itself. If `hermes update` changes that checkout,
+    # the checkout no longer agrees with the stamped tag of the shell. Thus
+    # refuse, and point at the in-app updater or at eject. Eject changes the
+    # install to source mode.
+    from hermes_cli.install_manifest import format_bundled_update_message, is_bundled_install
+
+    if is_bundled_install(PROJECT_ROOT):
+        print(format_bundled_update_message())
         sys.exit(1)
 
     if getattr(args, "check", False):

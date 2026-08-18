@@ -73,16 +73,11 @@ afterEach(() => {
 
 async function renderMessaging() {
   const { MessagingView } = await import('./index')
-  let result: ReturnType<typeof render>
-  await act(async () => {
-    result = render(
-      <MemoryRouter>
-        <MessagingView />
-      </MemoryRouter>
-    )
-  })
-
-  return result!
+  return render(
+    <MemoryRouter>
+      <MessagingView />
+    </MemoryRouter>
+  )
 }
 
 describe('MessagingView setup-guide link', () => {
@@ -106,9 +101,7 @@ describe('MessagingView setup-guide link', () => {
     await renderMessaging()
 
     const link = await screen.findByText('Open setup guide')
-    await act(async () => {
-      fireEvent.click(link)
-    })
+    fireEvent.click(link)
 
     await waitFor(() => expect(openExternalLink).toHaveBeenCalledWith(docsUrl))
   })
@@ -134,9 +127,7 @@ describe('MessagingView pairing', () => {
     await renderMessaging()
 
     const approve = await screen.findByRole('button', { name: 'Approve' })
-    await act(async () => {
-      fireEvent.click(approve)
-    })
+    fireEvent.click(approve)
 
     await waitFor(() => expect(approvePairing).toHaveBeenCalledWith('teams', 'a1b2c3d4e5f60718'))
   })
@@ -150,9 +141,7 @@ describe('MessagingView pairing', () => {
 
     await renderMessaging()
 
-    await act(async () => {
-      fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
-    })
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }))
 
     expect(await screen.findByRole('button', { name: 'Approve' })).toBeTruthy()
     expect(screen.getByText('Bee')).toBeTruthy()

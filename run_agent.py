@@ -470,6 +470,7 @@ class AIAgent:
         clarify_callback: callable = None,
         read_terminal_callback: callable = None,
         read_preview_callback: callable = None,
+        interact_preview_callback: callable = None,
         read_window_below_callback: callable = None,
         setup_mcp_callback: callable = None,
         step_callback: callable = None,
@@ -558,6 +559,7 @@ class AIAgent:
             clarify_callback=clarify_callback,
             read_terminal_callback=read_terminal_callback,
             read_preview_callback=read_preview_callback,
+            interact_preview_callback=interact_preview_callback,
             read_window_below_callback=read_window_below_callback,
             setup_mcp_callback=setup_mcp_callback,
             step_callback=step_callback,
@@ -5439,6 +5441,22 @@ class AIAgent:
         — which is where the FD release belongs.
         """
         if client is None:
+            return
+        # Subprocess-backed clients own a child process rather than a TLS
+        # socket pool. Their explicit abort hook is thread-safe and is the only
+        # way to unblock a worker waiting on stdout after the user presses Stop.
+        subprocess_abort = getattr(client, "abort_from_any_thread", None)
+        if callable(subprocess_abort):
+            with self._openai_client_lock():
+                cache = self._request_client_cache_ref()
+                if cache["client"] is client:
+                    cache["poisoned"] = True
+            subprocess_abort()
+            logger.info(
+                "Subprocess client aborted (%s, shared=False) %s",
+                reason,
+                self._client_log_context(),
+            )
             return
         # A pool whose sockets were shut down from a stranger thread must
         # never be reused: poison the cache slot so the owner-thread close

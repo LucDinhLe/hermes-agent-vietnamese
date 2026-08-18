@@ -1,0 +1,532 @@
+# Tiến độ
+
+## Cập nhật 2026-08-18 — bổ sung Giám sát (Advisor) và mở candidate kế tiếp
+
+- Xác nhận `vi-v0.20.0-26` đã là tag bất biến tại
+  `8ea73dcb475e32b8171bb970cc98ba809119f9b8`; không di chuyển hoặc dựng lại tag.
+  Phạm vi v26 mở rộng chỉ có thể đi vào candidate kế tiếp
+  `vi-v0.20.0-27` sau khi commit sạch, push và CI nguồn xanh.
+- Thêm Advisor mặc định tắt, chỉ đọc và không có tools. Khi bật, Hermes tự rà
+  soát trước mutating batch đầu tiên, khi đổi nhóm công cụ/lặp lỗi và trước kết
+  quả cuối; verdict `PASS/REVISE/ASK_USER/BLOCK`, mặc định tối đa hai vòng sửa.
+- Batch bị yêu cầu sửa được đóng đủ synthetic tool result theo từng
+  `tool_call_id`; final candidate bị từ chối chỉ là scaffolding tạm và bị loại
+  khỏi transcript bền vững. Review packet redaction secret và không chứa hidden
+  chain-of-thought.
+- Settings → Model có mục **Giám sát (Advisor)** ngay sau model chính, chỉ gồm
+  công tắc bật/tắt và bộ chọn provider/model. Không thêm nút gọi thủ công trong
+  chat. Cấu hình/model tách profile và áp dụng cho phiên mới.
+- Cổng release nay gọi đích danh test Advisor Python, vòng hội thoại, model UI
+  và i18n; promotion pilot yêu cầu evidence off-zero-call, plan/recovery/final,
+  read-only, bounded revision và model persistence.
+- Kiểm thử hiện tại: 119/119 Electron/release, 61/61 UI v26 cũ,
+  26/26 Advisor UI+i18n, 107/107 Python release và Desktop typecheck đều đạt.
+  Một lượt chạy hai suite UI đồng thời từng timeout do tải máy; workflow đã tách
+  suite Advisor và cả hai suite đều xanh khi chạy tuần tự. Chưa build candidate mới, chưa tạo tag,
+  draft hay public release. GitHub CLI hiện không xác thực được nên chưa thể
+  push/tạo draft PR hoặc đọc CI từ máy này.
+
+## Cập nhật 2026-08-17 — khóa cổng candidate và promotion v26
+
+- Workflow tạo candidate nay gọi đích danh test extension MV3, ba lớp Connector
+  Electron, consent UI, preview pane, reasoning UI/store và RPC Python; không còn
+  dựa vào việc test mới vô tình được suite tổng quát thu thập.
+- Promotion community pilot bắt buộc bằng chứng Windows x64 cho Chrome/Edge
+  profile cô lập, consent/revoke/persistence/redaction, reasoning bật/tắt và giữ
+  nguyên bản gốc, safe tool, update exact v25, repair/uninstall và rollback.
+- Cổng release local sau thay đổi đạt 119/119 Electron/release tests, 61/61 UI
+  tests và 36/36 Python release tests. Desktop typecheck, `uv lock --check`,
+  dependency production audit (0 vulnerability) và scan mẫu secret trên toàn bộ
+  diff v26 đều đạt.
+- Full UI trước đó đạt 3.700 test và có 4 timeout không tái hiện khi chạy riêng;
+  full Electron có 20 lỗi thuộc giả định POSIX/quyền Windows, trong khi đúng bộ
+  release workflow đạt sạch. Hai kết quả full-suite này được giữ là cảnh báo môi
+  trường, không được ghi thành gate xanh.
+- Release notes được chuyển sang v26 và cố ý ghi candidate-only. Public Latest
+  vẫn là `vi-v0.20.0-25`; chưa có tag, draft hoặc artifact v26 tại thời điểm này.
+
+## Cập nhật 2026-08-17 — hoàn thiện lát cắt tóm tắt reasoning tiếng Việt v26
+
+- Thêm RPC stateless `reasoning.summarize`: backend kiểm SHA-256, giới hạn
+  reasoning công khai ở 64 KiB và gọi riêng auxiliary task
+  `reasoning_summary_vi`; không ghi vào transcript hoặc prompt của phiên chính.
+- Tùy chọn **Tóm tắt suy luận bằng tiếng Việt** mặc định tắt. Khi tắt, đường
+  hậu xử lý dừng trước hash và tạo đúng zero model call; khi bật chỉ chạy sau
+  `message.complete`, tối đa một lần cho cùng digest.
+- Giữ nguyên reasoning và câu trả lời gốc; summary nằm trong panel riêng với
+  model, độ trễ và trạng thái chi phí/usage. Lỗi auxiliary chỉ hiện trong panel,
+  không đổi lượt chính thành lỗi.
+- Cache local tách transcript, không lưu reasoning nguồn, bị khóa theo
+  `profile + session lineage + message id + source SHA-256`, giới hạn 120 bản
+  ghi/1 MiB, phục hồi qua restart và có nút xóa trong Settings.
+- Bổ sung copy VI/EN/JA/ZH/ZH-Hant và cấu hình model riêng cho task. Kiểm thử
+  targeted hiện đạt 58 Python tests, 22 Desktop tests, Desktop typecheck và
+  lint thay đổi đều không lỗi/cảnh báo.
+
+## Cập nhật 2026-08-17 — khóa threat model và đặc tả v26
+
+- Tạo worktree sạch `feat/v26-secure-connector` từ `origin/main` tại
+  `4d597f74600cdc3791edf7d34566534182946c55`; không chạm các worktree cũ và giữ
+  nguyên release/tag/asset v25.
+- Xác minh baseline: 6/6 public-release tests, 18/18 preview/reasoning UI tests,
+  26/26 bundled-runtime/hardening tests và Desktop typecheck đều đạt trong môi
+  trường cô lập, dùng đúng lockfile.
+- Khóa threat model tại `docs/hermes-connector-v26-threat-model.md`: consent hai
+  phía, optional domain permissions, loopback một lần, metadata-only IPC,
+  RAM-only payload, import đúng `persist:hermes-preview` và revoke theo ledger.
+- Khóa quyết định bỏ qua có cảnh báo đối với partitioned cookie vì Electron 41
+  chưa có API giữ `partitionKey`; không hạ cấp thành cookie không phân vùng.
+- Khóa đặc tả tại `docs/hermes-v26-spec.md`; nền móng trust v26 chỉ dành cho
+  companion chính chủ. Extension Manager tổng quát được hoãn sang v27.
+- Tạo `docs/release-vi-v0.20.0-26-plan.md` với cổng Chrome/Edge profile cô lập,
+  exact Windows x64, update v25 -> v26, redaction và public GO/NO-GO.
+
+## Cập nhật 2026-08-17 — bàn giao v25 và khởi động phạm vi v26
+
+- Đóng gói toàn bộ hành trình từ tiếp nhận v15 tới public thành công v25 tại
+  `docs/release-vi-v0.20.0-25-retrospective.md`, gồm sự cố, nguyên nhân gốc,
+  candidate v15–v24, cổng hồi quy, workflow bằng chứng và audit sau public.
+- Đưa `docs/release-engineering-rulebook.md` vào repository làm hợp đồng phát
+  hành chính thức; bổ sung cổng điều hướng công khai để chặn README/Latest trỏ
+  nhầm phiên bản sau promotion.
+- Tạo `docs/handoff-vi-v0.20.0-26.md` với nguồn sự thật, ranh giới bất biến của
+  v25, gaps còn mở, bản đồ mã và prompt tiếp quản cho phiên mới.
+- Phạm vi định hướng v26 gồm Hermes Connector cho Chrome/Edge để chuyển cookie
+  theo domain với consent rõ ràng, nền móng extension tin cậy và tùy chọn tóm
+  tắt reasoning công khai bằng tiếng Việt. Không hứa tương thích mọi extension
+  Chrome Web Store và không cố lấy chain-of-thought ẩn.
+- Chưa viết mã v26, chưa tạo candidate/tag/artifact và không thay release v25.
+
+## Cập nhật 2026-08-17 — viết lại mô tả và hướng dẫn cài v25
+
+- Viết lại phần giới thiệu công khai theo hành trình của người mới: lý do dự án
+  tồn tại, nhóm người dùng, nguồn gốc Hermes Agent, giấy phép MIT và phạm vi duy
+  trì độc lập của Lê Đình Lực.
+- Bổ sung bảng điểm mạnh so với cách tự cài Hermes Agent từ mã nguồn, hướng dẫn
+  kiểm tra kiến trúc máy, chọn đúng artifact và kết nối ChatGPT, Claude,
+  Gemini hoặc nhà cung cấp khác sau cài đặt.
+- Loại mục liệt kê thay đổi kỹ thuật của v25 khỏi phần giới thiệu release; giữ
+  riêng tình trạng kiểm thử, ký số, nền tảng build-only và rollback để người dùng
+  hiểu đúng rủi ro.
+- Thêm bốn ảnh cảnh báo Edge do người duy trì cung cấp vào hướng dẫn Windows,
+  README tiếng Việt và ghi chú phát hành. Hướng dẫn chỉ cho phép bỏ chặn khi đúng
+  nguồn, đúng tên và đúng SHA-256; cảnh báo phát hiện mối đe dọa cụ thể phải dừng.
+- Thêm regression khóa sự tồn tại và liên kết của bốn ảnh, đồng thời cấm đưa
+  lại mục `Cải thiện trong bản v25` vào phần giới thiệu công khai.
+
+## Cập nhật 2026-08-17 — sửa đường tải công khai v14 trỏ nhầm
+
+- Sau khi `vi-v0.20.0-25` được công bố, README, hướng dẫn cài Windows và GitHub
+  `Latest` vẫn trỏ `vi-v0.20.0-14`. Người duy trì và ít nhất một người dùng đã
+  tải nhầm v14; đây là lỗi đồng bộ phát hành, không phải lỗi hồ sơ cục bộ.
+- Bản Windows x64 v25 đã được người duy trì tải trực tiếp và cài thành công.
+  Artifact công khai giữ nguyên 332.776.297 byte, SHA-256
+  `0f31c4a23bbb7913300b3f3571ad346aae517d367705a965d451a1febf620e59`.
+- Theo quyết định sản phẩm mới, v25 được dùng làm bản tải mặc định để lấy phản
+  hồi cộng đồng nhưng vẫn giữ nhãn pilot, công khai rõ năm target build-only và
+  tình trạng chưa ký số. v14 chỉ còn là mục tiêu rollback.
+- Hợp đồng tài liệu mới khóa tag tải mặc định và toàn bộ tên asset giữa README,
+  hướng dẫn và release notes để chặn tái diễn việc công bố một bản nhưng hướng
+  người dùng sang bản khác.
+
+## Cập nhật 2026-08-16 — candidate v20 dựng đủ, dừng ở verifier draft
+
+- `vi-v0.20.0-20` đạt toàn bộ sáu build native và 12/12 Install & Update E2E;
+  macOS Intel đã dựng thành công `cryptography==50.0.0` từ sdist khóa hash với
+  OpenSSL 3.5.7 tĩnh, đóng blocker của v19.
+- Draft kín v20 upload đủ artifact và đối chiếu thành công mọi installer/gói
+  native. Verifier dừng vì dòng provenance trong `SHA256SUMS.txt` chứa tiền tố
+  `release-assets/`, trong khi bước tải lại đã đứng trong thư mục `uploaded`.
+  Đây là lỗi đường dẫn manifest của workflow; không phải sai byte artifact.
+- Workflow nay tạo checksum provenance ngay bên trong `release-assets`, nên
+  manifest luôn ghi basename giống toàn bộ asset khác. Regression cấm mẫu đường
+  dẫn cũ. Tag/draft v20 giữ bất biến; candidate kế tiếp là `vi-v0.20.0-21`.
+
+## Cập nhật 2026-08-16 — đóng blocker macOS Intel cho candidate v20
+
+- Candidate bất biến `vi-v0.20.0-19` đạt source contracts, Install & Update E2E
+  và năm job native: Windows x64/ARM64, macOS Apple Silicon, Linux x64/ARM64.
+  macOS Intel dừng đúng ở runtime payload vì `cryptography==50.0.0` không phát
+  hành wheel x86_64; không có draft hoặc artifact v19 nào được công bố.
+- Candidate kế tiếp giữ nguyên sàn bảo mật `cryptography==50.0.0` và chỉ cho
+  macOS Intel dựng sdist đã khóa hash. Workflow dựng OpenSSL 3.5.7 tĩnh từ URL
+  phiên bản bất biến, kiểm SHA-256
+  `a8c0d28a529ca480f9f36cf5792e2cd21984552a3c8e4aa11a24aa31aeac98e8`,
+  rồi import-probe native payload trước khi đóng gói. macOS ARM64 vẫn bắt buộc
+  wheel; không nới ngoại lệ cho nền tảng khác.
+- Regression hiện tại: 75/75 kiểm thử desktop release, 21 kiểm thử Python,
+  typecheck/lint đạt (0 lỗi; 96 cảnh báo có sẵn), `uv lock --check` đạt và npm
+  runtime audit báo 0 lỗ hổng. Candidate vẫn là **NO-GO/candidate only** cho tới
+  khi tag v20 dựng đủ sáu nền tảng và exact artifact vượt runtime smoke.
+
+## Cập nhật 2026-08-15 — đóng blocker Windows ARM64 cho candidate v19
+
+- Native staging v18 xác nhận Windows ARM64 dừng ở `pywinpty==2.0.15`: bản này
+  không có wheel ARM64 nên pip biên dịch sdist và linker lấy nhầm
+  `C:\Program Files\Git\usr\lib\winpty.lib` x64, gây xung đột machine type cùng
+  15 symbol `winpty_*` không thể liên kết. Đây là lỗi runtime thật, không phải
+  lỗi mạng hoặc runner.
+- Runtime Windows nay ghim `pywinpty==3.0.5`, bản đầu tiên có wheel CPython
+  3.11/3.12 hoàn chỉnh cho cả x64 và ARM64. Không dùng 3.0.4 vì changelog chính
+  thức xác nhận wheel x64/ARM64 của bản đó thiếu native binary.
+- Windows ARM64 staging đã loại `pywinpty` khỏi danh sách cho phép build sdist;
+  lock chứa URL và SHA-256 riêng cho cả `win_amd64` lẫn `win_arm64`. Regression
+  chặn hạ pin, thiếu một trong hai kiến trúc hoặc đưa package quay lại đường
+  source-build.
+- Trên Windows x64, wheel 3.0.5 cài thật chứa `_winpty.pyd`, `conpty.dll`,
+  `winpty.dll`, `winpty-agent.exe`, `OpenConsole.exe`; toàn bộ spawn, đọc/ghi,
+  resize và đóng ConPTY đạt. Kiểm thử hiện tại: Python 21 đạt, đóng gói/Electron
+  27 đạt, `uv lock --check` đạt.
+- Candidate vẫn là `vi-v0.20.0-19`. Chưa tạo hoặc đẩy tag cho tới khi commit
+  cuối sạch, fetch được và CI nguồn mới đạt; v18 giữ bất biến.
+
+## Cập nhật 2026-08-15 — candidate v18 dừng ở verifier macOS, chuyển sang v19
+
+- Verify nguồn và Install & Update E2E v18 đều đạt; Windows x64, Linux x64 và
+  Linux ARM64 xanh trọn job native. Cả hai runner Mac dựng thành công ứng dụng,
+  DMG và ZIP `0.20.0-vi.18`, nhưng verifier tìm DMG theo phiên bản package nội
+  bộ `0.17.0`, tưởng artifact chưa có và kích hoạt một build thừa lần hai.
+- Bộ dò DMG nay khóa theo hậu tố `-mac-<arch>.dmg`, đúng cùng contract mà bước
+  chuẩn hóa artifact dùng, độc lập với release-version override. Regression xác
+  nhận cả Apple Silicon và Intel, loại blockmap/sai kiến trúc; bộ hợp đồng tăng
+  lên 74/74.
+- Candidate kế tiếp là `vi-v0.20.0-19`; tag v18 giữ bất biến. Không có draft hay
+  artifact v18 nào được công bố.
+
+## Cập nhật 2026-08-15 — candidate v17 dừng ở đóng gói, chuyển sang v18
+
+- Verify nguồn v17 đạt; Install & Update E2E tạo đúng ma trận tag `vi-v*` và
+  xanh toàn bộ 10 tuyến cài lại/nâng cấp từ v1, v5, v9, v12 và v16.
+- Sáu job native lộ ba lỗi đóng gói: biểu thức peel tag qua shell mất dấu `^`
+  trên Windows; biến chứng thư Apple rỗng bị electron-builder hiểu là đường dẫn
+  thư mục; electron-builder tự kích hoạt publish chỉ vì checkout đang ở tag.
+- Runtime staging nay gọi Git bằng argv xác định; build community prerelease
+  xóa hoàn toàn biến chứng thư rỗng; wrapper electron-builder luôn dùng
+  `--publish never`. Staging draft và public promotion tiếp tục là hai bước độc
+  lập. Regression đạt 73/73 và bộ UI đã chốt đạt 27/27; typecheck đạt.
+- Candidate kế tiếp là `vi-v0.20.0-18`. Tag v17 là bất biến, không di chuyển;
+  không có draft/artifact v17 nào đủ điều kiện công bố.
+
+## Cập nhật 2026-08-15 — candidate v16 dừng ở đóng gói, chuyển sang v17
+
+- Verify của tag bất biến `vi-v0.20.0-16` đạt, gồm 36/36 kiểm thử Python phát
+  hành. Ba runner native macOS Apple Silicon, Linux x64 và Linux ARM64 cùng dừng
+  ở `stage-agent-payloads.mjs`: Node 26 coi liên kết npm
+  `node_modules/.bin/agent-browser` là thư mục khi `cpSync` dereference. Workflow
+  được hủy sau khi đã chứng minh lỗi chung để không tiếp tục tốn runner; không có
+  draft release hoặc artifact v16 nào được tạo.
+- Runtime staging nay tạo ba launcher `agent-browser` xác định trực tiếp từ bin
+  contract của package, không sao chép chi tiết `.bin` phụ thuộc npm/hệ điều
+  hành. Regression tái tạo entry dạng thư mục đạt 17/17; launcher Windows chạy
+  thật và trả `agent-browser 0.26.0`. Exact-artifact verifier mới buộc launcher
+  Unix là tệp executable và launcher Windows là tệp, ngăn lỗi cấu trúc lọt qua.
+- Install/update E2E v16 tạo đúng matrix tag `vi-v*`; ba tuyến `hermes update`
+  từ v1/v5/v8/v12 đều đạt. Các tuyến installer re-run fetch HTTPS ra GitHub thật
+  thay vì bare repo cô lập nên lệch commit. Sandbox nay rewrite HTTPS GitHub qua
+  SSH shim/fake remote; contract test tăng lên 6/6. Candidate kế tiếp là
+  `vi-v0.20.0-17`; không di chuyển hoặc tái sử dụng tag v16.
+- Quyết định tiếp tục là **candidate only / NO-GO** cho tới khi v17 dựng đủ sáu
+  nền tảng và đúng artifact qua runtime smoke. Nếu công bố, đây chỉ là
+  **community prerelease chưa ký số**, đúng chấp thuận của chủ phát hành; không
+  quảng cáo stable và không dùng tiền lệ AICoworker thay cho bằng chứng Hermes.
+
+## Cập nhật 2026-08-15 — candidate v15 dừng trước build, chuyển sang v16
+
+- Tag bất biến `vi-v0.20.0-15` đã kích hoạt đúng workflow phát hành và
+  install/update E2E của fork, nhưng cổng verify dừng trước build vì workflow
+  gọi `pytest` khi chưa cài nhóm phụ thuộc `dev`. Không có artifact hoặc release
+  v15 nào được tạo.
+- Workflow nay cài nhóm kiểm thử từ `uv.lock` bằng
+  `uv sync --locked --python 3.11 --extra dev` và chạy bốn tệp release qua
+  wrapper chuẩn `scripts/run_tests.sh`. Contract test cấm tái xuất hiện lệnh
+  `uv run pytest` thiếu môi trường.
+- Xác minh bản sửa: release workflow contract 5/5; bốn tệp Python đạt 36/36
+  bằng runner cô lập chuẩn. Vì không di chuyển hoặc tái sử dụng tag bất biến,
+  candidate kế tiếp mang số `vi-v0.20.0-16`.
+- Install/update E2E của tag v15 đã tạo đủ matrix nhưng mọi leg fetch nhầm tag
+  Việt hóa từ repo upstream NousResearch; leg của chính v15 còn tự kiểm thử cập
+  nhật từ một commit sang chính nó. Reusable workflow nay truyền URL fork vào
+  sandbox và tag-trigger loại candidate hiện tại khỏi tập phiên bản nguồn.
+- Regression cho picker/fork route đạt 5/5; YAML và Bash syntax đều hợp lệ.
+
+## Cập nhật 2026-08-15 — cho phép community prerelease không ký, không hạ chuẩn stable
+
+- Chủ phát hành chấp nhận công bố đúng trạng thái hiện có và không mua Apple
+  Developer Program ở vòng này. Hồ sơ SignPath Foundation cho Windows đã được
+  gửi; chưa có kết quả phê duyệt hoặc cấu hình ký trong GitHub.
+- Commit `74cb448` thêm lớp phát hành tường minh `community-prerelease`. Lớp này
+  khóa Apple/SignPath secrets khỏi build, ghi `releaseClass` vào provenance,
+  bắt buộc release giữ nhãn prerelease và yêu cầu bằng chứng cảnh báo
+  SmartScreen/Gatekeeper trên từng artifact. Đường `stable` vẫn bắt buộc
+  Authenticode, Developer ID, notarization và stapling như trước.
+- Promotion tiếp tục tách khỏi build/staging và chỉ nhận đúng manifest, đúng
+  runtime-smoke run, đúng release class và đủ quyết định `GO` trên sáu nền tảng.
+  Chấp nhận unsigned không miễn fresh install, gateway, onboarding, persistence,
+  update, repair, uninstall hoặc rollback.
+- Xác minh cục bộ trong clone sạch tải độc lập từ GitHub: YAML parse đạt; workflow
+  contract 5/5; evidence/tag tests 9/9; Prettier đạt; Desktop typecheck đạt;
+  `uv lock --check` đạt; `npm audit --omit=dev --omit=optional --audit-level=high`
+  trả 0 lỗ hổng.
+- Hai thay đổi tài liệu có sẵn ở worktree cũ (`docs/community-release.md` và
+  `docs/release-engineering-rulebook.md`) không bị sửa, xóa hoặc đưa vào commit.
+- Quyết định vẫn **candidate only / NO-GO** cho public cho tới khi workflow tạo
+  đúng draft artifacts và runtime smoke exact-byte đạt đủ ma trận. Không dùng
+  tiền lệ AICoworker thay cho bằng chứng Hermes.
+
+## Cập nhật 2026-08-15 — tab Browser và checkpoint công khai v15
+
+- Commit `04345ecdf` thay Browser một-bề-mặt bằng thanh tab thật trong panel
+  phải: `+` tạo webview độc lập, `×` đóng từng tab, chuyển tab không tháo
+  webview, và đóng tab cuối tự trở về chế độ Tệp. URL do agent mở điều hướng tab
+  Browser đang chọn thay vì tự sinh tab ngoài ý muốn.
+- Bỏ nhãn chữ **Hệ thống tệp** ở đầu panel; nút biểu tượng Tệp vẫn giữ tooltip,
+  trạng thái chọn và tên trợ năng. Bổ sung bản dịch nhãn tab mới cho toàn bộ
+  locale Desktop.
+- 50/50 test trực tiếp cho store/tab/đọc trang/fit Browser đạt; typecheck và
+  lint đạt. UI đầy đủ đạt 421/424 tệp, 3.690/3.697 phép thử ở lượt tải cao; cả 7
+  ca trong 3 tệp timeout/chồng DOM đều đạt khi chạy riêng tuần tự.
+- Hợp đồng CVE/lock/workflow đạt 10/10; `npm audit --omit=optional` trả 0. Bộ
+  Electron mục tiêu đạt 124/128; 4 ca còn lại là quyền POSIX, đường dẫn Linux và
+  bash không có trên Windows, không đi qua mã thay đổi này.
+- Windows x64 build từ `04345ecdf` đạt. Installer 121.419.758 byte, SHA-256
+  `46D4EAD85DE96610232B4085047205A405BA9FA7810169661841D5B262A37804`;
+  app đã cài có SHA-256
+  `1BF43E7D75C000B4EFD6C358DFF34168519C2BA285B5E88B7C7E905D7044A7D6`.
+  Stamp sạch, đúng commit công khai trên nhánh; cả hai executable `NotSigned`.
+- Đã gỡ bản per-user cũ. Lượt cài nâng quyền đầu tiên chọn nhầm all-users nên đã
+  gỡ ngay và cài lại thành công bằng `/currentuser`; không xóa, nhập hoặc khôi
+  phục hồ sơ Hermes. Bản cài mới nằm đúng `%LOCALAPPDATA%\\Programs\\Hermes`.
+- Nhánh `chore/prepare-vi-v0.20.0-15` đã push. Tuyến mở tự động của đúng
+  executable mới bị Enterprise Application Control chặn vì hash chưa ký; công
+  cụ quan sát cửa sổ Windows cũng bị từ chối quyền. Không đổi hoặc lách chính
+  sách. Fresh bootstrap/UI máy thật của artifact cuối vì vậy chưa có bằng chứng
+  đạt.
+- Quyết định vẫn **NO-GO** cho merge/tag/release. Còn thiếu Windows smoke sau
+  khi executable được cho phép/ký, job GitHub thực với tag `vi-v*`, macOS Apple
+  Silicon thật và Linux x64 thật.
+
+## Cập nhật 2026-08-15 — mở rộng và tự fit Trình duyệt ở panel phải
+
+- Bỏ giới hạn cứng `20rem` (320 px) của panel Tệp/Trình duyệt. Panel nay có thể
+  kéo tới `min(65vw, 90rem)`; vùng hội thoại vẫn giữ sàn `22vw`, còn kích thước
+  người dùng kéo tiếp tục được lưu bằng pane state hiện có.
+- Webview tự tính zoom theo bề rộng thực: giữ trang ở 100% từ 960 px trở lên,
+  thu nhỏ tỷ lệ thuận khi panel hẹp và chặn ở 45% để nội dung vẫn đọc được.
+  Không chèn CSS/JavaScript riêng vào website.
+- Test hồi quy được viết trước và đạt 18/18 cho giới hạn panel, công thức fit,
+  lifecycle `dom-ready`/resize và chuyển Tệp/Trình duyệt. Typecheck đạt; lint 0
+  lỗi; production build đạt.
+- Toàn bộ UI suite đạt 421/424 tệp và 3.685/3.692 phép thử ở lượt tải cao; cả 3
+  tệp còn lại (13 phép thử) đều đạt khi chạy riêng tuần tự, xác nhận lỗi lượt đầu
+  là timeout/chồng DOM do nghẽn tài nguyên, không phải hồi quy panel.
+- Smoke production tại commit `b5b707511` dùng `HERMES_HOME` và user-data tạm
+  cô lập, bắt đầu với 0 phiên. Panel kéo thật từ 237 lên 645 px, lưu đúng 645 px
+  và giữ nguyên khi đổi Tệp ↔ Trình duyệt. Google ở 237 px dùng zoom 45%; ở 645
+  px dùng 67% và có `innerWidth = scrollWidth = 963`, không tràn ngang.
+- Không đọc, nhập hoặc khôi phục hồ sơ Hermes cũ. Quyết định phát hành vẫn
+  **NO-GO** vì fresh bootstrap đúng commit cuối, runner GitHub `vi-v*`, macOS
+  Apple Silicon thật và Linux x64 thật chưa đạt.
+
+## Cập nhật 2026-08-15 — quyết định NO-GO cho vi-v0.20.0-15
+
+- Lỗi tên phiên không tự hiện và đổi tên trả HTTP 500 được truy ra đúng
+  `state.db` cũ bị `database disk image is malformed`, không phải lỗi cài mới.
+  Theo quyết định bỏ dữ liệu cũ, toàn bộ session DB/sidecar/session files cũ đã
+  được **di chuyển để cách ly**, không nhập hoặc khôi phục. Hồ sơ mới bắt đầu từ
+  0 phiên.
+- Commit `b2fa5e368` làm đường đổi tên bền vững qua lineage root/tip sau nén;
+  commit `4148a5546` bổ sung `hermes doctor --fix` để đổi cơ sở dữ liệu WAL cũ
+  sang rollback journal khi chứng minh được không có tiến trình đang giữ DB.
+- Smoke thật trên ứng dụng đang cài và hồ sơ sạch đạt: tên tự sinh xuất hiện ở
+  panel trái; đổi thành **Kiểm thử đổi tên v15** lưu bền qua reload; tạo/đóng tab
+  và chuyển Tệp/Trình duyệt ở panel phải đều đạt; log hiện tại không còn 500,
+  malformed hay traceback.
+- Bộ cài Windows x64 cuối build thành công từ `4148a5546`, 121.419.143 byte,
+  SHA-256 `3B06CADCCA7BD1E2EB0A402CF672AC0E227E54D95F75968203A7595F2916907D`.
+  Stamp sạch, payload contract đạt, artifact `NotSigned` và không chứa `tar`,
+  `image-size`, state DB, `.env`, credentials hoặc dữ liệu cá nhân.
+- Artifact cuối nay chạy qua Application Control. Renderer đóng gói + backend
+  mã cuối khởi động khỏe trên `HERMES_HOME` cô lập, tạo 0 phiên và giữ
+  `journal_mode=delete` với SQLite 3.49.1. Fresh bootstrap thuần dừng ở 404 vì
+  stamp `4148a5546` là commit cục bộ chưa có trên GitHub; không thay stamp hoặc
+  push để lách cổng ghim commit.
+- Kiểm thử mục tiêu đạt; typecheck/build/lint tệp đổi đạt; `npm audit` trả 0.
+  UI đầy đủ đạt 3.680/3.687 ở lượt song song và cả 7 ca timeout/chồng DOM đều
+  đạt khi chạy riêng. Electron đạt 993/1.023; 27 ca POSIX/quyền/timing không phù
+  hợp Windows vẫn là lỗi nền và không thuộc lát cắt.
+- Website production build locale `en` đạt; typecheck website còn lỗi nền
+  TypeScript 6/Docusaurus/JSX và dữ liệu user stories, không thuộc lát cắt.
+- Quyết định: **NO-GO** cho phát hành công khai/thử nghiệm rộng. Còn thiếu runner
+  GitHub thật cho `vi-v*`, fresh bootstrap artifact cuối sau khi commit được
+  phép xuất hiện trên GitHub, macOS Apple Silicon thật và Linux x64 thật. Xem
+  `docs/release-vi-v0.20.0-15-go-no-go.md`.
+
+## Cập nhật 2026-08-15 — chuẩn bị checkpoint vi-v0.20.0-15
+
+- Tạo worktree tách biệt từ `origin/main` tại `771fd6df9`; không đụng nhánh
+  `docs/record-vi-v0.20.0-14` hoặc các hiện vật smoke cũ.
+- Nâng runtime `cryptography` từ `48.0.1` lên `50.0.0`, là sàn chung đã vá
+  CVE-2026-69247, CVE-2026-69248 và CVE-2026-69249. Môi trường cô lập cài thật
+  tập `[all]`, DingTalk, Teams, Azure và dev; 174 regression tests đạt.
+- Ép toàn cây Node build/optional lên `tar 7.5.22`; `npm ci` và
+  `npm rebuild get-windows` đạt; sáu test staging Windows và bảy test packaging
+  matrix đạt.
+- Nâng `nanoid` website lên `3.3.18`. OSV Scanner 2.3.8 hiện chỉ còn hai cảnh
+  báo `image-size 2.0.2` website-only chưa có fixed version; `cryptography`,
+  `tar` và `nanoid` đã biến mất khỏi kết quả quét cục bộ.
+- Sửa install/update E2E để trigger tag `vi-v*`, ưu tiên họ tag Việt hóa trên
+  fork, giữ tương thích tag upstream và thêm job chẩn đoán trigger. 4 test hợp
+  đồng workflow/tag đạt; YAML parse đạt. Chưa push nên GitHub chưa thể chứng minh
+  job mới tạo trên runner thật.
+- Desktop typecheck đạt; lint đạt với 0 lỗi và 91 cảnh báo có sẵn; 70/70 UI test
+  liên quan tab phiên, đóng tab và Browser panel phải đạt; production build đạt
+  ngoài sandbox.
+- Cổng tiếp theo: commit checkpoint để install-stamp ghim đúng mã v15, đóng gói
+  Windows x64, quét nội dung artifact và chạy fresh-install bằng hồ sơ cô lập.
+
+## Cập nhật 2026-08-14 — khôi phục nút đóng tab phiên
+
+- Khôi phục nút `×` trên mọi tab ngang có thể đóng: tab đang hoạt động luôn hiển thị, tab nền hiện khi rê chuột hoặc focus bằng bàn phím.
+- Nút dùng vùng bấm 24 px, con trỏ bàn tay, nhãn trợ năng và tooltip theo ngôn ngữ giao diện; thao tác được chặn khỏi cơ chế kéo/chọn tab để một lần bấm chỉ thực hiện một việc.
+- Giữ nguyên hành vi an toàn có sẵn: phiên đang chạy hỏi xác nhận, còn đóng tab chỉ ẩn tab và phiên vẫn mở lại được từ danh sách bên trái.
+- Chuẩn hóa tiêu đề tab từ dữ liệu cũ `NEW SESSION` thành **Phiên mới** theo locale hiện tại; tiêu đề thật do người dùng đặt không bị thay đổi.
+- Xác minh: 28/28 kiểm thử mục tiêu đạt; typecheck đạt; lint 0 lỗi; 3.679/3.686 phép thử UI đầy đủ đạt ở lượt song song và cả 7 lỗi timeout/chồng DOM đều đạt khi chạy lại riêng; production build Desktop đạt ngoài sandbox.
+
+## Cập nhật 2026-08-14 — phát hành vi-v0.20.0-14
+
+- PR #21 đưa bản sửa nút đóng tab và tiêu đề **Phiên mới** vào `main`; PR #22 cập nhật toàn bộ liên kết tải, hướng dẫn Windows và ghi chú phát hành cho `vi-v0.20.0-14`.
+- CI của lát cắt mã nguồn đạt toàn bộ kiểm tra bắt buộc, gồm bộ giao diện đầy đủ 3.679 phép thử ở lượt GitHub; cổng rà soát thay đổi nhạy cảm cũng đạt.
+- Bản [`vi-v0.20.0-14`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-14) được công bố là **Latest** từ commit `571f43d527f5a95122baadf29768172682c7a765`, không phải bản nháp hoặc pre-release.
+- Sáu job đóng gói đều xanh, tạo đủ 19 tài sản cho Windows x64/ARM64, macOS Apple Silicon/Intel và Linux x64/ARM64 cùng các bảng SHA-256.
+- Bộ cài Windows x64 tải ngược từ bản phát hành công khai có 121.419.240 byte và SHA-256 `270c782c54f9cda496c6b5fb0a7a1b06af7fb919859952072fae971d45f14355`; mã băm khớp `SHA256SUMS.txt`.
+- Bộ cài vẫn chưa ký số trong thời gian chờ SignPath Foundation xét duyệt; cảnh báo SmartScreen được giải thích bằng hướng dẫn ảnh chụp đã liên kết ở đầu trang phát hành.
+
+## Cập nhật 2026-08-14 — phát hành vi-v0.20.0-12
+
+- PR #14 đã nhập vào `main`, gồm luồng cài đặt/kết nối model, sửa bootstrap Windows, khôi phục tab nhiều phiên và đưa Trình duyệt dùng chung vào panel phải.
+- Sửa hai phép thử `prompt-overlays` từng mặc định chữ tiếng Anh bằng cách khóa locale của chính bài test; toàn bộ UI suite trên GitHub đạt 3.672/3.672 phép thử.
+- Cổng phát hành phát hiện advisory mới `GHSA-2v37-7h3g-55p8`. PR #15 nâng riêng `nanoid` dòng 3 từ `3.3.17` lên `3.3.18`; `npm audit --omit=optional --audit-level=high` trả `0 vulnerabilities`, kiểm tra lockfile semantic và CI đạt.
+- Pre-release [`vi-v0.20.0-12`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-12) được tạo từ commit `4aee0954b12e5f5848c56d08741baeb036e1527d`, đủ 19 tài sản cho Windows, macOS và Linux x64/ARM64 cùng bảng SHA-256.
+- Bộ cài Windows x64 công khai có SHA-256 `cd42357d336b3f21fa2017fd521169ef00a034abda9524909da700a3cdc7c989`; mã băm tải thật khớp cả `SHA256SUMS.txt` và digest GitHub. Tệp vẫn chưa ký số trong thời gian chờ SignPath xét duyệt.
+
+## Cập nhật 2026-08-14 — đưa Trình duyệt vào panel phải
+
+- Bỏ mục **Trình duyệt** khỏi thanh điều hướng bên trái và giữ nguyên toàn bộ tab phiên trong vùng làm việc giữa.
+- Thêm hai nút **Tệp** và **Trình duyệt** cạnh tên thư mục ở đầu panel phải; biểu tượng dùng kích thước điều khiển panel 32 px để dễ nhìn và có trạng thái đang chọn rõ ràng.
+- Trình duyệt dùng chung được render trực tiếp trong panel phải. Chuyển qua lại chỉ ẩn bề mặt, không tháo cây tệp hoặc webview, nên trạng thái cây, lịch sử trang và phiên đăng nhập còn nguyên.
+- URL do người dùng hoặc agent mở tự chuyển panel phải sang Trình duyệt và mở lại panel nếu đang đóng. Phiên không có thư mục làm việc vẫn dùng được Browser; chế độ Tệp hiển thị trạng thái chưa có dự án.
+- Browser cũ từng được lưu như một pane động sẽ bị layout mirror loại khỏi vùng giữa trong lần chạy mới; tab URL và partition cookie `persist:hermes-preview` vẫn được giữ.
+- Xác minh hoàn tất: 59/59 kiểm thử mục tiêu đạt; Desktop typecheck đạt; ESLint và Prettier các tệp thay đổi đạt; production build và Windows x64 unpacked 466 tệp đạt.
+- Đã nâng cấp trên máy Windows thử nghiệm với điểm quay lui riêng. Bootstrap hoàn tất đúng commit `60e9b75d5`, dịch vụ nền trả `ok` cho Hermes 0.20.0 và mã băm ứng dụng cài đặt khớp bản đóng gói. Đại ca đã xác nhận trực quan vị trí biểu tượng và việc chuyển giữa **Tệp** với **Trình duyệt**.
+
+## Cập nhật 2026-08-14 — khôi phục tab nhiều phiên và sửa vị trí Trình duyệt
+
+- Thanh tab trong vùng làm việc luôn hiện mặc định kể cả khi chỉ có một phiên; nút `+` tiếp tục tạo phiên mới trong đúng vùng đang làm việc. Tùy chọn người dùng chủ động **Ẩn thanh tab** vẫn được tôn trọng.
+- Bấm một phiên ở danh sách bên trái nay chuyển tới tab đã mở hoặc xếp phiên thành tab mới; chỉ dùng lại vùng chính khi đó thực sự là bản nháp trống.
+- Nút **Trình duyệt** vẫn nằm ở thanh điều hướng bên trái nhưng nội dung web mở thành tab ở vùng giữa, cạnh các phiên làm việc; tab có tiêu đề theo ngôn ngữ giao diện và vẫn có thể kéo ra cạnh để xem song song.
+- Nâng mã định danh Browser để tự di chuyển bản đã bị ghim nhầm vào vùng danh sách phiên ở các build thử trước; giữ nguyên địa chỉ cuối và partition cookie `persist:hermes-preview`.
+- Cho phép popup do người dùng kích hoạt để các website có luồng đăng nhập OAuth hoặc mạng xã hội hoạt động trong phiên Browser dùng chung.
+- Xác minh hiện tại: 54/54 kiểm thử mục tiêu đạt; Desktop typecheck đạt; ESLint và Prettier các tệp thay đổi đạt; production build và Windows x64 unpacked đạt.
+- Đã nâng cấp bản `c7cee6a1d` trên máy Windows thử nghiệm với điểm quay lui riêng. Bootstrap tự đồng bộ đúng commit sau khi nhánh được đẩy lên GitHub; marker hoàn tất và `/api/health` trả `ok`, Hermes 0.20.0.
+- Toàn bộ UI suite không hoàn tất trong giới hạn 180 giây và lặp lại các lỗi nền không thuộc lát cắt tại `prompt-overlays`, `messaging`, `gateway-settings` và `skills`; không ghi nhận bộ này là đạt. Bước quan sát giao diện tự động không khả dụng trong môi trường thử, nên cần xác nhận trực quan thủ công trên cửa sổ Hermes đang mở.
+
+## Cập nhật 2026-08-14 — sửa lỗi Windows chặn Python khi cài mới
+
+- Xác định nguyên nhân từ nhật ký Windows Code Integrity: Enterprise Application Control cho phép ứng dụng Hermes nhưng chặn `python.exe` không có chữ ký trong bản Python do `uv` quản lý.
+- Windows bootstrap chuyển sang CPython 3.12.10 chính thức có chữ ký của Python Software Foundation; bộ cài kiểm tra cả chữ ký Authenticode và SHA-256 đã ghim trước khi chạy.
+- Hỗ trợ Windows x64 và ARM64; `uv` nhận đường dẫn tuyệt đối tới interpreter đã xác minh để không tự chọn lại bản Python không có chữ ký.
+- Lưu lựa chọn interpreter tin cậy qua các stage, tái sử dụng Python hợp lệ đã cài theo Hermes, registry hoặc PATH khi sửa chữa và cập nhật.
+- Fresh-install smoke test dùng hồ sơ riêng trong LocalAppData trên Windows và tự đi qua lựa chọn cài cục bộ; không đọc hoặc sửa hồ sơ Hermes chính.
+- Xác minh thật trên máy có Application Control: Python 3.12.10 và `venv\\Scripts\\python.exe` đều có chữ ký hợp lệ; stage phụ thuộc hoàn tất; CLI Hermes chạy; `/api/health` trả HTTP 200 với Hermes 0.20.0.
+- 17/17 kiểm thử hồi quy installer đạt; 13/13 kiểm thử fresh-install/gate đạt; Desktop typecheck đạt; lint 0 lỗi. Toàn bộ Electron suite có 19 lỗi nền tảng cũ khi các ca POSIX chạy trên Windows, không liên quan lát cắt này và không được ghi nhận là đạt.
+
+## Cập nhật 2026-08-14 — không gian Trình duyệt dùng chung
+
+- Thêm **Trình duyệt** vào thanh điều hướng bên trái và mở trong cùng vùng với **Phiên** theo mặc định.
+- Người dùng có thể chuyển tab, kéo Trình duyệt sang vùng riêng, xem song song và thay đổi kích thước bằng hệ thống pane hiện có.
+- Bổ sung thanh địa chỉ, quay lại, tiến tới và tải lại; chỉ cho phép địa chỉ HTTP/HTTPS.
+- Người dùng và agent thao tác trên cùng Electron webview và cùng partition đăng nhập `persist:hermes-preview`.
+- `read_preview` trả thêm danh sách phần tử tương tác có mã tham chiếu; công cụ Desktop mới `interact_preview` hỗ trợ bấm, nhập, nhấn phím, cuộn và điều hướng.
+- Không đọc giá trị mật khẩu và từ chối để agent nhập vào ô mật khẩu.
+- Ẩn các nút của vùng **Thay đổi mã** khi chưa có thay đổi tương thích, giúp giao diện bớt gây nhầm lẫn.
+- Xác minh: 39/39 kiểm thử UI mục tiêu đạt, 71/71 kiểm thử Python đạt, typecheck đạt, lint 0 lỗi, production build và Windows unpacked đạt.
+- Smoke test dùng hồ sơ mới tách biệt đã lên màn hình thiết lập lần đầu. Nhật ký không có lỗi gateway hoặc bootstrap; phím tắt toàn cục đang trùng với ứng dụng khác nhưng không ảnh hưởng tính năng Trình duyệt.
+- Tài liệu kỹ thuật và giới hạn hiện tại: `docs/shared-browser-pane.md`.
+
+## Cập nhật 2026-08-13 — mở đầy đủ kết nối và tên model Claude
+
+- Màn **Kết nối model** hiển thị trực tiếp toàn bộ luồng đăng nhập tài khoản mà backend cung cấp và toàn bộ nhà cung cấp có thể thiết lập bằng khóa API; không còn giấu danh mục khóa sau nút phụ.
+- Danh mục khóa được sinh từ nguồn nhà cung cấp lõi, tự nhận thêm nhà cung cấp mới và loại đúng các luồng OAuth, tiến trình ngoài hoặc cấu hình thiếu biến xác thực.
+- AWS Bedrock và Google Vertex AI tiếp tục được cấu hình tại **Cài đặt → Nhà cung cấp → API** vì cần nhiều trường cấu hình chuyên biệt.
+- Claude Code dùng tên model cụ thể: Sonnet 5, Fable 5, Opus 5, Opus 4.8 và Haiku 4.5; quyền sử dụng thực tế vẫn do tài khoản Claude quyết định.
+- Tài liệu giải thích rõ Gemini dùng Google AI Studio API key hoặc Vertex AI. Không tích hợp lại OAuth của Gemini CLI vì điều khoản của Google cấm phần mềm bên thứ ba dùng luồng đó.
+- Xác minh: 7/7 kiểm thử onboarding đạt, 4/4 kiểm thử Claude Code provider đạt, Desktop typecheck đạt.
+- Lần công bố `vi-v0.20.0-9` đầu tiên bị hủy ở giới hạn 15 phút sau khi tải 17/19 tệp. Workflow được sửa để tiếp tục bản nháp, bỏ qua tệp đã có và chỉ công bố khi tải đủ; giới hạn job tăng lên 30 phút.
+
+## Cập nhật 2026-08-13 — viết lại tài liệu công khai
+
+- Chuyển thông tin độc lập của dự án sang cách diễn đạt trung tính, tránh dùng cụm “không được bảo chứng” ở phần mở đầu.
+- Ghi đúng trạng thái ký số: hồ sơ SignPath Foundation đã nộp và đang chờ xét duyệt; ký số là xác minh nhà phát hành, không phải giấy phép sử dụng của Microsoft hoặc Apple.
+- Chuẩn hóa tên hiển thị thành **Hermes Vietnamese**, bỏ biểu tượng trang trí sau tên.
+- Thêm link tải trực tiếp cho từng hệ điều hành và kiến trúc, cùng hướng dẫn kiểm tra phiên bản hệ điều hành, chip x64/ARM64, Apple Silicon/Intel trước khi tải.
+- Viết lại README trang chủ theo hành trình ba bước: tải và cài, kết nối model, bắt đầu giao việc.
+- Cập nhật toàn bộ liên kết tải sang `vi-v0.20.0-8` và bảng chọn đúng bộ cài cho sáu nền tảng.
+- Viết lại hướng dẫn tiếng Việt chi tiết cho Windows, macOS, Linux; ChatGPT OAuth; Claude Pro/Max qua Claude Code; Gemini bằng khóa Google AI Studio; nhà cung cấp khác và model cục bộ.
+- Bổ sung bảng phân biệt tài khoản/gói thuê bao/API, xử lý lỗi thường gặp, cảnh báo chưa ký số, cập nhật, sao lưu và gỡ cài đặt.
+- Giữ rõ cam kết: **Thông tin đăng nhập và dữ liệu của mỗi người được lưu riêng trên máy của mình.**
+- Cập nhật mẫu ghi chú phát hành theo luồng kết nối mới. Các liên kết nội bộ đã được kiểm tra, Prettier và `git diff --check` đều đạt.
+
+## Cập nhật 2026-08-13 — ưu tiên kết nối tài khoản sẵn có
+
+- Nhánh: `fix/provider-first-onboarding`, bắt đầu từ `origin/main` tại `5bfbbc2ad`.
+- Màn **Kết nối model** hiện trực tiếp theo thứ tự: ChatGPT OAuth, Claude Pro/Max, Google Gemini bằng khóa API; Nous Portal và các dịch vụ khác nằm dưới **Nhà cung cấp khác**.
+- Bỏ nhãn **Đề xuất** và cơ chế ẩn các nhà cung cấp phía sau Nous Portal.
+- Gemini được ghi rõ là luồng Google AI Studio/API key trong toàn bộ locale; bấm vào sẽ mở form khóa API với Gemini được chọn sẵn.
+- Xác minh: 32/32 kiểm thử onboarding+i18n đạt; 7/7 kiểm thử onboarding trực tiếp đạt; typecheck đạt; lint không có lỗi (chỉ còn cảnh báo có sẵn ở tệp khác).
+- Bản Windows unpacked đã đóng gói thành công. Smoke test trực tiếp trên bản dev tách biệt xác nhận đúng thứ tự, đúng tiếng Việt và đúng hành vi bấm Gemini.
+- Cửa sổ thử dùng `HERMES_HOME` và user-data riêng, không đọc hoặc sửa hồ sơ Hermes chính.
+
+## Mục tiêu hiện tại
+
+Hợp nhất thiết lập Desktop lần đầu thành ba bước trên Windows, macOS và Linux, đồng thời giữ nguyên giao diện và tính năng lõi Hermes sau khi thiết lập.
+
+## Trạng thái đã xác minh
+
+- Nhánh làm việc ban đầu: `fix/readable-window-controls`, HEAD `492220e5f`.
+- Worktree sạch trước thay đổi.
+- Baseline đạt 18/18 kiểm thử giao diện cài đặt/onboarding.
+- Baseline đạt 20/20 kiểm thử bootstrap Electron.
+- Typecheck Desktop đạt.
+- `bootstrap-runner.ts` đã có bộ điều khiển `install.ps1` cho Windows và `install.sh` cho macOS/Linux.
+- Giao diện vẫn còn nhánh cũ hướng dẫn người dùng macOS/Linux tự mở Terminal; nhánh này cần được loại bỏ khỏi luồng người dùng.
+
+## Quyết định
+
+- Ba bước chỉ là lớp thiết lập lần đầu; Terminal tích hợp và ứng dụng chính không đổi.
+- Tái sử dụng luồng nhà cung cấp/model hiện có, không xây một luồng xác thực thứ hai.
+- Model cục bộ dùng điểm cuối cục bộ hiện có trong lát cắt đầu; chưa nhúng model nặng vào bộ cài nền.
+- Lựa chọn ngôn ngữ phải hoạt động trước khi backend sẵn sàng và được đồng bộ vào cấu hình khi bước 2 bắt đầu.
+
+## Đã hoàn thành trong lát cắt này
+
+- Thêm chỉ báo ba bước dùng chung cho cài đặt cục bộ, kết nối từ xa và onboarding nhà cung cấp/model.
+- Cho phép đổi English/Tiếng Việt trước khi backend chạy; lựa chọn được lưu vào cấu hình ở bước 2.
+- Loại bỏ hướng dẫn buộc người dùng macOS/Linux mở Terminal khỏi màn hình cài đặt.
+- Giữ nguyên Terminal tích hợp và không gian làm việc Hermes sau onboarding.
+- Củng cố Windows bootstrap bằng gói `uv` chính thức từ PyPI, kiểm tra SHA-256 trước khi giải nén; vẫn giữ đường cài Astral cũ làm dự phòng.
+- Bổ sung gói macOS Intel x64 vào ma trận bên cạnh Apple Silicon, Windows x64/ARM64 và Linux x64/ARM64.
+- Cập nhật README, ghi chú phát hành và tài liệu vận hành cộng đồng.
+
+## Xác minh
+
+- 34/34 kiểm thử giao diện trực tiếp cho thiết lập, onboarding và i18n đạt.
+- 27/27 kiểm thử Electron bootstrap và ma trận đóng gói đạt.
+- 8/8 kiểm thử nguồn cho `install.ps1` đạt.
+- Typecheck Desktop và lint trên toàn bộ tệp thay đổi đạt; chỉ còn cảnh báo test có sẵn của dự án.
+- Windows `uv` bootstrap đã chạy thật trong thư mục sạch: `uv 0.12.3`, mã băm được xác minh và tiến trình kết thúc thành công.
+- Production build Desktop đạt sau khi chạy ngoài giới hạn sandbox.
+- Bộ UI đầy đủ bị hết thời gian ở một số bài cũ không thuộc lát cắt này; các bài liên quan trực tiếp đều xanh và lỗi chậm đã được ghi nhận, không bị diễn giải thành kết quả đạt.
+
+## Bước phát hành tiếp theo
+
+Tạo checkpoint Git, đẩy nhánh và chạy workflow pre-release sáu nền tảng. Gói macOS/Linux cần được kiểm tra thêm trên máy thật trước khi bỏ nhãn thử nghiệm cộng đồng.

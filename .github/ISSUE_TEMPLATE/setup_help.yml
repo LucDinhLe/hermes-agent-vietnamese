@@ -1,61 +1,59 @@
-name: "🔧 Setup / Installation Help"
-description: Having trouble installing or configuring Hermes? Ask here.
-title: "[Setup]: "
-labels: ["setup"]
+name: '🔧 Hỗ trợ cài đặt'
+description: Hỏi khi bạn gặp khó khăn trong lúc cài đặt hoặc cấu hình Hermes.
+title: '[Cài đặt]: '
+labels: ['setup']
 body:
   - type: markdown
     attributes:
       value: |
-        Sorry you're having trouble! Please fill out the details below so we can help.
+        Rất tiếc vì bạn đang gặp khó khăn. Vui lòng cung cấp các thông tin bên dưới để chúng tôi hỗ trợ.
 
-        **Quick checks first:**
-        - Run `hermes debug share` and paste the links in the Debug Report section below
-        - If you're in a chat session, you can use `/debug` instead — it does the same thing
-        - Try `hermes update` to get the latest version
-        - Check the [README troubleshooting section](https://github.com/NousResearch/hermes-agent#troubleshooting)
-        - For general questions, consider the [Nous Research Discord](https://discord.gg/NousResearch) for faster help
+        **Kiểm tra nhanh trước:**
+        - Xem [hướng dẫn tiếng Việt](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md)
+        - Tải đúng gói từ [trang Bản phát hành](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases)
+        - Nếu cần chẩn đoán, ưu tiên chạy `hermes debug share --local` và xóa thông tin nhạy cảm trước khi chia sẻ
 
   - type: textarea
     id: description
     attributes:
-      label: What's Going Wrong?
-      description: Describe what you're trying to do and where it fails.
+      label: Bạn đang gặp vấn đề gì?
+      description: Mô tả việc bạn đang làm và bước xảy ra lỗi.
       placeholder: |
-        I ran `hermes setup` and selected Nous Portal, but when I try to
-        start the gateway I get...
+        Tôi chạy `hermes setup` và chọn Nous Portal, nhưng khi mở Gateway thì...
     validations:
       required: true
 
   - type: textarea
     id: steps
     attributes:
-      label: Steps Taken
-      description: What did you do? Include the exact commands you ran.
+      label: Các bước đã thực hiện
+      description: Bạn đã làm gì? Hãy ghi chính xác câu lệnh đã chạy.
       placeholder: |
-        1. Ran the install script: `curl -fsSL ... | bash`
-        2. Ran `hermes setup` and chose "Quick setup"
-        3. Selected OpenRouter, entered API key
-        4. Ran `hermes chat` and got error...
+        1. Chạy trình cài đặt...
+        2. Mở Hermes...
+        3. Chọn OpenRouter và nhập khóa API...
+        4. Gửi tin nhắn rồi gặp lỗi...
     validations:
       required: true
 
   - type: dropdown
     id: install-method
     attributes:
-      label: Installation Method
+      label: Cách cài đặt
       options:
-        - Install script (curl | bash)
-        - Manual clone + pip/uv install
-        - PowerShell installer (Windows)
+        - Bộ cài Desktop từ GitHub Releases
+        - Tập lệnh cài đặt (curl | bash)
+        - Tự clone mã nguồn và cài bằng pip/uv
+        - Trình cài PowerShell (Windows)
         - Docker
-        - Other
+        - Khác
     validations:
       required: true
 
   - type: input
     id: os
     attributes:
-      label: Operating System
+      label: Hệ điều hành
       placeholder: Ubuntu 24.04 / macOS 15.2 / Windows 11
     validations:
       required: true
@@ -63,29 +61,25 @@ body:
   - type: input
     id: python-version
     attributes:
-      label: Python Version
-      description: Output of `python --version` (or `python3 --version`)
-      placeholder: "3.11.9"
+      label: Phiên bản Python
+      description: Kết quả của `python --version` hoặc `python3 --version`
+      placeholder: '3.11.9'
 
   - type: input
     id: hermes-version
     attributes:
-      label: Hermes Version
-      description: Output of `hermes version` (if install got that far)
-      placeholder: "2.1.0"
+      label: Phiên bản Hermes
+      description: Kết quả của `hermes version` nếu đã cài đến bước này
+      placeholder: '2.1.0'
 
   - type: textarea
     id: debug-report
     attributes:
-      label: Debug Report
+      label: Báo cáo chẩn đoán
       description: |
-        Run `hermes debug share` from your terminal and paste the links it prints here.
-        This uploads your system info, config, and recent logs to a paste service automatically.
+        Ưu tiên chạy `hermes debug share --local`, kiểm tra và xóa khóa API, mã OAuth, đường dẫn riêng tư hoặc dữ liệu cá nhân trước khi dán phần liên quan vào đây.
 
-        If you're in an interactive chat session, you can also use the `/debug` slash command — it does the same thing.
-
-        If the upload fails or install didn't get that far, run `hermes debug share --local` and paste the output directly.
-        If even that doesn't work, run `hermes doctor` and paste that output instead.
+        Chỉ dùng `hermes debug share` hoặc `/debug` khi bạn hiểu nội dung nào sẽ được tải lên dịch vụ chia sẻ văn bản. Nếu quá trình cài đặt chưa hoàn tất, dùng `hermes doctor` rồi dán phần kết quả không chứa bí mật.
       placeholder: |
         Report   https://paste.rs/abc123
         agent.log   https://paste.rs/def456
@@ -95,8 +89,8 @@ body:
   - type: textarea
     id: error-output
     attributes:
-      label: Full Error Output
-      description: Paste the complete error message or traceback. This will be auto-formatted.
+      label: Toàn bộ thông báo lỗi
+      description: Dán toàn bộ thông báo lỗi hoặc truy vết. Nội dung sẽ được tự động định dạng.
       render: shell
     validations:
       required: true
@@ -104,9 +98,9 @@ body:
   - type: textarea
     id: tried
     attributes:
-      label: What I've Already Tried
-      description: List any fixes or workarounds you've already attempted.
+      label: Những cách bạn đã thử
+      description: Liệt kê các cách sửa hoặc giải pháp tạm thời bạn đã thử.
       placeholder: |
-        - Ran `hermes update`
-        - Tried reinstalling with `pip install -e ".[all]"`
-        - Checked that OPENROUTER_API_KEY is set in ~/.hermes/.env
+        - Tải lại bản cài mới nhất
+        - Thử cài lại ứng dụng
+        - Kiểm tra tài khoản hoặc khóa API

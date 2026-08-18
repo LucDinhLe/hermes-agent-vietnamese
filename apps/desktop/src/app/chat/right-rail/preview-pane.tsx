@@ -2,7 +2,10 @@ import { useStore } from '@nanostores/react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
+import { Button } from '@/components/ui/button'
+import { Codicon } from '@/components/ui/codicon'
 import { Tip } from '@/components/ui/tooltip'
+import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { type Translations, useI18n } from '@/i18n'
 import { isDesktopFsRemoteMode } from '@/lib/desktop-fs'
 import { guardGuestPointers } from '@/lib/guest-pointer-guard'
@@ -12,7 +15,10 @@ import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
 import { $previewServerRestart, failPreviewServerRestart, type PreviewTarget } from '@/store/preview'
 
+import { BrowserConnectorDialog } from './browser-connector-dialog'
 import { ArtifactPreview } from './preview-artifact'
+import { normalizeBrowserAddress } from './preview-browser-address'
+import { previewBrowserZoomFactor } from './preview-browser-fit'
 import {
   clampConsoleHeight,
   compactUrl,
@@ -22,18 +28,25 @@ import {
 } from './preview-console'
 import { type ConsoleEntry } from './preview-console-state'
 import { LocalFilePreview, PreviewEmptyState } from './preview-file'
-import { registerPreviewPageReader } from './preview-reader'
+import { interactPreviewWebview, readPreviewWebview } from './preview-page-bridge'
+import { registerPreviewPageController } from './preview-reader'
 import { previewConsoleState, registerPreviewDevTools } from './preview-strip-tools'
 
 type PreviewWebview = HTMLElement & {
+  canGoBack?: () => boolean
+  canGoForward?: () => boolean
   closeDevTools?: () => void
   executeJavaScript?: (code: string) => Promise<unknown>
   getTitle?: () => string
   getURL?: () => string
+  goBack?: () => void
+  goForward?: () => void
+  loadURL?: (url: string) => Promise<void>
   isDevToolsOpened?: () => boolean
   openDevTools?: () => void
   reload?: () => void
   reloadIgnoringCache?: () => void
+  setZoomFactor?: (factor: number) => void
 }
 
 interface PreviewPaneProps {
@@ -133,7 +146,10 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
   const consoleState = previewConsoleState(tabId ?? target.url)
   const consoleBodyRef = useRef<HTMLDivElement | null>(null)
   const consoleShouldStickRef = useRef(true)
+  const browserReadyRef = useRef(false)
+  const browserWidthRef = useRef(0)
   const hostRef = useRef<HTMLDivElement | null>(null)
+  const lastBrowserZoomRef = useRef<number | null>(null)
   const lastReloadRequestRef = useRef(reloadRequest)
   const lastRestartEventRef = useRef('')
   const previewContentRef = useRef<HTMLDivElement | null>(null)
@@ -142,10 +158,86 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
   const consoleHeight = useStore(consoleState.$height)
   const consoleOpen = useStore(consoleState.$open)
   const [currentUrl, setCurrentUrl] = useState(target.url)
+  const [addressValue, setAddressValue] = useState(target.url)
+  const [canGoBack, setCanGoBack] = useState(false)
+  const [canGoForward, setCanGoForward] = useState(false)
   const [devtoolsOpen, setDevtoolsOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<PreviewLoadErrorState | null>(null)
   const [localReloadKey, setLocalReloadKey] = useState(0)
+  const [connectorOpen, setConnectorOpen] = useState(false)
+
+  const applyBrowserFit = useCallback((width: number) => {
+    browserWidthRef.current = width
+
+    const webview = webviewRef.current
+
+    if (!browserReadyRef.current || !webview?.setZoomFactor) {
+      return
+    }
+
+    const factor = previewBrowserZoomFactor(width)
+
+    if (lastBrowserZoomRef.current === factor) {
+      return
+    }
+
+    try {
+      webview.setZoomFactor(factor)
+      lastBrowserZoomRef.current = factor
+    } catch {
+      // The guest may be navigating or tearing down between a resize delivery
+      // and this call. Its next dom-ready/resize event retries the fit.
+    }
+  }, [])
+
+  const handleBrowserResize = useCallback(
+    (entries: readonly ResizeObserverEntry[]) => {
+      const host = hostRef.current
+
+      if (!host) {
+        return
+      }
+
+      const entry = entries.find(candidate => candidate.target === host)
+      const width = entry?.contentRect.width ?? host.getBoundingClientRect().width
+
+      applyBrowserFit(width)
+    },
+    [applyBrowserFit]
+  )
+
+  useResizeObserver(handleBrowserResize, hostRef)
+
+  useEffect(() => {
+    const refitBrowser = () => {
+      const host = hostRef.current
+
+      if (!host) {
+        return
+      }
+
+      applyBrowserFit(host.getBoundingClientRect().width)
+    }
+
+    // Electron can defer ResizeObserver delivery while the native <webview>
+    // is occluded or a split-pane drag owns pointer capture. Re-measure at the
+    // two stable layout boundaries so the guest cannot stay stuck at the zoom
+    // from the rail's previous width.
+    document.addEventListener('pointerup', refitBrowser, true)
+
+    if (typeof window.addEventListener === 'function') {
+      window.addEventListener('resize', refitBrowser)
+    }
+
+    return () => {
+      document.removeEventListener('pointerup', refitBrowser, true)
+
+      if (typeof window.removeEventListener === 'function') {
+        window.removeEventListener('resize', refitBrowser)
+      }
+    }
+  }, [applyBrowserFit])
 
   // Artifacts have no URL to load — they render from the registry, never in a
   // webview.
@@ -246,6 +338,25 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
     }
   }, [isWebPreview])
 
+  const syncHistory = useCallback(() => {
+    setCanGoBack(webviewRef.current?.canGoBack?.() ?? false)
+    setCanGoForward(webviewRef.current?.canGoForward?.() ?? false)
+  }, [])
+
+  const submitAddress = useCallback(() => {
+    const url = normalizeBrowserAddress(addressValue)
+
+    if (!url) {
+      notify({ kind: 'warning', title: copy.invalidAddressTitle, message: copy.invalidAddressMessage })
+
+      return
+    }
+
+    setAddressValue(url)
+    setCurrentUrl(url)
+    void webviewRef.current?.loadURL?.(url)
+  }, [addressValue, copy.invalidAddressMessage, copy.invalidAddressTitle])
+
   const appendConsoleEntry = useCallback(
     (entry: Omit<ConsoleEntry, 'id'>) => {
       consoleShouldStickRef.current = isNearConsoleBottom(consoleBodyRef.current)
@@ -333,19 +444,24 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
       return
     }
 
-    return registerPreviewPageReader(tabId, async () => {
-      const webview = webviewRef.current
+    return registerPreviewPageController(tabId, {
+      interact: opts => {
+        const webview = webviewRef.current
 
-      if (!webview?.executeJavaScript) {
-        throw new Error('preview webview is not ready')
-      }
+        if (!webview) {
+          throw new Error('preview webview is not ready')
+        }
 
-      const text = await webview.executeJavaScript('document.body ? document.body.innerText : ""')
+        return interactPreviewWebview(webview, opts)
+      },
+      read: async () => {
+        const webview = webviewRef.current
 
-      return {
-        text: typeof text === 'string' ? text : '',
-        title: webview.getTitle?.() ?? '',
-        url: webview.getURL?.() ?? ''
+        if (!webview) {
+          throw new Error('preview webview is not ready')
+        }
+
+        return readPreviewWebview(webview)
       }
     })
   }, [isWebPreview, tabId])
@@ -542,7 +658,12 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
 
     host.replaceChildren()
     webviewRef.current = null
+    browserReadyRef.current = false
+    lastBrowserZoomRef.current = null
     setCurrentUrl(target.url)
+    setAddressValue(target.url)
+    setCanGoBack(false)
+    setCanGoForward(false)
     setDevtoolsOpen(false)
     setLoadError(null)
     consoleState.reset()
@@ -556,6 +677,10 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
 
     const webview = document.createElement('webview') as PreviewWebview
     webview.className = 'flex h-full w-full flex-1 bg-transparent'
+    // OAuth/social sign-in commonly opens a user-initiated popup. Keep that
+    // browser behavior available; the guest shares this persistent partition,
+    // so successful sign-in remains local and reusable across app launches.
+    webview.setAttribute('allowpopups', 'true')
     webview.setAttribute('partition', 'persist:hermes-preview')
     webview.setAttribute('src', target.url)
     webview.setAttribute('webpreferences', 'contextIsolation=yes,nodeIntegration=no,sandbox=yes')
@@ -592,6 +717,8 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
       if (detail.url) {
         setLoadError(null)
         setCurrentUrl(detail.url)
+        setAddressValue(detail.url)
+        syncHistory()
       }
     }
 
@@ -621,7 +748,17 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
     }
 
     const onStart = () => setLoading(true)
-    const onStop = () => setLoading(false)
+
+    const onStop = () => {
+      setLoading(false)
+      syncHistory()
+    }
+
+    const onDomReady = () => {
+      browserReadyRef.current = true
+      applyBrowserFit(browserWidthRef.current || host.getBoundingClientRect().width)
+    }
+
     // The WEBVIEW is the source of truth for DevTools, not our click handler:
     // closing the DevTools window itself fires devtools-closed with no click,
     // and the glyph was left stuck "on" when we tracked it locally.
@@ -636,6 +773,7 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
     webview.addEventListener('did-navigate-in-page', onNavigate)
     webview.addEventListener('did-start-loading', onStart)
     webview.addEventListener('did-stop-loading', onStop)
+    webview.addEventListener('dom-ready', onDomReady)
     host.appendChild(webview)
     webviewRef.current = webview
 
@@ -648,14 +786,85 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
       webview.removeEventListener('did-navigate-in-page', onNavigate)
       webview.removeEventListener('did-start-loading', onStart)
       webview.removeEventListener('did-stop-loading', onStop)
+      webview.removeEventListener('dom-ready', onDomReady)
+      browserReadyRef.current = false
       webview.remove()
     }
-  }, [appendConsoleEntry, consoleState, copy, isRemoteHtml, isWebPreview, target.url])
+  }, [applyBrowserFit, appendConsoleEntry, consoleState, copy, isRemoteHtml, isWebPreview, syncHistory, target.url])
 
   return (
     <aside className="relative flex h-full w-full min-w-0 flex-col overflow-hidden bg-transparent text-muted-foreground">
+      {target.kind === 'url' && !isRemoteHtml && (
+        <form
+          aria-label={copy.addressBar}
+          className="flex h-10 shrink-0 items-center gap-1.5 border-b border-border/60 bg-background/95 px-2"
+          onSubmit={event => {
+            event.preventDefault()
+            submitAddress()
+          }}
+        >
+          <Tip label={copy.back}>
+            <Button
+              aria-label={copy.back}
+              disabled={!canGoBack}
+              onClick={() => webviewRef.current?.goBack?.()}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <Codicon name="arrow-left" size="0.9rem" />
+            </Button>
+          </Tip>
+          <Tip label={copy.forward}>
+            <Button
+              aria-label={copy.forward}
+              disabled={!canGoForward}
+              onClick={() => webviewRef.current?.goForward?.()}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <Codicon name="arrow-right" size="0.9rem" />
+            </Button>
+          </Tip>
+          <Tip label={copy.reloadPage}>
+            <Button aria-label={copy.reloadPage} onClick={reloadPreview} size="icon-sm" type="button" variant="ghost">
+              <Codicon name="refresh" size="0.9rem" spinning={loading} />
+            </Button>
+          </Tip>
+          <div className="flex min-w-24 flex-1 items-center rounded-md border border-border/70 bg-muted/25 px-2 focus-within:border-primary/50">
+            <Codicon className="mr-1.5 shrink-0 opacity-55" name="lock" size="0.75rem" />
+            <input
+              aria-label={copy.address}
+              className="h-7 min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none"
+              onChange={event => setAddressValue(event.target.value)}
+              placeholder={copy.addressPlaceholder}
+              spellCheck={false}
+              value={addressValue}
+            />
+          </div>
+          <Tip label={copy.sharedWithAgentHint}>
+            <span className="hidden shrink-0 items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-[0.65rem] font-medium text-primary sm:flex">
+              <Codicon name="robot" size="0.72rem" />
+              {copy.sharedWithAgent}
+            </span>
+          </Tip>
+          <Tip label={copy.connector.openButton}>
+            <Button
+              aria-label={copy.connector.openButton}
+              onClick={() => setConnectorOpen(true)}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <Codicon name="key" size="0.85rem" />
+            </Button>
+          </Tip>
+        </form>
+      )}
+      <BrowserConnectorDialog onOpenChange={setConnectorOpen} open={connectorOpen} url={currentUrl} />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {!embedded && (
+        {!embedded && target.kind !== 'url' && (
           <div className="pointer-events-none flex min-h-(--titlebar-height) items-center gap-1.5 border-b border-border/60 bg-background px-2 py-1">
             <div className="min-w-0 flex-1">
               <Tip label={copy.openTarget(currentUrl)}>

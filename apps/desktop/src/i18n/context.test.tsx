@@ -3,11 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { HermesConfigRecord } from '@/hermes'
 
-import { type I18nConfigClient, I18nProvider, useI18n } from './context'
+import { FIRST_RUN_LOCALE_KEY, type I18nConfigClient, I18nProvider, useI18n } from './context'
 import type { Locale } from './types'
 
 function LanguageProbe({ target = 'zh' }: { target?: Locale }) {
-  const { isLoadingConfig, isSavingLocale, locale, saveError, setLocale, t } = useI18n()
+  const { isLoadingConfig, isSavingLocale, locale, previewLocale, saveError, setLocale, t } = useI18n()
 
   return (
     <div>
@@ -20,6 +20,9 @@ function LanguageProbe({ target = 'zh' }: { target?: Locale }) {
       <button onClick={() => void setLocale(target).catch(() => undefined)} type="button">
         switch
       </button>
+      <button onClick={() => previewLocale(target)} type="button">
+        preview
+      </button>
     </div>
   )
 }
@@ -28,17 +31,18 @@ describe('I18nProvider', () => {
   afterEach(() => {
     cleanup()
     vi.restoreAllMocks()
+    window.localStorage.clear()
   })
 
-  it('defaults to English without a config client', () => {
+  it('defaults to Vietnamese without a config client', () => {
     render(
       <I18nProvider configClient={null}>
         <LanguageProbe />
       </I18nProvider>
     )
 
-    expect(screen.getByTestId('locale').textContent).toBe('en')
-    expect(screen.getByTestId('label').textContent).toBe('Language')
+    expect(screen.getByTestId('locale').textContent).toBe('vi')
+    expect(screen.getByTestId('label').textContent).toBe('Ngôn ngữ')
   })
 
   it('normalizes an initial locale alias and switches translations', async () => {
@@ -76,7 +80,64 @@ describe('I18nProvider', () => {
     expect(configClient.saveConfig).not.toHaveBeenCalled()
   })
 
-  it('keeps English usable when config loading fails', async () => {
+  it('uses Vietnamese for a fresh profile without a configured language', async () => {
+    const configClient: I18nConfigClient = {
+      getConfig: vi.fn().mockResolvedValue({}),
+      saveConfig: vi.fn()
+    }
+
+    render(
+      <I18nProvider configClient={configClient}>
+        <LanguageProbe />
+      </I18nProvider>
+    )
+
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'))
+
+    expect(screen.getByTestId('locale').textContent).toBe('vi')
+    expect(screen.getByTestId('label').textContent).toBe('Ngôn ngữ')
+    expect(configClient.saveConfig).not.toHaveBeenCalled()
+  })
+
+  it('restores an early setup language until the backend can persist it', async () => {
+    window.localStorage.setItem(FIRST_RUN_LOCALE_KEY, 'en')
+
+    const configClient: I18nConfigClient = {
+      getConfig: vi.fn().mockResolvedValue({}),
+      saveConfig: vi.fn()
+    }
+
+    render(
+      <I18nProvider configClient={configClient}>
+        <LanguageProbe />
+      </I18nProvider>
+    )
+
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'))
+    expect(screen.getByTestId('locale').textContent).toBe('en')
+  })
+
+  it('previews a setup language without calling a backend and persists it locally', async () => {
+    const configClient: I18nConfigClient = {
+      getConfig: vi.fn().mockResolvedValue({}),
+      saveConfig: vi.fn()
+    }
+
+    render(
+      <I18nProvider configClient={configClient}>
+        <LanguageProbe target="en" />
+      </I18nProvider>
+    )
+
+    await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'))
+    fireEvent.click(screen.getByRole('button', { name: 'preview' }))
+
+    expect(screen.getByTestId('locale').textContent).toBe('en')
+    expect(window.localStorage.getItem(FIRST_RUN_LOCALE_KEY)).toBe('en')
+    expect(configClient.saveConfig).not.toHaveBeenCalled()
+  })
+
+  it('keeps the community Vietnamese default when config loading fails', async () => {
     const configClient: I18nConfigClient = {
       getConfig: vi.fn().mockRejectedValue(new Error('config unavailable')),
       saveConfig: vi.fn()
@@ -90,8 +151,8 @@ describe('I18nProvider', () => {
 
     await waitFor(() => expect(screen.getByTestId('loading').textContent).toBe('false'))
 
-    expect(screen.getByTestId('locale').textContent).toBe('en')
-    expect(screen.getByTestId('label').textContent).toBe('Language')
+    expect(screen.getByTestId('locale').textContent).toBe('vi')
+    expect(screen.getByTestId('label').textContent).toBe('Ngôn ngữ')
     expect(configClient.saveConfig).not.toHaveBeenCalled()
   })
 
@@ -207,6 +268,7 @@ describe('I18nProvider', () => {
     await waitFor(() => expect(saveConfig).toHaveBeenCalledTimes(1))
     expect(saveConfig).toHaveBeenCalledWith({ display: { language: 'ja', skin: 'mono' } })
     expect(screen.getByTestId('locale').textContent).toBe('ja')
+    expect(window.localStorage.getItem(FIRST_RUN_LOCALE_KEY)).toBe('ja')
   })
 
   it('applies RTL direction for Arabic and restores LTR on switch back', async () => {

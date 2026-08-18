@@ -195,6 +195,16 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     }
   },
   normalizePreviewTarget: (target, baseDir) => ipcRenderer.invoke('hermes:normalizePreviewTarget', target, baseDir),
+  browserConnector: {
+    status: () => ipcRenderer.invoke('hermes:browser-connector:status'),
+    setEnabled: enabled => ipcRenderer.invoke('hermes:browser-connector:enabled', enabled),
+    start: url => ipcRenderer.invoke('hermes:browser-connector:start', url),
+    pairingStatus: attemptId => ipcRenderer.invoke('hermes:browser-connector:pairing-status', attemptId),
+    approve: attemptId => ipcRenderer.invoke('hermes:browser-connector:approve', attemptId),
+    cancel: attemptId => ipcRenderer.invoke('hermes:browser-connector:cancel', attemptId),
+    revoke: importId => ipcRenderer.invoke('hermes:browser-connector:revoke', importId),
+    openExtensionFolder: () => ipcRenderer.invoke('hermes:browser-connector:open-extension')
+  },
   watchPreviewFile: url => ipcRenderer.invoke('hermes:watchPreviewFile', url),
   watchDirectory: dir => ipcRenderer.invoke('hermes:watchDirectory', dir),
   stopPreviewFileWatch: id => ipcRenderer.invoke('hermes:stopPreviewFileWatch', id),

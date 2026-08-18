@@ -1,0 +1,166 @@
+name: Kiểm thử runtime artifact Hermes tiếng Việt
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Draft candidate cần nghiệm thu'
+        required: true
+        type: string
+      sha256sums_sha256:
+        description: 'SHA-256 của SHA256SUMS.txt trong draft'
+        required: true
+        type: string
+      release_class:
+        description: 'Lớp phát hành phải khớp provenance của draft'
+        required: true
+        type: choice
+        options:
+          - community-prerelease
+          - stable
+
+permissions:
+  contents: read
+
+jobs:
+  exact-bytes:
+    name: Byte và chữ ký — ${{ matrix.id }}
+    runs-on: ${{ matrix.runner }}
+    environment: release-smoke
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: windows-x64
+            runner: windows-2025
+            artifact: Hermes-Vietnamese-Windows-x64-Setup.exe
+          - id: windows-arm64
+            runner: windows-11-arm
+            artifact: Hermes-Vietnamese-Windows-arm64-Setup.exe
+          - id: macos-arm64
+            runner: macos-15
+            artifact: Hermes-Vietnamese-macOS-Apple-Silicon.dmg
+          - id: macos-x64
+            runner: macos-15-intel
+            artifact: Hermes-Vietnamese-macOS-Intel.dmg
+          - id: linux-x64
+            runner: ubuntu-24.04
+            artifact: Hermes-Vietnamese-Linux-x64.AppImage
+          - id: linux-arm64
+            runner: ubuntu-24.04-arm
+            artifact: Hermes-Vietnamese-Linux-arm64.AppImage
+    steps:
+      - name: Tải đúng artifact từ draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          ARTIFACT: ${{ matrix.artifact }}
+        run: |
+          mkdir candidate
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ARTIFACT" --pattern SHA256SUMS.txt --dir candidate
+
+      - name: Xác minh manifest và byte
+        shell: bash
+        env:
+          EXPECTED_MANIFEST_SHA: ${{ inputs.sha256sums_sha256 }}
+          ARTIFACT: ${{ matrix.artifact }}
+        run: |
+          node -e "const fs=require('fs'),c=require('crypto'); const h=p=>c.createHash('sha256').update(fs.readFileSync(p)).digest('hex'); if(h('candidate/SHA256SUMS.txt')!==process.env.EXPECTED_MANIFEST_SHA) process.exit(1); const line=fs.readFileSync('candidate/SHA256SUMS.txt','utf8').split(/\r?\n/).find(x=>x.endsWith('  '+process.env.ARTIFACT)); if(!line || h('candidate/'+process.env.ARTIFACT)!==line.slice(0,64)) process.exit(1)"
+
+      - name: Xác minh Authenticode
+        if: runner.os == 'Windows' && inputs.release_class == 'stable'
+        shell: powershell
+        env:
+          ARTIFACT: ${{ matrix.artifact }}
+        run: |
+          $signature = Get-AuthenticodeSignature -LiteralPath (Join-Path candidate $env:ARTIFACT)
+          if ($signature.Status -ne 'Valid') { throw "Authenticode is $($signature.Status), not Valid" }
+
+      - name: Ghi nhận Windows unsigned cho community prerelease
+        if: runner.os == 'Windows' && inputs.release_class == 'community-prerelease'
+        shell: powershell
+        env:
+          ARTIFACT: ${{ matrix.artifact }}
+        run: |
+          $signature = Get-AuthenticodeSignature -LiteralPath (Join-Path candidate $env:ARTIFACT)
+          if ($signature.Status -eq 'Valid') { throw 'Community prerelease unexpectedly contains a signed installer' }
+          Write-Warning "Unsigned community prerelease: Authenticode=$($signature.Status)"
+
+      - name: Xác minh Developer ID, Gatekeeper và stapling
+        if: runner.os == 'macOS' && inputs.release_class == 'stable'
+        shell: bash
+        env:
+          ARTIFACT: ${{ matrix.artifact }}
+        run: |
+          mount_point="$(mktemp -d)"
+          hdiutil attach "candidate/$ARTIFACT" -nobrowse -readonly -mountpoint "$mount_point"
+          app="$(find "$mount_point" -maxdepth 1 -name '*.app' -print -quit)"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          spctl --assess --type execute --verbose=4 "$app"
+          xcrun stapler validate "$app"
+          hdiutil detach "$mount_point"
+
+      - name: Ghi nhận macOS chưa notarize cho community prerelease
+        if: runner.os == 'macOS' && inputs.release_class == 'community-prerelease'
+        shell: bash
+        env:
+          ARTIFACT: ${{ matrix.artifact }}
+        run: |
+          mount_point="$(mktemp -d)"
+          hdiutil attach "candidate/$ARTIFACT" -nobrowse -readonly -mountpoint "$mount_point"
+          app="$(find "$mount_point" -maxdepth 1 -name '*.app' -print -quit)"
+          test -n "$app"
+          codesign --display --verbose=4 "$app" 2>&1 || true
+          spctl --assess --type execute --verbose=4 "$app" 2>&1 || true
+          if xcrun stapler validate "$app"; then
+            echo "::error::community prerelease unexpectedly contains a stapled notarization ticket"
+            hdiutil detach "$mount_point"
+            exit 1
+          fi
+          hdiutil detach "$mount_point"
+
+  evidence:
+    name: Đối chiếu smoke thật trên đúng máy và artifact
+    needs: exact-bytes
+    runs-on: ubuntu-24.04
+    environment: release-production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Tải bằng chứng và manifest từ draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          mkdir candidate
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS.txt --pattern release-runtime-evidence.json --dir candidate
+
+      - name: Bắt buộc đủ fresh/update/repair/uninstall/rollback trên cả sáu máy
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          MANIFEST_SHA: ${{ inputs.sha256sums_sha256 }}
+          RELEASE_CLASS: ${{ inputs.release_class }}
+        run: |
+          candidate_commit="$(git rev-parse HEAD)"
+          test "$candidate_commit" = "$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          node scripts/validate-release-evidence.mjs \
+            candidate/release-runtime-evidence.json \
+            candidate/SHA256SUMS.txt \
+            "$TAG" \
+            "$candidate_commit" \
+            "$MANIFEST_SHA" \
+            "$RELEASE_CLASS" \
+            > release-evidence.json
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-evidence-${{ inputs.tag }}
+          path: release-evidence.json
+          if-no-files-found: error
+          retention-days: 90

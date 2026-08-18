@@ -49,7 +49,7 @@ import { readReferenceImage } from './lib/read-reference-image'
 // The generate → hatch → adopt controller. A thin view over the `pet-generate`
 // store; the store owns the steps and persists inputs across close/reopen.
 export function PetGenerateContent() {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const copy = t.commandCenter.generatePet
   const { requestGateway } = useGatewayRequest()
   const navigate = useNavigate()
@@ -255,7 +255,7 @@ export function PetGenerateContent() {
                   type="button"
                 >
                   <ImageIcon className="size-3" />
-                  Add a reference
+                  {locale === 'vi' ? 'Thêm ảnh tham chiếu' : 'Add a reference'}
                 </button>
               )}
             </div>

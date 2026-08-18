@@ -14,18 +14,24 @@
 #
 # Usage:
 #   scripts/sandbox/pick-release-tags.sh [--count N] [--repo DIR]
+#                                        [--exclude TAG]
 #
 #   --count   how many tags to emit (default 5, minimum 1). Fewer tags than
 #             requested emits all of them.
 #   --repo    repository to read tags from (default: this checkout).
+#   --exclude tag to omit from the update-from set. Tag-triggered workflows use
+#             this for the candidate itself, because updating a commit to
+#             itself is not an update test.
 #
 # Reads tags from the local checkout, so it needs one fetched with tags
 # (actions/checkout with fetch-depth: 0, or `fetch-tags: true`). A shallow
 # checkout has no tags and this exits non-zero rather than silently emitting an
 # empty matrix.
 #
-# Only vYYYY.M.D[.N] release tags are considered; the repo also carries
-# backup/* and one-off tags that are not releases.
+# A Vietnamese fork release uses vi-vMAJOR.MINOR.PATCH-BUILD. When those tags
+# exist they take precedence, because they are the versions fork users update
+# from. Repositories without Vietnamese tags keep the upstream
+# vYYYY.M.D[.N] behavior. backup/* and one-off tags are ignored.
 
 set -euo pipefail
 
@@ -34,6 +40,7 @@ COUNT=5
 # path so a symlinked or copied script still reads the checkout it lives in
 # rather than whatever repo the caller happens to be standing in.
 REPO=""
+EXCLUDE=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --count)
@@ -42,6 +49,9 @@ while [ "$#" -gt 0 ]; do
     --repo)
       [ "$#" -ge 2 ] || { echo 'error: --repo needs a value' >&2; exit 1; }
       REPO="$2"; shift 2 ;;
+    --exclude)
+      [ "$#" -ge 2 ] || { echo 'error: --exclude needs a value' >&2; exit 1; }
+      EXCLUDE="$2"; shift 2 ;;
     -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "error: unknown argument: $1" >&2; exit 1 ;;
   esac
@@ -64,21 +74,42 @@ if [ -z "$REPO" ]; then
   REPO="$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$script_dir")"
 fi
 
-# sort -V orders v2026.4.8 before v2026.4.13 (numeric), which a plain
-# lexicographic sort gets wrong.
+# sort -V orders build 9 before build 14 (numeric), which a plain
+# lexicographic sort gets wrong. Prefer one coherent tag family rather than
+# mixing two unrelated version schemes in the same evenly-spaced matrix.
 mapfile -t tags < <(
-  git -C "$REPO" tag --list 'v*' \
-    | grep -E '^v[0-9]{4}\.[0-9]+\.[0-9]+(\.[0-9]+)?$' \
+  git -C "$REPO" tag --list 'vi-v*' \
+    | grep -E '^vi-v[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$' \
     | sort -V
 )
+tag_family='vietnamese'
+
+if [ "${#tags[@]}" -eq 0 ]; then
+  mapfile -t tags < <(
+    git -C "$REPO" tag --list 'v*' \
+      | grep -E '^v[0-9]{4}\.[0-9]+\.[0-9]+(\.[0-9]+)?$' \
+      | sort -V
+  )
+  tag_family='upstream'
+fi
+
+if [ -n "$EXCLUDE" ]; then
+  filtered=()
+  for tag in "${tags[@]}"; do
+    [ "$tag" = "$EXCLUDE" ] || filtered+=("$tag")
+  done
+  tags=("${filtered[@]}")
+fi
 
 total="${#tags[@]}"
 if [ "$total" -eq 0 ]; then
-  echo "error: no release tags found in $REPO" >&2
+  echo "error: no prior supported release tags found in $REPO" >&2
   echo '       A shallow clone has no tags: fetch with tags (actions/checkout' >&2
   echo '       with fetch-depth: 0, or fetch-tags: true).' >&2
   exit 1
 fi
+
+echo "release tag family: $tag_family ($total candidate(s))" >&2
 
 if [ "$total" -le "$COUNT" ]; then
   picked=("${tags[@]}")

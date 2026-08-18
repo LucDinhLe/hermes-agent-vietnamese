@@ -946,6 +946,14 @@ DEFAULT_CONFIG = {
     #           - id: pareto-router
     #             min_coding_score: 0.5
     #
+    # Independent, read-only supervisory checkpoints around the primary loop.
+    # The feature is explicit opt-in because it adds model calls, latency and
+    # provider-visible review packets. Revision loops are deliberately bounded.
+    "advisor": {
+        "enabled": False,
+        "max_revisions": 2,
+        "fail_open": True,
+    },
     # Each aux task is independent — main-agent provider_routing and
     # openrouter.min_coding_score do NOT propagate to aux calls by design.
     "auxiliary": {
@@ -1047,6 +1055,30 @@ DEFAULT_CONFIG = {
             "extra_body": {},
             "reasoning_effort": "",  # per-task thinking level: none|minimal|low|medium|high|xhigh|max|ultra (empty = provider default)
             "language": "",
+        },
+        # Optional Desktop post-turn summary of provider-visible reasoning.
+        # The renderer owns the default-off consent switch; this slot only
+        # controls which auxiliary model serves calls after consent.
+        "reasoning_summary_vi": {
+            "provider": "auto",
+            "model": "",
+            "base_url": "",
+            "api_key": "",
+            "timeout": 90,
+            "extra_body": {},
+            "reasoning_effort": "",
+        },
+        # Advisor — read-only planning/recovery/final goal-alignment review.
+        # Pick a stronger model than the working model when desired. It never
+        # receives tools and never writes directly to the user transcript.
+        "advisor": {
+            "provider": "auto",
+            "model": "",
+            "base_url": "",
+            "api_key": "",
+            "timeout": 120,
+            "extra_body": {},
+            "reasoning_effort": "",
         },
         "memory_query_rewrite": {
             "provider": "auto",
@@ -2680,6 +2712,19 @@ DEFAULT_CONFIG = {
         "level": "INFO",       # Minimum level for agent.log: DEBUG, INFO, WARNING
         "max_size_mb": 5,      # Max size per log file before rotation
         "backup_count": 3,     # Number of rotated backup files to keep
+    },
+
+    # Settings for the update pipeline.
+    "update": {
+        # This setting selects the releases that `hermes update` tracks on
+        # source (git) installs:
+        #   auto   — use the install manifest (.hermes-install.json).
+        #            This is the same as "main" for each pre-existing install.
+        #   main   — git pull origin main (the current behavior).
+        #   stable — check out the latest tagged release, not main.
+        # Bundled desktop installs ignore this setting and always track
+        # stable. Their updates come from the updater of the desktop app.
+        "channel": "auto",
     },
 
     # Remotely-hosted model catalog manifest.  When enabled, the CLI fetches

@@ -1,0 +1,28 @@
+{
+  "tag": "vi-v0.20.0-25",
+  "rollbackTag": "vi-v0.20.0-14",
+  "releaseClass": "community-pilot",
+  "windowsX64": {
+    "filename": "Hermes-Vietnamese-Windows-x64-Setup.exe",
+    "size": 332776297,
+    "sha256": "0f31c4a23bbb7913300b3f3571ad346aae517d367705a965d451a1febf620e59"
+  },
+  "windowsInstallImages": [
+    "edge-warning-see-more-v25.jpg",
+    "edge-download-menu-keep-v25.jpg",
+    "edge-publisher-unknown-v25.jpg",
+    "edge-keep-anyway-v25.jpg"
+  ],
+  "downloadFiles": [
+    "Hermes-Vietnamese-Windows-x64-Setup.exe",
+    "Hermes-Vietnamese-Windows-arm64-Setup.exe",
+    "Hermes-Vietnamese-macOS-Apple-Silicon.dmg",
+    "Hermes-Vietnamese-macOS-Intel.dmg",
+    "Hermes-Vietnamese-Linux-x64.deb",
+    "Hermes-Vietnamese-Linux-arm64.deb",
+    "Hermes-Vietnamese-Linux-x64.rpm",
+    "Hermes-Vietnamese-Linux-arm64.rpm",
+    "Hermes-Vietnamese-Linux-x64.AppImage",
+    "Hermes-Vietnamese-Linux-arm64.AppImage"
+  ]
+}

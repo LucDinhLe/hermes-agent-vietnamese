@@ -1423,6 +1423,12 @@ def _(rid, params: dict) -> dict:
     return _respond(rid, params, "text", allow_expired=True)
 
 
+@method("preview.interact.respond")
+def _(rid, params: dict) -> dict:
+    # `text` is the JSON result of an action executed by the live Browser pane.
+    return _respond(rid, params, "text", allow_expired=True)
+
+
 @method("window.read.respond")
 def _(rid, params: dict) -> dict:
     # `text` is a JSON string describing the OS window underneath the Hermes

@@ -1,10 +1,12 @@
 interface FirstRunSetupBackend {
   activeRoot?: string
+  bootstrapReason?: string
   kind?: string
   platform?: string
 }
 
 interface FirstRunSetupGateOptions {
+  autoContinue?: boolean
   hideChoice?: () => void
   log?: (message: string) => void
   onStuck?: (backend: FirstRunSetupBackend, stuckAfterMs: number) => void
@@ -15,6 +17,7 @@ interface FirstRunSetupGateOptions {
 export type FirstRunSetupDecision = 'continue-local' | 'remote-applied' | 'reset'
 
 export function createFirstRunSetupGate({
+  autoContinue = false,
   hideChoice,
   log,
   onStuck,
@@ -58,10 +61,23 @@ export function createFirstRunSetupGate({
   }
 
   const shouldGate = (backend?: FirstRunSetupBackend | null) =>
-    Boolean(backend && backend.kind === 'bootstrap-needed' && !localBootstrapConfirmed)
+    Boolean(
+      backend &&
+        backend.kind === 'bootstrap-needed' &&
+        backend.bootstrapReason !== 'packaged-runtime-refresh' &&
+        !localBootstrapConfirmed
+    )
 
   const wait = async (backend?: FirstRunSetupBackend | null) => {
     if (!shouldGate(backend)) {
+      return 'continue-local' as const
+    }
+
+    if (autoContinue) {
+      localBootstrapConfirmed = true
+
+      log?.('[bootstrap] automated fresh-install smoke test selected local install')
+
       return 'continue-local' as const
     }
 

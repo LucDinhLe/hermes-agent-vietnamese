@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { getActionStatus, getComputerUseStatus, grantComputerUsePermissions } from '@/hermes'
+import { useI18n } from '@/i18n'
 import { AlertTriangle, Check, ExternalLink, Loader2, RefreshCw, X } from '@/lib/icons'
 import { upsertDesktopActionTask } from '@/store/activity'
 import { notify, notifyError } from '@/store/notifications'
@@ -33,6 +34,9 @@ function GrantIcon({ granted }: { granted: boolean | null }) {
 }
 
 function PermissionRow({ granted, label, hint }: { granted: boolean | null; label: string; hint: string }) {
+  const { locale } = useI18n()
+  const isVi = locale === 'vi'
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-background/55 p-2.5">
       <div className="min-w-0">
@@ -41,7 +45,17 @@ function PermissionRow({ granted, label, hint }: { granted: boolean | null; labe
       </div>
       <Pill tone={tone(granted)}>
         <GrantIcon granted={granted} />
-        {granted === true ? 'Granted' : granted === false ? 'Not granted' : 'Unknown'}
+        {granted === true
+          ? isVi
+            ? 'Đã cấp'
+            : 'Granted'
+          : granted === false
+            ? isVi
+              ? 'Chưa cấp'
+              : 'Not granted'
+            : isVi
+              ? 'Chưa rõ'
+              : 'Unknown'}
       </Pill>
     </div>
   )
@@ -61,6 +75,8 @@ function PermissionRow({ granted, label, hint }: { granted: boolean | null; labe
  * below this card (the generic ToolsetConfigPanel).
  */
 export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) {
+  const { locale } = useI18n()
+  const isVi = locale === 'vi'
   const [status, setStatus] = useState<ComputerUseStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [granting, setGranting] = useState(false)
@@ -70,11 +86,11 @@ export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) 
     try {
       setStatus(await getComputerUseStatus())
     } catch (err) {
-      notifyError(err, 'Could not read Computer Use status')
+      notifyError(err, isVi ? 'Không thể đọc trạng thái Computer Use' : 'Could not read Computer Use status')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [isVi])
 
   // eslint-disable-next-line no-restricted-syntax -- legitimate non-atom ref write (see eslint rule comment)
   useEffect(() => {
@@ -91,15 +107,17 @@ export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) 
       const started = await grantComputerUsePermissions()
 
       if (!started.ok) {
-        notifyError(new Error('spawn failed'), 'Could not request permissions')
+        notifyError(new Error('spawn failed'), isVi ? 'Không thể yêu cầu cấp quyền' : 'Could not request permissions')
 
         return
       }
 
       notify({
         kind: 'info',
-        title: 'Approve in System Settings',
-        message: 'macOS will show a permission dialog attributed to CuaDriver. Approve it, then return here.'
+        title: isVi ? 'Phê duyệt trong Cài đặt hệ thống' : 'Approve in System Settings',
+        message: isVi
+          ? 'macOS sẽ hiện hộp thoại cấp quyền cho CuaDriver. Hãy phê duyệt rồi quay lại đây.'
+          : 'macOS will show a permission dialog attributed to CuaDriver. Approve it, then return here.'
       })
 
       // The driver waits for the user to flip the switch — poll until it exits.
@@ -124,20 +142,20 @@ export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) 
       }
     } catch (err) {
       if (activeRef.current) {
-        notifyError(err, 'Could not request permissions')
+        notifyError(err, isVi ? 'Không thể yêu cầu cấp quyền' : 'Could not request permissions')
       }
     } finally {
       if (activeRef.current) {
         setGranting(false)
       }
     }
-  }, [onConfiguredChange, refresh])
+  }, [isVi, onConfiguredChange, refresh])
 
   if (loading) {
     return (
       <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
         <Loader2 className="size-3.5 animate-spin" />
-        Checking Computer Use status…
+        {isVi ? 'Đang kiểm tra trạng thái Computer Use…' : 'Checking Computer Use status…'}
       </div>
     )
   }
@@ -149,7 +167,8 @@ export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) 
   if (!status.platform_supported) {
     return (
       <p className="px-1 text-xs text-muted-foreground">
-        Computer Use isn&apos;t supported on this platform ({status.platform}).
+        {isVi ? 'Computer Use chưa hỗ trợ nền tảng này' : "Computer Use isn't supported on this platform"} (
+        {status.platform}).
       </p>
     )
   }
@@ -157,8 +176,13 @@ export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) 
   if (!status.installed) {
     return (
       <p className="px-1 text-xs text-muted-foreground">
-        Install the cua-driver backend below to drive this machine.
-        {status.can_grant && ' Then grant Accessibility and Screen Recording here.'}
+        {isVi
+          ? 'Hãy cài dịch vụ cua-driver bên dưới để điều khiển máy này.'
+          : 'Install the cua-driver backend below to drive this machine.'}
+        {status.can_grant &&
+          (isVi
+            ? ' Sau đó cấp quyền Accessibility và Screen Recording tại đây.'
+            : ' Then grant Accessibility and Screen Recording here.')}
       </p>
     )
   }
@@ -171,17 +195,26 @@ export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) 
         <div className="min-w-0">
           {status.can_grant ? (
             <p className="text-[0.72rem] text-muted-foreground">
-              Grants attach to CuaDriver&apos;s own identity (com.trycua.driver), not Hermes — so the dialog is
-              attributed to the process that drives your Mac.
+              {isVi
+                ? 'Quyền được cấp cho định danh riêng của CuaDriver (com.trycua.driver), nên macOS sẽ ghi tên tiến trình điều khiển máy thay vì Hermes.'
+                : "Grants attach to CuaDriver's own identity (com.trycua.driver), not Hermes — so the dialog is attributed to the process that drives your Mac."}
             </p>
           ) : (
-            <p className="text-[0.72rem] text-muted-foreground">{PLATFORM_NOTE[status.platform] ?? ''}</p>
+            <p className="text-[0.72rem] text-muted-foreground">
+              {isVi
+                ? status.platform === 'linux'
+                  ? 'Điều khiển Desktop qua lớp trợ năng X11/XWayland, không cần hộp thoại cấp quyền.'
+                  : status.platform === 'win32'
+                    ? 'Lần chạy đầu có thể hiện cảnh báo Windows SmartScreen cho cua-driver UIAccess — hãy cho phép.'
+                    : ''
+                : (PLATFORM_NOTE[status.platform] ?? '')}
+            </p>
           )}
           {status.version && <p className="text-[0.68rem] text-muted-foreground/80">{status.version}</p>}
         </div>
         <Button onClick={() => void refresh()} size="sm" variant="text">
           <RefreshCw className="size-3.5" />
-          Recheck
+          {isVi ? 'Kiểm tra lại' : 'Recheck'}
         </Button>
       </div>
 
@@ -189,21 +222,39 @@ export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) 
         <>
           <PermissionRow
             granted={status.accessibility}
-            hint="Lets cua-driver post clicks, keystrokes, and read the accessibility tree."
-            label="Accessibility"
+            hint={
+              isVi
+                ? 'Cho phép cua-driver nhấp chuột, gõ phím và đọc cây trợ năng.'
+                : 'Lets cua-driver post clicks, keystrokes, and read the accessibility tree.'
+            }
+            label={isVi ? 'Trợ năng' : 'Accessibility'}
           />
           <PermissionRow
             granted={status.screen_recording}
-            hint="Lets cua-driver capture screenshots of app windows."
-            label="Screen Recording"
+            hint={
+              isVi
+                ? 'Cho phép cua-driver chụp màn hình các cửa sổ ứng dụng.'
+                : 'Lets cua-driver capture screenshots of app windows.'
+            }
+            label={isVi ? 'Ghi màn hình' : 'Screen Recording'}
           />
         </>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-background/55 p-2.5">
-          <span className="text-sm font-medium">Driver health</span>
+          <span className="text-sm font-medium">{isVi ? 'Tình trạng driver' : 'Driver health'}</span>
           <Pill tone={tone(status.ready)}>
             <GrantIcon granted={status.ready} />
-            {status.ready === true ? 'Ready' : status.ready === false ? 'Not ready' : 'Unknown'}
+            {status.ready === true
+              ? isVi
+                ? 'Sẵn sàng'
+                : 'Ready'
+              : status.ready === false
+                ? isVi
+                  ? 'Chưa sẵn sàng'
+                  : 'Not ready'
+                : isVi
+                  ? 'Chưa rõ'
+                  : 'Unknown'}
           </Pill>
         </div>
       )}
@@ -225,13 +276,21 @@ export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) 
       {status.ready ? (
         <div className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground">
           <Check className="size-3.5" />
-          Computer Use is ready. Ask the agent to capture an app and click around.
+          {isVi
+            ? 'Computer Use đã sẵn sàng. Bạn có thể yêu cầu AI agent chụp và thao tác trên ứng dụng.'
+            : 'Computer Use is ready. Ask the agent to capture an app and click around.'}
         </div>
       ) : (
         status.can_grant && (
           <Button disabled={granting} onClick={() => void grant()} size="sm">
             {granting ? <Loader2 className="size-3.5 animate-spin" /> : <ExternalLink className="size-3.5" />}
-            {granting ? 'Waiting for approval…' : 'Grant permissions'}
+            {granting
+              ? isVi
+                ? 'Đang chờ phê duyệt…'
+                : 'Waiting for approval…'
+              : isVi
+                ? 'Cấp quyền'
+                : 'Grant permissions'}
           </Button>
         )
       )}

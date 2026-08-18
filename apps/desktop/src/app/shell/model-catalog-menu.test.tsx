@@ -10,6 +10,7 @@ import {
   setModelVisibilityOpen,
   setVisibleModels
 } from '@/store/model-visibility'
+import { $collapsedProviders } from '@/store/provider-collapse'
 
 import { ModelCatalogMenu, type ModelMenuController } from './model-catalog-menu'
 
@@ -29,9 +30,13 @@ vi.mock('@/hermes', () => ({
 
 beforeEach(() => {
   $visibleModels.set(null)
+  $collapsedProviders.set([])
   setModelVisibilityOpen(false)
   getGlobalModelOptions.mockResolvedValue({
-    providers: [{ models: ['gemini-3.1-pro', 'gemini-2.5-flash'], name: 'Google', slug: 'google' }]
+    providers: [
+      { models: ['sonnet', 'opus', 'haiku'], name: 'Claude Pro / Max (Claude Code)', slug: 'claude-code' },
+      { models: ['gemini-3.1-pro', 'gemini-2.5-flash'], name: 'Google AI Studio (API)', slug: 'google' }
+    ]
   })
 })
 
@@ -104,5 +109,22 @@ describe('the catalog owns model curation', () => {
     fireEvent.click(screen.getByText('Edit Models…'))
 
     expect($modelVisibilityOpen.get()).toBe(true)
+  })
+
+  it('makes a collapsed provider discoverable and expandable', async () => {
+    $collapsedProviders.set(['claude-code'])
+
+    renderMenu()
+
+    const label = await screen.findByText('Claude Pro / Max (Claude Code)')
+    const header = label.closest('[role="menuitem"]')
+
+    expect(header?.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByText(/^Sonnet/i)).toBeNull()
+
+    fireEvent.click(header!)
+
+    await screen.findByText(/^Sonnet/i)
+    expect(header?.getAttribute('aria-expanded')).toBe('true')
   })
 })

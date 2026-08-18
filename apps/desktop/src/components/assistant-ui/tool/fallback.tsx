@@ -112,6 +112,7 @@ const TOOL_PAYLOAD_PRE_CLASS = cn(TOOL_SECTION_SURFACE_CLASS, 'font-mono text-[0
  * nothing else here.
  */
 function ToolPayloadDisclosure({ args, result }: { args: unknown; result: unknown }) {
+  const { locale } = useI18n()
   const [open, setOpen] = useState(false)
 
   return (
@@ -127,7 +128,7 @@ function ToolPayloadDisclosure({ args, result }: { args: unknown; result: unknow
         type="button"
       >
         <DisclosureCaret className="text-(--ui-text-tertiary)" open={open} size="0.625rem" />
-        Tool payload
+        {locale === 'vi' ? 'Dữ liệu công cụ' : 'Tool payload'}
       </button>
       {open && (
         <pre className={cn(TOOL_PAYLOAD_PRE_CLASS, 'mt-1 whitespace-pre-wrap wrap-anywhere')}>
@@ -342,7 +343,7 @@ function toolEntryDisclosureId(messageId: string, part: ToolPart): string {
 }
 
 function ToolEntry({ part }: ToolEntryProps) {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const copy = t.assistant.tool
   const statusCopy = t.statusStack
   const messageId = useAuiState(s => s.message.id)
@@ -620,7 +621,9 @@ function ToolEntry({ part }: ToolEntryProps) {
             <div className="max-w-full text-xs leading-relaxed text-(--ui-text-secondary)">
               {view.searchQuery && (
                 <p className="mb-1 flex min-w-0 gap-1.5 wrap-anywhere">
-                  <span className="shrink-0 font-medium text-(--ui-text-tertiary)">Search</span>
+                  <span className="shrink-0 font-medium text-(--ui-text-tertiary)">
+                    {locale === 'vi' ? 'Tìm kiếm' : 'Search'}
+                  </span>
                   <span>{view.searchQuery}</span>
                 </p>
               )}
@@ -715,6 +718,8 @@ interface TerminalTranscriptProps {
 }
 
 function TerminalTranscript({ command, exitCode }: TerminalTranscriptProps) {
+  const { locale } = useI18n()
+
   if (!command && exitCode === undefined) {
     return null
   }
@@ -736,7 +741,7 @@ function TerminalTranscript({ command, exitCode }: TerminalTranscriptProps) {
             exitCode === 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
           )}
         >
-          exit {exitCode}
+          {locale === 'vi' ? 'mã thoát' : 'exit'} {exitCode}
         </span>
       )}
     </div>

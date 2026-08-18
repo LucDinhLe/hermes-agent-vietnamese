@@ -20,6 +20,11 @@ afterEach(cleanup)
 vi.mock('@/i18n', () => ({
   useI18n: () => ({
     t: {
+      keybinds: {
+        actions: {
+          'session.new': 'Phiên mới'
+        }
+      },
       sidebar: {
         row: {
           ageMin: 'm',
@@ -57,12 +62,20 @@ vi.mock('@/app/chat/session-drag', () => ({ startSessionDrag: vi.fn() }))
 // build session state with the same factory the app uses. It is a spy because
 // the row calls it exactly once per render, which is how the isolation test
 // below counts repaints.
-const sessionTitle = vi.fn((s: SessionInfo) => (s as unknown as { title: string }).title)
+const sessionTitle = vi.fn(
+  (s: SessionInfo, localizedNewSessionTitle?: string) =>
+    (/^new session$/i.test((s as unknown as { title: string }).title)
+      ? localizedNewSessionTitle
+      : (s as unknown as { title: string }).title) || 'Untitled session'
+)
 
 vi.mock('@/lib/chat-runtime', async importOriginal => {
   const actual = await importOriginal<typeof ChatRuntime>()
 
-  return { ...actual, sessionTitle: (s: SessionInfo) => sessionTitle(s) }
+  return {
+    ...actual,
+    sessionTitle: (s: SessionInfo, localizedNewSessionTitle?: string) => sessionTitle(s, localizedNewSessionTitle)
+  }
 })
 vi.mock('@/lib/haptics', () => ({ triggerHaptic: vi.fn() }))
 vi.mock('@/lib/session-source', () => ({
@@ -219,11 +232,18 @@ describe('SidebarSessionRow running arc', () => {
     })
 
     expect(sessionTitle).toHaveBeenCalledTimes(1)
-    expect(sessionTitle).toHaveBeenCalledWith(expect.objectContaining({ id: 's1' }))
+    expect(sessionTitle).toHaveBeenCalledWith(expect.objectContaining({ id: 's1' }), 'Phiên mới')
   })
 })
 
 describe('SidebarSessionRow', () => {
+  it('localizes a legacy persisted NEW SESSION placeholder', () => {
+    renderRow(makeSession({ title: 'NEW SESSION' }))
+
+    expect(screen.getByText('Phiên mới')).toBeTruthy()
+    expect(screen.queryByText('NEW SESSION')).toBeNull()
+  })
+
   it('keeps an aria-label on the kebab without wrapping it in a Tip', () => {
     render(
       <SidebarSessionRow

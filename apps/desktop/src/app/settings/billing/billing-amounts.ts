@@ -1,3 +1,5 @@
+import type { Locale } from '@/i18n'
+
 import type { BillingStateResponse } from './types'
 import { EMPTY_BILLING_VALUE } from './use-billing-state'
 
@@ -49,22 +51,24 @@ export function initialAutoReloadAmount(...candidates: Array<null | string | und
 export function validateAutoReloadInputs(
   thresholdRaw: string,
   reloadToRaw: string,
-  bounds: Pick<BillingStateResponse, 'max_usd' | 'min_usd'>
+  bounds: Pick<BillingStateResponse, 'max_usd' | 'min_usd'>,
+  locale: Locale = 'en'
 ): { error?: string; values?: { reloadTo: string; threshold: string } } {
-  const threshold = validateBillingAmount('Threshold', thresholdRaw, bounds)
+  const isVi = locale === 'vi'
+  const threshold = validateBillingAmount(isVi ? 'Ngưỡng' : 'Threshold', thresholdRaw, bounds, locale)
 
   if (threshold.error || threshold.amount == null) {
     return { error: threshold.error }
   }
 
-  const reloadTo = validateBillingAmount('Reload-to', reloadToRaw, bounds)
+  const reloadTo = validateBillingAmount(isVi ? 'Mức nạp' : 'Reload-to', reloadToRaw, bounds, locale)
 
   if (reloadTo.error || reloadTo.amount == null) {
     return { error: reloadTo.error }
   }
 
   if (reloadTo.amount <= threshold.amount) {
-    return { error: 'Reload-to amount must be greater than the threshold.' }
+    return { error: isVi ? 'Mức nạp phải lớn hơn ngưỡng.' : 'Reload-to amount must be greater than the threshold.' }
   }
 
   return {
@@ -78,30 +82,40 @@ export function validateAutoReloadInputs(
 export function validateBillingAmount(
   label: string,
   raw: string,
-  bounds: Pick<BillingStateResponse, 'max_usd' | 'min_usd'>
+  bounds: Pick<BillingStateResponse, 'max_usd' | 'min_usd'>,
+  locale: Locale = 'en'
 ): { amount?: number; error?: string } {
+  const isVi = locale === 'vi'
   const cleaned = raw.trim().replace(/^\$/, '').trim()
 
   if (!cleaned || !/^\d+(\.\d{1,2})?$/.test(cleaned)) {
-    return { error: `${label}: enter a dollar amount with at most 2 decimal places.` }
+    return {
+      error: isVi
+        ? `${label}: nhập số tiền USD với tối đa 2 chữ số thập phân.`
+        : `${label}: enter a dollar amount with at most 2 decimal places.`
+    }
   }
 
   const amount = Number(cleaned)
 
   if (!(amount > 0)) {
-    return { error: `${label}: amount must be greater than $0.` }
+    return { error: isVi ? `${label}: số tiền phải lớn hơn $0.` : `${label}: amount must be greater than $0.` }
   }
 
   const min = parseAmount(bounds.min_usd)
 
   if (min != null && amount < min) {
-    return { error: `${label}: minimum is ${formatMoney(min)}.` }
+    return {
+      error: isVi ? `${label}: tối thiểu ${formatMoney(min)}.` : `${label}: minimum is ${formatMoney(min)}.`
+    }
   }
 
   const max = parseAmount(bounds.max_usd)
 
   if (max != null && amount > max) {
-    return { error: `${label}: maximum is ${formatMoney(max)}.` }
+    return {
+      error: isVi ? `${label}: tối đa ${formatMoney(max)}.` : `${label}: maximum is ${formatMoney(max)}.`
+    }
   }
 
   return { amount }

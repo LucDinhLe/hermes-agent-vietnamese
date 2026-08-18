@@ -1,264 +1,153 @@
 <p align="center">
-  <img src="assets/banner.png" alt="Hermes Agent" width="100%">
+  <img src="assets/banner.png" alt="Hermes Vietnamese" width="100%">
 </p>
 
-# Hermes Agent ☤
+# Hermes Vietnamese
+
+**Bản cộng đồng giúp người Việt cài Hermes Agent như một ứng dụng thông thường, kết nối model của mình và bắt đầu giao việc mà không phải tự dựng môi trường lập trình.**
+
+Hermes là một AI agent có thể trò chuyện, làm việc với tệp, chạy lệnh, dùng trình duyệt, ghi nhớ qua nhiều phiên, học kỹ năng và chạy tác vụ theo lịch. Dự án này ra đời vì đường tiếp cận từ mã nguồn của Hermes Agent vẫn là một rào cản với người dùng phổ thông Việt Nam. Việc tự chuẩn bị Git, Python, Node.js, dependency, dòng lệnh và tài liệu tiếng Anh dễ làm người mới dừng lại trước khi thấy được năng lực thật của Hermes.
+
+Hermes Vietnamese đóng gói phần lõi đó thành trải nghiệm Desktop Việt/Anh có hướng dẫn rõ từ lúc tải về tới phiên làm việc đầu tiên. Dự án phục vụ người dùng cá nhân, người làm nội dung, đào tạo, nghiên cứu, vận hành và các nhóm nhỏ muốn thử một AI agent có thể thao tác trên máy dưới quyền kiểm soát của chính họ. Đây vẫn là bản pilot cộng đồng, chưa phù hợp với công việc trọng yếu cần phần mềm đã ký số, hỗ trợ thương mại hoặc cam kết bảo hành.
+
+Dự án được phát triển từ [Hermes Agent](https://github.com/NousResearch/hermes-agent) của Nous Research theo [giấy phép MIT](LICENSE), do [Lê Đình Lực](https://github.com/LucDinhLe) phát triển và duy trì như một dự án cá nhân vì cộng đồng. Đây là bản phân phối độc lập, không phải bản phát hành chính thức của Nous Research, OpenAI, Anthropic, Google, Microsoft hoặc Apple.
+
 <p align="center">
-  <a href="https://hermes-agent.nousresearch.com/">Hermes Agent</a> | <a href="https://hermes-agent.nousresearch.com/">Hermes Desktop</a>
-</p>
-<p align="center">
-  <a href="https://hermes-agent.nousresearch.com/docs/"><img src="https://img.shields.io/badge/Docs-hermes--agent.nousresearch.com-FFD700?style=for-the-badge" alt="Documentation"></a>
-  <a href="https://discord.gg/NousResearch"><img src="https://img.shields.io/badge/Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"></a>
-  <a href="https://github.com/NousResearch/hermes-agent/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT"></a>
-  <a href="https://nousresearch.com"><img src="https://img.shields.io/badge/Built%20by-Nous%20Research-blueviolet?style=for-the-badge" alt="Built by Nous Research"></a>
-  <a href="README.zh-CN.md"><img src="https://img.shields.io/badge/Lang-中文-red?style=for-the-badge" alt="中文"></a>
-  <a href="README.ur-pk.md"><img src="https://img.shields.io/badge/Lang-اردو-green?style=for-the-badge" alt="اردو"></a>
-  <a href="README.es.md"><img src="https://img.shields.io/badge/Lang-Español-orange?style=for-the-badge" alt="Español"></a>
+  <a href="https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-25"><img src="https://img.shields.io/badge/Tải_bản_vi--v0.20.0--25-Windows_%7C_macOS_%7C_Linux-F97316?style=for-the-badge" alt="Tải Hermes Vietnamese"></a>
+  <a href="README.vi.md"><img src="https://img.shields.io/badge/Hướng_dẫn-Cài_đặt_%26_kết_nối-DC2626?style=for-the-badge" alt="Hướng dẫn cài đặt và kết nối"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/Giấy_phép-MIT-16A34A?style=for-the-badge" alt="Giấy phép MIT"></a>
 </p>
 
-**The self-improving AI agent built by [Nous Research](https://nousresearch.com).** It's the only agent with a built-in learning loop — it creates skills from experience, improves them during use, nudges itself to persist knowledge, searches its own past conversations, and builds a deepening model of who you are across sessions. Run it on a $5 VPS, a GPU cluster, or serverless infrastructure that costs nearly nothing when idle. It's not tied to your laptop — talk to it from Telegram while it works on a cloud VM.
+## Điểm mạnh so với cách tự cài Hermes Agent từ mã nguồn
 
-Use any model you want — [Nous Portal](https://portal.nousresearch.com), OpenRouter, OpenAI, your own endpoint, and [many others](https://hermes-agent.nousresearch.com/docs/integrations/providers). Switch with `hermes model` — no code changes, no lock-in.
+| Nhu cầu của người dùng          | Hermes Vietnamese bổ sung                                                                                                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cài như ứng dụng thông thường   | Bộ cài có giao diện cho Windows, macOS và Linux; người dùng phổ thông không phải tự cài Git, Python, Node.js hoặc chạy lệnh để hoàn tất lần đầu.                                |
+| Bắt đầu bằng tiếng Việt         | Giao diện tiếng Việt mặc định, chuyển nhanh VI/EN; tên model, thương hiệu và giá trị kỹ thuật vẫn giữ nguyên để dễ đối chiếu tài liệu quốc tế.                                  |
+| Đi từ cài đặt tới giao việc     | Quy trình ba bước gồm chọn ngôn ngữ, chuẩn bị Hermes, kết nối model; có hướng dẫn riêng cho ChatGPT, Claude, Gemini, API key và model cục bộ.                                   |
+| Làm nhiều việc trong một cửa sổ | Tab nhiều phiên có nút `+`/`×`, danh sách phiên, Terminal tích hợp, vùng Tệp và Trình duyệt dùng chung ở panel phải.                                                            |
+| Giảm lỗi do môi trường máy      | Runtime thiết yếu, source snapshot và dependency của đúng bản phát hành được đóng gói hoặc khóa theo hợp đồng; lần chạy đầu không phụ thuộc một nhánh Git động.                 |
+| Dễ kiểm tra và phục hồi         | Có SHA-256 cho artifact, luồng repair, lựa chọn giữ/xóa dữ liệu khi gỡ cài đặt, hướng dẫn sao lưu và kênh cập nhật `vi-v*` riêng.                                               |
+| Giữ năng lực lõi Hermes         | Vẫn dùng hệ thống model, công cụ, bộ nhớ, kỹ năng, lịch chạy, AI agent phụ và Gateway của dự án gốc; bản cộng đồng tập trung vào trải nghiệm cài đặt và sử dụng cho người Việt. |
 
-<table>
-<tr><td><b>A real terminal interface</b></td><td>Full TUI with multiline editing, slash-command autocomplete, conversation history, interrupt-and-redirect, and streaming tool output.</td></tr>
-<tr><td><b>Lives where you do</b></td><td>Telegram, Discord, Slack, WhatsApp, Signal, and CLI — all from a single gateway process. Voice memo transcription, cross-platform conversation continuity.</td></tr>
-<tr><td><b>A closed learning loop</b></td><td>Agent-curated memory with periodic nudges. Autonomous skill creation after complex tasks. Skills self-improve during use. FTS5 session search with LLM summarization for cross-session recall. <a href="https://github.com/plastic-labs/honcho">Honcho</a> dialectic user modeling. Compatible with the <a href="https://agentskills.io">agentskills.io</a> open standard.</td></tr>
-<tr><td><b>Scheduled automations</b></td><td>Built-in cron scheduler with delivery to any platform. Daily reports, nightly backups, weekly audits — all in natural language, running unattended.</td></tr>
-<tr><td><b>Delegates and parallelizes</b></td><td>Spawn isolated subagents for parallel workstreams. Write Python scripts that call tools via RPC, collapsing multi-step pipelines into zero-context-cost turns.</td></tr>
-<tr><td><b>Runs anywhere, not just your laptop</b></td><td>Seven terminal backends — local, Docker, SSH, Singularity, Modal, Daytona, and Vercel Sandbox. Daytona and Modal offer serverless persistence — your agent's environment hibernates when idle and wakes on demand, costing nearly nothing between sessions. Run it on a $5 VPS or a GPU cluster.</td></tr>
-<tr><td><b>Research-ready</b></td><td>Batch trajectory generation, trajectory compression for training the next generation of tool-calling models.</td></tr>
-</table>
+Hermes Vietnamese không tặng kèm model AI, tài khoản trả phí hoặc hạn mức API. Người dùng tự chọn nhà cung cấp và chịu điều khoản, chi phí của dịch vụ đó.
 
----
+## Từ tải về đến giao việc trong ba bước
 
-## Quick Install
+### Bước 1. Tải về và cài đặt
 
-### Linux, macOS, WSL2, Termux
+> **Bản tải mặc định hiện tại:** [vi-v0.20.0-25](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-25), bản pilot cộng đồng. Windows x64 đã được cài thử bằng chính artifact công khai; năm target còn lại đã build native nhưng đang chờ thêm phản hồi máy thật. Các bộ cài hiện chưa ký số.
 
-```bash
-curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
-```
+Mở [trang phát hành vi-v0.20.0-25](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-25), chọn đúng tệp cho máy và chạy bộ cài. Trong lần mở đầu tiên:
 
-### Windows (native, PowerShell)
+1. Chọn **Tiếng Việt** hoặc **English**.
+2. Chọn cài Hermes trên máy.
+3. Chờ ứng dụng chuẩn bị môi trường chạy.
 
-> **Heads up:** Native Windows runs Hermes without WSL — CLI, gateway, TUI, and tools all work natively. If you'd rather use WSL2, the Linux/macOS one-liner above works there too. Found a bug? Please [file issues](https://github.com/NousResearch/hermes-agent/issues).
+Người dùng không cần mở Terminal, chạy lệnh hay sửa tệp cấu hình. Lần cài đầu cần Internet và có thể mất vài phút vì Hermes phải tải môi trường chạy cùng các thành phần cần thiết.
 
-Run this in PowerShell:
+Người dùng kỹ thuật có thể xem mã trình cài Windows tại [`scripts/install.ps1`](scripts/install.ps1); cài đặt bằng giao diện không yêu cầu tự chạy tệp này.
 
-```powershell
-iex (irm https://hermes-agent.nousresearch.com/install.ps1)
-```
+| Máy đang dùng                | Tải trực tiếp                                                                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Windows 10/11, chip x64      | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Windows-x64-Setup.exe)           |
+| Windows 10/11, chip ARM64    | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Windows-arm64-Setup.exe)       |
+| Mac dùng chip Apple M-series | [Bộ cài macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
+| Mac dùng chip Intel          | [Bộ cài macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-macOS-Intel.dmg)                 |
+| Ubuntu/Debian x64            | [Gói Linux x64 `.deb`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-x64.deb)                 |
+| Ubuntu/Debian ARM64          | [Gói Linux ARM64 `.deb`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-arm64.deb)             |
+| Fedora/RHEL x64              | [Gói Linux x64 `.rpm`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-x64.rpm)                 |
+| Fedora/RHEL ARM64            | [Gói Linux ARM64 `.rpm`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-arm64.rpm)             |
+| Linux khác x64               | [Gói Linux x64 `.AppImage`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-x64.AppImage)       |
+| Linux khác ARM64             | [Gói Linux ARM64 `.AppImage`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-arm64.AppImage)   |
 
-The installer handles everything: uv, Python 3.11, Node.js, ripgrep, ffmpeg, **and a portable Git Bash** (MinGit, unpacked to `%LOCALAPPDATA%\hermes\git` — no admin required, completely isolated from any system Git install). Hermes uses this bundled Git Bash to run shell commands.
+> **Windows báo `isn't commonly downloaded` hoặc chỉ hiện nút Delete?** Xem [hướng dẫn cài Windows từng bước bằng hình ảnh](docs/cai-dat-windows-bang-anh.md). Tệp sẽ không tự tiếp tục nếu chỉ chờ; người dùng cần mở **See more**, bấm mũi tên cạnh **Delete** và chọn **Keep anyway**.
 
-If you already have Git installed, the installer detects it and uses that instead. Otherwise a ~45MB MinGit download is all you need — it won't touch or interfere with any system Git.
+| Edge báo tệp chưa được tải phổ biến                                                     | Mở mũi tên cạnh Delete và chọn Keep anyway                                              |
+| --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| ![Edge yêu cầu bấm See more](docs/assets/windows-install/edge-warning-see-more-v25.jpg) | ![Edge hiện lựa chọn Keep anyway](docs/assets/windows-install/edge-keep-anyway-v25.jpg) |
 
-> **Android / Termux:** The tested manual path is documented in the [Termux guide](https://hermes-agent.nousresearch.com/docs/getting-started/termux). On Termux, Hermes installs a curated `.[termux]` extra because the full `.[all]` extra currently pulls Android-incompatible voice dependencies.
->
-> **Windows:** Native Windows is fully supported — the PowerShell one-liner above installs everything. If you'd rather use WSL2, the Linux command works there too. Native Windows install lives under `%LOCALAPPDATA%\hermes`; WSL2 installs under `~/.hermes` as on Linux.
+`Publisher: Unknown` hiện vì bộ cài chưa ký số. Chỉ bỏ chặn khi tải đúng kho này và SHA-256 khớp; nếu Microsoft Defender nêu tên một mối đe dọa cụ thể thì dừng cài đặt. Không tắt SmartScreen hoặc Defender trên toàn máy.
 
-After installation:
+### Kiểm tra máy trước khi tải
 
-```bash
-source ~/.bashrc    # reload shell (or: source ~/.zshrc)
-hermes              # start chatting!
-```
+- **Windows:** nhấn `Windows + I` → **Hệ thống → Giới thiệu**. Máy cần Windows 10/11 bản 64-bit. Dòng **Loại hệ thống** ghi `x64-based processor` thì tải x64; ghi `ARM-based processor` thì tải ARM64.
+- **macOS:** mở menu ** → About This Mac/Giới thiệu về máy Mac**. Máy cần macOS 12 trở lên. Dòng **Chip** bắt đầu bằng `Apple M` thì tải Apple Silicon; dòng **Processor** ghi `Intel` thì tải bản Intel.
+- **Linux:** mở **Settings → About** để xem kiến trúc. `x86_64` tương ứng x64; `aarch64` hoặc `arm64` tương ứng ARM64. Nếu giao diện không hiển thị, có thể chạy `uname -m` trong Terminal.
 
-### Troubleshooting
+Xem thêm [hướng dẫn kiểm tra cấu hình, cài đặt và xử lý SmartScreen/Gatekeeper](README.vi.md#kiểm-tra-máy-có-phù-hợp-không).
 
-#### Windows Defender or antivirus flags `uv.exe` as malware
+### Bước 2. Kết nối model
 
-If your antivirus (Bitdefender, Windows Defender, etc.) quarantines `uv.exe` from the Hermes `bin` folder (`%LOCALAPPDATA%\hermes\bin\uv.exe`), this is a **false positive**. The file is Astral's `uv` — the Rust Python package manager Hermes bundles to manage its Python environment. ML-based antivirus engines commonly flag unsigned Rust binaries that download and install packages.
+Màn **Kết nối model** hiện ngay ba lựa chọn phổ biến, theo thứ tự dễ hiểu:
 
-**To verify your copy is authentic:**
+1. **OpenAI OAuth (ChatGPT)** dùng tài khoản ChatGPT của bạn.
+2. **Claude Pro / Max (qua Claude Code)** dùng tài khoản Claude Pro hoặc Max của bạn.
+3. **Google Gemini (khóa API)** dùng khóa tạo tại Google AI Studio.
 
-```powershell
-# Install GitHub CLI if needed
-winget install --id GitHub.cli
+Ngay bên dưới là toàn bộ kết nối tài khoản và khóa API mà bản Hermes đang cài hỗ trợ. Danh sách tự lấy từ lõi Hermes nên các nhà cung cấp mới sẽ xuất hiện mà không cần sửa riêng giao diện tiếng Việt. Bạn cũng có thể chọn **Tôi sẽ chọn nhà cung cấp sau** để vào ứng dụng trước.
 
-# Login to GitHub
-gh auth login
+| Lựa chọn          | Bạn cần có                                       | Cách tính phí                                                                                  |
+| ----------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| ChatGPT OAuth     | Tài khoản ChatGPT có quyền dùng Codex            | Theo gói và giới hạn của tài khoản ChatGPT                                                     |
+| Claude Pro / Max  | Gói Claude Pro hoặc Max và đăng nhập Claude Code | Dùng quyền lợi gói Claude; cầu nối từ chối Extra Usage để tránh chuyển sang mức dùng tính thêm |
+| Google Gemini     | Khóa API Google AI Studio                        | Theo hạn mức miễn phí hoặc thanh toán API của Google AI Studio                                 |
+| Anthropic API     | Khóa API Anthropic                               | Tính phí API riêng, không dùng chung gói Claude Pro/Max                                        |
+| Nhà cung cấp khác | Tài khoản hoặc khóa tương ứng                    | Theo chính sách của dịch vụ bạn chọn                                                           |
 
-# Run verification
-$uv = "$env:LOCALAPPDATA\hermes\bin\uv.exe"
-$ver = (& $uv --version).Split(' ')[1]
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$zip = "$env:TEMP\uv.zip"
-Invoke-WebRequest "https://github.com/astral-sh/uv/releases/download/$ver/uv-x86_64-pc-windows-msvc.zip" -OutFile $zip -UseBasicParsing
-gh attestation verify $zip --repo astral-sh/uv
-Expand-Archive $zip "$env:TEMP\uv_x" -Force
-(Get-FileHash "$env:TEMP\uv_x\uv.exe").Hash -eq (Get-FileHash $uv).Hash
-```
+Hermes không tặng kèm gói model trả phí. Mỗi người tự đăng nhập tài khoản hoặc nhập khóa API của mình. Gemini dùng Google AI Studio API key hoặc Google Vertex AI; Hermes không dùng OAuth của Gemini CLI vì [điều khoản Gemini CLI không cho phần mềm bên thứ ba dùng lại dịch vụ qua OAuth này](https://github.com/google-gemini/gemini-cli/blob/main/docs/resources/tos-privacy.md). Xem thao tác từng bước tại [Kết nối ChatGPT, Claude và Gemini](README.vi.md#kết-nối-chatgpt-claude-và-gemini).
 
-If attestation says "Verification succeeded" and the last line prints `True`, you're good.
+### Bước 3. Bắt đầu giao việc
 
-**To whitelist Hermes:**
-- **Windows Defender:** Run PowerShell as Admin → `Add-MpPreference -ExclusionPath "$env:LOCALAPPDATA\hermes\bin"`
-- **Bitdefender:** Add an exception in the Bitdefender console (Protection > Antivirus > Settings > Manage Exceptions)
-- Whitelist the **folder**, not the file hash — Hermes updates `uv` and the hash changes every version
+Chọn model mặc định rồi giao một mục tiêu bằng tiếng Việt hoặc ngôn ngữ bạn muốn. Sau thiết lập, Hermes mở không gian làm việc đầy đủ với:
 
-For more context, see the upstream Astral reports: [astral-sh/uv#13553](https://github.com/astral-sh/uv/issues/13553), [astral-sh/uv#15011](https://github.com/astral-sh/uv/issues/15011), [astral-sh/uv#10079](https://github.com/astral-sh/uv/issues/10079).
+- Hội thoại và tác vụ nhiều bước.
+- Đọc, tạo và chỉnh sửa tệp theo quyền được cấp.
+- Terminal tích hợp, công cụ trình duyệt, kỹ năng và bộ nhớ.
+- AI agent phụ, lịch chạy và kết nối nền tảng nhắn tin khi được cấu hình.
 
----
+## Hermes có thể làm gì?
 
-## Getting Started
+| Khả năng              | Mô tả                                                                                                                         |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Làm việc với máy tính | Đọc và sửa tệp, chạy lệnh, duyệt web và thực thi mã theo quyền người dùng cấp.                                                |
+| Bộ nhớ và kỹ năng     | Ghi nhớ qua nhiều phiên, tìm lại hội thoại và tạo hoặc cải thiện kỹ năng từ trải nghiệm.                                      |
+| Nhiều nhà cung cấp AI | Kết nối ChatGPT, Claude Pro/Max, Gemini API, Nous Portal, OpenRouter, Bedrock, Vertex AI và nhiều điểm cuối tương thích khác. |
+| Tự động hóa           | Tạo lịch chạy, giao việc cho AI agent phụ và gửi kết quả tới các kênh đã cấu hình.                                            |
+| Nền tảng nhắn tin     | Có thể kết nối Telegram, Discord, Slack, WhatsApp và các nền tảng khác qua Gateway.                                           |
+| Nhiều môi trường chạy | Hỗ trợ máy cá nhân, Docker, SSH và một số môi trường máy chủ từ xa.                                                           |
 
-```bash
-hermes              # Interactive CLI — start a conversation
-hermes model        # Choose your LLM provider and model
-hermes tools        # Configure which tools are enabled
-hermes config set   # Set individual config values
-hermes config get   # Print individual config values
-hermes gateway      # Start the messaging gateway (Telegram, Discord, etc.)
-hermes setup        # Run the full setup wizard (configures everything at once)
-hermes claw migrate # Migrate from OpenClaw (if coming from OpenClaw)
-hermes update       # Update to the latest version
-hermes doctor       # Diagnose any issues
-```
+Tài liệu kỹ thuật đầy đủ của dự án gốc nằm tại [hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/).
 
-📖 **[Full documentation →](https://hermes-agent.nousresearch.com/docs/)**
+## Riêng tư và dữ liệu đăng nhập
 
----
+**Thông tin đăng nhập và dữ liệu của mỗi người được lưu riêng trên máy của mình.** Bộ cài không chứa tài khoản, khóa API, mã OAuth hoặc lịch sử trò chuyện của người đóng gói. Dự án này không vận hành máy chủ tập trung để thu thập thông tin đăng nhập của người dùng.
 
-## Skip the API-key collection — Nous Portal
+Khi bạn gửi yêu cầu tới một nhà cung cấp AI hoặc dịch vụ mạng, nội dung cần thiết sẽ được dịch vụ đã chọn xử lý theo điều khoản và chính sách quyền riêng tư của họ. AI agent có thể chạy lệnh và thao tác với tệp trong phạm vi được cấp, vì vậy hãy đọc yêu cầu quyền trước khi chấp thuận và kiểm tra kết quả trước các thao tác quan trọng.
 
-Hermes works with whatever provider you want — that's not changing. But if you'd rather not collect five separate API keys for the model, web search, image generation, TTS, and a cloud browser, **[Nous Portal](https://portal.nousresearch.com)** covers all of them under one subscription:
+## Trạng thái ký số của bộ cài
 
-- **300+ models** — pick any of them with `/model <name>`
-- **Tool Gateway** — web search (Firecrawl), image generation (FAL), text-to-speech (OpenAI), cloud browser (Browser Use), all routed through your sub. No extra accounts.
+Dự án **đã nộp hồ sơ và đang chờ xét duyệt** chương trình ký mã miễn phí dành cho phần mềm mã nguồn mở của SignPath Foundation. Trong thời gian chờ, các bản phát hành hiện tại chưa có chữ ký số xác minh nhà phát hành, nên Windows SmartScreen hoặc macOS Gatekeeper có thể cảnh báo.
 
-One command from a fresh install:
+Đây là trạng thái kỹ thuật tạm thời trong quá trình hoàn thiện ký số, không có nghĩa Microsoft hoặc Apple đã từ chối dự án hay phần mềm không được phép cài. Chứng thư ký mã dùng để xác minh nguồn phát hành; nó không phải giấy phép sử dụng phần mềm do Microsoft hoặc Apple cấp.
 
-```bash
-hermes setup --portal
-```
+Chỉ tải từ [trang phát hành chính thức của kho này](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases) và đối chiếu mã trong `SHA256SUMS.txt` trước khi cài. Không tắt cơ chế bảo mật của hệ điều hành trên toàn máy. Xem [chính sách ký mã](CODE_SIGNING_POLICY.md) và [hướng dẫn xử lý cảnh báo](README.vi.md#trạng-thái-ký-số-và-cảnh-báo-khi-cài).
 
-That logs you in via OAuth, sets Nous as your provider, and turns on the Tool Gateway. Check what's wired up any time with `hermes portal info`. Full details on the [Tool Gateway docs page](https://hermes-agent.nousresearch.com/docs/user-guide/features/tool-gateway).
+## Cập nhật và giữ phần tiếng Việt
 
-You can still bring your own keys per-tool whenever you want — the gateway is per-backend, not all-or-nothing.
+Bản cộng đồng nhận cập nhật từ kho `LucDinhLe/hermes-agent-vietnamese`. Thay đổi từ Hermes Agent gốc được rà soát, kiểm thử rồi đồng bộ vào nhánh này để hạn chế làm mất lớp Việt hóa và các điều chỉnh tương thích.
 
----
+Tài khoản, cấu hình, phiên làm việc và bộ nhớ nằm trong thư mục dữ liệu người dùng, tách khỏi tệp ứng dụng. Cập nhật bộ cài không chủ động xóa dữ liệu đó. Trước thay đổi lớn hoặc khi chuyển máy, mở **Trung tâm chỉ huy → Bảo trì → Tạo bản sao lưu** rồi giữ tệp `.zip` ở nơi an toàn. Xem [hướng dẫn sao lưu và khôi phục](docs/sao-luu-khoi-phuc.md).
 
-## CLI vs Messaging Quick Reference
+## Nguồn gốc, giấy phép và miễn trừ
 
-Hermes has two entry points: start the terminal UI with `hermes`, or run the gateway and talk to it from Telegram, Discord, Slack, WhatsApp, Signal, or Email. Once you're in a conversation, many slash commands are shared across both interfaces.
+Dự án được phát triển từ [Hermes Agent](https://github.com/NousResearch/hermes-agent) của [Nous Research](https://nousresearch.com) theo giấy phép MIT. Giấy phép, kiến trúc, thuật toán và tính năng lõi vẫn thuộc phạm vi của dự án gốc. Bản cộng đồng bổ sung lớp Việt hóa, tài liệu, đóng gói đa nền tảng và một số điều chỉnh tương thích cho người dùng Việt.
 
-| Action                         | CLI                                           | Messaging platforms                                                              |
-| ------------------------------ | --------------------------------------------- | -------------------------------------------------------------------------------- |
-| Start chatting                 | `hermes`                                      | Run `hermes gateway setup` + `hermes gateway start`, then send the bot a message |
-| Start fresh conversation       | `/new` or `/reset`                            | `/new` or `/reset`                                                               |
-| Change model                   | `/model [provider:model]`                     | `/model [provider:model]`                                                        |
-| Set a personality              | `/personality [name]`                         | `/personality [name]`                                                            |
-| Retry or undo the last turn    | `/retry`, `/undo`                             | `/retry`, `/undo`                                                                |
-| Compress context / check usage | `/compress`, `/usage`, `/insights [--days N]` | `/compress`, `/usage`, `/insights [days]`                                        |
-| Browse skills                  | `/skills` or `/<skill-name>`                  | `/<skill-name>`                                                                  |
-| Interrupt current work         | `Ctrl+C` or send a new message                | `/stop` or send a new message                                                    |
-| Platform-specific status       | `/platforms`                                  | `/status`, `/sethome`                                                            |
+Phần mềm được cung cấp theo nguyên trạng, không kèm cam kết bảo hành. Kết quả AI có thể sai; dịch vụ bên thứ ba có thể thay đổi model, giới hạn hoặc chính sách. Người dùng chịu trách nhiệm kiểm tra kết quả và quyền đã cấp. Xem [LICENSE](LICENSE) và [miễn trừ trách nhiệm bằng tiếng Việt](DISCLAIMER.md).
 
-For the full command lists, see the [CLI guide](https://hermes-agent.nousresearch.com/docs/user-guide/cli) and the [Messaging Gateway guide](https://hermes-agent.nousresearch.com/docs/user-guide/messaging).
+## Báo lỗi và đóng góp
 
----
-
-## Documentation
-
-All documentation lives at **[hermes-agent.nousresearch.com/docs](https://hermes-agent.nousresearch.com/docs/)**:
-
-| Section                                                                                             | What's Covered                                             |
-| --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| [Quickstart](https://hermes-agent.nousresearch.com/docs/getting-started/quickstart)                 | Install → setup → first conversation in 2 minutes          |
-| [CLI Usage](https://hermes-agent.nousresearch.com/docs/user-guide/cli)                              | Commands, keybindings, personalities, sessions             |
-| [Configuration](https://hermes-agent.nousresearch.com/docs/user-guide/configuration)                | Config file, providers, models, all options                |
-| [Messaging Gateway](https://hermes-agent.nousresearch.com/docs/user-guide/messaging)                | Telegram, Discord, Slack, WhatsApp, Signal, Home Assistant |
-| [Security](https://hermes-agent.nousresearch.com/docs/user-guide/security)                          | Command approval, DM pairing, container isolation          |
-| [Tools & Toolsets](https://hermes-agent.nousresearch.com/docs/user-guide/features/tools)            | 40+ tools, toolset system, terminal backends               |
-| [Skills System](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills)              | Procedural memory, Skills Hub, creating skills             |
-| [Memory](https://hermes-agent.nousresearch.com/docs/user-guide/features/memory)                     | Persistent memory, user profiles, best practices           |
-| [MCP Integration](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp)               | Connect any MCP server for extended capabilities           |
-| [Cron Scheduling](https://hermes-agent.nousresearch.com/docs/user-guide/features/cron)              | Scheduled tasks with platform delivery                     |
-| [Context Files](https://hermes-agent.nousresearch.com/docs/user-guide/features/context-files)       | Project context that shapes every conversation             |
-| [Architecture](https://hermes-agent.nousresearch.com/docs/developer-guide/architecture)             | Project structure, agent loop, key classes                 |
-| [Contributing](https://hermes-agent.nousresearch.com/docs/developer-guide/contributing)             | Development setup, PR process, code style                  |
-| [CLI Reference](https://hermes-agent.nousresearch.com/docs/reference/cli-commands)                  | All commands and flags                                     |
-| [Environment Variables](https://hermes-agent.nousresearch.com/docs/reference/environment-variables) | Complete env var reference                                 |
-
----
-
-## Migrating from OpenClaw
-
-If you're coming from OpenClaw, Hermes can automatically import your settings, memories, skills, and API keys.
-
-**During first-time setup:** The setup wizard (`hermes setup`) automatically detects `~/.openclaw` and offers to migrate before configuration begins.
-
-**Anytime after install:**
-
-```bash
-hermes claw migrate              # Interactive migration (full preset)
-hermes claw migrate --dry-run    # Preview what would be migrated
-hermes claw migrate --preset user-data   # Migrate without secrets
-hermes claw migrate --overwrite  # Overwrite existing conflicts
-```
-
-What gets imported:
-
-- **SOUL.md** — persona file
-- **Memories** — MEMORY.md and USER.md entries
-- **Skills** — user-created skills → `~/.hermes/skills/openclaw-imports/`
-- **Command allowlist** — approval patterns
-- **Messaging settings** — platform configs, allowed users, working directory
-- **API keys** — allowlisted secrets (Telegram, OpenRouter, OpenAI, Anthropic, ElevenLabs)
-- **TTS assets** — workspace audio files
-- **Workspace instructions** — AGENTS.md (with `--workspace-target`)
-
-See `hermes claw migrate --help` for all options, or use the `openclaw-migration` skill for an interactive agent-guided migration with dry-run previews.
-
----
-
-## Contributing
-
-We welcome contributions! See the [Contributing Guide](https://hermes-agent.nousresearch.com/docs/developer-guide/contributing) for development setup, code style, and PR process.
-
-Quick start for contributors — use the standard installer, then work from the
-full git checkout it creates at `$HERMES_HOME/hermes-agent` (usually
-`~/.hermes/hermes-agent`). This matches the layout used by `hermes update`, the
-managed venv, lazy dependencies, gateway, and docs tooling.
-
-```bash
-curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
-cd "${HERMES_HOME:-$HOME/.hermes}/hermes-agent"
-uv pip install -e ".[all,dev]"
-scripts/run_tests.sh
-```
-
-Manual clone fallback (for throwaway clones/CI where you intentionally do not
-want the managed install layout):
-
-Create the venv outside the cloned source tree — a venv inside the directory
-the agent operates from can be wiped by a relative-path command the agent runs
-against its own checkout, destroying the running runtime mid-session.
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv venv ~/.hermes/venvs/hermes-dev --python 3.11
-source ~/.hermes/venvs/hermes-dev/bin/activate
-uv pip install -e ".[all,dev]"
-scripts/run_tests.sh
-```
-
----
-
-## Community
-
-- 💬 [Discord](https://discord.gg/NousResearch)
-- 📚 [Skills Hub](https://agentskills.io)
-- 🐛 [Issues](https://github.com/NousResearch/hermes-agent/issues)
-- 🔌 [computer-use-linux](https://github.com/avifenesh/computer-use-linux) — Linux desktop-control MCP server for Hermes and other MCP hosts, with AT-SPI accessibility trees, Wayland/X11 input, screenshots, and compositor window targeting.
-- 🔌 [HermesClaw](https://github.com/AaronWong1999/hermesclaw) — Community WeChat bridge: Run Hermes Agent and OpenClaw on the same WeChat account.
-
----
-
-## License
-
-MIT — see [LICENSE](LICENSE).
-
-Built by [Nous Research](https://nousresearch.com).
+- [Báo lỗi cài đặt, kết nối hoặc bản dịch](https://github.com/LucDinhLe/hermes-agent-vietnamese/issues)
+- [Đọc hướng dẫn đầy đủ bằng tiếng Việt](README.vi.md)
+- [Xem phạm vi bảo trì](MAINTAINERS.md)
+- Báo cáo vấn đề bảo mật theo [SECURITY.md](SECURITY.md). Không đăng khóa API, mã OAuth hoặc dữ liệu cá nhân trong issue công khai.

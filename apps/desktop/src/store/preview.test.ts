@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { $rightRailActiveTabId } from './layout'
+import {
+  $fileBrowserOpen,
+  $rightRailActiveTabId,
+  $rightSidebarView,
+  setFileBrowserOpen,
+  setRightSidebarView
+} from './layout'
 import {
   $previewServerRestart,
   $previewServerRestartStatus,
@@ -10,7 +16,10 @@ import {
   closePreviewForSource,
   closeRightRail,
   closeRightRailTab,
+  decodePreviewTabs,
+  openNewBrowserTab,
   openPreview,
+  openSharedBrowser,
   previewTabId,
   type PreviewTarget,
   progressPreviewServerRestart
@@ -32,12 +41,16 @@ describe('preview store', () => {
   beforeEach(() => {
     $previewServerRestart.set(null)
     closeRightRail()
+    setFileBrowserOpen(false)
+    setRightSidebarView('files')
     window.localStorage.clear()
   })
 
   afterEach(() => {
     $previewServerRestart.set(null)
     closeRightRail()
+    setFileBrowserOpen(false)
+    setRightSidebarView('files')
     window.localStorage.clear()
   })
 
@@ -68,18 +81,85 @@ describe('preview store', () => {
     expect($previewTabs.get().map(tab => tab.target.kind)).toEqual(['file', 'url', 'artifact'])
   })
 
-  // The Browser is a SINGLETON: the tab names the surface, not the page, so a
-  // second URL navigates the browser it already has instead of stacking a
-  // second Browser tab beside the first.
-  it('keeps one Browser tab — a second url swaps its target instead of adding a tab', () => {
+  it('navigates the selected Browser tab when another url is opened', () => {
     openPreview(urlTarget('https://news.ycombinator.com'), 'tool-result')
+    openNewBrowserTab()
     openPreview(urlTarget('https://www.reddit.com'), 'tool-result')
 
     const urlTabs = $previewTabs.get().filter(tab => tab.target.kind === 'url')
 
-    expect(urlTabs).toHaveLength(1)
-    expect(urlTabs[0].target.url).toBe('https://www.reddit.com')
-    expect($rightRailActiveTabId.get()).toBe(urlTabs[0].id)
+    expect(urlTabs).toHaveLength(2)
+    expect(urlTabs[0].target.url).toBe('https://news.ycombinator.com')
+    expect(urlTabs[1].target.url).toBe('https://www.reddit.com')
+    expect($rightRailActiveTabId.get()).toBe(urlTabs[1].id)
+  })
+
+  it('adds independently closeable Browser tabs and fronts the new one', () => {
+    openSharedBrowser()
+    const firstId = $rightRailActiveTabId.get()
+
+    openNewBrowserTab()
+    const secondId = $rightRailActiveTabId.get()
+
+    expect($previewTabs.get().filter(tab => tab.target.kind === 'url')).toHaveLength(2)
+    expect(secondId).not.toBe(firstId)
+
+    closeRightRailTab(secondId!)
+
+    expect($previewTabs.get().filter(tab => tab.target.kind === 'url')).toHaveLength(1)
+    expect($rightRailActiveTabId.get()).toBe(firstId)
+  })
+
+  it('routes web targets into the visible right-hand Browser surface', () => {
+    openPreview(urlTarget('https://facebook.com'), 'tool-result')
+
+    expect($rightSidebarView.get()).toBe('browser')
+    expect($fileBrowserOpen.get()).toBe(true)
+    expect($previewTarget.get()?.url).toBe('https://facebook.com')
+  })
+
+  it('opens the shared Browser home once, then returns to its existing page', () => {
+    openSharedBrowser()
+    const first = $previewTabs.get().find(tab => tab.target.kind === 'url')
+
+    expect(first?.target.url).toBe('https://www.google.com/')
+
+    openPreview(urlTarget('https://facebook.com'), 'manual')
+    setRightSidebarView('files')
+    openSharedBrowser()
+
+    const browserTabs = $previewTabs.get().filter(tab => tab.target.kind === 'url')
+    expect(browserTabs).toHaveLength(1)
+    expect(browserTabs[0].target.url).toBe('https://facebook.com')
+    expect($rightSidebarView.get()).toBe('browser')
+  })
+
+  it('rekeys the legacy Browser pane so an upgrade can adopt it into the corrected workspace location', () => {
+    const browser = urlTarget('https://facebook.com')
+    const restored = decodePreviewTabs(JSON.stringify([{ id: 'url:browser', target: browser }]))
+
+    expect(restored).toHaveLength(1)
+    expect(restored[0].id).toBe(previewTabId(browser))
+    expect(restored[0].target.url).toBe('https://facebook.com')
+  })
+
+  it('preserves multiple persisted Browser tabs with unique ids', () => {
+    const restored = decodePreviewTabs(
+      JSON.stringify([
+        { id: 'url:browser', target: urlTarget('https://one.example') },
+        { id: 'url:https://two.example', target: urlTarget('https://two.example') }
+      ])
+    )
+
+    expect(restored.map(tab => tab.target.url)).toEqual(['https://one.example', 'https://two.example'])
+    expect(new Set(restored.map(tab => tab.id))).toHaveLength(2)
+  })
+
+  it('returns to files when the final Browser tab closes', () => {
+    openSharedBrowser()
+    closeRightRailTab($rightRailActiveTabId.get()!)
+
+    expect($rightSidebarView.get()).toBe('files')
   })
 
   it('re-fronts an existing tab instead of duplicating it, refreshing its target', () => {

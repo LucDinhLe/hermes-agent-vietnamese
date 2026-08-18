@@ -78,7 +78,18 @@ export async function renameSessionPreferringRpc(
   title: string,
   profile?: string
 ): Promise<{ title?: string }> {
-  const isActiveRow = storedSessionId === $selectedStoredSessionId.get()
+  const selectedStoredSessionId = $selectedStoredSessionId.get()
+
+  const isActiveRow =
+    storedSessionId === selectedStoredSessionId ||
+    (selectedStoredSessionId != null &&
+      $sessions
+        .get()
+        .some(
+          session =>
+            sessionMatchesStoredId(session, storedSessionId) && sessionMatchesStoredId(session, selectedStoredSessionId)
+        ))
+
   const runtimeId = isActiveRow ? $activeSessionId.get() : null
   const gateway = activeGateway()
 

@@ -56,6 +56,38 @@ function toError(error: unknown): Error {
 }
 
 const RTL_LOCALES = new Set<Locale>(['ar'])
+const FIRST_RUN_LOCALE: Locale = 'vi'
+export const FIRST_RUN_LOCALE_KEY = 'hermes-first-run-locale-v1'
+
+function readFirstRunLocale(): Locale | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const value = window.localStorage.getItem(FIRST_RUN_LOCALE_KEY)
+
+    return value ? normalizeLocale(value) : null
+  } catch {
+    return null
+  }
+}
+
+function writeFirstRunLocale(locale: Locale | null) {
+  if (typeof window === 'undefined') {
+    return
+  }
+
+  try {
+    if (locale) {
+      window.localStorage.setItem(FIRST_RUN_LOCALE_KEY, locale)
+    } else {
+      window.localStorage.removeItem(FIRST_RUN_LOCALE_KEY)
+    }
+  } catch {
+    // The language still changes for this window when storage is unavailable.
+  }
+}
 
 function applyDocumentLocale(locale: Locale) {
   if (typeof document === 'undefined') {
@@ -72,6 +104,7 @@ export interface I18nContextValue {
   isSavingLocale: boolean
   locale: Locale
   saveError: Error | null
+  previewLocale: (next: Locale) => void
   setLocale: (next: Locale) => Promise<void>
   t: Translations
 }
@@ -82,6 +115,7 @@ const I18nContext = createContext<I18nContextValue>({
   isSavingLocale: false,
   locale: DEFAULT_LOCALE,
   saveError: null,
+  previewLocale: () => {},
   setLocale: async () => {},
   t: TRANSLATIONS[DEFAULT_LOCALE]
 })
@@ -93,7 +127,10 @@ export interface I18nProviderProps {
 }
 
 export function I18nProvider({ children, configClient = defaultConfigClient, initialLocale }: I18nProviderProps) {
-  const [locale, setLocaleState] = useState<Locale>(() => normalizeLocale(initialLocale))
+  const [locale, setLocaleState] = useState<Locale>(() =>
+    normalizeLocale(initialLocale ?? readFirstRunLocale() ?? FIRST_RUN_LOCALE)
+  )
+
   const [isLoadingConfig, setIsLoadingConfig] = useState(false)
   const [isSavingLocale, setIsSavingLocale] = useState(false)
   const [configLoadError, setConfigLoadError] = useState<Error | null>(null)
@@ -121,13 +158,26 @@ export function I18nProvider({ children, configClient = defaultConfigClient, ini
       .getConfig()
       .then(config => {
         if (!cancelled) {
-          setLocaleState(normalizeLocale(getConfigDisplayLanguage(config)))
+          const configuredLanguage = getConfigDisplayLanguage(config)
+
+          // The community build opens in Vietnamese on a fresh profile while
+          // preserving English as the technical fallback for missing strings,
+          // plugins, unsupported values, and config-load failures.
+          setLocaleState(
+            configuredLanguage == null
+              ? (readFirstRunLocale() ?? FIRST_RUN_LOCALE)
+              : normalizeLocale(configuredLanguage)
+          )
         }
       })
       .catch(error => {
         if (!cancelled) {
           setConfigLoadError(toError(error))
-          setLocaleState(DEFAULT_LOCALE)
+          // The backend is intentionally unavailable during first install and
+          // managed release refreshes. Keep the cached choice (Vietnamese on a
+          // fresh community profile) so the setup/progress UI does not flash
+          // back to English while Hermes is being prepared.
+          setLocaleState(readFirstRunLocale() ?? FIRST_RUN_LOCALE)
         }
       })
       .finally(() => {
@@ -140,6 +190,12 @@ export function I18nProvider({ children, configClient = defaultConfigClient, ini
       cancelled = true
     }
   }, [configClient, initialLocale])
+
+  const previewLocale = useCallback((next: Locale) => {
+    setSaveError(null)
+    setLocaleState(next)
+    writeFirstRunLocale(next)
+  }, [])
 
   const setLocale = useCallback(
     async (next: Locale) => {
@@ -161,6 +217,11 @@ export function I18nProvider({ children, configClient = defaultConfigClient, ini
         if (!result.ok) {
           throw new Error('Failed to save language')
         }
+
+        // Keep a local cache as an early-boot hint. Backend config remains
+        // authoritative once it is reachable, while install/update screens can
+        // render in the user's chosen language before that request succeeds.
+        writeFirstRunLocale(next)
       } catch (error) {
         const nextError = toError(error)
 
@@ -181,11 +242,12 @@ export function I18nProvider({ children, configClient = defaultConfigClient, ini
       isLoadingConfig,
       isSavingLocale,
       locale,
+      previewLocale,
       saveError,
       setLocale,
       t: TRANSLATIONS[locale]
     }),
-    [configLoadError, isLoadingConfig, isSavingLocale, locale, saveError, setLocale]
+    [configLoadError, isLoadingConfig, isSavingLocale, locale, previewLocale, saveError, setLocale]
   )
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>

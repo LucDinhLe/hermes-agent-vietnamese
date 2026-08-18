@@ -108,6 +108,11 @@ export type GatewayEventPayload = {
   // in-app terminal pane or the browser/preview pane)
   start?: number
   count?: number
+  // preview.interact.request (agent controlling the same live Browser pane)
+  action?: string
+  delta_y?: number
+  key?: string
+  ref?: string
   // status.update (kind=process → background process completion/watch-match)
   kind?: string
   // pane.reveal (agent focusing a desktop pane via the focus_pane tool)

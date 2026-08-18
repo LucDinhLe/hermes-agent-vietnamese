@@ -14,7 +14,7 @@ interface ReferenceChipProps {
 // The reference photo as an attachment chip: filename + thumbnail that opens
 // the shared image viewer (lightbox), with a remove affordance.
 export function ReferenceChip({ name, onRemove, src }: ReferenceChipProps) {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const { download, saving } = useImageDownload(src)
   const [viewing, setViewing] = useState(false)
 
@@ -24,9 +24,11 @@ export function ReferenceChip({ name, onRemove, src }: ReferenceChipProps) {
         <img alt={name} className="size-4 rounded-md object-cover" src={src} />
       </button>
 
-      <span className="max-w-40 truncate text-[0.64rem] font-medium text-foreground/50">{name || 'Reference'}</span>
+      <span className="max-w-40 truncate text-[0.64rem] font-medium text-foreground/50">
+        {name || (locale === 'vi' ? 'Ảnh tham chiếu' : 'Reference')}
+      </span>
       <button
-        aria-label="Remove reference"
+        aria-label={locale === 'vi' ? 'Xóa ảnh tham chiếu' : 'Remove reference'}
         className="text-(--ui-text-tertiary) transition not-hover:opacity-50"
         onClick={onRemove}
         type="button"

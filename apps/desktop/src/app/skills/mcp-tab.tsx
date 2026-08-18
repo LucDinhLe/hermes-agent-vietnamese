@@ -1553,7 +1553,7 @@ function McpCatalog({
   onInstalled: () => void
   profile?: null | string
 }) {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const m = t.settings.mcp
   const [installing, setInstalling] = useState<null | string>(null)
   const [envDrafts, setEnvDrafts] = useState<Record<string, Record<string, string>>>({})
@@ -1641,7 +1641,7 @@ function McpCatalog({
                   </span>
                   <CatalogTag>{entry.transport}</CatalogTag>
                   {entry.auth_type === 'oauth' && <CatalogTag>OAuth</CatalogTag>}
-                  {entry.auth_type === 'api_key' && <CatalogTag>API key</CatalogTag>}
+                  {entry.auth_type === 'api_key' && <CatalogTag>{locale === 'vi' ? 'Khóa API' : 'API key'}</CatalogTag>}
                   {entry.needs_install && !entry.installed && <CatalogTag>{m.catalogNeedsInstall}</CatalogTag>}
                   {entry.installed && (
                     <span className="text-[0.6rem] text-emerald-400">
