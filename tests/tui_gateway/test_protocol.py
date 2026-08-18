@@ -315,7 +315,15 @@ def test_block_and_respond(capture):
 
 @pytest.mark.parametrize(
     "event",
-    ["secret.request", "sudo.request", "clarify.request", "terminal.read.request"],
+    [
+        "secret.request",
+        "sudo.request",
+        "clarify.request",
+        "terminal.read.request",
+        "preview.read.request",
+        "preview.interact.request",
+        "window.read.request",
+    ],
 )
 def test_sensitive_prompt_timeout_emits_expiry(capture, event):
     server, buf = capture
@@ -337,6 +345,9 @@ def test_sensitive_prompt_timeout_emits_expiry(capture, event):
         ("sudo.respond", "password"),
         ("clarify.respond", "answer"),
         ("terminal.read.respond", "text"),
+        ("preview.read.respond", "text"),
+        ("preview.interact.respond", "text"),
+        ("window.read.respond", "text"),
     ],
 )
 def test_late_prompt_response_is_idempotent(server, method, value_key):

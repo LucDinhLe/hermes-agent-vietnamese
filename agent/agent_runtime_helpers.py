@@ -99,7 +99,18 @@ def _ra():
 
 
 AGENT_RUNTIME_POST_HOOK_TOOL_NAMES = frozenset(
-    {"todo", "session_search", "memory", "clarify", "read_terminal", "read_preview", "read_window_below", "setup_mcp", "delegate_task"}
+    {
+        "todo",
+        "session_search",
+        "memory",
+        "clarify",
+        "read_terminal",
+        "read_preview",
+        "interact_preview",
+        "read_window_below",
+        "setup_mcp",
+        "delegate_task",
+    }
 )
 
 
@@ -3223,6 +3234,20 @@ def invoke_tool(agent, function_name: str, function_args: dict, effective_task_i
                     start=next_args.get("start"),
                     count=next_args.get("count"),
                     callback=getattr(agent, "read_preview_callback", None),
+                ),
+                next_args,
+            )
+    elif function_name == "interact_preview":
+        def _execute(next_args: dict) -> Any:
+            from tools.interact_preview_tool import interact_preview_tool as _interact_preview_tool
+            return _finish_agent_tool(
+                _interact_preview_tool(
+                    action=next_args.get("action", ""),
+                    ref=next_args.get("ref", ""),
+                    text=next_args.get("text"),
+                    key=next_args.get("key", ""),
+                    delta_y=next_args.get("delta_y"),
+                    callback=getattr(agent, "interact_preview_callback", None),
                 ),
                 next_args,
             )

@@ -6,16 +6,14 @@ Hermes Desktop có một trình duyệt nằm ngay trong không gian làm việc
 
 ## Trải nghiệm đã triển khai
 
-- Nút **Trình duyệt** và **Tệp** nằm ở đầu panel bên phải; không lặp lại tiêu đề chữ cho hệ thống tệp.
-- Panel phải có hai chế độ **Tệp** và **Trình duyệt**. Chuyển chế độ chỉ ẩn bề mặt còn lại; cây thư mục, trang web, lịch sử điều hướng và phiên đăng nhập vẫn được giữ.
-- Chế độ **Trình duyệt** có thanh tab riêng: nút `+` mở trang mới, `×` đóng từng tab và đóng tab cuối sẽ trở về chế độ **Tệp**.
-- Mỗi tab Browser giữ webview và lịch sử riêng khi chuyển tab. URL do agent mở sẽ điều hướng tab Browser đang chọn thay vì tự sinh thêm tab.
-- Trình duyệt chỉ hiển thị ở panel phải, vì vậy cuộc trò chuyện và các tab phiên ở vùng giữa luôn còn trên màn hình để làm việc song song.
-- Có thể kéo vạch chia để mở rộng hoặc thu hẹp panel phải.
+- **Trình duyệt** xuất hiện ở thanh điều hướng bên trái.
+- Khi mở lần đầu, Trình duyệt nằm cùng vùng với **Phiên** để người dùng chuyển tab nhanh.
+- Có thể kéo tab Trình duyệt sang cạnh vùng làm việc để xem song song.
+- Có thể kéo vạch chia để mở rộng hoặc thu hẹp từng vùng.
 - Thanh địa chỉ có các nút quay lại, tiến tới và tải lại.
 - Hỗ trợ cửa sổ đăng nhập do website chủ động mở cho các luồng OAuth và đăng nhập mạng xã hội.
 - Phiên web dùng partition bền vững `persist:hermes-preview`, vì vậy người dùng và agent dùng chung phiên đăng nhập trên máy.
-- Các preview tệp và sản phẩm tạo ra vẫn mở cạnh vùng làm việc như trước; chúng không chiếm chỗ của Browser trong panel phải.
+- Các preview tệp và sản phẩm tạo ra vẫn mở cạnh vùng làm việc như trước.
 
 ## Cầu nối cho agent
 

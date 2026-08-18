@@ -2002,6 +2002,7 @@ export const en: Translations = {
   sidebar: {
     nav: {
       'new-session': 'New session',
+      browser: 'Browser',
       skills: 'Capabilities',
       messaging: 'Messaging',
       artifacts: 'Artifacts',
