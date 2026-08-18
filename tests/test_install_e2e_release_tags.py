@@ -170,6 +170,10 @@ def test_workflow_triggers_fork_tags_and_has_diagnostic_job():
     )
     assert "HERMES_DEV_SANDBOX_UPSTREAM:" in reusable
     assert "github.com/${{ github.repository }}.git" in reusable
+    assert "Refresh sandbox package index (bounded retry)" in reusable
+    assert "Install sandbox dependencies (bounded retry)" in reusable
+    assert "timeout --signal=TERM --kill-after=10s 180s" in reusable
+    assert "timeout --signal=TERM --kill-after=10s 300s" in reusable
 
 
 def test_installer_rerun_keeps_https_git_fetches_inside_fake_remote():
