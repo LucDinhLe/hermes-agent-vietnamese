@@ -28,12 +28,17 @@
   tag mang version `0.20.0` không khớp version nguồn upstream `0.20.4`. Tag lỗi
   được giữ nguyên làm bằng chứng, không di chuyển hoặc tái sử dụng.
 - Candidate bất biến `vi-v0.20.4-28` đã qua cổng tag/version nhưng native build
-  phát hiện `agent-browser@0.26.0` bị rơi khỏi root dependency khi đồng bộ
-  upstream. Không có draft hay artifact nào được tạo; tag tiếp tục được giữ
-  nguyên làm bằng chứng thất bại.
-- Candidate thay thế phải dùng `vi-v0.20.4-29`, khôi phục dependency/browser
-  helper và khóa regression trước khi dựng lại sáu target, tải lại exact artifact
-  và chạy smoke/rollback theo workflow.
+  phát hiện pipeline resident vẫn kỳ vọng `agent-browser@0.26.0` ở root, trong
+  khi upstream 0.20.4 đã chủ ý chuyển gói này ra khỏi workspace dependency graph.
+  Không có draft hay artifact nào được tạo; tag tiếp tục được giữ nguyên làm
+  bằng chứng thất bại.
+- Candidate thay thế phải dùng `vi-v0.20.4-29`, lấy tarball browser bất biến vào
+  vùng dựng release riêng rồi nhúng vào payload resident, không đưa dependency
+  trở lại root; sau đó dựng lại sáu target, tải exact artifact và chạy
+  smoke/rollback theo workflow.
+- PR CI đã chặn thử nghiệm đưa dependency trở lại root tại commit `c624465d5`;
+  commit này không được gắn tag. Bản sửa kế tiếp giữ nguyên hợp đồng lazy của
+  upstream và khóa tarball resident riêng bằng SHA-512.
 - Public Latest vẫn là `vi-v0.20.0-25`; rollback giữ `vi-v0.20.0-14`. Candidate
   v28 chỉ được công khai dạng community prerelease sau toàn bộ exact-artifact gate.
 

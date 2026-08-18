@@ -23,6 +23,9 @@ Không phát hành trực tiếp từ `main` động.
   model làm việc; tối đa hai vòng chỉnh sửa.
 - Giữ Browser nhiều tab ở panel phải, runtime resident, repair, update, uninstall
   giữ/xóa dữ liệu, build stamp và kênh cập nhật `vi-v*`.
+- Nhúng `agent-browser@0.26.0` từ tarball release được khóa SHA-512 vào payload
+  resident; không đưa gói này trở lại root workspace dependency graph của
+  upstream 0.20.4.
 - Nâng Electron lên `42.8.0`; khóa dependency đã kiểm toán để `npm audit` đầy đủ
   không còn advisory tại candidate source.
 - Sửa giao diện tiếng Việt: `Gửi yêu cầu` thay cho `Gửi theo dõi`; fresh profile

@@ -38,6 +38,7 @@ import fs from "node:fs"
 import path from "node:path"
 
 import { isMain } from "./utils.mjs"
+import { AGENT_BROWSER_VERSION } from "../../../scripts/prepare-agent-browser-native.mjs"
 import { parseVietnameseReleaseTag } from "../../../scripts/vietnamese-release.mjs"
 
 export { parseVietnameseReleaseTag } from "../../../scripts/vietnamese-release.mjs"
@@ -328,6 +329,25 @@ exit $LASTEXITCODE\r
   )
 }
 
+export function resolveAgentBrowserPackageRoot(env = process.env) {
+  const browserPackageInput = env.HERMES_AGENT_BROWSER_PACKAGE_ROOT?.trim()
+  if (!browserPackageInput) {
+    throw new Error("repo: HERMES_AGENT_BROWSER_PACKAGE_ROOT is required for bundled staging")
+  }
+  const browserPackage = path.resolve(browserPackageInput)
+  const browserManifestPath = path.join(browserPackage, "package.json")
+  if (!fs.statSync(browserManifestPath, { throwIfNoEntry: false })?.isFile()) {
+    throw new Error("repo: verified agent-browser package is missing package.json")
+  }
+  const browserManifest = JSON.parse(fs.readFileSync(browserManifestPath, "utf8"))
+  if (browserManifest.name !== "agent-browser" || browserManifest.version !== AGENT_BROWSER_VERSION) {
+    throw new Error(
+      `repo: expected agent-browser ${AGENT_BROWSER_VERSION}, got ${browserManifest.name || "unknown"} ${browserManifest.version || "unknown"}`
+    )
+  }
+  return browserPackage
+}
+
 // ─── impure staging steps (they shell out, have no unit tests, and run in CI) ──────
 
 function run(cmd, args, opts = {}) {
@@ -409,15 +429,12 @@ function stageRepo(tag, outDir) {
       dereference: true,
     })
   }
-  // Browser automation is a production root dependency, not a workspace
-  // dependency. Copy the lockfile-installed package and npm shims into the
-  // source snapshot so the resident runtime never has to contact npm before
-  // it can discover agent-browser. The package tarball is integrity-pinned by
-  // package-lock.json and `npm ci` runs before this stage.
-  const browserPackage = path.join(REPO_ROOT, "node_modules", "agent-browser")
-  if (!fs.existsSync(browserPackage)) {
-    throw new Error("repo: agent-browser production dependency missing — run root npm ci first")
-  }
+  // agent-browser intentionally stays out of root dependencies (#43564), so
+  // the release builder materializes its exact SHA-512-pinned npm tarball in a
+  // private work directory. Copy that verified package into the source
+  // snapshot: the resident runtime remains offline-ready without re-entangling
+  // agent-browser with the ui-tui/web workspace install graph.
+  const browserPackage = resolveAgentBrowserPackageRoot()
   fs.cpSync(browserPackage, path.join(repoDir, "node_modules", "agent-browser"), {
     recursive: true,
     dereference: true,

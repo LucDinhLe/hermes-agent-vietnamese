@@ -34,9 +34,6 @@
     "url": "https://github.com/LucDinhLe/hermes-agent-vietnamese/issues"
   },
   "homepage": "https://github.com/LucDinhLe/hermes-agent-vietnamese#readme",
-  "dependencies": {
-    "agent-browser": "0.26.0"
-  },
   "devDependencies": {
     "@eslint/js": "9.39.5",
     "typescript-eslint": "8.64.0",
@@ -70,7 +67,6 @@
     "esbuild@0.28.1": true,
     "node-pty@1.1.0": true,
     "electron-winstaller@5.4.0": true,
-    "agent-browser@0.26.0": true,
     "electron@42.8.0": true,
     "fsevents@2.3.2": true,
     "fsevents@2.3.3": true,
