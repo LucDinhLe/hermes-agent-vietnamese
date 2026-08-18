@@ -59,6 +59,8 @@ import {
 import { decideBootstrapRepair } from './bootstrap-repair-guard'
 import { runBootstrap } from './bootstrap-runner'
 import { detectBundleSkew } from './bundle-skew'
+import { BrowserConnectorController } from './browser-connector/controller'
+import { HERMES_PREVIEW_PARTITION } from './browser-connector/cookie-import'
 import { applyConnectionChange, resolveTerminalConnection } from './connection-apply'
 import {
   apiRequestRegistryConnectionId,
@@ -758,6 +760,11 @@ const DESKTOP_INSTALLATION_PATH = path.join(app.getPath('userData'), 'desktop-in
 const DESKTOP_UPDATE_CONFIG_PATH = path.join(app.getPath('userData'), 'updates.json')
 const DESKTOP_WINDOW_STATE_PATH = path.join(app.getPath('userData'), 'window-state.json')
 const DESKTOP_BACKEND_OWNERSHIP_PATH = path.join(app.getPath('userData'), 'backend-ownership.json')
+const BROWSER_CONNECTOR_SETTINGS_PATH = path.join(app.getPath('userData'), 'browser-connector', 'settings.json')
+const BROWSER_CONNECTOR_LEDGER_PATH = path.join(app.getPath('userData'), 'browser-connector', 'imports.json')
+const BROWSER_CONNECTOR_RESOURCE_ROOT = IS_PACKAGED ? process.resourcesPath : path.join(APP_ROOT, 'build')
+const BROWSER_CONNECTOR_EXTENSION_PATH = path.join(BROWSER_CONNECTOR_RESOURCE_ROOT, 'hermes-connector')
+const BROWSER_CONNECTOR_TRUST_PATH = path.join(BROWSER_CONNECTOR_RESOURCE_ROOT, 'hermes-connector-trust.json')
 // active-profile.json records which Hermes profile the desktop launches its
 // local backend as. When set, startHermes() passes `hermes --profile <name>
 // dashboard …`, which deterministically pins HERMES_HOME (see
@@ -765,6 +772,23 @@ const DESKTOP_BACKEND_OWNERSHIP_PATH = path.join(app.getPath('userData'), 'backe
 // ~/.hermes/active_profile file. Unset (null) preserves the legacy behavior:
 // no --profile flag, so the backend honors active_profile / default.
 const DESKTOP_PROFILE_CONFIG_PATH = path.join(app.getPath('userData'), 'active-profile.json')
+
+let browserConnectorController: BrowserConnectorController | undefined
+
+function getBrowserConnectorController(): BrowserConnectorController {
+  if (!browserConnectorController) {
+    browserConnectorController = new BrowserConnectorController({
+      cookieStore: session.fromPartition(HERMES_PREVIEW_PARTITION).cookies,
+      extensionPath: BROWSER_CONNECTOR_EXTENSION_PATH,
+      importLedgerPath: BROWSER_CONNECTOR_LEDGER_PATH,
+      settingsPath: BROWSER_CONNECTOR_SETTINGS_PATH,
+      trustPath: BROWSER_CONNECTOR_TRUST_PATH
+    })
+  }
+
+  return browserConnectorController
+}
+
 // Mirrors hermes_cli.profiles._PROFILE_ID_RE so we never hand the backend a
 // value its profile resolver would reject and exit on.
 const PROFILE_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/
@@ -13696,6 +13720,31 @@ ipcMain.handle('hermes:normalizePreviewTarget', (_event, target, baseDir) =>
   normalizePreviewTarget(String(target || ''), baseDir ? String(baseDir) : '')
 )
 
+ipcMain.handle('hermes:browser-connector:status', () => getBrowserConnectorController().status())
+ipcMain.handle('hermes:browser-connector:enabled', (_event, enabled) =>
+  getBrowserConnectorController().setEnabled(enabled === true)
+)
+ipcMain.handle('hermes:browser-connector:start', (_event, url) =>
+  getBrowserConnectorController().start(String(url || ''))
+)
+ipcMain.handle('hermes:browser-connector:pairing-status', (_event, attemptId) =>
+  getBrowserConnectorController().pairingStatus(String(attemptId || ''))
+)
+ipcMain.handle('hermes:browser-connector:approve', (_event, attemptId) =>
+  getBrowserConnectorController().approve(String(attemptId || ''))
+)
+ipcMain.handle('hermes:browser-connector:cancel', (_event, attemptId) =>
+  getBrowserConnectorController().cancel(attemptId ? String(attemptId) : undefined)
+)
+ipcMain.handle('hermes:browser-connector:revoke', (_event, importId) =>
+  getBrowserConnectorController().revoke(String(importId || ''))
+)
+ipcMain.handle('hermes:browser-connector:open-extension', async () => {
+  const error = await shell.openPath(BROWSER_CONNECTOR_EXTENSION_PATH)
+
+  return error ? { ok: false, error: 'OPEN_EXTENSION_FAILED' } : { ok: true }
+})
+
 ipcMain.handle('hermes:watchPreviewFile', (_event, url) => watchPreviewFile(String(url || '')))
 
 ipcMain.handle('hermes:watchDirectory', (_event, dir) => watchDirectory(String(dir || '')))
@@ -15237,6 +15286,8 @@ app.on('before-quit', event => {
       app.quit()
     })
   }
+
+  void browserConnectorController?.shutdown()
 
   if ((sshConnections.size > 0 || sshBootstrapCoordinator.promises().length > 0) && !sshQuitTeardownDone) {
     event.preventDefault()

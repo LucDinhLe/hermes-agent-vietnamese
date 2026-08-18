@@ -2476,6 +2476,59 @@ export interface Translations {
       unreachableDescription: string
       openTarget: (url: string) => string
       fallbackTitle: string
+      addressBar: string
+      address: string
+      addressPlaceholder: string
+      back: string
+      forward: string
+      reloadPage: string
+      invalidAddressTitle: string
+      invalidAddressMessage: string
+      sharedWithAgent: string
+      sharedWithAgentHint: string
+      connector: {
+        openButton: string
+        title: string
+        description: string
+        loading: string
+        officialExtension: string
+        trustVerified: string
+        trustFailed: string
+        openFolder: string
+        extensionId: string
+        digest: string
+        enabled: string
+        disabled: string
+        enableDescription: string
+        enable: string
+        disable: string
+        currentSite: string
+        createCode: string
+        pairingTitle: string
+        pairingInstructions: string
+        copy: string
+        expiresAt: (time: string) => string
+        previewReady: string
+        browser: string
+        domain: string
+        cookies: string
+        sessionCookies: string
+        unsupported: string
+        expiry: string
+        sessionOnly: string
+        importWarning: string
+        confirmImport: (count: number, hostname: string) => string
+        importing: string
+        imported: (count: number, hostname: string) => string
+        skippedUnsupported: (count: number) => string
+        importedSessions: string
+        noImports: string
+        importRecord: (count: number, time: string) => string
+        revoke: string
+        revokeWarning: string
+        error: (code: string) => string
+        close: string
+      }
     }
   }
 

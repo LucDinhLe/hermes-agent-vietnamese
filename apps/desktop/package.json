@@ -5,9 +5,10 @@
   "version": "0.17.0",
   "description": "Native desktop shell for Hermes Agent.",
   "author": "Nous Research",
+  "homepage": "https://github.com/LucDinhLe/hermes-agent-vietnamese",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/NousResearch/hermes-agent.git"
+    "url": "git+https://github.com/LucDinhLe/hermes-agent-vietnamese.git"
   },
   "type": "module",
   "main": "dist/electron-main.mjs",
@@ -28,7 +29,7 @@
     "profile:main:cpu": "tsc --build tsconfig.electron.json && wait-on http://127.0.0.1:5174 && node scripts/bundle-electron-main.mjs --dev && cross-env XCURSOR_SIZE=24 NODE_OPTIONS=--cpu-prof HERMES_DESKTOP_DEV_SERVER=http://127.0.0.1:5174 electron .",
     "start": "npm run build && electron .",
     "prebuild": "npm run clean",
-    "build": "node scripts/assert-root-install.mjs && node scripts/write-build-stamp.mjs && vite build && node scripts/bundle-electron-main.mjs && node scripts/stage-native-deps.mjs",
+    "build": "node scripts/assert-root-install.mjs && uv run --no-project ../../scripts/write_install_stamp.py --output build/install-stamp.json && node scripts/build-connector-extension.mjs && vite build && node scripts/bundle-electron-main.mjs && node scripts/stage-native-deps.mjs && node scripts/stage-agent-payloads.mjs",
     "postbuild": "node scripts/assert-dist-built.mjs",
     "prebuilder": "node scripts/patch-electron-builder-mac-binary.mjs",
     "builder": "cross-env NODE_OPTIONS=--max-old-space-size=16384 node scripts/run-electron-builder.mjs",
@@ -119,6 +120,7 @@
     "d3-force": "3.0.0",
     "dnd-core": "14.0.1",
     "dompurify": "3.4.13",
+    "electron-updater": "6.8.9",
     "emojibase-data": "16.0.3",
     "fflate": "0.8.3",
     "frimousse": "0.3.0",
@@ -196,6 +198,13 @@
     ],
     "artifactName": "Hermes-${version}-${os}-${arch}.${ext}",
     "icon": "assets/icon",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "LucDinhLe",
+        "repo": "hermes-agent-vietnamese"
+      }
+    ],
     "directories": {
       "output": "release"
     },
@@ -214,8 +223,20 @@
         "to": "install-stamp.json"
       },
       {
+        "from": "build/agent-payload",
+        "to": "agent-payload"
+      },
+      {
         "from": "assets/icon.ico",
         "to": "icon.ico"
+      },
+      {
+        "from": "build/hermes-connector",
+        "to": "hermes-connector"
+      },
+      {
+        "from": "build/hermes-connector-trust.json",
+        "to": "hermes-connector-trust.json"
       }
     ],
     "asar": true,
@@ -227,6 +248,7 @@
     ],
     "mac": {
       "category": "public.app-category.developer-tools",
+      "minimumSystemVersion": "12.0",
       "entitlements": "electron/entitlements.mac.plist",
       "entitlementsInherit": "electron/entitlements.mac.inherit.plist",
       "extendInfo": {
