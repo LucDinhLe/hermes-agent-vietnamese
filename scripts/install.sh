@@ -2350,6 +2350,37 @@ configure_browser_env_from_system_browser() {
     log_success "Configured browser tools to use $browser_path"
 }
 
+cleanup_stale_npm_rename_dirs() {
+    # Interrupted npm installs can leave rename targets such as
+    # node_modules/.ink-xKZbo5aM behind. The next install then fails with
+    # ENOTEMPTY before it can repair the dependency tree. Remove only npm's
+    # eight-character staging names in the three workspaces installed below;
+    # preserve ordinary hidden directories such as node_modules/.bin.
+    local modules_dir package_parent stale_dir stage_name package_name
+    for modules_dir in \
+        "$INSTALL_DIR/node_modules" \
+        "$INSTALL_DIR/ui-tui/node_modules" \
+        "$INSTALL_DIR/web/node_modules"; do
+        [ -d "$modules_dir" ] || continue
+        for package_parent in "$modules_dir" "$modules_dir"/@*; do
+            [ -d "$package_parent" ] || continue
+            for stale_dir in \
+                "$package_parent"/.[!.]*-[[:alnum:]][[:alnum:]][[:alnum:]][[:alnum:]][[:alnum:]][[:alnum:]][[:alnum:]][[:alnum:]]; do
+                [ -d "$stale_dir" ] || continue
+                stage_name="${stale_dir##*/}"
+                package_name="${stage_name#.}"
+                package_name="${package_name%-????????}"
+                # A real npm rename failure leaves both the original package
+                # and its staging destination. Requiring that sibling avoids
+                # deleting an unrelated hidden directory with a similar name.
+                [ -e "$package_parent/$package_name" ] || continue
+                log_warn "Removing stale npm staging directory: ${stale_dir#"$INSTALL_DIR"/}"
+                rm -rf -- "$stale_dir"
+            done
+        done
+    done
+}
+
 install_node_deps() {
     if [ "$HAS_NODE" = false ]; then
         log_info "Skipping Node.js dependencies (Node not installed)"
@@ -2379,6 +2410,7 @@ install_node_deps() {
         # CLI installer and can exceed the bounded install window on a clean
         # machine. Match `hermes update`: install only the root, TUI, and web
         # workspaces. Desktop dependencies are installed by the desktop path.
+        cleanup_stale_npm_rename_dirs
         if ! run_with_timeout "$NODE_DEPS_TIMEOUT" npm install --loglevel=warn \
                 --no-fund --no-audit --prefer-offline --progress=false \
                 --workspace ui-tui --workspace web --include-workspace-root \

@@ -1,5 +1,31 @@
 # Tiến độ
 
+## Cập nhật 2026-08-19 — chặn candidate v28 cho tới khi cài lại sạch
+
+- Candidate bất biến `vi-v0.20.4-29` dừng ở Windows ARM64 do Git for Windows
+  `tar` hiểu đường dẫn ổ đĩa như tên máy; `vi-v0.20.4-30` dừng ở verifier do
+  so sánh chuỗi đường dẫn `tar.exe` khác dấu phân cách. Cả hai tag được giữ
+  nguyên làm bằng chứng và không được di chuyển hoặc tái sử dụng.
+- Candidate `vi-v0.20.4-31` đã dựng đủ 6/6 target và tạo draft prerelease 26
+  asset tại workflow `32165043998`; tải ngược từng asset khớp byte, checksum và
+  provenance. Candidate vẫn **NO-GO** vì Install & Update E2E phát hiện bộ cài
+  chạy lại thất bại ở bước Node dependencies.
+- PR #38 vẫn mở dạng draft, có nhãn `ci-reviewed`. CI commit
+  `0c7972bff2f426b59368fb5d4ed664749bb4e1d3` đạt ở lượt chạy lại
+  `32171281649`; Public Latest vẫn là `vi-v0.20.0-25`.
+- E2E chẩn đoán từ đúng bản công khai v25 tại run `32171292220` giữ được lỗi
+  gốc: npm trả `ENOTEMPTY` khi đổi `node_modules/ink` sang thư mục tạm
+  `.ink-xKZbo5aM` còn sót từ lần cài trước. Đây là lỗi tính lặp lại an toàn của
+  installer, không phải lỗi mạng hoặc thiếu package.
+- Bộ cài nay dọn trước chỉ các thư mục staging npm có hậu tố 8 ký tự trong
+  `node_modules` của root, TUI và web; giữ nguyên `.bin` cùng các thư mục ẩn hợp
+  lệ. Regression tạo đúng cây dở dang, yêu cầu npm chỉ được gọi sau khi cây tạm
+  đã bị dọn và xác nhận `.bin` không bị đụng tới.
+- `bash -n scripts/install.sh` đạt. Trên Windows, một kiểm tra tĩnh đạt và bốn
+  ca hành vi Linux được bỏ qua đúng marker; các ca Linux phải đạt trên CI trước
+  khi push tiếp. Candidate kế tiếp, nếu toàn bộ CI và E2E công khai đều xanh,
+  là `vi-v0.20.4-32`.
+
 ## Cập nhật 2026-08-18 — chuẩn bị Hermes Vietnamese v28
 
 - Worktree `projects/hermes-v28`, nhánh `release/v28-upstream-sync`, đồng bộ từ
