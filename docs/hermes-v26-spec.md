@@ -1,17 +1,19 @@
 # Đặc tả Hermes Vietnamese v26
 
-**Phiên bản:** 1.0 khóa triển khai<br>
-**Ngày:** 2026-08-17<br>
+**Phiên bản:** 1.1 khóa triển khai<br>
+**Ngày:** 2026-08-18<br>
 **Cơ sở:** `origin/main` tại `4d597f74600cdc3791edf7d34566534182946c55`
 
 ## 1. Mục tiêu sản phẩm
 
-v26 bổ sung hai khả năng độc lập:
+v26 bổ sung ba khả năng độc lập:
 
 1. Chuyển có kiểm soát phiên đăng nhập của website hiện tại từ Chrome/Edge sang
    Browser của Hermes.
 2. Tạo bản tóm tắt tiếng Việt tùy chọn từ reasoning công khai sau khi lượt chạy
    kết thúc, đồng thời giữ nguyên reasoning và câu trả lời gốc.
+3. Cho phép bật một model **Giám sát (Advisor)** độc lập để rà soát kế hoạch,
+   nhịp phục hồi và kết quả cuối của model làm việc.
 
 Nền móng trust của extension được đưa vào connector. Trình quản lý extension
 tổng quát và hỗ trợ Chrome Web Store được hoãn sang v27.
@@ -176,7 +178,46 @@ Nếu backend không trả usage, UI ghi **Chi phí không được provider cun
 Latency đo ở client quanh RPC. Lỗi auxiliary chỉ hiện trong summary panel và
 không đổi trạng thái thành công của turn chính.
 
-## 4. UX và trợ năng
+## 4. Giám sát (Advisor)
+
+### 4.1 Hành vi và vị trí
+
+- Mặc định tắt. Khi tắt phải tạo đúng zero Advisor call.
+- Settings → Model đặt mục **Giám sát (Advisor)** ngay sau model chính và trước
+  các model phụ trợ, chỉ có công tắc bật/tắt và bộ chọn provider/model.
+- Không có nút **Gọi Giám sát ngay** trong chat. Khi bật, Hermes tự gọi Advisor:
+  1. trước batch công cụ có thể thay đổi trạng thái đầu tiên;
+  2. khi đổi sang một nhóm công cụ thay đổi trạng thái mới hoặc lặp lỗi;
+  3. sau các cổng verify xác định và trước khi lưu/trả kết quả cuối.
+- Mỗi nhóm chỉnh sửa bị giới hạn mặc định hai lần và tối đa bốn lần qua cấu
+  hình nâng cao; không được tự lặp vô hạn.
+
+### 4.2 Ranh giới an toàn
+
+- Advisor là auxiliary call chỉ đọc, `tools=None`; không gọi công cụ, không sửa
+  file, không gửi tin và không nói trực tiếp với người dùng.
+- Review packet chỉ chứa mục tiêu người dùng, nội dung công khai cần rà soát,
+  tên công cụ, khóa tham số và tham số đã redaction. Không gửi hidden reasoning
+  hoặc chain-of-thought.
+- Verdict chỉ gồm `PASS`, `REVISE`, `ASK_USER`, `BLOCK` cùng tóm tắt và chỉ dẫn
+  ngắn. Không lưu suy luận riêng tư của Advisor.
+- Khi chặn batch công cụ, Hermes phải trả synthetic tool result cho từng
+  `tool_call_id`; không tạo chuỗi role sai hoặc tool result mồ côi.
+- Candidate trả lời bị yêu cầu sửa là scaffolding tạm, bị loại khỏi transcript
+  bền vững sau khi có bản thay thế.
+- Lỗi mạng/model mặc định fail-open với cảnh báo để lớp tùy chọn không làm hỏng
+  phiên chính. Người vận hành có thể đặt `advisor.fail_open: false` để buộc dừng
+  thao tác thay đổi trạng thái khi Advisor không sẵn sàng.
+
+### 4.3 Cấu hình
+
+- Hành vi: `advisor.enabled`, `advisor.max_revisions`, `advisor.fail_open`.
+- Định tuyến model: `auxiliary.advisor.provider/model/base_url/api_key/timeout`,
+  dùng cùng cơ chế profile isolation và auxiliary accounting hiện có.
+- Cấu hình được snapshot khi tạo agent/session; thay đổi trong Settings áp dụng
+  cho phiên mới, không đổi quyết định giữa một tool sequence đang chạy.
+
+## 5. UX và trợ năng
 
 - Copy chính có đủ VI/EN; theo quy tắc desktop, mọi key mới phải có cả VI, EN,
   JA, ZH và ZH-Hant trước merge.
@@ -187,16 +228,17 @@ không đổi trạng thái thành công của turn chính.
 - Không hiển thị cookie name/value. Expiry chỉ hiển thị tổng hợp.
 - Trạng thái unsupported partitioned cookie không bị giấu trong số thành công.
 
-## 5. Phi chức năng
+## 6. Phi chức năng
 
 - Không network ngoài loopback cho connector.
 - Pairing startup dưới 250 ms trên máy kiểm thử; polling không quá 2 Hz.
 - Summary không chặn render assistant answer.
+- Advisor không thay đổi core tool schema hoặc system prompt đã cache.
 - Mọi file lưu mới ghi nguyên tử và chịu được JSON hỏng bằng fail-closed cùng
   bản sao `.corrupt-<timestamp>` không chứa cookie value.
 - Test không dùng profile thật; mọi HOME/AppData/user-data đều cô lập.
 
-## 6. Tiêu chí chấp nhận
+## 7. Tiêu chí chấp nhận
 
 Connector đạt khi toàn bộ ca domain/subdomain, session/persistent expiry,
 HttpOnly, SameSite, partitioned-skip, multi-profile, incognito-disabled,
@@ -207,7 +249,11 @@ Reasoning summary đạt khi bản gốc và assistant response không đổi, o
 auxiliary calls, on tạo tối đa một call theo digest, lỗi không ảnh hưởng turn,
 cache tách profile và restart phục hồi đúng summary.
 
-## 7. Deferred sang v27
+Advisor đạt khi off tạo zero call; on chặn đúng mutating batch trước thực thi,
+giữ đủ tool-call/result pairing, gọi lại ở recovery/final, loại scaffolding khỏi
+transcript, model đã chọn tồn tại qua restart và mọi vòng sửa đều bị chặn số lần.
+
+## 8. Deferred
 
 - Trình quản lý extension tổng quát.
 - Cài trực tiếp Chrome Web Store hoặc CRX.

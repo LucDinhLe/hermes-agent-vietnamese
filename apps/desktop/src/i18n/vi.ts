@@ -1075,6 +1075,12 @@ export const vi: Translations = {
       reasoning: 'Lý luận',
       reasoningOff: 'Tắt',
       defaultsFailed: 'Không lưu được giá trị mặc định của model',
+      advisorTitle: 'Giám sát (Advisor)',
+      advisorDesc:
+        'Một model độc lập rà soát kế hoạch, lúc đổi hướng hoặc lặp lỗi, và kết quả cuối trước khi Hermes trả lời.',
+      advisorEnabled: 'Bật Giám sát',
+      advisorCost: 'Khi bật, mỗi nhịp rà soát tạo thêm model call, độ trễ và chi phí.',
+      advisorModel: 'Model Giám sát',
       auxiliaryTitle: 'Model phụ trợ',
       resetAllToMain: 'Đặt lại tất cả về model chính',
       auxiliaryDesc:

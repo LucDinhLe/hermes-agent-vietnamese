@@ -1647,6 +1647,18 @@ def init_agent(
     except Exception:
         _agent_cfg = {}
 
+    # Snapshot Advisor posture for this agent/session. Settings explicitly say
+    # they apply to new sessions, so a mid-turn config write cannot silently
+    # introduce extra provider calls or change a checkpoint decision.
+    try:
+        from agent.advisor import settings_from_config as _advisor_settings_from_config
+
+        agent._advisor_settings = _advisor_settings_from_config(_agent_cfg)
+    except Exception:
+        from agent.advisor import AdvisorSettings as _AdvisorSettings
+
+        agent._advisor_settings = _AdvisorSettings()
+
     # Codex commentary visibility (display.show_commentary, default true).
     # When true, completed Codex phase=commentary messages are delivered as
     # visible mid-turn updates through the interim message path. When false,

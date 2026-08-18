@@ -1603,6 +1603,24 @@ def run_conversation(
     # on the next loop iteration. This prevents a second advisor fan-out.
     pending_moa_prepared_request = None
 
+    # Advisor checkpoint state is local to this user turn. The configuration
+    # itself was snapshotted at agent construction so Settings changes apply to
+    # new sessions and cannot alter policy midway through a tool sequence.
+    from agent.advisor import AdvisorSettings as _AdvisorSettings
+
+    _advisor_settings = getattr(agent, "_advisor_settings", _AdvisorSettings())
+    _advisor_active = bool(
+        getattr(_advisor_settings, "enabled", False)
+        and not getattr(agent, "_persist_disabled", False)
+    )
+    _advisor_plan_passed = False
+    _advisor_plan_revisions = 0
+    _advisor_recovery_revisions = 0
+    _advisor_recovery_pending = False
+    _advisor_approved_tool_names: set[str] = set()
+    _advisor_mutations_blocked = False
+    _advisor_final_revisions = 0
+
     # Per-turn tally of consecutive successful credential-pool token refreshes,
     # keyed by (provider, pool-entry-id). A persistent upstream 401 lets
     # ``try_refresh_current()`` "succeed" forever on a single-entry OAuth pool,
@@ -6763,7 +6781,155 @@ def run_conversation(
                     except Exception:
                         pass
 
+                # Read-only Advisor planning/recovery checkpoint. The
+                # assistant tool-call row is already canonical at this point,
+                # so a rejected call can be paired with a synthetic tool result
+                # without violating provider role/tool-call alternation.
+                _advisor_withheld = False
+                if _advisor_active:
+                    try:
+                        from agent.advisor import (
+                            AdvisorDecision,
+                            batch_requires_review,
+                            build_plan_packet,
+                            enforce_availability_policy,
+                            material_tool_signature,
+                            review_packet,
+                            tool_call_id,
+                            tool_call_name,
+                            withheld_tool_result,
+                        )
+
+                        _advisor_calls = list(assistant_message.tool_calls or [])
+                        if _advisor_calls and batch_requires_review(_advisor_calls):
+                            _advisor_names = {
+                                tool_call_name(tc) or "unknown" for tc in _advisor_calls
+                            }
+                            _advisor_signature = material_tool_signature(_advisor_calls)
+                            _advisor_checkpoint = None
+                            _advisor_exhausted = False
+
+                            if _advisor_mutations_blocked:
+                                _advisor_decision = AdvisorDecision(
+                                    verdict="BLOCK",
+                                    summary="Advisor revision budget was exhausted.",
+                                    feedback=(
+                                        "Stop proposing state-changing actions. Explain the unresolved "
+                                        "constraint or ask the user for direction."
+                                    ),
+                                )
+                                _advisor_exhausted = True
+                            else:
+                                _advisor_decision = None
+                                if not _advisor_plan_passed:
+                                    _advisor_checkpoint = "plan"
+                                elif _advisor_recovery_pending:
+                                    _advisor_checkpoint = "recovery"
+                                elif (
+                                    not _advisor_names.issubset(_advisor_approved_tool_names)
+                                ):
+                                    # A new material tool family is a compact,
+                                    # deterministic proxy for a major plan change.
+                                    _advisor_checkpoint = "recovery"
+
+                                if _advisor_checkpoint:
+                                    agent._emit_status(
+                                        "Advisor is reviewing the plan…"
+                                        if _advisor_checkpoint == "plan"
+                                        else "Advisor is reviewing the changed approach…"
+                                    )
+                                    _advisor_decision = enforce_availability_policy(
+                                        review_packet(build_plan_packet(
+                                            objective=original_user_message,
+                                            assistant_text=turn_content or "",
+                                            tool_calls=_advisor_calls,
+                                            checkpoint=_advisor_checkpoint,
+                                        )),
+                                        _advisor_settings,
+                                    )
+
+                            if _advisor_decision is not None:
+                                if _advisor_decision.passes:
+                                    _advisor_plan_passed = True
+                                    _advisor_recovery_pending = False
+                                    _advisor_approved_tool_names.update(_advisor_names)
+                                    if not _advisor_decision.available:
+                                        agent._emit_status(
+                                            "⚠️ Advisor was unavailable; continuing under fail-open policy"
+                                        )
+                                    else:
+                                        agent._emit_status(
+                                            f"Advisor passed {_advisor_checkpoint or 'plan'} checkpoint"
+                                        )
+                                else:
+                                    if _advisor_checkpoint == "recovery":
+                                        _advisor_recovery_revisions += 1
+                                        _advisor_count = _advisor_recovery_revisions
+                                    else:
+                                        _advisor_plan_revisions += 1
+                                        _advisor_count = _advisor_plan_revisions
+                                    _advisor_exhausted = (
+                                        _advisor_exhausted
+                                        or _advisor_count >= _advisor_settings.max_revisions
+                                    )
+                                    if _advisor_exhausted:
+                                        _advisor_mutations_blocked = True
+                                    for _advisor_tc in _advisor_calls:
+                                        messages.append({
+                                            "role": "tool",
+                                            "name": tool_call_name(_advisor_tc),
+                                            "tool_call_id": tool_call_id(_advisor_tc),
+                                            "content": withheld_tool_result(
+                                                _advisor_decision,
+                                                exhausted=_advisor_exhausted,
+                                            ),
+                                            "_advisor_withheld": True,
+                                            "_advisor_plan_signature": _advisor_signature,
+                                        })
+                                    try:
+                                        agent._flush_messages_to_session_db(
+                                            messages, conversation_history
+                                        )
+                                    except Exception:
+                                        logger.debug(
+                                            "Advisor-withheld tool-result flush failed",
+                                            exc_info=True,
+                                        )
+                                    agent._session_messages = messages
+                                    agent._emit_status(
+                                        f"Advisor requested revision ({_advisor_count}/"
+                                        f"{_advisor_settings.max_revisions}): "
+                                        f"{_advisor_decision.summary or _advisor_decision.verdict}"
+                                    )
+                                    _advisor_withheld = True
+                    except Exception:
+                        # Advisor is an optional supervisory layer. A local
+                        # integration/parsing fault must not corrupt the main
+                        # turn; fail open and leave a diagnostic breadcrumb.
+                        logger.warning("Advisor plan checkpoint failed open", exc_info=True)
+                        agent._emit_status(
+                            "⚠️ Advisor checkpoint failed; continuing under fail-open policy"
+                        )
+
+                if _advisor_withheld:
+                    continue
+
                 agent._execute_tool_calls(assistant_message, messages, effective_task_id, api_call_count)
+
+                if _advisor_active:
+                    # Existing guardrail counters are the source of truth for
+                    # repeated tool failure. The next material batch gets a
+                    # recovery review; no extra model call is made here.
+                    try:
+                        _advisor_failures = getattr(
+                            agent._tool_guardrails,
+                            "_same_tool_failure_counts",
+                            {},
+                        )
+                        if any(int(count) >= 2 for count in _advisor_failures.values()):
+                            _advisor_recovery_pending = True
+                    except Exception:
+                        pass
 
                 if getattr(agent, "_incremental_persistence_failed", False):
                     # A tool result could not be made canonical. Do not send
@@ -7611,6 +7777,83 @@ def run_conversation(
                     )
                     final_response = None
                     continue
+
+                # Final goal-alignment checkpoint. It runs after deterministic
+                # verify-on-stop, user pre_verify hooks, and kanban protocol
+                # checks, but before the answer is made durable as the terminal
+                # response. Rejected candidates are paired with an internal
+                # user nudge and removed from durable history by the finalizer.
+                if _advisor_active and final_response:
+                    try:
+                        from agent.advisor import (
+                            build_final_packet,
+                            enforce_availability_policy,
+                            final_revision_nudge,
+                            review_packet,
+                            tool_call_name,
+                        )
+
+                        _advisor_used_tools = []
+                        for _advisor_msg in messages:
+                            if not isinstance(_advisor_msg, dict):
+                                continue
+                            for _advisor_tc in _advisor_msg.get("tool_calls") or []:
+                                _advisor_used_tools.append(tool_call_name(_advisor_tc))
+
+                        agent._emit_status("Advisor is checking the final result…")
+                        _advisor_final = enforce_availability_policy(
+                            review_packet(build_final_packet(
+                                objective=original_user_message,
+                                candidate=final_response,
+                                changed_paths=getattr(
+                                    agent, "_turn_file_mutation_paths", set()
+                                ),
+                                tool_names=_advisor_used_tools,
+                            )),
+                            _advisor_settings,
+                        )
+                        if not _advisor_final.available:
+                            agent._emit_status(
+                                "⚠️ Advisor was unavailable; delivering the result under fail-open policy"
+                            )
+                        elif _advisor_final.passes:
+                            agent._emit_status("Advisor passed the final checkpoint")
+                        elif (
+                            _advisor_final_revisions < _advisor_settings.max_revisions
+                            and agent.iteration_budget.remaining > 0
+                        ):
+                            _advisor_final_revisions += 1
+                            final_msg["finish_reason"] = "advisor_revision_required"
+                            final_msg["_advisor_final_synthetic"] = True
+                            messages.append(final_msg)
+                            messages.append({
+                                "role": "user",
+                                "content": final_revision_nudge(_advisor_final),
+                                "_advisor_final_synthetic": True,
+                            })
+                            agent._session_messages = messages
+                            agent._emit_status(
+                                f"Advisor requested final revision ("
+                                f"{_advisor_final_revisions}/"
+                                f"{_advisor_settings.max_revisions}): "
+                                f"{_advisor_final.summary or _advisor_final.verdict}"
+                            )
+                            _pending_verification_response = final_response
+                            _pending_verification_response_previewed = (
+                                agent._interim_content_was_streamed(final_response or "")
+                            )
+                            final_response = None
+                            continue
+                        else:
+                            agent._emit_status(
+                                "⚠️ Advisor still found unresolved concerns after the bounded review budget: "
+                                f"{_advisor_final.summary or _advisor_final.verdict}"
+                            )
+                    except Exception:
+                        logger.warning("Advisor final checkpoint failed open", exc_info=True)
+                        agent._emit_status(
+                            "⚠️ Advisor final checkpoint failed; delivering under fail-open policy"
+                        )
 
                 messages.append(final_msg)
                 # Make the completed answer durable before leaving the loop —

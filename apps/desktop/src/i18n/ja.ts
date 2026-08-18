@@ -871,6 +871,11 @@ export const ja = defineLocale({
       provider: 'プロバイダー',
       model: 'モデル',
       applying: '適用中...',
+      advisorTitle: 'アドバイザー',
+      advisorDesc: '独立したモデルが、計画、重大な方針変更や反復エラー、最終結果を回答前に確認します。',
+      advisorEnabled: 'アドバイザーを有効化',
+      advisorCost: '有効にすると、各チェックポイントでモデル呼び出し、遅延、コストが追加されます。',
+      advisorModel: 'アドバイザーモデル',
       auxiliaryTitle: '補助モデル',
       resetAllToMain: 'すべてメインにリセット',
       auxiliaryDesc:

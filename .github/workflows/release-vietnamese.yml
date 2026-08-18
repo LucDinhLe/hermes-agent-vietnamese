@@ -132,6 +132,12 @@ jobs:
           src/components/assistant-ui/thread/streaming.test.tsx
           src/store/reasoning-summary.test.ts
 
+      - name: Kiểm thử giao diện Advisor và ngôn ngữ
+        run: >-
+          npm run --prefix apps/desktop test:ui --
+          src/app/settings/model-settings.test.tsx
+          src/i18n/languages.test.ts
+
       - name: Kiểm tra kiểu dữ liệu
         run: npm run --prefix apps/desktop typecheck
 
@@ -143,6 +149,8 @@ jobs:
           tests/hermes_cli/test_update_eject.py
           tests/hermes_cli/test_version_info.py
           tests/agent/test_oneshot.py
+          tests/agent/test_advisor.py
+          tests/run_agent/test_advisor_checkpoints.py
           tests/tui_gateway/test_protocol.py
 
   build:

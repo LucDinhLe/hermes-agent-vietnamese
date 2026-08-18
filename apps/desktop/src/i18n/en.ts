@@ -851,6 +851,12 @@ export const en: Translations = {
       reasoning: 'Reasoning',
       reasoningOff: 'Off',
       defaultsFailed: 'Failed to save model defaults',
+      advisorTitle: 'Advisor',
+      advisorDesc:
+        'An independent model reviews the plan, major recovery changes, and the final result before Hermes replies.',
+      advisorEnabled: 'Enable Advisor',
+      advisorCost: 'When enabled, each checkpoint adds a model call, latency, and cost.',
+      advisorModel: 'Advisor model',
       auxiliaryTitle: 'Auxiliary models',
       resetAllToMain: 'Reset all to main',
       auxiliaryDesc: 'Helper tasks run on the main model by default. Assign a dedicated model to any task to override.',

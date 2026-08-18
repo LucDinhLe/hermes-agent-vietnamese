@@ -1,5 +1,31 @@
 # Tiến độ
 
+## Cập nhật 2026-08-18 — bổ sung Giám sát (Advisor) và mở candidate kế tiếp
+
+- Xác nhận `vi-v0.20.0-26` đã là tag bất biến tại
+  `8ea73dcb475e32b8171bb970cc98ba809119f9b8`; không di chuyển hoặc dựng lại tag.
+  Phạm vi v26 mở rộng chỉ có thể đi vào candidate kế tiếp
+  `vi-v0.20.0-27` sau khi commit sạch, push và CI nguồn xanh.
+- Thêm Advisor mặc định tắt, chỉ đọc và không có tools. Khi bật, Hermes tự rà
+  soát trước mutating batch đầu tiên, khi đổi nhóm công cụ/lặp lỗi và trước kết
+  quả cuối; verdict `PASS/REVISE/ASK_USER/BLOCK`, mặc định tối đa hai vòng sửa.
+- Batch bị yêu cầu sửa được đóng đủ synthetic tool result theo từng
+  `tool_call_id`; final candidate bị từ chối chỉ là scaffolding tạm và bị loại
+  khỏi transcript bền vững. Review packet redaction secret và không chứa hidden
+  chain-of-thought.
+- Settings → Model có mục **Giám sát (Advisor)** ngay sau model chính, chỉ gồm
+  công tắc bật/tắt và bộ chọn provider/model. Không thêm nút gọi thủ công trong
+  chat. Cấu hình/model tách profile và áp dụng cho phiên mới.
+- Cổng release nay gọi đích danh test Advisor Python, vòng hội thoại, model UI
+  và i18n; promotion pilot yêu cầu evidence off-zero-call, plan/recovery/final,
+  read-only, bounded revision và model persistence.
+- Kiểm thử hiện tại: 119/119 Electron/release, 61/61 UI v26 cũ,
+  26/26 Advisor UI+i18n, 107/107 Python release và Desktop typecheck đều đạt.
+  Một lượt chạy hai suite UI đồng thời từng timeout do tải máy; workflow đã tách
+  suite Advisor và cả hai suite đều xanh khi chạy tuần tự. Chưa build candidate mới, chưa tạo tag,
+  draft hay public release. GitHub CLI hiện không xác thực được nên chưa thể
+  push/tạo draft PR hoặc đọc CI từ máy này.
+
 ## Cập nhật 2026-08-17 — khóa cổng candidate và promotion v26
 
 - Workflow tạo candidate nay gọi đích danh test extension MV3, ba lớp Connector
