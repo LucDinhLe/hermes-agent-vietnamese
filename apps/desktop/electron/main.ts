@@ -15352,6 +15352,7 @@ async function runDesktopUninstall(mode) {
     agentRoot: runtime.agentRoot,
     uninstallArgs,
     appPath: removeBundle,
+    userDataPath: app.getPath('userData'),
     hermesHome: HERMES_HOME
   }
 
