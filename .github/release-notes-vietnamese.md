@@ -1,10 +1,11 @@
-## Hermes Vietnamese vi-v0.20.0-26 — candidate kín để nghiệm thu
+## Hermes Vietnamese vi-v0.20.0-27 — candidate kín để nghiệm thu
 
 Hermes Vietnamese v26 bổ sung Hermes Connector chính chủ cho Chrome/Edge và tùy
-chọn tóm tắt phần suy luận công khai bằng tiếng Việt. Đây là bản phân phối độc
-lập của [Hermes Agent](https://github.com/NousResearch/hermes-agent), do
-[Lê Đình Lực](https://github.com/LucDinhLe) phát triển cho cộng đồng theo giấy
-phép MIT.
+chọn tóm tắt phần suy luận công khai bằng tiếng Việt. Candidate `-27` bổ sung
+Advisor chỉ đọc để rà kế hoạch, đổi hướng phục hồi và kết quả cuối bằng một mô
+hình riêng do người dùng chọn. Đây là bản phân phối độc lập của
+[Hermes Agent](https://github.com/NousResearch/hermes-agent), do [Lê Đình
+Lực](https://github.com/LucDinhLe) phát triển cho cộng đồng theo giấy phép MIT.
 
 > **Đây mới là draft candidate, không phải bản tải công khai và không phải
 > stable.** Public Latest vẫn là `vi-v0.20.0-25`. Chỉ promotion đúng artifact đã
@@ -44,7 +45,7 @@ cài có thể kiểm tra, thay vì yêu cầu người dùng phổ thông tự 
 Python, Node.js và dependency. Bản phân phối không kèm model, tài khoản trả phí,
 API key hoặc hạn mức sử dụng.
 
-### Điểm mới trong v26
+### Điểm mới trong phạm vi v26 mở rộng
 
 #### Hermes Connector cho Chrome và Edge
 
@@ -80,6 +81,19 @@ Chrome Web Store. Extension Manager tổng quát được tách khỏi phạm vi
 - Tính năng không cố truy xuất chain-of-thought ẩn, encrypted thinking hoặc dữ
   liệu provider không công bố.
 
+#### Giám sát bằng Advisor
+
+- Advisor mặc định tắt và có cấu hình model/provider riêng ngay cạnh model làm
+  việc trong Settings → Model.
+- Khi bật, Hermes tự gọi Advisor trước batch công cụ có thể thay đổi trạng thái
+  đầu tiên, khi đổi hướng hoặc lặp lỗi và trước khi giao kết quả cuối.
+- Advisor chỉ nhận packet đã rút gọn/redact, không có tools và không trực tiếp
+  thao tác tệp, trình duyệt, terminal hoặc nhắn người dùng thay model làm việc.
+- Verdict gồm `PASS`, `REVISE`, `ASK_USER` và `BLOCK`; vòng chỉnh sửa được giới
+  hạn mặc định hai lần để tránh lặp vô hạn.
+- Khi tắt, đường Advisor tạo đúng zero model call. Khi bật, mỗi checkpoint có
+  thể làm tăng độ trễ và chi phí theo model được chọn.
+
 ### Quyền riêng tư và bảo mật
 
 - Cookie/token không được ghi vào log, crash evidence, analytics hay file trung
@@ -94,8 +108,8 @@ Chrome Web Store. Extension Manager tổng quát được tách khỏi phạm vi
 ### Tình trạng candidate và cổng nghiệm thu
 
 - Source/unit gate cho cookie validation/import/revoke, loopback pairing,
-  extension manifest/digest, Desktop consent/trust và reasoning summary đã được
-  đưa thẳng vào workflow tạo candidate.
+  extension manifest/digest, Desktop consent/trust, reasoning summary và
+  Advisor plan/recovery/final đã được đưa thẳng vào workflow tạo candidate.
 - Sáu target native phải build thành công và khớp SHA-256 trước khi draft được
   tạo: Windows x64/ARM64, macOS Apple Silicon/Intel và Linux x64/ARM64.
 - **Windows x64 chưa được tuyên bố exact-artifact smoke đạt ở thời điểm tạo
@@ -103,8 +117,8 @@ Chrome Web Store. Extension Manager tổng quát được tách khỏi phạm vi
   AppData, Electron user-data, Chrome profile và Edge profile hoàn toàn cô lập.
 - Cổng bắt buộc còn gồm: fresh install, first-run không cần developer tools,
   gateway/onboarding, safe tool, Chrome+Edge Connector, revoke/persistence,
-  redaction, reasoning summary bật/tắt, update từ exact v25, repair, uninstall và
-  rollback.
+  redaction, reasoning summary bật/tắt, Advisor bật/tắt/read-only/bounded,
+  update từ exact v25, repair, uninstall và rollback.
 - Windows ARM64, macOS Apple Silicon/Intel và Linux x64/ARM64 chỉ được ghi
   `BUILD-ONLY-PILOT` nếu chưa có smoke trên máy người dùng; không suy diễn từ CI.
 
