@@ -6,7 +6,7 @@
 # Uses uv for desktop/server installs and Python's stdlib venv + pip on Termux.
 #
 # Usage:
-#   curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/scripts/install.sh | bash
 #
 # Or with options:
 #   curl -fsSL ... | bash -s -- --no-venv --skip-setup
@@ -43,8 +43,8 @@ NC='\033[0m' # No Color
 BOLD='\033[1m'
 
 # Configuration
-REPO_URL_SSH="git@github.com:NousResearch/hermes-agent.git"
-REPO_URL_HTTPS="https://github.com/NousResearch/hermes-agent.git"
+REPO_URL_SSH="git@github.com:LucDinhLe/hermes-agent-vietnamese.git"
+REPO_URL_HTTPS="https://github.com/LucDinhLe/hermes-agent-vietnamese.git"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 # INSTALL_DIR is resolved AFTER arg parsing and OS detection so we can pick an
 # FHS-style layout for root installs.  Track whether the user gave us an
@@ -535,7 +535,7 @@ detect_os() {
             OS="windows"
             DISTRO="windows"
             log_error "Windows detected. Please use the PowerShell installer:"
-            log_info "  iex (irm https://hermes-agent.nousresearch.com/install.ps1)"
+            log_info "  iex (irm https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/scripts/install.ps1)"
             exit 1
             ;;
         *)
@@ -1242,6 +1242,36 @@ show_manual_install_hint() {
 # Installation
 # ============================================================================
 
+is_official_ssh_remote() {
+    local remote_url
+    remote_url="${1:-}"
+    remote_url="${remote_url%/}"
+    remote_url="${remote_url%.git}"
+    remote_url="$(printf '%s' "$remote_url" | tr '[:upper:]' '[:lower:]')"
+
+    case "$remote_url" in
+        git@github.com:lucdinhle/hermes-agent-vietnamese|\
+        ssh://git@github.com/lucdinhle/hermes-agent-vietnamese)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+use_public_https_origin_for_managed_install() {
+    # Repair only the public community remote. Custom forks remain untouched.
+    local origin_url
+    origin_url="$(git remote get-url origin 2>/dev/null || true)"
+    if ! is_official_ssh_remote "$origin_url"; then
+        return 0
+    fi
+
+    log_info "Switching the public Hermes update remote from SSH to HTTPS..."
+    git remote set-url origin "$REPO_URL_HTTPS"
+}
+
 clone_repo() {
     log_info "Installing to $INSTALL_DIR..."
 
@@ -1263,6 +1293,9 @@ clone_repo() {
             cd "$INSTALL_DIR"
 
             local autostash_ref=""
+            # Normalize before examining/stashing local changes so an avoidable
+            # SSH trust failure cannot strand the installer autostash.
+            use_public_https_origin_for_managed_install
             discard_update_lockfile_churn "$INSTALL_DIR"
             if [ -n "$(git status --porcelain)" ]; then
                 # A previously interrupted update can leave the index with
@@ -1370,18 +1403,17 @@ EOF
             exit 1
         fi
     else
-        # Try SSH first (for private repo access), fall back to HTTPS
-        # GIT_SSH_COMMAND disables interactive prompts and sets a short timeout
-        # so SSH fails fast instead of hanging when no key is configured.
-        log_info "Trying SSH clone..."
-        if GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=5" \
-           git clone --depth 1 --branch "$BRANCH" "$REPO_URL_SSH" "$INSTALL_DIR" 2>/dev/null; then
-            log_success "Cloned via SSH"
+        # This is a public managed checkout, so prefer anonymous HTTPS. Keep
+        # SSH only as a fallback for networks where HTTPS is unavailable.
+        log_info "Trying HTTPS clone..."
+        if git clone --depth 1 --branch "$BRANCH" "$REPO_URL_HTTPS" "$INSTALL_DIR"; then
+            log_success "Cloned via HTTPS"
         else
-            rm -rf "$INSTALL_DIR" 2>/dev/null  # Clean up partial SSH clone
-            log_info "SSH failed, trying HTTPS..."
-            if git clone --depth 1 --branch "$BRANCH" "$REPO_URL_HTTPS" "$INSTALL_DIR"; then
-                log_success "Cloned via HTTPS"
+            rm -rf "$INSTALL_DIR" 2>/dev/null  # Clean up partial HTTPS clone
+            log_info "HTTPS failed, trying SSH..."
+            if GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=5" \
+               git clone --depth 1 --branch "$BRANCH" "$REPO_URL_SSH" "$INSTALL_DIR" 2>/dev/null; then
+                log_success "Cloned via SSH"
             else
                 log_error "Failed to clone repository"
                 exit 1
@@ -1390,6 +1422,7 @@ EOF
     fi
 
     cd "$INSTALL_DIR"
+    use_public_https_origin_for_managed_install
 
     if [ -n "$INSTALL_COMMIT" ]; then
         # Validate the commit argument: must look like a hex SHA (full 40-char

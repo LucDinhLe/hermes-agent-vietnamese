@@ -1,15 +1,18 @@
-## Hermes Vietnamese vi-v0.20.0-27 — candidate kín để nghiệm thu
+## Hermes Vietnamese vi-v0.20.0-28 — đồng bộ Hermes Agent 0.20.4
 
 Hermes Vietnamese v26 bổ sung Hermes Connector chính chủ cho Chrome/Edge và tùy
-chọn tóm tắt phần suy luận công khai bằng tiếng Việt. Candidate `-27` bổ sung
-Advisor chỉ đọc để rà kế hoạch, đổi hướng phục hồi và kết quả cuối bằng một mô
-hình riêng do người dùng chọn. Đây là bản phân phối độc lập của
+chọn tóm tắt phần suy luận công khai bằng tiếng Việt. Bản `-27` bổ sung Advisor
+chỉ đọc để rà kế hoạch, đổi hướng phục hồi và kết quả cuối bằng một mô hình
+riêng do người dùng chọn. Bản `-28` giữ nguyên các nâng cấp đó, đồng bộ nền lõi
+với [Hermes Agent 0.20.4](https://github.com/NousResearch/hermes-agent/releases/tag/v2026.8.18),
+khôi phục cập nhật từ kho cộng đồng và sửa giao diện lần đầu luôn mặc định tiếng
+Việt. Đây là bản phân phối độc lập của
 [Hermes Agent](https://github.com/NousResearch/hermes-agent), do [Lê Đình
 Lực](https://github.com/LucDinhLe) phát triển cho cộng đồng theo giấy phép MIT.
 
-> **Đây mới là draft candidate, không phải bản tải công khai và không phải
-> stable.** Public Latest vẫn là `vi-v0.20.0-25`. Chỉ promotion đúng artifact đã
-> vượt toàn bộ exact-artifact gate mới được phép thay đổi trạng thái này.
+> **Lớp phát hành: community prerelease, không phải stable.** Workflow luôn tạo
+> draft trước. Chỉ đúng artifact đã vượt toàn bộ exact-artifact gate mới được
+> chuyển thành bản công khai; Public Latest vẫn là `vi-v0.20.0-25`.
 
 ### Bản tải công khai hiện hành
 
@@ -45,7 +48,27 @@ cài có thể kiểm tra, thay vì yêu cầu người dùng phổ thông tự 
 Python, Node.js và dependency. Bản phân phối không kèm model, tài khoản trả phí,
 API key hoặc hạn mức sử dụng.
 
-### Điểm mới trong phạm vi v26 mở rộng
+### Điểm mới trong v28
+
+#### Đồng bộ nền Hermes Agent mới nhất
+
+- Đồng bộ từ tag upstream đã ký `v2026.8.18`, tương ứng Hermes Agent `0.20.4`,
+  thay vì bám một nhánh động.
+- Giữ các thay đổi lõi mới của upstream về model/provider, gateway, bộ nhớ,
+  công cụ, Desktop và an toàn cập nhật; đồng thời giữ nguyên lớp phân phối tiếng
+  Việt, runtime resident, installer và cơ chế quay lui của dự án cộng đồng.
+- Khôi phục đường cài và kênh cập nhật về
+  `LucDinhLe/hermes-agent-vietnamese`; kênh stable ưu tiên tag `vi-v*` công khai.
+- Khôi phục `hermes update --eject` để tải script cài nguồn từ đúng commit của
+  Hermes Vietnamese; không còn giao commit cộng đồng cho bộ cài upstream.
+- Kênh cập nhật stable chỉ chọn GitHub Release đã công khai; tag của draft
+  candidate không còn bị báo sớm cho người dùng.
+- Nâng Electron lên `42.8.0`; kiểm toán dependency đầy đủ tại candidate source
+  trả về `0 vulnerabilities`.
+- Lần chạy đầu nhận tiếng Việt từ cả Desktop và cấu hình backend; ô nhập tiếp
+  theo dùng câu **Gửi yêu cầu**, không dùng cụm **Gửi theo dõi**.
+
+### Các nâng cấp được giữ từ v26 và v27
 
 #### Hermes Connector cho Chrome và Edge
 
@@ -112,8 +135,8 @@ Chrome Web Store. Extension Manager tổng quát được tách khỏi phạm vi
   Advisor plan/recovery/final đã được đưa thẳng vào workflow tạo candidate.
 - Sáu target native phải build thành công và khớp SHA-256 trước khi draft được
   tạo: Windows x64/ARM64, macOS Apple Silicon/Intel và Linux x64/ARM64.
-- **Windows x64 chưa được tuyên bố exact-artifact smoke đạt ở thời điểm tạo
-  draft.** Candidate phải được tải lại từ draft và thử trong Hermes HOME,
+- **Windows x64 chưa được tuyên bố exact-artifact smoke đạt trước workflow
+  runtime-smoke.** Candidate phải được tải lại từ draft và thử trong Hermes HOME,
   AppData, Electron user-data, Chrome profile và Edge profile hoàn toàn cô lập.
 - Cổng bắt buộc còn gồm: fresh install, first-run không cần developer tools,
   gateway/onboarding, safe tool, Chrome+Edge Connector, revoke/persistence,

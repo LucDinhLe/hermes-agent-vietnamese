@@ -647,7 +647,16 @@ export const en: Translations = {
       shortcutDesc: 'Needs at least one modifier, e.g. CommandOrControl+Shift+Space.',
       active: 'Shortcut is active.',
       takenBy: 'Another app already uses this shortcut — pick a different one.',
-      invalidShortcut: 'Not a valid shortcut. Include at least one modifier key.'
+      invalidShortcut: 'Not a valid shortcut. Include at least one modifier key.',
+      window: {
+        ariaLabel: 'Quick Entry',
+        placeholder: 'Ask Hermes…',
+        disconnectedPlaceholder: 'Not connected — open Hermes to reconnect',
+        sendTo: 'Send to',
+        targetSession: 'Target session',
+        currentChat: 'Current chat',
+        newSession: 'New session'
+      }
     },
     credentials: {
       pasteKey: 'Paste key',
@@ -859,7 +868,7 @@ export const en: Translations = {
       sshErrHostKey:
         'The host key has CHANGED since you last connected. Verify this is expected, then run ssh-keygen -R <host> and reconnect.',
       sshErrNotInstalled:
-        'Hermes is not installed on the remote host. Install it there (curl -fsSL https://hermes-agent.nousresearch.com/install.sh | sh) or set the Hermes path.',
+        'Hermes is not installed on the remote host. Install it there (curl -fsSL https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/scripts/install.sh | sh) or set the Hermes path.',
       sshErrPlatform:
         'Unsupported remote platform. Hermes Desktop SSH mode supports Linux, macOS, and Windows remote hosts.',
       sshErrTimeout: 'SSH connection timed out. The host may be unreachable or asleep.',
@@ -1462,6 +1471,13 @@ export const en: Translations = {
       securityAuditDesc: 'Scan config and skills for risky settings',
       backup: 'Create backup',
       backupDesc: 'Zip config, memories, skills, and sessions',
+      revealBackup: 'Show backup',
+      importBackup: 'Restore backup',
+      importBackupDesc: 'Select a Hermes backup zip and restore its config, memories, skills, and sessions',
+      importBackupConfirm:
+        'Restore this backup? Existing Hermes data with the same names will be replaced. The current installation and app files will stay in place.',
+      importBackupRestart: 'Restore completed. Restart Hermes to load all restored data.',
+      importBackupFailed: 'Backup restore failed',
       debugShare: 'Debug share',
       debugShareDesc: 'Upload a redacted report + logs, get shareable links (auto-deletes in 6h)',
       debugShareRunning: 'Uploading debug report...',
@@ -2028,6 +2044,41 @@ export const en: Translations = {
     projectEmpty: 'No sessions yet',
     noSessions: 'No sessions yet',
     noFilterMatches: 'No sessions match these filters',
+    filterMenu: {
+      ariaLabel: 'Filters',
+      grouping: 'Grouping',
+      ordering: 'Ordering',
+      show: 'Show',
+      filters: 'Filters',
+      status: 'Status',
+      pullRequest: 'Pull request',
+      project: 'Project',
+      archived: 'Archived',
+      resetDefaults: 'Reset to defaults',
+      expandAll: 'Expand all',
+      collapseAll: 'Collapse all',
+      markAllRead: 'Mark all as read',
+      options: {
+        updated: 'Updated',
+        project: 'Project',
+        status: 'Status',
+        created: 'Created',
+        tokens: 'Tokens',
+        cost: 'Cost',
+        manual: 'Manual',
+        pr: 'PR',
+        profile: 'Profile',
+        open: 'Open',
+        draft: 'Draft',
+        merged: 'Merged',
+        closed: 'Closed',
+        none: 'No PR',
+        'needs-input': 'Needs input',
+        working: 'Working',
+        unread: 'Unread',
+        idle: 'Idle'
+      }
+    },
     projects: {
       sectionLabel: 'Projects',
       home: 'Home',
@@ -2484,6 +2535,9 @@ export const en: Translations = {
       skipped: 'Skipped',
       failed: 'Failed'
     },
+    journeySteps: ['Install', 'Connect a model', 'Start working'],
+    chooseLanguage: 'Setup language',
+    noTerminalRequired: 'No Terminal commands or configuration files are required for setup.',
     oneTimeTitle: 'Hermes needs a one-time install',
     unsupportedDesc: platform =>
       `Automated first-launch install isn’t available on ${platform} yet. Open Terminal and run the command below, then relaunch this app. Subsequent launches will skip this step.`,

@@ -1058,7 +1058,7 @@ export const zh: Translations = {
         'SSH 认证失败。请将密钥加载到 ssh-agent（ssh-add），或在 ~/.ssh/config 中设置 IdentityFile——Hermes 以非交互方式运行 ssh。',
       sshErrHostKey: '自上次连接以来主机密钥已更改。请确认这是预期的，然后运行 ssh-keygen -R <host> 并重新连接。',
       sshErrNotInstalled:
-        '远程主机上未安装 Hermes。请在远程安装（curl -fsSL https://hermes-agent.nousresearch.com/install.sh | sh）或设置 Hermes 路径。',
+        '远程主机上未安装 Hermes。请在远程安装（curl -fsSL https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/scripts/install.sh | sh）或设置 Hermes 路径。',
       sshErrPlatform: '不支持的远程平台。Hermes Desktop 的 SSH 模式支持 Linux、macOS 和 Windows 远程主机。',
       sshErrTimeout: 'SSH 连接超时。主机可能无法访问或处于休眠状态。',
       sshErrUpdateRequired: '使用 Desktop SSH 连接前，请更新远程主机上的 Hermes。',
@@ -1650,6 +1650,12 @@ export const zh: Translations = {
       securityAuditDesc: '扫描配置与技能中的风险设置',
       backup: '创建备份',
       backupDesc: '打包配置、记忆、技能与会话',
+      revealBackup: '显示备份',
+      importBackup: '恢复备份',
+      importBackupDesc: '选择 Hermes 备份压缩包并恢复配置、记忆、技能与会话',
+      importBackupConfirm: '要恢复此备份吗？同名的现有 Hermes 数据将被替换，安装文件和应用文件会保留。',
+      importBackupRestart: '恢复完成。请重新启动 Hermes 以加载所有恢复的数据。',
+      importBackupFailed: '备份恢复失败',
       debugShare: '调试分享',
       debugShareDesc: '上传脱敏报告与日志，获取可分享链接（6 小时后自动删除）',
       debugShareRunning: '正在上传调试报告…',
@@ -2661,6 +2667,9 @@ export const zh: Translations = {
       skipped: '已跳过',
       failed: '失败'
     },
+    journeySteps: ['安装', '连接模型', '开始工作'],
+    chooseLanguage: '设置语言',
+    noTerminalRequired: '设置过程无需使用终端命令或编辑配置文件。',
     oneTimeTitle: 'Hermes 需要一次性安装',
     unsupportedDesc: platform =>
       `${platform} 暂不支持自动首次启动安装。请打开终端并运行下面的命令，然后重新启动此应用。之后启动会跳过此步骤。`,

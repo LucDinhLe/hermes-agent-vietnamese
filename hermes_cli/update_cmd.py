@@ -27,6 +27,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -167,6 +168,148 @@ _UPDATE_CRITICAL_FILES = (
     "toolsets.py",
     "hermes_constants.py",
 )
+
+# Stable community releases use ``vi-vX.Y.Z-N``. Upstream ``vX.Y.Z`` tags
+# remain valid for source checkouts, but a Vietnamese release is preferred
+# whenever the public fork exposes one. CalVer tags such as ``v2026.8.18`` are
+# intentionally excluded so they cannot outrank the fork's SemVer line.
+_RELEASE_TAG_RE = re.compile(r"^(?:vi-)?v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)(?:-(\d+))?$")
+
+
+def _parse_release_tag(tag: str):
+    """Parse a final upstream/community release into a sortable tuple."""
+    value = tag.strip()
+    match = _RELEASE_TAG_RE.match(value)
+    if not match:
+        return None
+    major, minor, patch, iteration = match.groups()
+    is_vietnamese = value.startswith("vi-")
+    if is_vietnamese != (iteration is not None):
+        return None
+    return (int(major), int(minor), int(patch), int(iteration) if iteration else -1)
+
+
+def _latest_release_tag_from_ls_remote(output: str):
+    """Select the newest final community release, or newest upstream tag."""
+    best = None
+    shas = {}
+    for line in output.splitlines():
+        parts = line.split("\t")
+        if len(parts) != 2:
+            continue
+        sha, ref = parts
+        if not ref.startswith("refs/tags/"):
+            continue
+        name = ref[len("refs/tags/"):]
+        peeled = name.endswith("^{}")
+        if peeled:
+            name = name[:-3]
+        version = _parse_release_tag(name)
+        if version is None:
+            continue
+        if peeled or name not in shas:
+            shas[name] = sha.strip()
+        rank = (1 if name.startswith("vi-") else 0, version)
+        if best is None or rank > best[0]:
+            best = (rank, name)
+    if best is None:
+        return None, None
+    tag = best[1]
+    return tag, shas.get(tag)
+
+
+def _resolve_latest_release_tag(git_cmd, cwd):
+    """Resolve the newest published release and its peeled commit from origin."""
+    tag = _github_latest_release_tag()
+    if tag is None:
+        return None, None
+    try:
+        result = subprocess.run(
+            git_cmd
+            + [
+                "ls-remote",
+                "--tags",
+                "origin",
+                f"refs/tags/{tag}",
+                f"refs/tags/{tag}^{{}}",
+            ],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        logger.warning("Could not list release tags from origin: %s", exc)
+        return None, None
+    if result.returncode != 0:
+        logger.warning("git ls-remote --tags failed: %s", (result.stderr or "").strip().splitlines()[:1])
+        return None, None
+    resolved_tag, resolved_sha = _latest_release_tag_from_ls_remote(result.stdout)
+    if resolved_tag != tag or resolved_sha is None:
+        logger.warning("Published release tag %s does not resolve on origin", tag)
+        return None, None
+    return resolved_tag, resolved_sha
+
+
+def _stable_channel_active(args) -> bool:
+    """Return True when this update tracks public tags rather than a branch."""
+    if getattr(args, "branch", None):
+        return False
+    try:
+        from hermes_cli.config import load_config
+        from hermes_cli.install_manifest import CHANNEL_STABLE, resolve_update_channel
+
+        config = None
+        try:
+            config = load_config()
+        except Exception as exc:
+            logger.debug("Could not load config for channel resolution: %s", exc)
+        return resolve_update_channel(config, _m().PROJECT_ROOT) == CHANNEL_STABLE
+    except Exception as exc:
+        logger.warning("Channel resolution failed; defaulting to main: %s", exc)
+        return False
+
+
+def _latest_public_release_tag_from_releases(data):
+    """Select the newest published community release from GitHub API data."""
+    if not isinstance(data, list):
+        return None
+    candidates = []
+    for item in data:
+        if not isinstance(item, dict) or item.get("draft") is True:
+            continue
+        tag = item.get("tag_name")
+        if not isinstance(tag, str):
+            continue
+        version = _parse_release_tag(tag)
+        if version is None:
+            continue
+        candidates.append((1 if tag.startswith("vi-") else 0, version, tag))
+    return max(candidates)[2] if candidates else None
+
+
+def _github_latest_release_tag():
+    """Resolve the newest public release, including a published prerelease."""
+    import urllib.error
+    import urllib.request
+
+    def _get_json(url):
+        request = urllib.request.Request(
+            url,
+            headers={"Accept": "application/vnd.github+json", "User-Agent": "hermes-update"},
+        )
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+
+    base = "https://api.github.com/repos/LucDinhLe/hermes-agent-vietnamese"
+    try:
+        data = _get_json(f"{base}/releases?per_page=100")
+        return _latest_public_release_tag_from_releases(data)
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        logger.warning("Could not resolve latest release from GitHub API: %s", exc)
+    return None
 
 def _capture_head_sha(git_cmd, cwd) -> str | None:
     """Return the current HEAD SHA, or None if it can't be resolved."""
@@ -1069,8 +1212,18 @@ def _update_via_zip(args, *, had_desktop_app_before_update: bool = False):
             f"--branch {branch}`, or update against main with `hermes update`."
         )
         _m().sys.exit(1)
+
+    zip_ref = f"refs/heads/{branch}"
+    if _stable_channel_active(args):
+        tag = _github_latest_release_tag()
+        if tag is None:
+            print("✗ Hermes cannot resolve the latest public release from GitHub.")
+            print("  Switch channels with: hermes config set update.channel main")
+            _m().sys.exit(1)
+        print(f"→ Update channel: stable. Hermes downloads release {tag}.")
+        zip_ref = f"refs/tags/{tag}"
     zip_url = (
-        f"https://github.com/NousResearch/hermes-agent/archive/refs/heads/{branch}.zip"
+        f"https://github.com/LucDinhLe/hermes-agent-vietnamese/archive/{zip_ref}.zip"
     )
 
     print("→ Downloading latest version...")
@@ -1751,13 +1904,13 @@ def _discard_stashed_changes(
     return True
 
 OFFICIAL_REPO_URLS = {
-    "https://github.com/NousResearch/hermes-agent.git",
-    "git@github.com:NousResearch/hermes-agent.git",
-    "https://github.com/NousResearch/hermes-agent",
-    "git@github.com:NousResearch/hermes-agent",
+    "https://github.com/LucDinhLe/hermes-agent-vietnamese.git",
+    "git@github.com:LucDinhLe/hermes-agent-vietnamese.git",
+    "https://github.com/LucDinhLe/hermes-agent-vietnamese",
+    "git@github.com:LucDinhLe/hermes-agent-vietnamese",
 }
 
-OFFICIAL_REPO_URL = "https://github.com/NousResearch/hermes-agent.git"
+OFFICIAL_REPO_URL = "https://github.com/LucDinhLe/hermes-agent-vietnamese.git"
 
 SKIP_UPSTREAM_PROMPT_FILE = ".skip_upstream_prompt"
 
@@ -1883,7 +2036,7 @@ def _sync_with_upstream_if_needed(git_cmd: list[str], cwd: Path) -> None:
         # Ask user if they want to add upstream
         print()
         print("ℹ Your fork is not tracking the official Hermes repository.")
-        print("  This means you may miss updates from NousResearch/hermes-agent.")
+        print("  This means you may miss updates from LucDinhLe/hermes-agent-vietnamese.")
         print()
         try:
             response = (
@@ -1897,7 +2050,7 @@ def _sync_with_upstream_if_needed(git_cmd: list[str], cwd: Path) -> None:
             print("→ Adding upstream remote...")
             if _add_upstream_remote(git_cmd, cwd):
                 print(
-                    "  ✓ Added upstream: https://github.com/NousResearch/hermes-agent.git"
+                    "  ✓ Added upstream: https://github.com/LucDinhLe/hermes-agent-vietnamese.git"
                 )
                 has_upstream = True
             else:
@@ -1905,7 +2058,7 @@ def _sync_with_upstream_if_needed(git_cmd: list[str], cwd: Path) -> None:
                 return
         else:
             print(
-                "  Skipped. Run 'git remote add upstream https://github.com/NousResearch/hermes-agent.git' to add later."
+                "  Skipped. Run 'git remote add upstream https://github.com/LucDinhLe/hermes-agent-vietnamese.git' to add later."
             )
             _mark_skip_upstream_prompt()
             return
@@ -2723,6 +2876,32 @@ def _cmd_update_check(branch: str = "main", *, branch_explicit: bool = False):
     cleared = clear_stale_git_locks(_m().PROJECT_ROOT)
     for lock_path in cleared:
         print(f"  (removed stale git lock: {lock_path})")
+
+    if not branch_explicit and _stable_channel_active(None):
+        print("→ Update channel: stable (tagged community releases)")
+        tag, tag_sha = _resolve_latest_release_tag(git_cmd, _m().PROJECT_ROOT)
+        if tag is None:
+            print("✗ No public release tags found on origin.")
+            print("  Switch channels with: hermes config set update.channel main")
+            sys.exit(1)
+        head_sha = _capture_head_sha(git_cmd, _m().PROJECT_ROOT)
+        at_or_past_tag = head_sha == tag_sha if head_sha and tag_sha else False
+        if not at_or_past_tag and tag_sha:
+            contained = subprocess.run(
+                git_cmd + ["merge-base", "--is-ancestor", tag_sha, "HEAD"],
+                cwd=_m().PROJECT_ROOT,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            at_or_past_tag = contained.returncode == 0
+        if at_or_past_tag:
+            print(f"✓ Up to date with the latest release ({tag}).")
+        else:
+            print(f"→ New release available: {tag}")
+            print("  Run `hermes update` to install it.")
+        return
 
     # Fetch only the branch we compare against; prefer upstream as the canonical
     # reference. A bare `git fetch <remote>` pulls every ref, and this repo has
@@ -4597,6 +4776,205 @@ def _rebuild_desktop_after_update(
         print("  ✓ Desktop app up to date")
 
 
+def _eject_resident_bundle(
+    bundle_repo_root: Path, pinned_tag: str, *, platform: str | None = None
+) -> int:
+    """Hand a sealed desktop bundle over to the community source installer.
+
+    The bundle itself is read-only, so the installer is launched with the exact
+    build commit recorded in ``.hermes_build_info.json``.  The next desktop
+    launch then prefers the source-managed checkout created beside the bundle.
+    """
+    host_platform = platform or sys.platform
+    if host_platform not in ("darwin", "win32"):
+        print("\u2717 The guided source installer is only available on macOS and Windows.")
+        print("  Install from source instead:")
+        print(
+            "  curl -fsSL https://raw.githubusercontent.com/"
+            "LucDinhLe/hermes-agent-vietnamese/main/scripts/install.sh | bash"
+        )
+        print("  The desktop app will prefer that checkout on its next launch.")
+        return 1
+
+    target = get_hermes_home() / "hermes-agent"
+    existing = _read_json_or_none(target / ".hermes-install.json")
+    if (target / ".git").exists() and (
+        existing is None or existing.get("installMode") == "source"
+    ):
+        print(f"\u2713 A source checkout already exists at {target}.")
+        print("  The desktop app will use it on its next launch.")
+        print("  Update it with: hermes update")
+        return 0
+
+    build_info = _read_json_or_none(bundle_repo_root / ".hermes_build_info.json") or {}
+    commit = str(build_info.get("commit") or "")
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        print("\u2717 An eject is not possible. The bundle's build info has no valid commit.")
+        print("  Reinstall from source instead:")
+        print(
+            "  curl -fsSL https://raw.githubusercontent.com/"
+            "LucDinhLe/hermes-agent-vietnamese/main/scripts/install.sh | bash"
+        )
+        return 1
+
+    installer_name = "install.sh" if host_platform == "darwin" else "install.ps1"
+    installer_url = (
+        "https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/"
+        f"{commit}/scripts/{installer_name}"
+    )
+
+    print("\u2695 Hermes ejects this install from the sealed app bundle...")
+    print(f"\u2192 Hermes downloads the source installer from {installer_url} ...")
+
+    import tempfile
+
+    scratch = Path(tempfile.mkdtemp(prefix="hermes-eject-"))
+    installer_path = scratch / installer_name
+    if not _download_eject_installer(installer_url, installer_path):
+        shutil.rmtree(scratch, ignore_errors=True)
+        print("\u2717 The download failed. Hermes aborted the eject. The install is unchanged.")
+        return 1
+
+    print(f"\u2192 Hermes starts the installer, pinned to {pinned_tag} ({commit[:12]})...")
+    ok = _launch_eject_installer(
+        installer_path, scratch, commit, platform=host_platform
+    )
+    if not ok:
+        shutil.rmtree(scratch, ignore_errors=True)
+        print("\u2717 Hermes could not start the installer. The install is unchanged.")
+        print(f"  The downloaded file is gone; get it manually: {installer_url}")
+        return 1
+
+    print("\u2713 The Hermes source installer is running. Follow its window to finish the eject.")
+    print(f"  \u2022 It installs a source-managed checkout at {target}")
+    print("  \u2022 The desktop app will use that checkout on its next launch.")
+    print("  \u2022 After the install, update with: hermes update")
+    return 0
+
+
+def _read_json_or_none(path: Path):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _download_eject_installer(url: str, dest: Path) -> bool:
+    """Download the installer to ``dest``. Returns False on any failure."""
+    import urllib.request
+
+    request = urllib.request.Request(url, headers={"User-Agent": "hermes-agent-eject"})
+    try:
+        with urllib.request.urlopen(request, timeout=120) as resp, open(dest, "wb") as out:
+            shutil.copyfileobj(resp, out)
+        return True
+    except OSError as exc:
+        print(f"  {exc}")
+        return False
+
+
+def _launch_eject_installer(
+    installer_path: Path,
+    scratch: Path,
+    commit: str,
+    *,
+    platform: str | None = None,
+) -> bool:
+    """Start the platform source installer in a new window at ``commit``."""
+    try:
+        host_platform = platform or sys.platform
+        if host_platform == "darwin":
+            launcher = scratch / "Hermes Source Install.command"
+            launcher.write_text(
+                "#!/bin/bash\n"
+                f"exec /bin/bash {shlex.quote(str(installer_path))} "
+                f"--commit {shlex.quote(commit)} --force-commit --include-desktop\n",
+                encoding="utf-8",
+            )
+            launcher.chmod(0o700)
+            launch = subprocess.run(
+                ["open", "-n", str(launcher)],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
+            if launch.returncode != 0:
+                print(f"  open failed: {(launch.stderr or '').strip()}")
+            return launch.returncode == 0
+
+        powershell = shutil.which("powershell.exe") or shutil.which("powershell")
+        if powershell is None:
+            print("  Windows PowerShell was not found.")
+            return False
+        subprocess.Popen(
+            [
+                powershell,
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                str(installer_path),
+                "-Commit",
+                commit,
+                "-ForceCommit",
+                "-IncludeDesktop",
+            ],
+            creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
+            close_fds=True,
+        )
+        return True
+    except OSError as exc:
+        print(f"  {exc}")
+        return False
+
+
+def cmd_update_eject(args) -> int:
+    """Implement ``hermes update --eject`` for bundled and source installs."""
+    from hermes_cli.install_manifest import (
+        CHANNEL_MAIN,
+        CHANNEL_STABLE,
+        MODE_SOURCE,
+        read_install_manifest,
+        write_install_manifest,
+    )
+
+    project_root = _m().PROJECT_ROOT
+    manifest = read_install_manifest(project_root)
+    channel = getattr(args, "channel", None) or CHANNEL_MAIN
+    if channel not in (CHANNEL_MAIN, CHANNEL_STABLE):
+        print(f"✗ Unknown channel '{channel}'. Use 'stable' or 'main'.")
+        return 1
+
+    if manifest.get("installMode") != "bundled":
+        if getattr(args, "channel", None):
+            manifest["installMode"] = MODE_SOURCE
+            manifest["channel"] = channel
+            write_install_manifest(manifest, project_root)
+            print(f"✓ The install is already source-managed. The channel is now '{channel}'.")
+        else:
+            print("✓ Nothing to eject. This install is already source-managed.")
+            print("  (Only desktop-bundled installs need an eject.)")
+        return 0
+
+    pinned_tag = manifest.get("pinnedTag") or ""
+    if _RELEASE_TAG_RE.fullmatch(pinned_tag) is None:
+        print("✗ An eject is not possible. The install manifest has no valid pinned tag.")
+        print("  Reinstall from source instead:")
+        print(
+            "  curl -fsSL https://raw.githubusercontent.com/"
+            "LucDinhLe/hermes-agent-vietnamese/main/scripts/install.sh | bash"
+        )
+        return 1
+
+    if getattr(args, "channel", None):
+        print(f"⚠ --channel {channel} does not apply to this eject.")
+        print("  After the install, set it with: hermes update --eject --channel " + channel)
+
+    return _eject_resident_bundle(project_root, pinned_tag)
+
+
 def _cmd_update_impl(args, gateway_mode: bool):
     """Body of ``cmd_update`` — kept separate so the wrapper can always
     restore stdio even on ``sys.exit``."""
@@ -4760,7 +5138,8 @@ def _cmd_update_impl(args, gateway_mode: bool):
         else:
             print("✗ Not a git repository. Please reinstall:")
             print(
-                "  curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash"
+                "  curl -fsSL https://raw.githubusercontent.com/LucDinhLe/"
+                "hermes-agent-vietnamese/main/scripts/install.sh | bash"
             )
             sys.exit(1)
 
@@ -4829,6 +5208,18 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # against.
         branch = _m()._resolve_update_branch(args)
 
+        target_ref = f"origin/{branch}"
+        stable_tag = None
+        if _stable_channel_active(args):
+            print("→ Update channel: stable (tagged community releases)")
+            stable_tag, _stable_tag_sha = _resolve_latest_release_tag(git_cmd, _m().PROJECT_ROOT)
+            if stable_tag is None:
+                print("✗ No public release tags found on origin. An update is not possible on the stable channel.")
+                print("  Switch channels with: hermes config set update.channel main")
+                _m()._resume_windows_gateways_after_update(_windows_gateway_resume)
+                sys.exit(1)
+            print(f"→ Latest release: {stable_tag}")
+
         # Self-heal abandoned git lock files (e.g. .git/shallow.lock left by a
         # crashed fetch) before the fetch — otherwise the update fails with
         # "Unable to create .../shallow.lock: File exists" and never reaches
@@ -4840,8 +5231,9 @@ def _cmd_update_impl(args, gateway_mode: bool):
             print("  (removed stale git lock(s): %s)" % ", ".join(cleared))
 
         print("→ Fetching updates...")
+        fetch_target = ["tag", stable_tag] if stable_tag else [branch]
         fetch_result = subprocess.run(
-            git_cmd + ["fetch", "origin", branch],
+            git_cmd + ["fetch", "origin", *fetch_target],
             cwd=_m().PROJECT_ROOT,
             capture_output=True,
             text=True, encoding="utf-8", errors="replace",
@@ -4887,7 +5279,10 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # otherwise warn loudly, mark the code update SKIPPED, and stop
         # before the post-update steps reinforce the stale tree.
         parked_branch_switched = False
-        if current_branch != branch:
+        if stable_tag is not None:
+            target_ref = stable_tag
+            auto_stash_ref = _m()._stash_local_changes_if_needed(git_cmd, _m().PROJECT_ROOT)
+        elif current_branch != branch:
             if current_branch != "HEAD":
                 switch_safe, switch_block_reason = _m()._assess_parked_branch_switch(
                     git_cmd, _m().PROJECT_ROOT, current_branch, branch
@@ -4969,7 +5364,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
         # 0), so keep it, but treat the shallow NUMBER as unknown and recover
         # the real one via the GitHub compare API when possible.
         result = subprocess.run(
-            git_cmd + ["rev-list", f"HEAD..origin/{branch}", "--count"],
+            git_cmd + ["rev-list", f"HEAD..{target_ref}", "--count"],
             cwd=_m().PROJECT_ROOT,
             capture_output=True,
             text=True, encoding="utf-8", errors="replace",
@@ -4995,7 +5390,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
                 text=True, encoding="utf-8", errors="replace",
             ).stdout.strip()
             target_sha = subprocess.run(
-                git_cmd + ["rev-parse", f"origin/{branch}"],
+                git_cmd + ["rev-parse", target_ref],
                 cwd=_m().PROJECT_ROOT, capture_output=True,
                 text=True, encoding="utf-8", errors="replace",
             ).stdout.strip()
@@ -5008,7 +5403,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             _invalidate_update_cache()
 
             # Even if origin is up to date, the fork may be behind upstream
-            if is_fork and branch == "main":
+            if is_fork and branch == "main" and stable_tag is None:
                 _m()._sync_with_upstream_if_needed(git_cmd, _m().PROJECT_ROOT)
 
             # Restore stash and switch back to original branch if we moved.
@@ -5158,7 +5553,7 @@ def _cmd_update_impl(args, gateway_mode: bool):
             # `pull --ff-only origin <branch>` given the fresh tracking ref;
             # the divergence fallback below is unchanged.
             pull_result = subprocess.run(
-                git_cmd + ["merge", "--ff-only", f"origin/{branch}"],
+                git_cmd + ["merge", "--ff-only", target_ref],
                 cwd=_m().PROJECT_ROOT,
                 capture_output=True,
                 text=True, encoding="utf-8", errors="replace",
@@ -5171,17 +5566,17 @@ def _cmd_update_impl(args, gateway_mode: bool):
                     "  ⚠ Fast-forward not possible (history diverged), resetting to match remote..."
                 )
                 reset_result = subprocess.run(
-                    git_cmd + ["reset", "--hard", f"origin/{branch}"],
+                    git_cmd + ["reset", "--hard", target_ref],
                     cwd=_m().PROJECT_ROOT,
                     capture_output=True,
                     text=True, encoding="utf-8", errors="replace",
                 )
                 if reset_result.returncode != 0:
-                    print(f"✗ Failed to reset to origin/{branch}.")
+                    print(f"✗ Failed to reset to {target_ref}.")
                     if reset_result.stderr.strip():
                         print(f"  {reset_result.stderr.strip()}")
                     print(
-                        f"  Try manually: git fetch origin && git reset --hard origin/{branch}"
+                        f"  Try manually: git fetch origin && git reset --hard {target_ref}"
                     )
                     sys.exit(1)
 

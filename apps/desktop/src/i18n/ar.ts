@@ -2019,8 +2019,6 @@ export const ar = defineLocale({
     lookingUpProviders: 'جار البحث عن المزوّدين...',
     collapse: 'طي',
     otherProviders: 'مزودون آخرون',
-    apiKeyProviders: 'مزوّدو مفتاح API والسحابة والنماذج المحلية',
-    apiKeyProviderPitch: 'اتصل باستخدام مفتاح API الخاص بك.',
     haveApiKey: 'لديك مفتاح API',
     chooseLater: 'سأختار مزوّدا لاحقا',
     recommended: 'موصى به',

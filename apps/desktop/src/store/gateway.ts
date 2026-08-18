@@ -180,13 +180,6 @@ export function gatewayForProfile(profile: string | null | undefined): HermesGat
   return key === g.primaryProfile ? g.primaryGateway : (g.secondaries.get(key)?.gateway ?? null)
 }
 
-/** Return a profile's already-owned socket without changing the active UI. */
-export function gatewayForProfile(profile: string | null | undefined): HermesGateway | null {
-  const key = normKey(profile)
-
-  return key === g.primaryProfile ? g.primaryGateway : (g.secondaries.get(key)?.gateway ?? null)
-}
-
 // Mirror a backend's connection state into the global composer state, but only
 // when that backend is the one the user is currently looking at. Lets the
 // composer reflect the active profile's socket without a background reconnect
@@ -455,7 +448,7 @@ async function sharedPrimaryRoute(profile: string): Promise<boolean> {
 // Resolve and open `profile`'s socket WITHOUT changing the active gateway.
 // Shared global-remote profiles intentionally return the primary socket plus a
 // request-scope flag; dedicated local/remote profiles use their pooled socket.
-async function gatewayForProfile(
+async function routeGatewayForProfile(
   profile: string,
   leaseRequest = false
 ): Promise<{ gateway: HermesGateway | null; key: string; release: () => void; scopeProfile: boolean }> {
@@ -530,7 +523,7 @@ export async function requestGatewayForProfile<T>(
   method: string,
   params: Record<string, unknown> = {}
 ): Promise<T> {
-  const route = await gatewayForProfile(profile, true)
+  const route = await routeGatewayForProfile(profile, true)
 
   try {
     if (!route.gateway) {
@@ -608,7 +601,7 @@ export async function requestGatewayForAgent<T>(
 // backend must not start a background retry loop — the real switch owns retry
 // and error UX. An already-open (or primary) profile is a no-op.
 export async function openGatewayForProfile(profile: string): Promise<void> {
-  await gatewayForProfile(profile)
+  await routeGatewayForProfile(profile)
 }
 
 // ── Connection-scoped agents (multi-source roster) ─────────────────────────

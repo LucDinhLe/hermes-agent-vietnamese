@@ -109,7 +109,6 @@ export type GatewayEventPayload = {
   start?: number
   count?: number
   // preview.interact.request (agent controlling the same live Browser pane)
-  action?: string
   delta_y?: number
   key?: string
   ref?: string

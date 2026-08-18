@@ -102,8 +102,8 @@ export function configureAutoUpdater(updater: ConfigurableAutoUpdater): void {
   updater.autoInstallOnAppQuit = true
   updater.disableDifferentialDownload = true
   // Community revision numbers are encoded as SemVer prerelease components
-  // (0.20.0-vi.15) even though the GitHub release itself is stable. Without
-  // this flag electron-updater filters the fork's update feed out entirely.
+  // (0.20.0-vi.15), and community candidates may also be published as GitHub
+  // prereleases. Without this flag electron-updater filters that feed out.
   updater.allowPrerelease = true
 }
 

@@ -440,7 +440,7 @@ export function TreeGroup({
               <>
                 {minimizable && (
                   <PaneStripGlyph
-                    icon={<Codicon name={node.minimized ? 'chevron-down' : 'chevron-up'} />}
+                    icon={<Codicon name={node.minimized ? 'chevron-up' : 'chevron-down'} />}
                     label={node.minimized ? t.zones.restore : t.zones.minimize}
                     onSelect={toggleCollapse}
                   />

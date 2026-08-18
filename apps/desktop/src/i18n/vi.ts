@@ -1,6 +1,6 @@
 import { defineFieldCopy } from '@/app/settings/field-copy'
 
-import type { Translations } from './types'
+import { defineLocale } from './define-locale'
 
 // Generated from en.ts by tools/hermes-i18n/generate-vi.mjs.
 
@@ -221,7 +221,7 @@ const VI_FIELD_DESCRIPTIONS = defineFieldCopy({
   }
 })
 
-export const vi: Translations = {
+export const vi = defineLocale({
   common: {
     apply: 'Áp dụng',
     back: 'Quay lại',
@@ -424,7 +424,7 @@ export const vi: Translations = {
     enterHud: 'Chế độ HUD',
     exitHud: 'Thoát chế độ HUD',
     layoutEditor: 'Trình chỉnh sửa bố cục',
-    layoutEditorTitle: 'Trình chỉnh sửa bố cục — ⌘ nhấp vào sẽ đặt lại bố cục'
+    layoutEditorTitle: modifier => `Trình chỉnh sửa bố cục — ${modifier}-nhấp sẽ đặt lại bố cục`
   },
 
   keybinds: {
@@ -858,11 +858,6 @@ export const vi: Translations = {
       envOverride: 'env ghi đè',
       intro:
         'Mặc định chạy trên máy này. Chọn từ xa khi ứng dụng cần điều khiển dịch vụ nền Hermes ở máy khác. Có thể thiết lập riêng cho từng hồ sơ bên dưới.',
-      appliesTo: 'Áp dụng cho',
-      allProfiles: 'Tất cả hồ sơ',
-      defaultConnection: 'Kết nối mặc định cho mọi hồ sơ không có ghi đè riêng.',
-      profileConnection: profile =>
-        `Kết nối chỉ được sử dụng khi “${profile}” là hồ sơ đang hoạt động. Chọn Sử dụng cổng mặc định để xóa ghi đè của nó.`,
       envOverrideTitle: 'Các biến môi trường đang kiểm soát phiên Desktop này.',
       envOverrideDesc:
         'Bỏ đặt HERMES_DESKTOP_REMOTE_URL và HERMES_DESKTOP_REMOTE_TOKEN để sử dụng cài đặt đã lưu bên dưới.',
@@ -870,8 +865,6 @@ export const vi: Translations = {
       localTitle: 'Cổng trên máy này',
       localDesc:
         'Khởi động dịch vụ nền Hermes riêng trên localhost. Đây là lựa chọn mặc định và có thể hoạt động ngoại tuyến.',
-      inheritTitle: 'Sử dụng cổng mặc định',
-      inheritDesc: 'Xóa ghi đè của hồ sơ này và sử dụng kết nối mặc định.',
       remoteTitle: 'Cổng từ xa',
       remoteDesc: 'Kết nối ứng dụng Desktop với dịch vụ nền Hermes từ xa.',
       remoteAuthHint:
@@ -974,8 +967,6 @@ export const vi: Translations = {
       sshHermesPathTitle: 'Hermes (tùy chọn)',
       sshHermesPathDesc: 'Đường dẫn đầy đủ đến nhị phân Hermes từ xa. Trống = tự động phát hiện.',
       sshHermesPathPlaceholder: 'tự động phát hiện',
-      sshRemoteProfileTitle: 'Hồ sơ từ xa (tùy chọn)',
-      sshRemoteProfileDesc: 'Tên hồ sơ trên máy chủ từ xa. Để trống = sử dụng tên hồ sơ Desktop.',
       sshTestConnection: 'Kiểm tra SSH',
       sshConnect: 'Kết nối',
       sshButtonsHint: '“Lưu” áp dụng ở lần khởi động tiếp theo; “Kết nối” sẽ kết nối lại ngay.',
@@ -987,7 +978,7 @@ export const vi: Translations = {
       sshErrHostKey:
         'Khóa máy chủ đã THAY ĐỔI từ lần kết nối trước. Hãy xác minh thay đổi này, sau đó chạy ssh-keygen -R <host> và kết nối lại.',
       sshErrNotInstalled:
-        'Hermes chưa được cài đặt trên máy chủ từ xa. Cài đặt nó ở đó (curl -fsSL https://hermes-agent.nousresearch.com/install.sh | sh) hoặc đặt đường dẫn Hermes.',
+        'Hermes chưa được cài đặt trên máy chủ từ xa. Cài đặt nó ở đó (curl -fsSL https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/scripts/install.sh | sh) hoặc đặt đường dẫn Hermes.',
       sshErrPlatform:
         'Nền tảng từ xa không được hỗ trợ. Chế độ SSH Hermes Desktop hỗ trợ các máy chủ từ xa Linux, macOS và Windows.',
       sshErrTimeout: 'Kết nối SSH đã hết thời gian chờ. Máy chủ có thể không truy cập được hoặc đang ngủ.',
@@ -1250,7 +1241,6 @@ export const vi: Translations = {
     tabSkills: 'Kỹ năng',
     tabToolsets: 'Công cụ',
     tabMcp: 'MCP',
-    tabHub: 'Duyệt trung tâm',
     all: 'Tất cả',
     searchSkills: 'Tìm kỹ năng...',
     searchToolsets: 'Tìm bộ công cụ...',
@@ -2306,7 +2296,7 @@ export const vi: Translations = {
       'Bắt đầu bằng một mục tiêu'
     ],
     followUpPlaceholders: [
-      'Gửi theo dõi',
+      'Gửi yêu cầu',
       'Thêm ngữ cảnh khác',
       'Tinh chỉnh yêu cầu',
       'Tiếp theo là gì?',
@@ -2472,7 +2462,7 @@ export const vi: Translations = {
       scopeLastTurn: 'Lượt cuối cùng',
       commit: 'Commit',
       commitAndPush: 'Commit và đẩy lên',
-      commitPlaceholder: 'Thông điệp commit (⌘↵ để commit)',
+      commitPlaceholder: shortcut => `Thông điệp commit (${shortcut} để commit)`,
       generateCommitMessage: 'Tạo thông điệp commit',
       stopGenerating: 'Dừng tạo',
       createPr: 'Tạo PR',
@@ -2633,8 +2623,6 @@ export const vi: Translations = {
     lookingUpProviders: 'Đang tìm nhà cung cấp...',
     collapse: 'Thu gọn',
     otherProviders: 'Nhà cung cấp khác',
-    apiKeyProviders: 'Khóa API, dịch vụ đám mây và model cục bộ',
-    apiKeyProviderPitch: 'Kết nối bằng khóa API riêng của bạn.',
     haveApiKey: 'Tôi có khóa API',
     chooseLater: 'Tôi sẽ chọn nhà cung cấp sau',
     recommended: 'Khuyên dùng',
@@ -3388,4 +3376,4 @@ export const vi: Translations = {
       toggle: open => `${open ? 'Hiển thị' : 'Ẩn'} thanh bên`
     }
   }
-}
+})

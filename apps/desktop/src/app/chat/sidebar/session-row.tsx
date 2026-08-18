@@ -143,7 +143,7 @@ function SidebarSessionRowImpl({
   const { t } = useI18n()
   const r = t.sidebar.row
   const { cancelPrewarm, startPrewarm } = useProfilePrewarm(session.profile)
-  const title = sessionTitle(session)
+  const title = sessionTitle(session, t.keybinds.actions['session.new'])
   const density = useStore($sessionListDensity)
   const fmt = t.sidebar
 

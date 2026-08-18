@@ -18,12 +18,12 @@ import { $embedAllowed, $embedMode, clearEmbedAllowed, type EmbedMode, setEmbedM
 import { $activeGatewayProfile, $profiles, normalizeProfileKey } from '@/store/profile'
 import { $reactionsEnabled, setReactionsEnabled } from '@/store/reactions-enabled'
 import { $reasoningCollapsedByDefault, setReasoningCollapsedByDefault } from '@/store/reasoning-disclosure'
-import { $sessionListDensity, type SessionListDensity, setSessionListDensity } from '@/store/session-list-density'
 import {
   $reasoningSummaryEnabled,
   clearReasoningSummaryCache,
   setReasoningSummaryEnabled
 } from '@/store/reasoning-summary'
+import { $sessionListDensity, type SessionListDensity, setSessionListDensity } from '@/store/session-list-density'
 import { $toolViewMode, setToolViewMode } from '@/store/tool-view'
 import {
   $translucency,

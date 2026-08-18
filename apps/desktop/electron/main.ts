@@ -59,10 +59,17 @@ import {
 } from './bootstrap-platform'
 import { decideBootstrapRepair } from './bootstrap-repair-guard'
 import { runBootstrap } from './bootstrap-runner'
-import { detectBundleSkew } from './bundle-skew'
 import { BrowserConnectorController } from './browser-connector/controller'
 import { HERMES_PREVIEW_PARTITION } from './browser-connector/cookie-import'
-import { decideResidentRuntime, findResidentPython, latestReleaseFromLsRemote, resolveChannel, resolvePayload } from './bundled-runtime'
+import { detectBundleSkew } from './bundle-skew'
+import {
+  decideResidentRuntime,
+  findResidentPython,
+  latestPublicReleaseTag,
+  latestReleaseFromLsRemote,
+  resolveChannel,
+  resolvePayload
+} from './bundled-runtime'
 import { applyConnectionChange, resolveTerminalConnection } from './connection-apply'
 import {
   apiRequestRegistryConnectionId,
@@ -2781,8 +2788,52 @@ async function checkStableChannelUpdates() {
     }
   }
 
+  let latestTag: string | null = null
+
+  try {
+    const response = await electronNet.fetch(
+      'https://api.github.com/repos/LucDinhLe/hermes-agent-vietnamese/releases?per_page=100',
+      { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'hermes-desktop-update' } }
+    )
+
+    if (!response.ok) {
+      throw new Error(`GitHub Releases returned HTTP ${response.status}`)
+    }
+
+    latestTag = latestPublicReleaseTag(await response.json())
+  } catch (error) {
+    return {
+      supported: true,
+      channel: 'stable',
+      error: 'fetch-failed',
+      message: firstLine(error instanceof Error ? error.message : String(error)),
+      hermesRoot: updateRoot,
+      fetchedAt: Date.now()
+    }
+  }
+
+  if (!latestTag) {
+    return {
+      supported: true,
+      channel: 'stable',
+      error: 'no-release-tags',
+      message: 'No published release exists on the remote yet.',
+      hermesRoot: updateRoot,
+      fetchedAt: Date.now()
+    }
+  }
+
   const [tags, currentSha, dirtyStr] = await Promise.all([
-    runGit(['ls-remote', '--tags', OFFICIAL_REPO_HTTPS_URL, 'v*'], { cwd: updateRoot }),
+    runGit(
+      [
+        'ls-remote',
+        '--tags',
+        OFFICIAL_REPO_HTTPS_URL,
+        `refs/tags/${latestTag}`,
+        `refs/tags/${latestTag}^{}`
+      ],
+      { cwd: updateRoot }
+    ),
     runGit(['rev-parse', 'HEAD'], { cwd: updateRoot }).then(r => r.stdout.trim()),
     runGit(['status', '--porcelain'], { cwd: updateRoot }).then(r => r.stdout.trim())
   ])
@@ -2800,7 +2851,7 @@ async function checkStableChannelUpdates() {
 
   const latest = latestReleaseFromLsRemote(tags.stdout)
 
-  if (!latest) {
+  if (!latest || latest.tag !== latestTag) {
     return {
       supported: true,
       channel: 'stable',

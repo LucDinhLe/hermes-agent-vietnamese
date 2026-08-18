@@ -323,11 +323,7 @@ fn upgrade_cached_script(kind: ScriptKind, cached: &Path, emit_log: &impl Fn(&st
 /// packets) never errors — the whole bootstrap would hang here instead of
 /// falling back to the cached script.
 async fn download(kind: ScriptKind, commit_or_ref: &str, dest_path: &Path) -> Result<()> {
-    let url = format!(
-        "https://raw.githubusercontent.com/NousResearch/hermes-agent/{}/scripts/{}",
-        commit_or_ref,
-        kind.filename()
-    );
+    let url = script_download_url(kind, commit_or_ref);
 
     if let Some(parent) = dest_path.parent() {
         std::fs::create_dir_all(parent).with_context(|| {
@@ -391,6 +387,14 @@ async fn download(kind: ScriptKind, commit_or_ref: &str, dest_path: &Path) -> Re
     Ok(())
 }
 
+fn script_download_url(kind: ScriptKind, commit_or_ref: &str) -> String {
+    format!(
+        "https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/{}/scripts/{}",
+        commit_or_ref,
+        kind.filename()
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -402,6 +406,23 @@ mod tests {
         assert!(!is_valid_commit("02d269"));
         assert!(!is_valid_commit("not-a-sha"));
         assert!(!is_valid_commit(""));
+    }
+
+    #[test]
+    fn script_downloads_stay_on_the_vietnamese_repository() {
+        let commit = "02d26981d3d4ad50e142399b8476f59ad5953ff0";
+        assert_eq!(
+            script_download_url(ScriptKind::Ps1, commit),
+            format!(
+                "https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/{commit}/scripts/install.ps1"
+            )
+        );
+        assert_eq!(
+            script_download_url(ScriptKind::Sh, commit),
+            format!(
+                "https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/{commit}/scripts/install.sh"
+            )
+        );
     }
 
     #[test]

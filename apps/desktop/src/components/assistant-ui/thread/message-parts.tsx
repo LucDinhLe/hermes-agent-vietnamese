@@ -25,8 +25,8 @@ import { generatedImageFromResult } from '@/lib/generated-images'
 import { separateGluedReasoningBlocks } from '@/lib/reasoning-blocks'
 import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
-import { $reasoningCollapsedByDefault } from '@/store/reasoning-disclosure'
 import { $activeGatewayProfile } from '@/store/profile'
+import { $reasoningCollapsedByDefault } from '@/store/reasoning-disclosure'
 import {
   $reasoningSummaries,
   $reasoningSummaryErrors,

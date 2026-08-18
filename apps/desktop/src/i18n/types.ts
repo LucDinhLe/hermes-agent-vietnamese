@@ -5,7 +5,7 @@
 // partial locales should use `defineLocale()` so missing desktop-only strings
 // fall back to English while new keys remain type-checked.
 
-export type Locale = 'en' | 'zh' | 'zh-hant' | 'ja' | 'ar'
+export type Locale = 'en' | 'zh' | 'zh-hant' | 'ja' | 'ar' | 'vi'
 
 export type ToolTitleKey =
   | 'browser_click'
@@ -537,6 +537,15 @@ export interface Translations {
       active: string
       takenBy: string
       invalidShortcut: string
+      window?: {
+        ariaLabel: string
+        placeholder: string
+        disconnectedPlaceholder: string
+        sendTo: string
+        targetSession: string
+        currentChat: string
+        newSession: string
+      }
     }
     credentials: {
       pasteKey: string
@@ -1285,6 +1294,12 @@ export interface Translations {
       securityAuditDesc: string
       backup: string
       backupDesc: string
+      revealBackup: string
+      importBackup: string
+      importBackupDesc: string
+      importBackupConfirm: string
+      importBackupRestart: string
+      importBackupFailed: string
       debugShare: string
       debugShareDesc: string
       debugShareRunning: string
@@ -1704,6 +1719,22 @@ export interface Translations {
     projectEmpty: string
     noSessions: string
     noFilterMatches: string
+    filterMenu?: {
+      ariaLabel: string
+      grouping: string
+      ordering: string
+      show: string
+      filters: string
+      status: string
+      pullRequest: string
+      project: string
+      archived: string
+      resetDefaults: string
+      expandAll: string
+      collapseAll: string
+      markAllRead: string
+      options: Record<string, string>
+    }
     projects: {
       sectionLabel: string
       home: string
@@ -2084,6 +2115,9 @@ export interface Translations {
 
   install: {
     stageStates: Record<string, string>
+    journeySteps: [string, string, string]
+    chooseLanguage: string
+    noTerminalRequired: string
     oneTimeTitle: string
     unsupportedDesc: (platform: string) => string
     installCommand: string
@@ -2160,7 +2194,7 @@ export interface Translations {
     featuredPitch: string
     fireworksPitch: string
     openRouterPitch: string
-    apiKeyOptions: Record<string, { short: string; description: string }>
+    apiKeyOptions: Record<string, { title?: string; short: string; description: string }>
     backToSignIn: string
     getKey: string
     replaceCurrent: string

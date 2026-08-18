@@ -1,5 +1,33 @@
 # Tiến độ
 
+## Cập nhật 2026-08-18 — chuẩn bị Hermes Vietnamese v28
+
+- Worktree `projects/hermes-v28`, nhánh `release/v28-upstream-sync`, đồng bộ từ
+  upstream tag đã ký `v2026.8.18`, commit
+  `e624e9fde561e1add9388384012b295fde669ade`, Hermes Agent `0.20.4`.
+- Phạm vi v28 giữ trọn Connector và tóm tắt reasoning của v26, Advisor của v27;
+  sửa fresh profile mặc định tiếng Việt và đổi ô nhập thành **Gửi yêu cầu**.
+- Khôi phục kênh cập nhật stable theo tag cộng đồng `vi-v*`; các đường cài,
+  cập nhật, eject, release notes và bootstrap runtime đã trỏ về
+  `LucDinhLe/hermes-agent-vietnamese`. Eject tải script từ đúng commit đã đóng
+  gói, thay vì giao commit cộng đồng cho bộ cài upstream.
+- Stable resolver đọc GitHub Releases công khai và lọc draft, nên tag candidate
+  chưa promotion không bị đưa sớm tới các máy đang dùng.
+- Nâng Electron lên `42.8.0`, nanoid lên `3.3.18`; `npm audit` runtime và đầy đủ
+  đều trả `0 vulnerabilities`; `uv lock --check` đạt.
+- Cổng nguồn đã đạt: 120/120 release/runtime tests, 92/92 UI release + Advisor,
+  126/126 Python release tests, 11/11 eject tests, Desktop typecheck và production
+  source build. ESLint đạt 0 lỗi, còn 135 cảnh báo nền upstream được giữ công khai.
+- Full UI trước sửa có 4.779 test đạt và 8 lỗi; ba hồi quy thật đã được sửa, các
+  tệp ảnh hưởng và đúng suite workflow đều xanh. Full Electron có 1.463 test đạt,
+  28 lỗi và 3 skip do giả định POSIX/quyền/timing trên Windows; đúng suite release
+  workflow đạt sạch. Hai full-suite này không được diễn giải thành toàn bộ xanh.
+- Chưa khóa candidate commit/tag, chưa push, chưa tạo draft PR/release và chưa
+  công khai. Cổng tiếp theo là commit sạch, tag bất biến `vi-v0.20.0-28`, build
+  native sáu target, tải lại exact artifact và chạy smoke/rollback theo workflow.
+- Public Latest vẫn là `vi-v0.20.0-25`; rollback giữ `vi-v0.20.0-14`. Candidate
+  v28 chỉ được công khai dạng community prerelease sau toàn bộ exact-artifact gate.
+
 ## Cập nhật 2026-08-18 — bổ sung Giám sát (Advisor) và mở candidate kế tiếp
 
 - Xác nhận `vi-v0.20.0-26` đã là tag bất biến tại
