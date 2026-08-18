@@ -27,10 +27,11 @@ import { useI18n } from '@/i18n'
 import { AlertTriangle, Cpu, Loader2 } from '@/lib/icons'
 import { DEFAULT_REASONING_EFFORT, REASONING_EFFORT_VALUES } from '@/lib/reasoning-effort'
 import { cn } from '@/lib/utils'
+import { setMainModelAssignment } from '@/store/cron-model-impact'
 import { notifyError } from '@/store/notifications'
 import { startManualLocalEndpoint, startManualOnboarding, startManualProviderOAuth } from '@/store/onboarding'
 
-import { invalidateHermesConfig, setHermesConfigCache, useHermesConfigRecord } from '../hooks/use-config-record'
+import { hermesConfigCacheWriter, invalidateHermesConfig, useHermesConfigRecord } from '../hooks/use-config-record'
 import { useOnProfileSwitch } from '../hooks/use-on-profile-switch'
 
 import { CONTROL_TEXT } from './constants'
@@ -114,6 +115,7 @@ const AUX_TASKS: readonly AuxTaskMeta[] = [
   { key: 'approval' },
   { key: 'mcp' },
   { key: 'title_generation' },
+  { key: 'reasoning_summary_vi' },
   { key: 'curator' }
 ]
 
@@ -155,9 +157,6 @@ interface StaleAuxWarningProps {
 // $0-balance provider after switching main away from it) and offers the
 // existing one-click reset rather than auto-clearing legitimate pins.
 function StaleAuxWarning({ applying, onReset, slots, taskLabel }: StaleAuxWarningProps) {
-  const { locale } = useI18n()
-  const isVi = locale === 'vi'
-
   if (!slots.length) {
     return null
   }
@@ -170,16 +169,11 @@ function StaleAuxWarning({ applying, onReset, slots, taskLabel }: StaleAuxWarnin
     <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
       <AlertTriangle className="size-3.5 shrink-0" />
       <span className="grow">
-        {isVi
-          ? `${slots.length} tác vụ phụ (${names}) vẫn đang chạy bằng `
-          : `${slots.length} auxiliary task${slots.length === 1 ? '' : 's'} (${names}) still run on `}
-        <span className="font-mono">
-          {allSameProvider ? provider : isVi ? 'các nhà cung cấp khác' : 'other providers'}
-        </span>
-        {isVi ? ', không phải model chính.' : ', not your main model.'}
+        {slots.length} auxiliary task{slots.length === 1 ? '' : 's'} ({names}) still run on{' '}
+        <span className="font-mono">{allSameProvider ? provider : 'other providers'}</span>, not your main model.
       </span>
       <Button disabled={applying} onClick={onReset} size="sm" variant="textStrong">
-        {isVi ? 'Đặt lại về model chính' : 'Reset all to main'}
+        Reset all to main
       </Button>
     </div>
   )
@@ -188,11 +182,13 @@ function StaleAuxWarning({ applying, onReset, slots, taskLabel }: StaleAuxWarnin
 interface ModelSettingsProps {
   /** Notified after the main model is applied, so live UI stores can sync. */
   onMainModelChanged?: (provider: string, model: string) => void
+  /** Shared settings "Applies to" scope: a concrete profile to edit instead of
+   *  the app's active one, or null to follow the active profile (default). */
+  scopeProfile?: null | string
 }
 
-export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
-  const { locale, t } = useI18n()
-  const isVi = locale === 'vi'
+export function ModelSettings({ onMainModelChanged, scopeProfile = null }: ModelSettingsProps) {
+  const { t } = useI18n()
   const m = t.settings.model
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -205,9 +201,9 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
   const [selectedMoaPreset, setSelectedMoaPreset] = useState('')
   const [newMoaPresetName, setNewMoaPresetName] = useState('')
   // agent.* defaults round-trip through the shared config cache (read → write
-  // back the whole record), so a save here shows in the MCP/config surfaces.
-  const { data: config } = useHermesConfigRecord()
-  const setConfig = setHermesConfigCache
+  // back the whole record), so a save here shows in the MCP/model surfaces.
+  const { data: config } = useHermesConfigRecord(scopeProfile)
+  const setConfig = useMemo(() => hermesConfigCacheWriter(scopeProfile), [scopeProfile])
   const [applying, setApplying] = useState(false)
   const [editingAuxTask, setEditingAuxTask] = useState<null | string>(null)
   const [auxDraft, setAuxDraft] = useState<{ model: string; provider: string }>({ model: '', provider: '' })
@@ -232,54 +228,57 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
   // A's models/providers into profile B (or fire onMainModelChanged for A).
   const profileEpoch = useRef(0)
 
-  const refresh = useCallback(async ({ replaceSelection = false }: { replaceSelection?: boolean } = {}) => {
-    const epoch = profileEpoch.current
-    setLoading(true)
-    setError('')
+  const refresh = useCallback(
+    async ({ replaceSelection = false }: { replaceSelection?: boolean } = {}) => {
+      const epoch = profileEpoch.current
+      setLoading(true)
+      setError('')
 
-    try {
-      const [modelInfo, modelOptions, auxiliaryModels, moaModels] = await Promise.all([
-        getGlobalModelInfo(),
-        getGlobalModelOptions(),
-        getAuxiliaryModels(),
-        getMoaModels().catch(() => null)
-      ])
+      try {
+        const [modelInfo, modelOptions, auxiliaryModels, moaModels] = await Promise.all([
+          getGlobalModelInfo(scopeProfile),
+          getGlobalModelOptions(undefined, scopeProfile),
+          getAuxiliaryModels(scopeProfile),
+          getMoaModels(scopeProfile).catch(() => null)
+        ])
 
-      if (profileEpoch.current !== epoch) {
-        return
+        if (profileEpoch.current !== epoch) {
+          return
+        }
+
+        setMainModel({ model: modelInfo.model, provider: modelInfo.provider })
+        setProviders(modelOptions.providers || [])
+
+        if (replaceSelection) {
+          setSelectedProvider(modelInfo.provider)
+          setSelectedModel(modelInfo.model)
+        } else {
+          setSelectedProvider(prev => prev || modelInfo.provider)
+          setSelectedModel(prev => prev || modelInfo.model)
+        }
+
+        setAuxiliary(auxiliaryModels)
+        setMoa(moaModels)
+
+        if (moaModels) {
+          setSelectedMoaPreset(prev => (prev && moaModels.presets[prev] ? prev : moaModels.default_preset))
+        }
+
+        // The config record loads via its own shared query; a model switch can
+        // change it server-side (aux slots), so nudge that cache to refetch.
+        void invalidateHermesConfig(scopeProfile)
+      } catch (err) {
+        if (profileEpoch.current === epoch) {
+          setError(err instanceof Error ? err.message : String(err))
+        }
+      } finally {
+        if (profileEpoch.current === epoch) {
+          setLoading(false)
+        }
       }
-
-      setMainModel({ model: modelInfo.model, provider: modelInfo.provider })
-      setProviders(modelOptions.providers || [])
-
-      if (replaceSelection) {
-        setSelectedProvider(modelInfo.provider)
-        setSelectedModel(modelInfo.model)
-      } else {
-        setSelectedProvider(prev => prev || modelInfo.provider)
-        setSelectedModel(prev => prev || modelInfo.model)
-      }
-
-      setAuxiliary(auxiliaryModels)
-      setMoa(moaModels)
-
-      if (moaModels) {
-        setSelectedMoaPreset(prev => (prev && moaModels.presets[prev] ? prev : moaModels.default_preset))
-      }
-
-      // The config record loads via its own shared query; a model switch can
-      // change it server-side (aux slots), so nudge that cache to refetch.
-      void invalidateHermesConfig()
-    } catch (err) {
-      if (profileEpoch.current === epoch) {
-        setError(err instanceof Error ? err.message : String(err))
-      }
-    } finally {
-      if (profileEpoch.current === epoch) {
-        setLoading(false)
-      }
-    }
-  }, [])
+    },
+    [scopeProfile]
+  )
 
   useEffect(() => {
     void refresh()
@@ -385,33 +384,36 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
   // edit that completes the slot flushes the whole preset. Every edit bumps
   // the generation so an in-flight response from an older save can never
   // repaint over the user's mid-edit state.
-  const scheduleMoaSave = useCallback((next: MoaConfigResponse) => {
-    if (moaSaveTimer.current) {
-      window.clearTimeout(moaSaveTimer.current)
-      moaSaveTimer.current = null
-    }
+  const scheduleMoaSave = useCallback(
+    (next: MoaConfigResponse) => {
+      if (moaSaveTimer.current) {
+        window.clearTimeout(moaSaveTimer.current)
+        moaSaveTimer.current = null
+      }
 
-    const generation = moaSaveGeneration.current + 1
-    moaSaveGeneration.current = generation
+      const generation = moaSaveGeneration.current + 1
+      moaSaveGeneration.current = generation
 
-    if (!moaConfigComplete(next)) {
-      return
-    }
+      if (!moaConfigComplete(next)) {
+        return
+      }
 
-    moaSaveTimer.current = window.setTimeout(() => {
-      void saveMoaModels(next)
-        .then(saved => {
-          if (moaSaveGeneration.current === generation) {
-            setMoa(saved)
-          }
-        })
-        .catch(err => {
-          if (moaSaveGeneration.current === generation) {
-            setError(err instanceof Error ? err.message : String(err))
-          }
-        })
-    }, 600)
-  }, [])
+      moaSaveTimer.current = window.setTimeout(() => {
+        void saveMoaModels(next, scopeProfile)
+          .then(saved => {
+            if (moaSaveGeneration.current === generation) {
+              setMoa(saved)
+            }
+          })
+          .catch(err => {
+            if (moaSaveGeneration.current === generation) {
+              setError(err instanceof Error ? err.message : String(err))
+            }
+          })
+      }, 600)
+    },
+    [scopeProfile]
+  )
 
   const updateMoaPreset = useCallback(
     (updater: (preset: NonNullable<typeof currentMoaPreset>) => NonNullable<typeof currentMoaPreset>) => {
@@ -449,35 +451,38 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
     return next
   }, [])
 
-  const saveMoa = useCallback(async (next: MoaConfigResponse) => {
-    const epoch = profileEpoch.current
+  const saveMoa = useCallback(
+    async (next: MoaConfigResponse) => {
+      const epoch = profileEpoch.current
 
-    // Explicit preset ops (set default / add / delete) supersede any pending
-    // debounced slot autosave — cancel it and invalidate in-flight responses
-    // so the two writers can't race each other's state.
-    if (moaSaveTimer.current) {
-      window.clearTimeout(moaSaveTimer.current)
-      moaSaveTimer.current = null
-    }
-
-    moaSaveGeneration.current += 1
-    setApplying(true)
-    setError('')
-
-    try {
-      const saved = await saveMoaModels(next)
-
-      if (profileEpoch.current !== epoch) {
-        return
+      // Explicit preset ops (set default / add / delete) supersede any pending
+      // debounced slot autosave — cancel it and invalidate in-flight responses
+      // so the two writers can't race each other's state.
+      if (moaSaveTimer.current) {
+        window.clearTimeout(moaSaveTimer.current)
+        moaSaveTimer.current = null
       }
 
-      setMoa(saved)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setApplying(false)
-    }
-  }, [])
+      moaSaveGeneration.current += 1
+      setApplying(true)
+      setError('')
+
+      try {
+        const saved = await saveMoaModels(next, scopeProfile)
+
+        if (profileEpoch.current !== epoch) {
+          return
+        }
+
+        setMoa(saved)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+      } finally {
+        setApplying(false)
+      }
+    },
+    [scopeProfile]
+  )
 
   const auxiliaryTaskLabel = useCallback((key: string) => m.tasks[key]?.label ?? key, [m.tasks])
 
@@ -522,10 +527,16 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
 
   const fastOn = isFastTier(getNested(config ?? {}, 'agent.service_tier'))
 
-  // Persist a single agent.* default by round-tripping the whole config record
+  const advisorEnabled = getNested(config ?? {}, 'advisor.enabled') === true
+  const advisorAssignment = auxiliary?.tasks.find(entry => entry.task === 'advisor')
+
+  const advisorIsAuto =
+    !advisorAssignment || !advisorAssignment.provider || advisorAssignment.provider === 'auto'
+
+  // Persist a single behavioral default by round-tripping the whole config record
   // (PUT /api/config replaces it) — optimistic, with rollback on failure.
-  const writeAgentDefault = useCallback(
-    async (key: string, value: string) => {
+  const writeConfigDefault = useCallback(
+    async (key: string, value: unknown) => {
       if (!config) {
         return
       }
@@ -535,13 +546,13 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
       setConfig(next)
 
       try {
-        await saveHermesConfig(next)
+        await saveHermesConfig(next, scopeProfile ?? undefined)
       } catch (err) {
         setConfig(prev)
         notifyError(err, m.defaultsFailed)
       }
     },
-    [config, m.defaultsFailed, setConfig]
+    [config, m.defaultsFailed, scopeProfile, setConfig]
   )
 
   // Paste an API key for the selected `api_key` provider, persist it, then
@@ -560,7 +571,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
     setError('')
 
     try {
-      await setEnvVar(keyEnv, apiKeyDraft.trim())
+      await setEnvVar(keyEnv, apiKeyDraft.trim(), scopeProfile)
       setApiKeyDraft('')
 
       // Pick a sensible default for the freshly-activated provider (mirrors
@@ -569,13 +580,13 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
       let nextModel = ''
 
       try {
-        const rec = await getRecommendedDefaultModel(slug)
+        const rec = await getRecommendedDefaultModel(slug, scopeProfile)
         nextModel = rec.model || ''
       } catch {
         nextModel = ''
       }
 
-      const options = await getGlobalModelOptions()
+      const options = await getGlobalModelOptions(undefined, scopeProfile)
 
       if (profileEpoch.current !== epoch) {
         return
@@ -590,7 +601,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
     } finally {
       setActivating(false)
     }
-  }, [apiKeyDraft, selectedProviderRow])
+  }, [apiKeyDraft, scopeProfile, selectedProviderRow])
 
   // OAuth / external providers can't be activated with a pasted key — hand off
   // to the shared onboarding flow scoped to this provider's real sign-in. The
@@ -628,12 +639,14 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
     setError('')
 
     try {
-      const result = await setModelAssignment({
-        model: selectedModel,
-        provider: selectedProvider,
-        scope: 'main',
-        ...(selectedProviderRow?.api_url ? { base_url: selectedProviderRow.api_url } : {})
-      })
+      const result = await setMainModelAssignment(
+        {
+          model: selectedModel,
+          provider: selectedProvider,
+          ...(selectedProviderRow?.api_url ? { base_url: selectedProviderRow.api_url } : {})
+        },
+        scopeProfile
+      )
 
       if (profileEpoch.current !== epoch) {
         return
@@ -643,14 +656,20 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
       const model = result.model || selectedModel
       setMainModel({ provider, model })
       setSwitchStaleAux(result.stale_aux ?? [])
-      onMainModelChanged?.(provider, model)
+
+      // Live UI stores mirror the ACTIVE profile's model; a scoped apply
+      // changed a different profile and must not repaint them.
+      if (scopeProfile == null) {
+        onMainModelChanged?.(provider, model)
+      }
+
       await refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setApplying(false)
     }
-  }, [onMainModelChanged, refresh, selectedModel, selectedProvider, selectedProviderRow])
+  }, [onMainModelChanged, refresh, scopeProfile, selectedModel, selectedProvider, selectedProviderRow])
 
   // Sibling of the applyMainModel endpoint passthrough (#65254): auxiliary
   // assignments targeting a user-defined provider must carry that provider's
@@ -676,13 +695,16 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
       setError('')
 
       try {
-        await setModelAssignment({
-          model: mainModel.model,
-          provider: mainModel.provider,
-          scope: 'auxiliary',
-          task,
-          ...endpointForProvider(mainModel.provider)
-        })
+        await setModelAssignment(
+          {
+            model: mainModel.model,
+            provider: mainModel.provider,
+            scope: 'auxiliary',
+            task,
+            ...endpointForProvider(mainModel.provider)
+          },
+          scopeProfile
+        )
         await refresh()
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err))
@@ -690,7 +712,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
         setApplying(false)
       }
     },
-    [endpointForProvider, mainModel, refresh]
+    [endpointForProvider, mainModel, refresh, scopeProfile]
   )
 
   const applyAuxiliaryDraft = useCallback(
@@ -703,13 +725,16 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
       setError('')
 
       try {
-        await setModelAssignment({
-          model: auxDraft.model,
-          provider: auxDraft.provider,
-          scope: 'auxiliary',
-          task,
-          ...endpointForProvider(auxDraft.provider)
-        })
+        await setModelAssignment(
+          {
+            model: auxDraft.model,
+            provider: auxDraft.provider,
+            scope: 'auxiliary',
+            task,
+            ...endpointForProvider(auxDraft.provider)
+          },
+          scopeProfile
+        )
         setEditingAuxTask(null)
         await refresh()
       } catch (err) {
@@ -718,7 +743,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
         setApplying(false)
       }
     },
-    [auxDraft, endpointForProvider, refresh]
+    [auxDraft, endpointForProvider, refresh, scopeProfile]
   )
 
   const beginAuxiliaryEdit = useCallback(
@@ -744,12 +769,15 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
     setError('')
 
     try {
-      await setModelAssignment({
-        model: mainModel.model,
-        provider: mainModel.provider,
-        scope: 'auxiliary',
-        task: '__reset__'
-      })
+      await setModelAssignment(
+        {
+          model: mainModel.model,
+          provider: mainModel.provider,
+          scope: 'auxiliary',
+          task: '__reset__'
+        },
+        scopeProfile
+      )
       setSwitchStaleAux([])
       await refresh()
     } catch (err) {
@@ -757,7 +785,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
     } finally {
       setApplying(false)
     }
-  }, [mainModel, refresh])
+  }, [mainModel, refresh, scopeProfile])
 
   if (loading && !mainModel) {
     return <ModelSettingsSkeleton />
@@ -792,11 +820,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
                       void activateApiKeyProvider()
                     }
                   }}
-                  placeholder={
-                    isVi
-                      ? `Dán ${selectedProviderRow?.key_env ?? 'khóa API'}`
-                      : `Paste ${selectedProviderRow?.key_env ?? 'API key'}`
-                  }
+                  placeholder={`Paste ${selectedProviderRow?.key_env ?? 'API key'}`}
                   type="password"
                   value={apiKeyDraft}
                 />
@@ -806,12 +830,12 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
                   size="sm"
                 >
                   {activating && <Loader2 className="size-3.5 animate-spin" />}
-                  {activating ? (isVi ? 'Đang kích hoạt...' : 'Activating...') : isVi ? 'Kích hoạt' : 'Activate'}
+                  {activating ? 'Activating...' : 'Activate'}
                 </Button>
               </>
             ) : (
               <Button onClick={startProviderSetup} size="sm" variant="textStrong">
-                {isVi ? 'Thiết lập' : 'Set up'} {selectedProviderRow?.name ?? (isVi ? 'nhà cung cấp' : 'provider')}
+                Set up {selectedProviderRow?.name ?? 'provider'}
               </Button>
             )
           ) : (
@@ -842,12 +866,8 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
         {needsSetup && !setupIsApiKey && selectedProviderRow && (
           <p className="mt-2 text-xs text-muted-foreground">
             {selectedProviderRow?.auth_type === 'api_key'
-              ? isVi
-                ? `${selectedProviderRow?.name} cần khóa API — hãy thiết lập để chọn model.`
-                : `${selectedProviderRow?.name} needs an API key — set it up to choose a model.`
-              : isVi
-                ? `${selectedProviderRow?.name} đăng nhập qua trình duyệt — Hermes sẽ hướng dẫn toàn bộ quy trình.`
-                : `${selectedProviderRow?.name} signs in through your browser — Hermes runs the flow for you.`}
+              ? `${selectedProviderRow?.name} needs an API key — set it up to choose a model.`
+              : `${selectedProviderRow?.name} signs in through your browser — Hermes runs the flow for you.`}
           </p>
         )}
         {config && mainModel && (reasoningSupported || fastSupported) && (
@@ -857,7 +877,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
               <div className="flex items-center gap-2 text-xs">
                 {m.reasoning}
                 <Select
-                  onValueChange={value => void writeAgentDefault('agent.reasoning_effort', value)}
+                  onValueChange={value => void writeConfigDefault('agent.reasoning_effort', value)}
                   value={effortValue}
                 >
                   <SelectTrigger className={cn('min-w-28', CONTROL_TEXT)}>
@@ -878,7 +898,9 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
                 {t.shell.modelOptions.fast}
                 <Switch
                   checked={fastOn}
-                  onCheckedChange={checked => void writeAgentDefault('agent.service_tier', checked ? 'fast' : 'normal')}
+                  onCheckedChange={checked =>
+                    void writeConfigDefault('agent.service_tier', checked ? 'fast' : 'normal')
+                  }
                   size="xs"
                 />
               </label>
@@ -896,6 +918,91 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
             />
           </div>
         )}
+      </section>
+
+      <section>
+        <div className="mb-2.5 flex items-center justify-between gap-3">
+          <SectionHeading icon={Cpu} title={m.advisorTitle} />
+          <label className="flex shrink-0 items-center gap-2 text-xs">
+            {m.advisorEnabled}
+            <Switch
+              checked={advisorEnabled}
+              disabled={!config || applying}
+              onCheckedChange={checked => void writeConfigDefault('advisor.enabled', checked)}
+              size="xs"
+            />
+          </label>
+        </div>
+        <p className="mb-2 text-xs text-muted-foreground">{m.advisorDesc}</p>
+        <p className="mb-2 text-xs text-amber-300/90">{m.advisorCost}</p>
+        <ListRow
+          action={
+            editingAuxTask !== 'advisor' && (
+              <Button
+                disabled={!providers.length || applying}
+                onClick={() => beginAuxiliaryEdit('advisor')}
+                size="sm"
+                variant="textStrong"
+              >
+                {m.change}
+              </Button>
+            )
+          }
+          below={
+            editingAuxTask === 'advisor' && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 pt-1">
+                <Select
+                  onValueChange={value => setAuxDraft(prev => ({ ...prev, provider: value, model: '' }))}
+                  value={auxDraft.provider}
+                >
+                  <SelectTrigger className={cn('min-w-32', CONTROL_TEXT)}>
+                    <SelectValue placeholder={m.provider} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {providerOptions.map(provider => (
+                      <SelectItem key={provider.slug || 'none'} value={provider.slug || 'none'}>
+                        {provider.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  onValueChange={value => setAuxDraft(prev => ({ ...prev, model: value }))}
+                  value={auxDraft.model}
+                >
+                  <SelectTrigger className={cn('min-w-48', CONTROL_TEXT)}>
+                    <SelectValue placeholder={m.model} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {withActive(auxDraftProviderModels, auxDraft.model).map(model => (
+                      <SelectItem key={model} value={model}>
+                        {model}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  disabled={!auxDraft.provider || !auxDraft.model || applying}
+                  onClick={() => void applyAuxiliaryDraft('advisor')}
+                  size="sm"
+                >
+                  {applying ? m.applying : t.common.apply}
+                </Button>
+                <Button onClick={() => setEditingAuxTask(null)} size="sm" variant="ghost">
+                  {t.common.cancel}
+                </Button>
+              </div>
+            )
+          }
+          description={
+            <span className="font-mono text-[0.68rem]">
+              {advisorIsAuto
+                ? m.autoUseMain
+                : `${advisorAssignment.provider} · ${advisorAssignment.model || m.providerDefault}`}
+            </span>
+          }
+          title={m.advisorModel}
+        />
       </section>
 
       <section>
@@ -1018,16 +1125,15 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
       </section>
       {moa && currentMoaPreset && (
         <section>
-          <SectionHeading icon={Cpu} title={isVi ? 'Tổ hợp AI agent (MoA)' : 'Mixture of Agents'} />
+          <SectionHeading icon={Cpu} title="Mixture of Agents" />
           <p className="mb-2 text-xs text-muted-foreground">
-            {isVi
-              ? 'Thiết lập các cấu hình đặt tên sẵn, hiển thị như model trong nhà cung cấp Mixture of Agents. Model tổng hợp là model trực tiếp xử lý.'
-              : 'Configure named presets that appear as models under the Mixture of Agents provider. The aggregator is the acting model.'}
+            Configure named presets that appear as models under the Mixture of Agents provider. The aggregator is the
+            acting model.
           </p>
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Select onValueChange={setSelectedMoaPreset} value={selectedMoaPreset || moa.default_preset}>
               <SelectTrigger className={cn('min-w-40', CONTROL_TEXT)}>
-                <SelectValue placeholder={isVi ? 'Cấu hình sẵn' : 'Preset'} />
+                <SelectValue placeholder="Preset" />
               </SelectTrigger>
               <SelectContent>
                 {Object.keys(moa.presets).map(name => (
@@ -1038,7 +1144,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
               </SelectContent>
             </Select>
             <label className="flex items-center gap-2 rounded-sm border border-border px-2 py-1 text-xs">
-              {isVi ? 'Đã bật' : 'Enabled'}
+              Enabled
               <Switch
                 checked={currentMoaPreset.enabled !== false}
                 disabled={applying}
@@ -1059,7 +1165,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
               size="sm"
               variant="text"
             >
-              {isVi ? 'Đặt làm mặc định' : 'Set default'}
+              Set default
             </Button>
             <Button
               disabled={Object.keys(moa.presets).length <= 1 || applying}
@@ -1085,12 +1191,12 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
               size="sm"
               variant="ghost"
             >
-              {t.common.delete}
+              Delete
             </Button>
             <Input
               className={cn('w-40', CONTROL_TEXT)}
               onChange={event => setNewMoaPresetName(event.target.value)}
-              placeholder={isVi ? 'cấu hình mới' : 'new preset'}
+              placeholder="new preset"
               value={newMoaPresetName}
             />
             <Button
@@ -1113,22 +1219,18 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
               size="sm"
               variant="textStrong"
             >
-              {isVi ? 'Thêm cấu hình' : 'Add preset'}
+              Add preset
             </Button>
           </div>
           <div className="mb-2 text-xs text-muted-foreground">
-            {isVi ? 'Mặc định:' : 'Default:'} <span className="font-mono">{moa.default_preset}</span>
+            Default: <span className="font-mono">{moa.default_preset}</span>
           </div>
           <div className="grid gap-1">
             {currentMoaPreset.reference_models.map((slot, index) => (
               <ListRow
                 action={
                   <Switch
-                    aria-label={
-                      isVi
-                        ? `${slot.enabled !== false ? 'Tắt' : 'Bật'} model tham chiếu ${index + 1}`
-                        : `${slot.enabled !== false ? 'Disable' : 'Enable'} reference ${index + 1}`
-                    }
+                    aria-label={`${slot.enabled !== false ? 'Disable' : 'Enable'} reference ${index + 1}`}
                     checked={slot.enabled !== false}
                     disabled={applying}
                     onCheckedChange={checked =>
@@ -1205,7 +1307,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
                       size="sm"
                       variant="ghost"
                     >
-                      {t.common.remove}
+                      Remove
                     </Button>
                   </div>
                 }
@@ -1216,7 +1318,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
                   </span>
                 }
                 key={`${selectedMoaPreset}-${index}`}
-                title={isVi ? `Model tham chiếu ${index + 1}` : `Reference ${index + 1}`}
+                title={`Reference ${index + 1}`}
               />
             ))}
             <Button
@@ -1230,7 +1332,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
               size="sm"
               variant="textStrong"
             >
-              {isVi ? 'Thêm model tham chiếu' : 'Add reference model'}
+              Add reference model
             </Button>
             <ListRow
               below={
@@ -1292,7 +1394,7 @@ export function ModelSettings({ onMainModelChanged }: ModelSettingsProps) {
                   {currentMoaPreset.aggregator.provider} · {currentMoaPreset.aggregator.model}
                 </span>
               }
-              title={isVi ? 'Model tổng hợp' : 'Aggregator'}
+              title="Aggregator"
             />
           </div>
         </section>

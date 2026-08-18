@@ -102,7 +102,6 @@ test('community app versions map back to public vi release tags', () => {
   assert.equal(out.latestTag, 'vi-v0.20.0-15')
   assert.equal(out.updateAvailable, true)
 })
-
 test('feed check reports up to date when versions match', () => {
   const out = describeFeedCheck('0.17.0', { version: '0.17.0' })
 

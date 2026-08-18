@@ -20,6 +20,20 @@ test("Vietnamese release tags map to deterministic Electron SemVer", () => {
   assert.throws(() => parseVietnameseReleaseTag("v0.20.0"), /vi-vX.Y.Z-N/)
 })
 
+test("candidate release notes use the canonical pyproject version", () => {
+  const notes = fs.readFileSync(
+    new URL("../.github/release-notes-vietnamese.md", import.meta.url),
+    "utf8",
+  )
+  const pyproject = fs.readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8")
+  const candidateTag = notes.match(/^## Hermes Vietnamese (vi-v\S+)/m)?.[1]
+  const projectVersion = pyproject.match(/^version\s*=\s*"([^"]+)"/m)?.[1]
+
+  assert.ok(candidateTag, "release notes must declare one Vietnamese candidate tag")
+  assert.ok(projectVersion, "pyproject.toml must declare the canonical version")
+  assert.equal(parseVietnameseReleaseTag(candidateTag).baseVersion, projectVersion)
+})
+
 test("every advertised native target has one immutable Node archive", () => {
   for (const [platform, arch] of [
     ["win32", "x64"], ["win32", "arm64"],

@@ -106,8 +106,9 @@ async def test_goal_verdict_continue_enqueues_continuation(hermes_home):
 
     from hermes_cli.goals import GoalManager
 
-    mgr = GoalManager(session_entry.session_id)
-    mgr.set("polish the docs")
+    await asyncio.to_thread(
+        lambda: GoalManager(session_entry.session_id).set("polish the docs")
+    )
 
     with patch("hermes_cli.goals.judge_goal", return_value=("continue", "still needs work", False, None, False)):
         await runner._post_turn_goal_continuation(
@@ -132,10 +133,13 @@ async def test_goal_verdict_budget_exhausted_sends_pause(hermes_home):
 
     from hermes_cli.goals import GoalManager, save_goal
 
-    mgr = GoalManager(session_entry.session_id, default_max_turns=2)
-    state = mgr.set("tiny goal", max_turns=2)
-    state.turns_used = 2
-    save_goal(session_entry.session_id, state)
+    def _seed_exhausted_goal() -> None:
+        mgr = GoalManager(session_entry.session_id, default_max_turns=2)
+        state = mgr.set("tiny goal", max_turns=2)
+        state.turns_used = 2
+        save_goal(session_entry.session_id, state)
+
+    await asyncio.to_thread(_seed_exhausted_goal)
 
     with patch("hermes_cli.goals.judge_goal", return_value=("continue", "keep going", False, None, False)):
         await runner._post_turn_goal_continuation(
@@ -151,5 +155,4 @@ async def test_goal_verdict_budget_exhausted_sends_pause(hermes_home):
     assert "turns used" in content.lower()
     # No continuation enqueued when budget is exhausted
     assert not adapter._pending_messages
-
 

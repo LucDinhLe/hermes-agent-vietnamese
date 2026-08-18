@@ -1,14 +1,13 @@
 import { useStore } from '@nanostores/react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { FirstRunJourney } from '@/components/first-run-journey'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
 import { getGlobalModelOptions } from '@/hermes'
-import { FIRST_RUN_LOCALE_KEY, normalizeLocale, useI18n } from '@/i18n'
-import { Check, ChevronLeft, KeyRound, Loader2 } from '@/lib/icons'
+import { useI18n } from '@/i18n'
+import { Check, ChevronDown, ChevronLeft, KeyRound, Loader2 } from '@/lib/icons'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { cn } from '@/lib/utils'
 import { $desktopBoot, type DesktopBootState } from '@/store/boot'
@@ -30,7 +29,13 @@ import {
 import type { ModelOptionProvider, OAuthProvider } from '@/types/hermes'
 
 import { DocsLink, FlowPanel, Status } from './flow'
-import { KeyProviderRow, ProviderRow, sortProviders } from './providers'
+import {
+  FeaturedProviderRow,
+  FireworksProviderRow,
+  OpenRouterProviderRow,
+  ProviderRow,
+  sortProviders
+} from './providers'
 
 export {
   FeaturedProviderRow,
@@ -108,39 +113,6 @@ const API_KEY_OPTIONS: ApiKeyOption[] = [
 // other api_key provider is appended with a generic "paste {KEY}" affordance.
 // OAuth / external providers are intentionally excluded here — they go through
 // the OAuth picker / sign-in flow, not a pasted key.
-export function buildApiKeyCatalog(rows: ModelOptionProvider[]): ApiKeyOption[] {
-  const derived: ApiKeyOption[] = []
-  const seenEnv = new Set<string>(API_KEY_OPTIONS.map(o => o.envKey))
-
-  for (const row of rows) {
-    // Only api_key providers can be activated with a pasted key. Skip OAuth /
-    // external / managed flows and anything missing an env var to write to.
-    if (row.auth_type && row.auth_type !== 'api_key') {
-      continue
-    }
-
-    const envKey = row.key_env
-
-    if (!envKey || seenEnv.has(envKey)) {
-      continue
-    }
-
-    seenEnv.add(envKey)
-    derived.push({
-      id: row.slug,
-      name: row.name,
-      envKey,
-      docsUrl: ''
-    })
-  }
-
-  // Curated first (recommended order), then the rest alphabetically so the
-  // long tail is scannable.
-  derived.sort((a, b) => a.name.localeCompare(b.name))
-
-  return [...API_KEY_OPTIONS, ...derived]
-}
-
 function useApiKeyCatalog(): ApiKeyOption[] {
   const [rows, setRows] = useState<ModelOptionProvider[]>([])
 
@@ -166,7 +138,40 @@ function useApiKeyCatalog(): ApiKeyOption[] {
     }
   }, [])
 
-  return useMemo(() => buildApiKeyCatalog(rows), [rows])
+  return useMemo(() => {
+    const curatedByEnv = new Map(API_KEY_OPTIONS.map(o => [o.envKey, o]))
+    const derived: ApiKeyOption[] = []
+    const seenEnv = new Set<string>(API_KEY_OPTIONS.map(o => o.envKey))
+
+    for (const row of rows) {
+      // Only api_key providers can be activated with a pasted key. Skip OAuth /
+      // external / managed flows and anything missing an env var to write to.
+      if (row.auth_type && row.auth_type !== 'api_key') {
+        continue
+      }
+
+      const envKey = row.key_env
+
+      if (!envKey || seenEnv.has(envKey)) {
+        continue
+      }
+
+      seenEnv.add(envKey)
+      derived.push({
+        id: row.slug,
+        name: row.name,
+        envKey,
+        description: `Direct API access to ${row.name}.`,
+        docsUrl: ''
+      })
+    }
+
+    // Curated first (recommended order), then the rest alphabetically so the
+    // long tail is scannable.
+    derived.sort((a, b) => a.name.localeCompare(b.name))
+
+    return [...API_KEY_OPTIONS.filter(o => curatedByEnv.has(o.envKey)), ...derived]
+  }, [rows])
 }
 
 // Exit choreography, mirroring the gateway "connecting" overlay's timing:
@@ -180,7 +185,7 @@ export function DesktopOnboardingOverlay({
   profile,
   requestGateway
 }: DesktopOnboardingOverlayProps) {
-  const { setLocale, t } = useI18n()
+  const { t } = useI18n()
   const onboarding = useStore($desktopOnboarding)
   const boot = useStore($desktopBoot)
   const ctxRef = useRef<OnboardingContext>({ requestGateway, onCompleted, profile })
@@ -224,34 +229,6 @@ export function DesktopOnboardingOverlay({
       void refreshOnboarding(ctx)
     }
   }, [ctx, enabled, onboarding.requested])
-
-  // Step 1 can switch the UI language before the local backend exists. Once
-  // onboarding reaches step 2, persist that early choice to Hermes config.
-  // The local fallback remains available for the next launch if saving fails.
-  const [attemptedFirstRunLocale, setAttemptedFirstRunLocale] = useState(false)
-
-  useEffect(() => {
-    if (attemptedFirstRunLocale || !enabled || onboarding.manual || onboarding.configured !== false) {
-      return
-    }
-
-    let pending: string | null = null
-
-    try {
-      pending = window.localStorage.getItem(FIRST_RUN_LOCALE_KEY)
-    } catch {
-      return
-    }
-
-    if (!pending) {
-      return
-    }
-
-    setAttemptedFirstRunLocale(true)
-    void setLocale(normalizeLocale(pending)).catch(() => {
-      // The pending choice stays in localStorage and can be retried later.
-    })
-  }, [attemptedFirstRunLocale, enabled, onboarding.configured, onboarding.manual, setLocale])
 
   // When the Providers settings page asked to connect a specific provider, the
   // store stashed its id. Once the provider list has loaded and we're back at
@@ -345,9 +322,6 @@ export function DesktopOnboardingOverlay({
             : 'translate-y-0 scale-100 opacity-100 blur-0'
         )}
       >
-        {!onboarding.manual ? (
-          <FirstRunJourney activeStep={flow.status === 'confirming_model' ? 3 : 2} className="px-5 pt-5" />
-        ) : null}
         {showPicker || !ready ? <Header /> : null}
         {onboarding.manual ? (
           <Button
@@ -426,11 +400,30 @@ function Header() {
 }
 
 export const FEATURED_ID = 'nous'
-const ONBOARDING_PRIMARY_PROVIDER_IDS = ['openai-codex', 'claude-code'] as const
+const SHOW_ALL_KEY = 'hermes-onboarding-show-all-v1'
+
+const readShowAll = () => {
+  try {
+    return window.localStorage.getItem(SHOW_ALL_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+const persistShowAll = (value: boolean) => {
+  try {
+    window.localStorage.setItem(SHOW_ALL_KEY, value ? '1' : '0')
+  } catch {
+    // localStorage unavailable — degrade silently.
+  }
+
+  return value
+}
 
 export function Picker({ ctx }: { ctx: OnboardingContext }) {
   const { t } = useI18n()
   const { localEndpoint, manual, mode, providers } = useStore($desktopOnboarding)
+  const [showAll, setShowAll] = useState(readShowAll)
   // Which key-form option to preselect when we flip to 'apikey' mode. The
   // OpenRouter row selects its key; the generic link lands on the first option.
   const [apiKeyInitialEnv, setApiKeyInitialEnv] = useState<string | undefined>(undefined)
@@ -472,59 +465,52 @@ export function Picker({ ctx }: { ctx: OnboardingContext }) {
   }
 
   const select = (p: OAuthProvider) => void startProviderOAuth(p, ctx)
-
-  const primary = ONBOARDING_PRIMARY_PROVIDER_IDS.flatMap(id => {
-    const provider = ordered.find(candidate => candidate.id === id)
-
-    return provider ? [provider] : []
-  })
-
-  const primaryIds = new Set(primary.map(provider => provider.id))
-  const optional = ordered.filter(provider => !primaryIds.has(provider.id))
+  const featured = ordered.find(p => p.id === FEATURED_ID) ?? null
+  const rest = featured ? ordered.filter(p => p.id !== FEATURED_ID) : ordered
+  // Collapse the secondary providers behind a disclosure whenever Nous Portal
+  // is present to anchor the choice — otherwise show the full list. The
+  // Fireworks/OpenRouter key rows always live behind the disclosure, so the
+  // toggle is warranted even when there are no other OAuth providers.
+  const collapsible = Boolean(featured)
+  const showRest = !collapsible || showAll
 
   return (
     <div className="grid gap-2">
       <div className="grid max-h-[60dvh] gap-2 overflow-y-auto p-1">
-        {primary.map(provider => (
-          <ProviderRow key={provider.id} onSelect={select} provider={provider} />
-        ))}
-        <KeyProviderRow
-          onClick={() => openKeyForm('GEMINI_API_KEY')}
-          pitch={t.onboarding.apiKeyOptions.gemini.description}
-          title={t.onboarding.apiKeyOptions.gemini.title ?? 'Google Gemini'}
-        />
-        {optional.length > 0 ? (
-          <p className="px-3 pt-2 text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            {t.onboarding.otherProviders}
-          </p>
+        {featured ? <FeaturedProviderRow onSelect={select} provider={featured} /> : null}
+        {showRest ? (
+          <>
+            {/* Fireworks leads the expanded list, matching CANONICAL_PROVIDERS
+                (Nous → Fireworks), but stays hidden until the user opens it. */}
+            <FireworksProviderRow onClick={() => openKeyForm('FIREWORKS_API_KEY')} />
+            {rest.map(p => (
+              <ProviderRow key={p.id} onSelect={select} provider={p} />
+            ))}
+            <OpenRouterProviderRow onClick={() => openKeyForm('OPENROUTER_API_KEY')} />
+          </>
         ) : null}
-        {optional.map(provider => (
-          <ProviderRow key={provider.id} onSelect={select} provider={provider} />
-        ))}
-        {apiKeyOptions.length > 1 ? (
-          <p className="px-3 pt-2 text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            {t.onboarding.apiKeyProviders}
-          </p>
-        ) : null}
-        {apiKeyOptions
-          .filter(option => option.envKey !== 'GEMINI_API_KEY')
-          .map(option => (
-            <KeyProviderRow
-              key={option.envKey}
-              onClick={() => openKeyForm(option.envKey)}
-              pitch={t.onboarding.apiKeyOptions[option.id]?.description ?? t.onboarding.apiKeyProviderPitch}
-              title={option.name}
-            />
-          ))}
       </div>
-      {/* First run only: let the user defer the choice and land in the app.
-          In manual mode the overlay already has a close affordance, so the
-          "choose later" escape would be redundant — hide it. */}
-      {manual ? null : (
-        <div className="flex items-center gap-3 pt-1">
-          <ChooseLaterLink />
-        </div>
-      )}
+      {collapsible ? (
+        <Button
+          className="mt-1 self-center font-medium"
+          onClick={() => setShowAll(persistShowAll(!showAll))}
+          size="xs"
+          type="button"
+          variant="text"
+        >
+          {showAll ? t.onboarding.collapse : t.onboarding.otherProviders}
+          <ChevronDown className={cn('size-3.5 transition', showAll && 'rotate-180')} />
+        </Button>
+      ) : null}
+      <div className="flex items-center justify-between gap-3 pt-1">
+        {/* First run only: let the user defer the choice and land in the app.
+            In manual mode the overlay already has a close affordance, so the
+            "choose later" escape would be redundant — hide it. */}
+        {manual ? <span /> : <ChooseLaterLink />}
+        <Button className="-mr-2 font-medium" onClick={() => openKeyForm()} size="xs" type="button" variant="text">
+          {t.onboarding.haveApiKey}
+        </Button>
+      </div>
     </div>
   )
 }
@@ -676,7 +662,7 @@ export function ApiKeyForm({
           autoFocus
           className="font-mono"
           onChange={e => setValue(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && void submit()}
+          onKeyDown={e => e.key === 'Enter' && !e.nativeEvent.isComposing && void submit()}
           placeholder={
             currentRedacted ??
             (alreadySet ? t.onboarding.replaceCurrent : option.placeholder || t.onboarding.pasteApiKey)
@@ -689,7 +675,7 @@ export function ApiKeyForm({
             autoComplete="off"
             className="font-mono"
             onChange={e => setLocalKey(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && void submit()}
+            onKeyDown={e => e.key === 'Enter' && !e.nativeEvent.isComposing && void submit()}
             placeholder={t.onboarding.localApiKeyPlaceholder}
             type="password"
             value={localKey}

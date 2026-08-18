@@ -8,12 +8,14 @@ import { Tip } from '@/components/ui/tooltip'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { type Translations, useI18n } from '@/i18n'
 import { isDesktopFsRemoteMode } from '@/lib/desktop-fs'
+import { guardGuestPointers } from '@/lib/guest-pointer-guard'
 import { openPreviewTargetInBrowser, remoteHtmlPreviewDocument } from '@/lib/local-preview'
 import { rafCoalesce } from '@/lib/raf-coalesce'
 import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
 import { $previewServerRestart, failPreviewServerRestart, type PreviewTarget } from '@/store/preview'
 
+import { BrowserConnectorDialog } from './browser-connector-dialog'
 import { ArtifactPreview } from './preview-artifact'
 import { normalizeBrowserAddress } from './preview-browser-address'
 import { previewBrowserZoomFactor } from './preview-browser-fit'
@@ -163,6 +165,7 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<PreviewLoadErrorState | null>(null)
   const [localReloadKey, setLocalReloadKey] = useState(0)
+  const [connectorOpen, setConnectorOpen] = useState(false)
 
   const applyBrowserFit = useCallback((width: number) => {
     browserWidthRef.current = width
@@ -277,6 +280,8 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
 
       document.body.style.cursor = 'row-resize'
       document.body.style.userSelect = 'none'
+      // The webview above the console must not swallow the gesture.
+      const releaseGuests = guardGuestPointers()
 
       // pointermove outpaces 60fps and each setHeight reflows the webview +
       // console split, so coalesce to one apply per frame (commits on cleanup).
@@ -297,6 +302,7 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
 
         active = false
         resize.finish()
+        releaseGuests()
         document.body.style.cursor = previousCursor
         document.body.style.userSelect = previousUserSelect
         handle.releasePointerCapture?.(pointerId)
@@ -441,7 +447,6 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
     return registerPreviewPageController(tabId, {
       interact: opts => {
         const webview = webviewRef.current
-
         if (!webview) {
           throw new Error('preview webview is not ready')
         }
@@ -454,7 +459,6 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
         if (!webview) {
           throw new Error('preview webview is not ready')
         }
-
         return readPreviewWebview(webview)
       }
     })
@@ -843,8 +847,20 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
               {copy.sharedWithAgent}
             </span>
           </Tip>
+          <Tip label={copy.connector.openButton}>
+            <Button
+              aria-label={copy.connector.openButton}
+              onClick={() => setConnectorOpen(true)}
+              size="icon-sm"
+              type="button"
+              variant="ghost"
+            >
+              <Codicon name="key" size="0.85rem" />
+            </Button>
+          </Tip>
         </form>
       )}
+      <BrowserConnectorDialog onOpenChange={setConnectorOpen} open={connectorOpen} url={currentUrl} />
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {!embedded && target.kind !== 'url' && (
           <div className="pointer-events-none flex min-h-(--titlebar-height) items-center gap-1.5 border-b border-border/60 bg-background px-2 py-1">

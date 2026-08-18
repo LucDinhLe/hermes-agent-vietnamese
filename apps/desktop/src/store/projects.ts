@@ -9,14 +9,14 @@ import type { HermesGitBaseBranch, HermesGitBranch } from '@/global'
 import { getHermesConfig, type HermesGateway } from '@/hermes'
 import { translateNow } from '@/i18n'
 import { desktopDefaultCwd, isDesktopFsRemoteMode, selectDesktopPaths, writeDesktopFileText } from '@/lib/desktop-fs'
-import { desktopGit } from '@/lib/desktop-git'
+import { desktopGit, isGitEndpointMissingError } from '@/lib/desktop-git'
 import { isMissingRpcMethod } from '@/lib/gateway-rpc'
 import { isUnderPath } from '@/lib/path-compare'
 import { persistentAtom } from '@/lib/persisted'
 import { $gateway, activeGateway, ensureActiveGatewayOpen } from '@/store/gateway'
 import { setSidebarAgentsGrouped } from '@/store/layout'
 import { notify } from '@/store/notifications'
-import { $activeGatewayProfile, requestFreshSession } from '@/store/profile'
+import { $activeGatewayProfile, $profileScope, ALL_PROFILES, requestFreshSession } from '@/store/profile'
 import {
   $selectedStoredSessionId,
   $sessions,
@@ -392,7 +392,32 @@ interface ProjectTreePayload {
   scoped_session_ids: string[]
 }
 
+const PROJECT_TREE_PREVIEW_LIMIT = 3
+// The all-profiles fan-out reads one database per profile, so it is allowed the
+// same headroom as the cross-profile session list rather than the interactive
+// default.
+const PROJECT_TREE_REQUEST_TIMEOUT_MS = 60_000
+
 let projectTreeRefreshGeneration = 0
+
+function applyProjectTreePayload(res: ProjectTreePayload): void {
+  const scoped = new Set(res.scoped_session_ids ?? [])
+  $projectTree.set(res.projects ?? [])
+  $activeProjectId.set(res.active_id ?? null)
+  const tombstones = $removedSessionIds.get()
+
+  if (tombstones.size) {
+    // Keep a tombstone while the backend still lists the id (delete pending on
+    // its side) OR while its mutation is still in flight locally — dropping it
+    // early flashes the row back until the RPC lands.
+    const inFlight = $sessionMutationsInFlight.get()
+    const pending = new Set([...tombstones].filter(id => scoped.has(id) || inFlight.has(id)))
+
+    if (pending.size !== tombstones.size) {
+      $removedSessionIds.set(pending)
+    }
+  }
+}
 
 async function refreshProjectTreeOn(gateway: HermesGateway): Promise<void> {
   const generation = ++projectTreeRefreshGeneration
@@ -403,30 +428,14 @@ async function refreshProjectTreeOn(gateway: HermesGateway): Promise<void> {
 
   try {
     const res = await gatewayRequestOn<ProjectTreePayload>(gateway, 'projects.tree', {
-      preview_limit: 3
+      preview_limit: PROJECT_TREE_PREVIEW_LIMIT
     })
 
     if (generation !== projectTreeRefreshGeneration || activeGateway() !== gateway) {
       return
     }
 
-    const scoped = new Set(res.scoped_session_ids ?? [])
-    $projectTree.set(res.projects ?? [])
-    $activeProjectId.set(res.active_id ?? null)
-    const tombstones = $removedSessionIds.get()
-
-    if (tombstones.size) {
-      // Keep a tombstone while the backend still lists the id (delete pending on
-      // its side) OR while its mutation is still in flight locally — dropping it
-      // early flashes the row back until the RPC lands.
-      const inFlight = $sessionMutationsInFlight.get()
-      const pending = new Set([...tombstones].filter(id => scoped.has(id) || inFlight.has(id)))
-
-      if (pending.size !== tombstones.size) {
-        $removedSessionIds.set(pending)
-      }
-    }
-
+    applyProjectTreePayload(res)
     markProjectsRpcSuccess()
   } catch (err) {
     if (activeGateway() === gateway) {
@@ -443,11 +452,48 @@ async function refreshProjectTreeOn(gateway: HermesGateway): Promise<void> {
 // sessions + the scoped-session-id set). Best-effort: a failure leaves the
 // cached tree intact so the sidebar doesn't flicker.
 export async function refreshProjectTree(): Promise<void> {
+  if ($profileScope.get() === ALL_PROFILES) {
+    await refreshProjectTreeAcrossProfiles()
+
+    return
+  }
+
   try {
     const { gateway } = await activeProjectsContext()
     await refreshProjectTreeOn(gateway)
   } catch {
     // Backend may not be ready; keep the last known tree.
+  }
+}
+
+// The grouped sidebar in all-profiles mode. `projects.tree` answers for one
+// backend's own profile, so it can only ever describe a slice of this view;
+// the REST fan-out reads every profile's databases directly instead of asking
+// us to hold a backend open per profile just to draw lanes.
+async function refreshProjectTreeAcrossProfiles(): Promise<void> {
+  const generation = ++projectTreeRefreshGeneration
+  $projectTreeLoading.set(true)
+
+  try {
+    const res = await window.hermesDesktop.api<ProjectTreePayload>({
+      path: `/api/profiles/projects/tree?preview_limit=${PROJECT_TREE_PREVIEW_LIMIT}`,
+      timeoutMs: PROJECT_TREE_REQUEST_TIMEOUT_MS
+    })
+
+    // A profile switch mid-flight leaves this payload describing the wrong
+    // scope; the newer refresh owns the tree.
+    if (generation !== projectTreeRefreshGeneration || $profileScope.get() !== ALL_PROFILES) {
+      return
+    }
+
+    applyProjectTreePayload(res)
+    markProjectsRpcSuccess()
+  } catch (err) {
+    markProjectsRpcFailure(err)
+  } finally {
+    if (generation === projectTreeRefreshGeneration) {
+      $projectTreeLoading.set(false)
+    }
   }
 }
 
@@ -617,7 +663,10 @@ export async function scanAndRecordRepos(force = false): Promise<void> {
     }
 
     state.completedSignature = signature
-    await refreshProjectTreeOn(context.gateway)
+    // Scope-aware on purpose: the scan records into one profile, but folding
+    // its result back in through the active scope keeps an all-profiles tree
+    // from being overwritten by the scanned profile's own.
+    await refreshProjectTree()
   } catch {
     state.completedSignature = undefined
   } finally {
@@ -1025,7 +1074,22 @@ export async function startWorkInRepo(
     return null
   }
 
-  const result = await git.worktreeAdd(repoPath, options)
+  let result
+
+  try {
+    result = await git.worktreeAdd(repoPath, options)
+  } catch (err) {
+    // Capability gate (#81724): a remote gateway serves worktree ops via the
+    // backend's /api/git mirror, and an older backend may predate it. The raw
+    // failure ("Expected JSON … but got HTML" / a bare 404) reads like a git
+    // error — name the real remedy instead of degrading silently.
+    if (isDesktopFsRemoteMode() && isGitEndpointMissingError(err)) {
+      throw new Error(translateNow('sidebar.projects.worktreeStaleBackend'))
+    }
+
+    throw err
+  }
+
   bumpWorktrees()
 
   return { branch: result.branch, path: result.path }
@@ -1035,7 +1099,8 @@ export async function startWorkInRepo(
 // local heads, plus the remote-tracking refs that have no local branch yet. A
 // teammate's branch is therefore reachable, and the user does not check it out
 // by hand first.
-// Empty on a remote backend or a non-repo, where the Electron probe cannot run.
+// Empty on a non-repo. On a remote gateway the list comes from the backend's
+// /api/git/branches mirror, so it acts on the repo where sessions actually run.
 export async function listRepoBranches(repoPath: string): Promise<HermesGitBranch[]> {
   const git = desktopGit()
 
@@ -1048,7 +1113,8 @@ export async function listRepoBranches(repoPath: string): Promise<HermesGitBranc
 
 // Local + remote-tracking branches for the base-branch picker in the
 // new-worktree dialog. The remote default (origin/HEAD) is flagged so the
-// UI can preselect it. Empty on a remote backend / non-repo.
+// UI can preselect it. Empty on a non-repo; remote gateways serve it from the
+// backend's /api/git/base-branches mirror.
 export async function listBaseBranches(repoPath: string): Promise<HermesGitBaseBranch[]> {
   const git = desktopGit()
 

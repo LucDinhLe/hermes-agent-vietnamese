@@ -41,7 +41,6 @@ export function releaseTagForAppVersion(version: string): string {
     ? `vi-v${community[1]}.${community[2]}.${community[3]}-${community[4]}`
     : `v${version}`
 }
-
 /**
  * Map an electron-updater check result to the renderer's update-check shape
  * (the shape hermes:updates:check already returns for the git path). The
@@ -103,8 +102,8 @@ export function configureAutoUpdater(updater: ConfigurableAutoUpdater): void {
   updater.autoInstallOnAppQuit = true
   updater.disableDifferentialDownload = true
   // Community revision numbers are encoded as SemVer prerelease components
-  // (0.20.0-vi.15) even though the GitHub release itself is stable. Without
-  // this flag electron-updater filters the fork's update feed out entirely.
+  // (0.20.0-vi.15), and community candidates may also be published as GitHub
+  // prereleases. Without this flag electron-updater filters that feed out.
   updater.allowPrerelease = true
 }
 
@@ -120,7 +119,6 @@ export function beginAppUpdateInstall(
   beforeInstall?.()
   updater.quitAndInstall(false, true)
 }
-
 /**
  * Lazy singleton for electron-updater's autoUpdater. The require sits inside
  * the function so thin builds and tests never pay for the module load.

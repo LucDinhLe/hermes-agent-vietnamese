@@ -4,7 +4,6 @@ import { PageLoader } from '@/components/page-loader'
 import { Button } from '@/components/ui/button'
 import { DisclosureCaret } from '@/components/ui/disclosure-caret'
 import { getMemoryProviderConfig, saveMemoryProviderConfig } from '@/hermes'
-import { useI18n } from '@/i18n'
 import { SlidersHorizontal } from '@/lib/icons'
 import { notifyError } from '@/store/notifications'
 import type { MemoryProviderConfig, MemoryProviderField } from '@/types/hermes'
@@ -21,9 +20,7 @@ function seedValues(config: MemoryProviderConfig): Record<string, string> {
   )
 }
 
-export function ProviderConfigPanel({ provider }: { provider: string }) {
-  const { locale, t } = useI18n()
-  const isVi = locale === 'vi'
+export function ProviderConfigPanel({ profile = null, provider }: { profile?: null | string; provider: string }) {
   const [config, setConfig] = useState<MemoryProviderConfig | null>(null)
   const [loadError, setLoadError] = useState<null | string>(null)
   const [values, setValues] = useState<Record<string, string>>({})
@@ -33,7 +30,7 @@ export function ProviderConfigPanel({ provider }: { provider: string }) {
 
   const refresh = useCallback(async () => {
     try {
-      const next = await getMemoryProviderConfig(provider)
+      const next = await getMemoryProviderConfig(provider, profile)
       const seed = seedValues(next)
       setConfig(next)
       setValues(seed)
@@ -41,15 +38,9 @@ export function ProviderConfigPanel({ provider }: { provider: string }) {
       setLoadError(null)
     } catch (err) {
       setConfig(null)
-      setLoadError(
-        err instanceof Error
-          ? err.message
-          : isVi
-            ? 'Không tải được cài đặt bộ nhớ'
-            : 'Memory provider settings failed to load'
-      )
+      setLoadError(err instanceof Error ? err.message : 'Memory provider settings failed to load')
     }
-  }, [isVi, provider])
+  }, [profile, provider])
 
   useEffect(() => {
     setConfig(null)
@@ -65,7 +56,7 @@ export function ProviderConfigPanel({ provider }: { provider: string }) {
       }
 
       try {
-        await saveMemoryProviderConfig(provider, { [field.key]: value })
+        await saveMemoryProviderConfig(provider, { [field.key]: value }, profile)
 
         if (field.kind === 'secret') {
           setValues(current => ({ ...current, [field.key]: '' }))
@@ -80,10 +71,10 @@ export function ProviderConfigPanel({ provider }: { provider: string }) {
           setSaved(current => ({ ...current, [field.key]: value }))
         }
       } catch (err) {
-        notifyError(err, isVi ? `Không thể lưu ${field.label}` : `Failed to save ${field.label}`)
+        notifyError(err, `Failed to save ${field.label}`)
       }
     },
-    [isVi, provider, saved]
+    [profile, provider, saved]
   )
 
   // Providers without a declared config surface (e.g. builtin) render nothing.
@@ -96,22 +87,16 @@ export function ProviderConfigPanel({ provider }: { provider: string }) {
       return (
         <div className="flex items-center justify-between gap-3 py-2">
           <span className="text-[length:var(--conversation-caption-font-size)] text-muted-foreground">
-            {isVi ? 'Không tải được cài đặt nhà cung cấp bộ nhớ:' : 'Memory provider settings failed to load:'}{' '}
-            {loadError}
+            Memory provider settings failed to load: {loadError}
           </span>
           <Button onClick={() => void refresh()} size="sm" type="button" variant="secondary">
-            {t.common.retry}
+            Retry
           </Button>
         </div>
       )
     }
 
-    return (
-      <PageLoader
-        className="min-h-24"
-        label={isVi ? 'Đang tải cài đặt nhà cung cấp bộ nhớ...' : 'Loading memory provider settings...'}
-      />
-    )
+    return <PageLoader className="min-h-24" label="Loading memory provider settings..." />
   }
 
   const inlineFields = config.fields.filter(field => field.inline)
@@ -129,24 +114,16 @@ export function ProviderConfigPanel({ provider }: { provider: string }) {
         >
           <DisclosureCaret open={expanded} />
           <span className="text-[length:var(--conversation-text-font-size)] font-medium text-foreground">
-            {isVi ? `Cài đặt ${config.label}` : `${config.label} settings`}
+            {config.label} settings
           </span>
           {secretFields.map(field => (
-            <Pill key={field.key}>
-              {field.is_set
-                ? isVi
-                  ? `Đã đặt ${field.label}`
-                  : `${field.label} set`
-                : isVi
-                  ? `Chưa đặt ${field.label}`
-                  : `${field.label} not set`}
-            </Pill>
+            <Pill key={field.key}>{field.is_set ? `${field.label} set` : `${field.label} not set`}</Pill>
           ))}
         </button>
         {hasFullConfig && (
           <Button onClick={() => setShowModal(true)} size="sm" type="button" variant="secondary">
             <SlidersHorizontal className="size-3.5" />
-            {isVi ? 'Cấu hình đầy đủ…' : 'Full config…'}
+            Full config…
           </Button>
         )}
       </div>
@@ -178,6 +155,7 @@ export function ProviderConfigPanel({ provider }: { provider: string }) {
           onOpenChange={setShowModal}
           onSaved={refresh}
           open={showModal}
+          profile={profile}
           provider={provider}
         />
       )}

@@ -73,8 +73,6 @@ def test_windows_python_stage_never_falls_back_to_uv_managed_python(source: str)
     windows_branch = test_python.split('if ($env:OS -eq "Windows_NT")', 1)[1]
     assert "Install-WindowsOfficialPython" in windows_branch
     assert "return $false" in windows_branch
-
-
 def test_windows_stage_reports_the_actual_official_python_version(source: str):
     assert '$PythonStageVersion = if ($env:OS -eq "Windows_NT")' in source
     assert 'Title = "Verifying Python $PythonStageVersion"' in source

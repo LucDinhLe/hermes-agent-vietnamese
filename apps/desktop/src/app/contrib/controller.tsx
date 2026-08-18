@@ -4,9 +4,9 @@ import type { CSSProperties, ReactElement, PointerEvent as ReactPointerEvent } f
 
 import { SessionDraftTitle } from '@/app/chat/session-draft-title'
 import { SessionStatusDot } from '@/app/chat/session-status-dot'
-import { sessionTabTitle } from '@/app/chat/session-tab-title'
 import { PALETTE_AREA, type PaletteContribution, paletteToggle } from '@/app/command-palette/contrib'
 import { type StatusbarItem } from '@/app/shell/statusbar-controls'
+import { InlinePreviewDirective } from '@/components/assistant-ui/inline-preview-directive'
 import { IdleMount } from '@/components/idle-mount'
 import { $layoutEditMode, toggleLayoutEditMode } from '@/components/pane-shell/edit-mode'
 import { allPaneIds, group, groupLeafIds, split } from '@/components/pane-shell/tree/model'
@@ -38,9 +38,10 @@ import { Slot } from '@/contrib/react/slot'
 import { useContributions } from '@/contrib/react/use-contributions'
 import { registry } from '@/contrib/registry'
 import { discoverRuntimePlugins } from '@/contrib/runtime-loader'
-import { translateNow } from '@/i18n/runtime'
+import { NEW_SESSION_TITLE, sessionTitle as storedSessionTitle } from '@/lib/chat-runtime'
 import { Download, FileText, LayoutDashboard, PanelBottom, Terminal, Upload, Zap } from '@/lib/icons'
 import { type KeybindContribution, KEYBINDS_AREA } from '@/lib/keybinds/actions'
+import { TRANSCRIPT_DIRECTIVE_AREA, type TranscriptDirectiveContribution } from '@/lib/transcript-directives'
 import { setYoloEnabled } from '@/lib/yolo-session'
 import { pruneComposerPopoutZones } from '@/store/composer-popout'
 import {
@@ -59,6 +60,7 @@ import { runExportProfileFlow, runImportProfileFlow } from '@/store/profile-shar
 import { $reviewOpen, closeReview, openReview, REVIEW_PANE_ID } from '@/store/review'
 import { $currentCwd, $selectedStoredSessionId, $sessions, $yoloActive, sessionMatchesStoredId } from '@/store/session'
 import { watchSessionPins } from '@/store/session-pin-sync'
+import { watchUnreadWriteGuard } from '@/store/session-unread-remote'
 import { $statusbarVisible } from '@/store/statusbar-prefs'
 import { isHudWindow } from '@/store/windows'
 
@@ -75,6 +77,7 @@ import {
 import { HudShell } from '../hud/hud-shell'
 import { $terminalTakeover, setTerminalTakeover } from '../right-sidebar/store'
 import { $workspaceIsPage } from '../routes'
+import { ShellContextMenu } from '../shell/shell-context-menu'
 
 import { FilesPane, LogsPane, ReviewPaneContent } from './panes'
 import { ContribWiring, WiredPane } from './wiring'
@@ -120,7 +123,7 @@ const workspaceDragPayload = (): SessionDragPayload | null => {
 
   const stored = $sessions.get().find(s => sessionMatchesStoredId(s, selected))
 
-  return { id: selected, profile: stored?.profile ?? '', title: stored ? sessionTabTitle(stored) : '' }
+  return { id: selected, profile: stored?.profile ?? '', title: stored ? storedSessionTitle(stored) : '' }
 }
 
 // The main tab drags like a session tile — drop it on a composer to link the
@@ -149,7 +152,6 @@ registry.registerMany([
     data: {
       placement: 'left',
       collapsible: true,
-      tabTitle: () => translateNow('sidebar.sessions'),
       dock: { pane: 'workspace', pos: 'left' },
       revealAliases: ['chat-sidebar'],
       width: `${SIDEBAR_DEFAULT_WIDTH}px`,
@@ -162,16 +164,10 @@ registry.registerMany([
     id: 'workspace',
     area: 'panes',
     // Live-retitled to the loaded session by syncWorkspaceTitle below.
-    title: translateNow('commandCenter.nav.newChat.title'),
+    title: NEW_SESSION_TITLE,
     data: {
       placement: 'main',
       minWidth: '22vw',
-      // The initial registration happens before the persisted locale finishes
-      // loading. Render the draft title reactively so a clean install does not
-      // leave this first tab stuck on the English placeholder after switching
-      // to Vietnamese. syncWorkspaceTitle replaces this once session state
-      // changes, using the same component for later fresh drafts.
-      tabTitle: () => <SessionDraftTitle scope={null} />,
       tabDrag: workspaceTabDrag,
       tabWrap: wrapWorkspaceTab,
       uncloseable: true
@@ -196,7 +192,7 @@ registry.registerMany([
       height: '20vh',
       maxHeight: '80vh',
       revealOnPreset: true,
-      tabTitle: () => translateNow('rightSidebar.terminal')
+      lifecycleKeepAlive: true
     },
     render: () => <WiredPane part="terminal" />
   },
@@ -208,7 +204,6 @@ registry.registerMany([
     data: {
       placement: 'right',
       collapsible: true,
-      tabTitle: () => translateNow('rightSidebar.files'),
       dock: { pane: 'workspace', pos: 'right' },
       revealAliases: ['file-browser'],
       width: FILE_BROWSER_DEFAULT_WIDTH,
@@ -226,7 +221,6 @@ registry.registerMany([
     data: {
       placement: 'right',
       collapsible: true,
-      tabTitle: () => translateNow('preview.diff'),
       revealAliases: [REVIEW_PANE_ID],
       width: FILE_BROWSER_DEFAULT_WIDTH,
       minWidth: FILE_BROWSER_MIN_WIDTH,
@@ -281,6 +275,19 @@ registry.registerMany([
       keywords: ['plugins', 'reload', 'refresh', 'desktop'],
       run: () => void discoverRuntimePlugins()
     } satisfies PaletteContribution
+  },
+  // The core `::preview{file="…"}` transcript directive — the model (or a
+  // skill) renders a workspace HTML file LIVE inside its own message
+  // (sandboxed srcdoc iframe; falls back to the classic preview card for
+  // non-HTML targets and remote gateways). Also the reference consumer for
+  // the `transcript.directives` area plugins register into.
+  {
+    id: 'transcript.preview',
+    area: TRANSCRIPT_DIRECTIVE_AREA,
+    data: {
+      name: 'preview',
+      render: ({ attrs, streaming }) => <InlinePreviewDirective attrs={attrs} streaming={streaming} />
+    } satisfies TranscriptDirectiveContribution
   },
   {
     id: 'layout.reset',
@@ -436,6 +443,9 @@ $layoutTree.subscribe(tree => {
 // never hides a pinned chat (and pre-existing pins migrate transparently).
 watchSessionPins()
 
+// Release unread-write guards once a list page confirms the value we wrote.
+watchUnreadWriteGuard()
+
 // The main tab reads as its SESSION (the loaded title, "New session" on a
 // fresh draft) — a stack of main + tiles is then just a row of session names.
 // register() replaces same-id in place; the render fn is the shared constant
@@ -449,7 +459,7 @@ const syncWorkspaceTitle = () => {
     area: 'panes',
     // The placeholder, not the draft's live name — `tabTitle` below renders
     // that. Keeping it here would re-register the pane on every keystroke.
-    title: stored ? sessionTabTitle(stored) : translateNow('commandCenter.nav.newChat.title'),
+    title: stored ? storedSessionTitle(stored) : NEW_SESSION_TITLE,
     data: {
       // The tab's status dot — the SAME primitive the sidebar row and session
       // tiles render, so the main tab never disagrees with its sidebar row. A
@@ -733,11 +743,18 @@ export function ContribController() {
       style={{ '--sidebar-width': '100%' } as CSSProperties}
     >
       <ContribWiring>
-        <div
-          className="flex h-screen min-h-0 w-screen flex-col bg-(--ui-bg-chrome) text-(--ui-text-primary)"
-          style={{ '--titlebar-height': '0px' } as CSSProperties}
-        >
-          {/* Title bar: fixed chrome outside the grid, composable via slots.
+        <ShellContextMenu>
+          <div
+            className="flex h-screen min-h-0 w-screen flex-col bg-(--ui-bg-chrome) text-(--ui-text-primary)"
+            // Window-glass hook: this div and the sidebar-wrapper above it are
+            // the app shell's two full-window opaque painters; the
+            // [data-hermes-glass] rules in styles.css clear them so the tint
+            // painted by <body> is the only thing between the page and the
+            // vibrancy material.
+            data-contrib-shell=""
+            style={{ '--titlebar-height': '0px' } as CSSProperties}
+          >
+            {/* Title bar: fixed chrome outside the grid, composable via slots.
               Layout contract (no contribution can break it):
                 - a full-bar DRAG BASE underneath (pointer-events-none, like
                   AppShell's drag strips) — everywhere without content drags
@@ -748,53 +765,57 @@ export function ContribController() {
                   tree-published --workspace-left/right vars (pure CSS, no rect
                   threading), clamped to clear the REAL TitlebarControls
                   clusters (fixed, z-70); center is truly window-centered. */}
-          <div className="relative flex h-[34px] shrink-0 items-center bg-(--ui-sidebar-surface-background) text-xs">
-            {/* Drag strips, AppShell-style: cut to AVOID the fixed control
+            <div className="relative flex h-[34px] shrink-0 items-center bg-(--ui-sidebar-surface-background) text-xs">
+              {/* Drag strips, AppShell-style: cut to AVOID the fixed control
                 clusters instead of overlapping them — Electron's no-drag
                 carve-out of fixed/transformed elements is unreliable, so a
                 full-bar drag base kills their clicks. In-flow slot content
                 still carves via its own no-drag wrapper (the same pattern as
                 the app's session-title button). */}
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 left-0 w-(--titlebar-controls-left,14px) [-webkit-app-region:drag]"
-            />
-            <div
-              aria-hidden="true"
-              className="pointer-events-none absolute inset-y-0 left-[calc(var(--titlebar-controls-left,14px)+(var(--titlebar-control-size,2rem)*2)+0.75rem)] right-[calc(var(--titlebar-tools-right,0.75rem)+var(--titlebar-tools-width,5.5rem)+0.75rem)] [-webkit-app-region:drag]"
-            />
-            <TitlebarSlot
-              area="titleBar.left"
-              className="pointer-events-auto absolute z-10 flex w-max items-center gap-2 [-webkit-app-region:no-drag]"
-              style={{
-                left: 'max(calc(var(--workspace-left, 0px) + 0.5rem), calc(var(--titlebar-controls-left, 14px) + 2 * var(--titlebar-control-size, 2rem) + 1rem))'
-              }}
-            />
-            <TitlebarSlot
-              area="titleBar.center"
-              className="pointer-events-auto absolute left-1/2 top-1/2 z-10 flex w-max -translate-x-1/2 -translate-y-1/2 items-center gap-2 [-webkit-app-region:no-drag]"
-            />
-            <TitlebarSlot
-              area="titleBar.right"
-              className="pointer-events-auto absolute z-10 flex w-max items-center gap-2 [-webkit-app-region:no-drag]"
-              style={{
-                right:
-                  'max(calc(var(--workspace-right, 0px) + 0.5rem), calc(var(--titlebar-tools-right, 0.75rem) + 5 * (var(--titlebar-control-size, 2rem) + 0.25rem) + 0.5rem))'
-              }}
-            />
-          </div>
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 left-0 w-(--titlebar-controls-left,14px) [-webkit-app-region:drag]"
+              />
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 left-[calc(var(--titlebar-controls-left,14px)+(var(--titlebar-control-size,2rem)*2)+0.75rem)] right-[calc(var(--titlebar-tools-right,0.75rem)+var(--titlebar-tools-width,5.5rem)+0.75rem)] [-webkit-app-region:drag]"
+              />
+              <TitlebarSlot
+                area="titleBar.left"
+                className="pointer-events-auto absolute z-10 flex w-max items-center gap-2 [-webkit-app-region:no-drag]"
+                style={{
+                  left: 'max(calc(var(--workspace-left, 0px) + 0.5rem), calc(var(--titlebar-controls-left, 14px) + 2 * var(--titlebar-control-size, 2rem) + 1rem))'
+                }}
+              />
+              <TitlebarSlot
+                area="titleBar.center"
+                className="pointer-events-auto absolute left-1/2 top-1/2 z-10 flex w-max -translate-x-1/2 -translate-y-1/2 items-center gap-2 [-webkit-app-region:no-drag]"
+              />
+              <TitlebarSlot
+                area="titleBar.right"
+                className="pointer-events-auto absolute z-10 flex w-max items-center gap-2 [-webkit-app-region:no-drag]"
+                style={{
+                  right:
+                    // Five static cluster buttons: four systemTools plus the
+                    // always-present right-sidebar toggle (titlebar-controls.tsx).
+                    // Keep in sync with wiring.tsx's SYSTEM_TOOL_COUNT.
+                    'max(calc(var(--workspace-right, 0px) + 0.5rem), calc(var(--titlebar-tools-right, 0.75rem) + 5 * var(--titlebar-control-size, 2rem) + 0.5rem))'
+                }}
+              />
+            </div>
 
-          <LayoutTreeRoot />
+            <LayoutTreeRoot />
 
-          {/* "Close running tab?" — the busy/input-blocked tile close gate. */}
-          <SessionTileCloseConfirm />
+            {/* "Close running tab?" — the busy/input-blocked tile close gate. */}
+            <SessionTileCloseConfirm />
 
-          {/* The REAL statusbar (model pill, command center, agents, …) with
+            {/* The REAL statusbar (model pill, command center, agents, …) with
               statusBar.left/right contributions merged in. Unmounted — not
               just hidden — while toggled off, so its 15s status poll and the
               per-turn readouts stop with it. */}
-          {statusbarVisible && <WiredPane part="statusbar" />}
-        </div>
+            {statusbarVisible && <WiredPane part="statusbar" />}
+          </div>
+        </ShellContextMenu>
       </ContribWiring>
     </SidebarProvider>
   )

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { $desktopOnboarding, type DesktopOnboardingState, type OnboardingContext } from '@/store/onboarding'
 import type { OAuthProvider } from '@/types/hermes'
 
-import { buildApiKeyCatalog, Picker } from '.'
+import { Picker } from '.'
 
 function provider(id: string, name = id): OAuthProvider {
   return {
@@ -56,72 +56,43 @@ afterEach(() => {
 })
 
 describe('onboarding Picker', () => {
-  it('shows existing-account connectors before optional provider services', () => {
-    setProviders([
-      provider('anthropic', 'Anthropic Claude'),
-      provider('nous', 'Nous Portal'),
-      provider('claude-code', 'Claude Code'),
-      provider('openai-codex', 'OpenAI Codex / ChatGPT')
-    ])
+  it('features Nous Portal and hides other providers behind a disclosure', () => {
+    setProviders([provider('anthropic', 'Anthropic Claude'), provider('nous', 'Nous Portal')])
     render(<Picker ctx={ctx} />)
 
-    expect(screen.getByText('OpenAI OAuth (ChatGPT)')).toBeTruthy()
-    expect(screen.getByText('Claude Pro / Max (qua Claude Code)')).toBeTruthy()
-    expect(screen.getByText('Google Gemini (API key)')).toBeTruthy()
     expect(screen.getByText('Nous Portal')).toBeTruthy()
+    expect(screen.getByText('Recommended')).toBeTruthy()
+    // Fireworks stays behind the disclosure with the other alternatives; only
+    // Nous Portal is visible before the user expands the list.
+    expect(screen.queryByText('Fireworks AI')).toBeNull()
+    expect(screen.queryByText('Anthropic API Key')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Other providers' }))
+
     expect(screen.getByText('Fireworks AI')).toBeTruthy()
-    expect(screen.getByText('OpenRouter')).toBeTruthy()
-    expect(screen.getByText('OpenAI')).toBeTruthy()
-    expect(screen.getByText('xAI Grok')).toBeTruthy()
-    expect(screen.getByText('Local / custom endpoint')).toBeTruthy()
     expect(screen.getByText('Anthropic API Key')).toBeTruthy()
-    expect(screen.queryByText('Recommended')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Other providers' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Collapse' })).toBeTruthy()
   })
 
-  it('adds every pasteable API provider from the backend catalog', () => {
-    const options = buildApiKeyCatalog([
-      { auth_type: 'api_key', key_env: 'DEEPSEEK_API_KEY', models: [], name: 'DeepSeek', slug: 'deepseek' },
-      { auth_type: 'oauth_external', models: [], name: 'Account OAuth', slug: 'account-oauth' },
-      { auth_type: 'api_key', models: [], name: 'Missing key metadata', slug: 'missing-key' }
-    ])
-
-    expect(options.some(option => option.id === 'deepseek')).toBe(true)
-    expect(options.some(option => option.id === 'account-oauth')).toBe(false)
-    expect(options.some(option => option.id === 'missing-key')).toBe(false)
-  })
-
-  it('keeps ChatGPT, Claude Pro, and Gemini ahead of Nous regardless of backend order', () => {
+  it('shows Fireworks first in the expanded list, ahead of other OAuth providers', () => {
     setProviders([
+      provider('openai-codex', 'OpenAI Codex / ChatGPT'),
       provider('minimax-oauth', 'MiniMax'),
-      provider('nous', 'Nous Portal'),
-      provider('claude-code', 'Claude Code'),
-      provider('openai-codex', 'OpenAI Codex / ChatGPT')
+      provider('nous', 'Nous Portal')
     ])
     render(<Picker ctx={ctx} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Other providers' }))
 
     const labels = screen
       .getAllByRole('button')
       .map(el => el.textContent ?? '')
-      .filter(text => /OpenAI OAuth|Claude Pro|Google Gemini|Nous Portal|MiniMax/.test(text))
+      .filter(text => /Nous Portal|Fireworks AI|ChatGPT or Codex|MiniMax|OpenRouter/.test(text))
 
     const indexOf = (needle: string) => labels.findIndex(text => text.includes(needle))
-    expect(indexOf('OpenAI OAuth')).toBeGreaterThanOrEqual(0)
-    expect(indexOf('Claude Pro')).toBeGreaterThan(indexOf('OpenAI OAuth'))
-    expect(indexOf('Google Gemini')).toBeGreaterThan(indexOf('Claude Pro'))
-    expect(indexOf('Nous Portal')).toBeGreaterThan(indexOf('Google Gemini'))
-    expect(indexOf('MiniMax')).toBeGreaterThan(indexOf('Nous Portal'))
-  })
-
-  it('opens the API form with Google Gemini preselected', () => {
-    setProviders([provider('nous', 'Nous Portal'), provider('openai-codex', 'OpenAI Codex / ChatGPT')])
-    render(<Picker ctx={ctx} />)
-
-    fireEvent.click(screen.getByRole('button', { name: /Google Gemini/ }))
-
-    expect($desktopOnboarding.get().mode).toBe('apikey')
-    expect(screen.getByRole('button', { name: /Google Gemini/ }).className).toContain('border-primary')
-    expect(screen.getByText('Use an API key from Google AI Studio to access Gemini models.')).toBeTruthy()
+    expect(indexOf('Nous Portal')).toBeGreaterThanOrEqual(0)
+    expect(indexOf('Fireworks AI')).toBeGreaterThan(indexOf('Nous Portal'))
+    expect(indexOf('ChatGPT or Codex')).toBeGreaterThan(indexOf('Fireworks AI'))
+    expect(indexOf('MiniMax')).toBeGreaterThan(indexOf('ChatGPT or Codex'))
   })
 
   it('shows every provider directly when Nous Portal is absent', () => {
@@ -130,8 +101,8 @@ describe('onboarding Picker', () => {
 
     expect(screen.getByText('Fireworks AI')).toBeTruthy()
     expect(screen.getByText('Anthropic API Key')).toBeTruthy()
-    expect(screen.getByText('OpenAI OAuth (ChatGPT)')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Other providers' })).toBeNull()
+    expect(screen.getByText('ChatGPT or Codex Subscription')).toBeTruthy()
+    expect(screen.queryByText('Other sign-in options')).toBeNull()
     expect(screen.queryByText('Recommended')).toBeNull()
   })
 

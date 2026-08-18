@@ -208,6 +208,7 @@ test('buildPosixCleanupScript waits for the PID, runs the uninstall module, remo
     agentRoot: '/home/x/.hermes/hermes-agent',
     uninstallArgs: ['-m', 'hermes_cli.uninstall', '--mode', 'gui'],
     appPath: '/opt/hermes/linux-unpacked',
+    userDataPath: '/home/x/.config/Hermes',
     hermesHome: '/home/x/.hermes'
   })
 
@@ -218,6 +219,7 @@ test('buildPosixCleanupScript waits for the PID, runs the uninstall module, remo
   assert.match(script, /seq 1 60/)
   assert.match(script, /'-m' 'hermes_cli\.uninstall' '--mode' 'gui'/)
   assert.match(script, /rm -rf '\/opt\/hermes\/linux-unpacked'/)
+  assert.match(script, /rm -rf '\/home\/x\/\.config\/Hermes'/)
   assert.match(script, /export HERMES_HOME='\/home\/x\/\.hermes'/)
 })
 
@@ -293,6 +295,7 @@ test('buildWindowsCleanupScript waits (bounded) for PID, runs uninstall, rmdir b
     agentRoot: 'C:\\hermes',
     uninstallArgs: ['-m', 'hermes_cli.uninstall', '--mode', 'full'],
     appPath: 'C:\\Users\\x\\AppData\\Local\\Programs\\Hermes',
+    userDataPath: 'C:\\Users\\x\\AppData\\Roaming\\Hermes',
     hermesHome: 'C:\\Users\\x\\AppData\\Local\\hermes'
   })
 
@@ -311,9 +314,12 @@ test('buildWindowsCleanupScript waits (bounded) for PID, runs uninstall, rmdir b
   assert.doesNotMatch(script, /find "%PID%"/) // the old substring-prone form is gone
   // Removal is a retry loop (Windows releases dir handles lazily).
   assert.match(script, /cd \/d "%~dp0"/)
-  assert.match(script, /:rmloop/)
+  assert.match(script, /:rmuserdataloop/)
+  assert.match(script, /rmdir \/s \/q "C:\\Users\\x\\AppData\\Roaming\\Hermes" >nul 2>&1/)
+  assert.match(script, /if %userdata_tries% geq 10 goto rmuserdatadone/)
+  assert.match(script, /:rmapploop/)
   assert.match(script, /rmdir \/s \/q "C:\\Users\\x\\AppData\\Local\\Programs\\Hermes" >nul 2>&1/)
-  assert.match(script, /if %tries% geq 10 goto rmdone/)
+  assert.match(script, /if %app_tries% geq 10 goto rmapdone/)
   assert.match(script, /del "%~f0"/)
 })
 
@@ -323,11 +329,14 @@ test.skipIf(process.platform !== 'win32')(
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-uninstall-wait-'))
     const scriptPath = path.join(directory, 'cleanup.cmd')
     const appPath = path.join(directory, 'app')
+    const userDataPath = path.join(directory, 'user-data')
     const agentRoot = path.join(appPath, 'resources', 'agent-payload', 'repo')
 
     try {
       fs.mkdirSync(agentRoot, { recursive: true })
+      fs.mkdirSync(userDataPath, { recursive: true })
       fs.writeFileSync(path.join(agentRoot, 'payload.txt'), 'runtime payload')
+      fs.writeFileSync(path.join(userDataPath, 'state.json'), 'desktop state')
       fs.writeFileSync(
         scriptPath,
         buildWindowsCleanupScript({
@@ -337,6 +346,7 @@ test.skipIf(process.platform !== 'win32')(
           agentRoot,
           uninstallArgs: ['cmd.exe'],
           appPath,
+          userDataPath,
           hermesHome: path.join(directory, 'home')
         })
       )
@@ -352,6 +362,7 @@ test.skipIf(process.platform !== 'win32')(
       assert.match(completed.stdout, /cmd\.exe/i)
       assert.equal(fs.existsSync(scriptPath), false)
       assert.equal(fs.existsSync(path.join(directory, 'cleanup-tasklist.tmp')), false)
+      assert.equal(fs.existsSync(userDataPath), false)
       assert.equal(fs.existsSync(appPath), false)
     } finally {
       fs.rmSync(directory, { recursive: true, force: true })
@@ -359,7 +370,7 @@ test.skipIf(process.platform !== 'win32')(
   }
 )
 
-test('buildWindowsCleanupScript omits PYTHONPATH + rmdir when not needed (gui, no bundle)', () => {
+test('buildWindowsCleanupScript omits PYTHONPATH + rmdir when neither bundle nor userData is removable', () => {
   const script = buildWindowsCleanupScript({
     desktopPid: 2,
     pythonExe: 'C:\\h\\venv\\Scripts\\python.exe',

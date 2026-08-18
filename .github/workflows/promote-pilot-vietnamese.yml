@@ -77,10 +77,29 @@ jobs:
             'sessionTabs',
             'browserTabs',
             'rightPanelResize',
+            'connectorChromeIsolated',
+            'connectorEdgeIsolated',
+            'connectorConsentPreview',
+            'connectorRevoke',
+            'connectorPersistence',
+            'connectorRedaction',
+            'reasoningSummaryEnabled',
+            'reasoningSummaryDisabledZeroCalls',
+            'reasoningOriginalPreserved',
+            'advisorDisabledZeroCalls',
+            'advisorPlanCheckpoint',
+            'advisorRecoveryCheckpoint',
+            'advisorFinalCheckpoint',
+            'advisorReadOnly',
+            'advisorRevisionBounded',
+            'advisorModelPersistence',
             'persistenceAfterRestart',
+            'safeTool',
+            'updateFromV25',
             'repair',
             'uninstallKeepData',
-            'uninstallDeleteData'
+            'uninstallDeleteData',
+            'rollback'
           ]
           const pilotTargets = ['windows-arm64', 'macos-arm64', 'macos-x64', 'linux-x64', 'linux-arm64']
           const provenance = JSON.parse(fs.readFileSync('candidate/candidate-provenance.json', 'utf8'))
@@ -106,11 +125,8 @@ jobs:
           for (const gate of requiredWindowsGates) {
             if (windows.gates?.[gate] !== true) throw new Error(`windows-x64 missing ${gate}`)
           }
-          if (windows.gates?.safeTool !== false || windows.gates?.updateFromPrevious !== false) {
-            throw new Error('pilot limitations must be explicit')
-          }
-          if (!Array.isArray(windows.limitations) || windows.limitations.length < 2) {
-            throw new Error('windows-x64 pilot limitations are absent')
+          if (!Array.isArray(windows.limitations)) {
+            throw new Error('windows-x64 pilot limitations must be an array')
           }
           for (const target of pilotTargets) {
             const record = evidence.platforms?.[target]

@@ -178,7 +178,16 @@ function shouldRemoveAppBundle(isPackaged, appPath) {
  * resolves from the agent source. `q()` single-quote-escapes for the shell
  * (closes-escapes-reopens any embedded apostrophe), defending against spaces.
  */
-function buildPosixCleanupScript({ desktopPid, pythonExe, pythonPath, agentRoot, uninstallArgs, appPath, hermesHome }) {
+function buildPosixCleanupScript({
+  desktopPid,
+  pythonExe,
+  pythonPath,
+  agentRoot,
+  uninstallArgs,
+  appPath,
+  userDataPath = null,
+  hermesHome
+}) {
   const q = s => `'${String(s).replace(/'/g, `'\\''`)}'`
 
   const lines = [
@@ -201,6 +210,13 @@ function buildPosixCleanupScript({ desktopPid, pythonExe, pythonPath, agentRoot,
   }
 
   lines.push(`cd ${q(agentRoot)} 2>/dev/null || true`, `${q(pythonExe)} ${uninstallArgs.map(q).join(' ')} || true`)
+
+  // The Python uninstaller also attempts this removal, but Electron helper
+  // processes can keep Chromium files open for a moment after the main PID
+  // exits. The detached handoff owns the final, post-exit cleanup.
+  if (userDataPath) {
+    lines.push(`rm -rf ${q(userDataPath)} || true`)
+  }
 
   if (appPath) {
     lines.push(`rm -rf ${q(appPath)} || true`)
@@ -241,6 +257,7 @@ function buildWindowsCleanupScript({
   agentRoot,
   uninstallArgs,
   appPath,
+  userDataPath = null,
   hermesHome
 }) {
   const pid = Number(desktopPid) || 0
@@ -279,21 +296,38 @@ function buildWindowsCleanupScript({
     `${q(pythonExe)} ${uninstallArgs.map(q).join(' ')}`
   )
 
+  if (userDataPath) {
+    lines.push(
+      'rem Chromium helper processes can release userData handles after the',
+      'rem main PID exits. Retry the post-exit cleanup instead of leaving data behind.',
+      'set /a userdata_tries=0',
+      ':rmuserdataloop',
+      `if not exist ${q(userDataPath)} goto rmuserdatadone`,
+      `rmdir /s /q ${q(userDataPath)} >nul 2>&1`,
+      `if not exist ${q(userDataPath)} goto rmuserdatadone`,
+      'set /a userdata_tries+=1',
+      'if %userdata_tries% geq 10 goto rmuserdatadone',
+      'timeout /t 1 /nobreak >nul',
+      'goto rmuserdataloop',
+      ':rmuserdatadone'
+    )
+  }
+
   if (appPath) {
     lines.push(
       'rem Leave the app tree before removing it. Windows cannot delete the',
       'rem current working directory of this cleanup cmd process.',
       'cd /d "%~dp0"',
-      'set /a tries=0',
-      ':rmloop',
-      `if not exist ${q(appPath)} goto rmdone`,
+      'set /a app_tries=0',
+      ':rmapploop',
+      `if not exist ${q(appPath)} goto rmapdone`,
       `rmdir /s /q ${q(appPath)} >nul 2>&1`,
-      `if not exist ${q(appPath)} goto rmdone`,
-      'set /a tries+=1',
-      'if %tries% geq 10 goto rmdone',
+      `if not exist ${q(appPath)} goto rmapdone`,
+      'set /a app_tries+=1',
+      'if %app_tries% geq 10 goto rmapdone',
       'timeout /t 1 /nobreak >nul',
-      'goto rmloop',
-      ':rmdone'
+      'goto rmapploop',
+      ':rmapdone'
     )
   }
 

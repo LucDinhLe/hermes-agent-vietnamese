@@ -1,10 +1,13 @@
 """Tests for the stable update channel (tag-tracking) in hermes_cli/update_cmd.py."""
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from hermes_cli.update_cmd import (
+    _latest_public_release_tag_from_releases,
     _latest_release_tag_from_ls_remote,
     _parse_release_tag,
+    _resolve_latest_release_tag,
     _stable_channel_active,
 )
 
@@ -17,7 +20,17 @@ class TestParseReleaseTag:
         assert _parse_release_tag(" v1.2.3 ") == (1, 2, 3, -1)
 
     def test_prereleases_and_garbage_rejected(self):
-        for tag in ("v1.2.3-rc1", "v1.2.3-beta.1", "vi-v1.2.3", "vi-v1.2.3-rc1", "v1.2", "1.2.3", "release-1", "vv1.2.3", ""):
+        for tag in (
+            "v1.2.3-rc1",
+            "v1.2.3-beta.1",
+            "vi-v1.2.3",
+            "vi-v1.2.3-rc1",
+            "v1.2",
+            "1.2.3",
+            "release-1",
+            "vv1.2.3",
+            "",
+        ):
             assert _parse_release_tag(tag) is None, tag
 
     def test_calver_tags_rejected(self):
@@ -59,22 +72,71 @@ class TestLatestReleaseTagFromLsRemote:
         )
         assert _latest_release_tag_from_ls_remote(output) == ("vi-v0.20.0-15", "new")
 
-    def test_peeled_sha_wins_for_annotated_tags(self):
-        output = (
-            "tagobj\trefs/tags/v1.0.0\n"
-            "commitsha\trefs/tags/v1.0.0^{}\n"
+    def test_prefers_the_community_release_line_over_upstream_tags(self):
+        output = "upstream\trefs/tags/v0.20.4\ncommunity\trefs/tags/vi-v0.20.0-28\n"
+        assert _latest_release_tag_from_ls_remote(output) == (
+            "vi-v0.20.0-28",
+            "community",
         )
+
+    def test_peeled_sha_wins_for_annotated_tags(self):
+        output = "tagobj\trefs/tags/v1.0.0\ncommitsha\trefs/tags/v1.0.0^{}\n"
         tag, sha = _latest_release_tag_from_ls_remote(output)
         assert tag == "v1.0.0"
         assert sha == "commitsha"
 
     def test_no_release_tags(self):
-        assert _latest_release_tag_from_ls_remote("aaa\trefs/tags/nightly\n") == (None, None)
+        assert _latest_release_tag_from_ls_remote("aaa\trefs/tags/nightly\n") == (
+            None,
+            None,
+        )
         assert _latest_release_tag_from_ls_remote("") == (None, None)
 
     def test_malformed_lines_ignored(self):
         output = "garbage line no tab\naaa\trefs/heads/main\nbbb\trefs/tags/v2.0.0\n"
         assert _latest_release_tag_from_ls_remote(output) == ("v2.0.0", "bbb")
+
+
+class TestLatestPublicReleaseFromGitHub:
+    def test_draft_candidate_is_invisible_until_published(self):
+        releases = [
+            {"tag_name": "vi-v0.20.0-28", "draft": True, "prerelease": True},
+            {"tag_name": "vi-v0.20.0-25", "draft": False, "prerelease": False},
+        ]
+        assert _latest_public_release_tag_from_releases(releases) == "vi-v0.20.0-25"
+
+    def test_published_community_prerelease_becomes_visible(self):
+        releases = [
+            {"tag_name": "vi-v0.20.0-28", "draft": False, "prerelease": True},
+            {"tag_name": "vi-v0.20.0-25", "draft": False, "prerelease": False},
+            {"tag_name": "v0.20.4", "draft": False, "prerelease": False},
+        ]
+        assert _latest_public_release_tag_from_releases(releases) == "vi-v0.20.0-28"
+
+    def test_resolver_peels_only_the_published_release_tag(self, tmp_path):
+        tag = "vi-v0.20.0-28"
+        commit = "ab" * 20
+        output = (
+            f"{'cd' * 20}\trefs/tags/{tag}\n"
+            f"{commit}\trefs/tags/{tag}^{{}}\n"
+        )
+
+        with (
+            patch(
+                "hermes_cli.update_cmd._github_latest_release_tag",
+                return_value=tag,
+            ),
+            patch(
+                "hermes_cli.update_cmd.subprocess.run",
+                return_value=SimpleNamespace(returncode=0, stdout=output, stderr=""),
+            ) as run,
+        ):
+            assert _resolve_latest_release_tag(["git"], tmp_path) == (tag, commit)
+
+        assert run.call_args.args[0][-2:] == [
+            f"refs/tags/{tag}",
+            f"refs/tags/{tag}^{{}}",
+        ]
 
 
 class _Args:
@@ -88,19 +150,37 @@ class TestStableChannelActive:
         assert _stable_channel_active(_Args(branch="bb/gui")) is False
 
     def test_config_stable_activates(self, tmp_path):
-        with patch("hermes_cli.config.load_config", return_value={"update": {"channel": "stable"}}), \
-             patch("hermes_cli.install_manifest.install_manifest_path",
-                   return_value=tmp_path / ".hermes-install.json"):
+        with (
+            patch(
+                "hermes_cli.config.load_config",
+                return_value={"update": {"channel": "stable"}},
+            ),
+            patch(
+                "hermes_cli.install_manifest.install_manifest_path",
+                return_value=tmp_path / ".hermes-install.json",
+            ),
+        ):
             assert _stable_channel_active(_Args()) is True
 
     def test_default_config_stays_main(self, tmp_path):
-        with patch("hermes_cli.config.load_config", return_value={"update": {"channel": "auto"}}), \
-             patch("hermes_cli.install_manifest.install_manifest_path",
-                   return_value=tmp_path / ".hermes-install.json"):
+        with (
+            patch(
+                "hermes_cli.config.load_config",
+                return_value={"update": {"channel": "auto"}},
+            ),
+            patch(
+                "hermes_cli.install_manifest.install_manifest_path",
+                return_value=tmp_path / ".hermes-install.json",
+            ),
+        ):
             assert _stable_channel_active(_Args()) is False
 
     def test_config_failure_defaults_to_main(self, tmp_path):
-        with patch("hermes_cli.config.load_config", side_effect=RuntimeError("boom")), \
-             patch("hermes_cli.install_manifest.install_manifest_path",
-                   return_value=tmp_path / ".hermes-install.json"):
+        with (
+            patch("hermes_cli.config.load_config", side_effect=RuntimeError("boom")),
+            patch(
+                "hermes_cli.install_manifest.install_manifest_path",
+                return_value=tmp_path / ".hermes-install.json",
+            ),
+        ):
             assert _stable_channel_active(_Args()) is False

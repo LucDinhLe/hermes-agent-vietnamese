@@ -16,10 +16,14 @@ PICKER = REPO_ROOT / "scripts" / "sandbox" / "pick-release-tags.sh"
 
 
 def _bash() -> str:
+    # WindowsApps exposes a WSL launcher named bash.exe even when no distro is
+    # installed; prefer the repository-compatible Git Bash on Windows.
+    windows_git_bash = Path(r"C:\Program Files\Git\bin\bash.exe")
+    if os.name == "nt" and windows_git_bash.exists():
+        return str(windows_git_bash)
     found = shutil.which("bash")
     if found:
         return found
-    windows_git_bash = Path(r"C:\Program Files\Git\bin\bash.exe")
     if windows_git_bash.exists():
         return str(windows_git_bash)
     pytest.skip("bash is required to exercise the release-tag picker")
@@ -49,6 +53,7 @@ def _pick(
     tags: list[str],
     count: int = 5,
     exclude: str | None = None,
+    published_tags: list[str] | None = None,
 ) -> list[str]:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -76,6 +81,12 @@ def _pick(
     ]
     if exclude is not None:
         args.extend(["--exclude", exclude])
+    if published_tags is not None:
+        published_file = tmp_path / "published-tags.txt"
+        published_file.write_text(
+            "".join(f"{tag}\n" for tag in published_tags), encoding="utf-8"
+        )
+        args.extend(["--published-tags-file", _git_bash_path(published_file)])
 
     result = subprocess.run(
         args,
@@ -125,6 +136,21 @@ def test_current_candidate_is_excluded_from_update_from_matrix(tmp_path: Path):
     assert picked == ["vi-v0.20.0-12", "vi-v0.20.0-14"]
 
 
+def test_drafts_and_failed_candidates_are_not_update_sources(tmp_path: Path):
+    picked = _pick(
+        tmp_path,
+        [
+            "vi-v0.20.0-14",
+            "vi-v0.20.0-25",
+            "vi-v0.20.0-27",
+            "vi-v0.20.4-31",
+        ],
+        published_tags=["vi-v0.20.0-14", "vi-v0.20.0-25"],
+    )
+
+    assert picked == ["vi-v0.20.0-14", "vi-v0.20.0-25"]
+
+
 def test_workflow_triggers_fork_tags_and_has_diagnostic_job():
     workflow = (REPO_ROOT / ".github" / "workflows" / "install-e2e.yml").read_text(
         encoding="utf-8"
@@ -136,12 +162,18 @@ def test_workflow_triggers_fork_tags_and_has_diagnostic_job():
     assert "inputs['tag-count']" in workflow
     assert "inputs.tag-count" not in workflow
     assert '--exclude "$EXCLUDE_TAG"' in workflow
+    assert "select(.draft == false)" in workflow
+    assert '--published-tags-file "$published_tags_file"' in workflow
 
     reusable = (REPO_ROOT / ".github" / "workflows" / "install-e2e-run.yml").read_text(
         encoding="utf-8"
     )
     assert "HERMES_DEV_SANDBOX_UPSTREAM:" in reusable
     assert "github.com/${{ github.repository }}.git" in reusable
+    assert "Refresh sandbox package index (bounded retry)" in reusable
+    assert "Install sandbox dependencies (bounded retry)" in reusable
+    assert "timeout --signal=TERM --kill-after=10s 180s" in reusable
+    assert "timeout --signal=TERM --kill-after=10s 300s" in reusable
 
 
 def test_installer_rerun_keeps_https_git_fetches_inside_fake_remote():

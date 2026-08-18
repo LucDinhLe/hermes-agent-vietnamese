@@ -2734,7 +2734,8 @@ class TestAuxiliaryProviderProfileReasoning:
             base_url="https://api.moonshot.ai/v1",
         )
 
-        assert kwargs["reasoning_effort"] == "medium"
+        # K3 maps medium → high (ref: K3 model docs)
+        assert kwargs["reasoning_effort"] == "high"
         assert "reasoning" not in kwargs.get("extra_body", {})
         assert "thinking" not in kwargs.get("extra_body", {})
 
@@ -2932,6 +2933,14 @@ class TestCodexAdapterPromptCacheKey:
             base_url="https://bedrock-mantle.us-west-2.api.aws/v1",
             model=model,
         )
+        adapter.create(messages=[
+            {"role": "system", "content": "SYS"},
+            {"role": "user", "content": "hi"},
+        ])
+        assert captured["prompt_cache_retention"] == "24h"
+
+    def test_meta_endpoint_includes_prompt_cache_retention(self):
+        adapter, captured = self._build_adapter(base_url="https://api.meta.ai/v1", model="muse-spark-1.2")
         adapter.create(messages=[
             {"role": "system", "content": "SYS"},
             {"role": "user", "content": "hi"},
@@ -4491,7 +4500,22 @@ class TestAutoRoutedProviderProfileHooks:
 
 
 class TestFastModelTier:
-    """The titling fast tier: rot-proof resolution, scoped to titling only."""
+    """The opt-in titling fast tier: rot-proof and scoped to titling only."""
+
+    def test_auto_client_cache_key_tracks_fast_model_preference(self):
+        """Changing the routing preference must not reuse the old auto client."""
+        from agent import auxiliary_client as ac
+
+        with patch.object(ac, "_task_prefers_fast_model", return_value=False):
+            main_key = ac._client_cache_key(
+                "auto", async_mode=False, task="title_generation"
+            )
+        with patch.object(ac, "_task_prefers_fast_model", return_value=True):
+            fast_key = ac._client_cache_key(
+                "auto", async_mode=False, task="title_generation"
+            )
+
+        assert main_key != fast_key
 
     def test_catalog_match_prefers_rolling_alias_over_pinned_id(self):
         """A "-latest" alias wins: it is the only id that cannot go stale."""
