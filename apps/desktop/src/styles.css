@@ -488,9 +488,9 @@
 
     --sidebar-width: 14.8125rem;
     --chat-min-width: 28rem;
-    --titlebar-control-size: 24px;
-    --titlebar-control-height: 24px;
-    --titlebar-icon-size: 13.9px;
+    --titlebar-control-size: 2rem;
+    --titlebar-control-height: 2rem;
+    --titlebar-icon-size: 16px;
     --sidebar-content-inline-padding: 1rem;
 
     --sidebar: var(--dt-sidebar-bg);

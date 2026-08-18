@@ -17,6 +17,7 @@ import { Codicon } from '@/components/ui/codicon'
 import { DecodeText } from '@/components/ui/decode-text'
 import { DROP_SHEET_BLUR_CLASS, DROP_SHEET_CLASS } from '@/components/ui/drop-affordance'
 import {
+  PANE_TAB_STRIP_HEIGHT_PX,
   PANE_TAB_STRIP_LINE_LEFT,
   PANE_TAB_STRIP_LINE_RIGHT,
   PaneStripGlyph,
@@ -367,7 +368,7 @@ export function TreeGroup({
         <ZoneMenu {...zoneMenu}>
           <div
             className={cn(
-              'flex h-full w-7 shrink-0 cursor-pointer select-none flex-col items-stretch bg-(--ui-sidebar-surface-background)',
+              'flex h-full w-9 shrink-0 cursor-pointer select-none flex-col items-stretch bg-(--ui-sidebar-surface-background)',
               // Strip line faces the content the zone collapsed away from.
               railSide === 'right' ? PANE_TAB_STRIP_LINE_LEFT : PANE_TAB_STRIP_LINE_RIGHT
             )}
@@ -431,15 +432,11 @@ export function TreeGroup({
             trailing={
               <>
                 {minimizable && (
-                  <button
-                    aria-label={node.minimized ? t.zones.restore : t.zones.minimize}
-                    className="mx-1 grid size-5 shrink-0 place-items-center self-center rounded-md text-(--ui-text-tertiary) opacity-0 transition-opacity hover:bg-(--ui-control-hover-background) hover:text-foreground focus-visible:opacity-100 group-hover/pane-header:opacity-100"
-                    onClick={toggleCollapse}
-                    onPointerDown={e => e.stopPropagation()}
-                    type="button"
-                  >
-                    <Codicon name={node.minimized ? 'chevron-up' : 'chevron-down'} size="0.75rem" />
-                  </button>
+                  <PaneStripGlyph
+                    icon={<Codicon name={node.minimized ? 'chevron-down' : 'chevron-up'} />}
+                    label={node.minimized ? t.zones.restore : t.zones.minimize}
+                    onSelect={toggleCollapse}
+                  />
                 )}
                 <StripDropCaret groupId={node.id} stripRef={stripRef} />
               </>
@@ -581,7 +578,7 @@ export function TreeGroup({
                 onPointerDownCapture={() => noteActiveTreeGroup(node.id)}
               >
                 <PaneStripGlyph
-                  icon={<Codicon name="add" size="0.8125rem" />}
+                  icon={<Codicon name="add" />}
                   label={t.zones.newSessionTab}
                   onSelect={() => newSessionTabAction()}
                 />
@@ -662,7 +659,7 @@ export function TreeGroup({
             className="absolute inset-x-0 bottom-0 z-50 flex cursor-grab items-center justify-center outline-1 -outline-offset-2 outline-dashed backdrop-blur-[2px]"
             onPointerDown={e => startPaneDrag(activeId, e, undefined, undefined, undefined, active?.title ?? activeId)}
             style={{
-              top: headerVisible ? 28 : 0,
+              top: headerVisible ? PANE_TAB_STRIP_HEIGHT_PX : 0,
               background:
                 'color-mix(in srgb, var(--ui-accent) 6%, color-mix(in srgb, var(--ui-bg-chrome) 55%, transparent))',
               outlineColor: 'color-mix(in srgb, var(--ui-accent) 55%, transparent)'

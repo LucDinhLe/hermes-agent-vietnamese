@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   MACOS_TAHOE_DARWIN_MAJOR,
+  TITLEBAR_CONTROL_HEIGHT,
   TITLEBAR_CONTROL_OFFSET_X,
   TITLEBAR_CONTROL_SIZE,
   TITLEBAR_EDGE_INSET,
@@ -16,10 +17,11 @@ import {
 } from './titlebar'
 
 describe('titlebar sizing', () => {
-  it('uses 24×24 hit targets and 13.9px glyphs', () => {
-    expect(TITLEBAR_CONTROL_SIZE).toBe(24)
-    expect(TITLEBAR_ICON_SIZE).toBe(13.9)
-    expect(titlebarIconSizeCss()).toBe('13.9px')
+  it('uses a readable glyph and a 32px pointer target', () => {
+    expect(TITLEBAR_CONTROL_SIZE).toBeGreaterThanOrEqual(32)
+    expect(TITLEBAR_CONTROL_HEIGHT).toBeGreaterThanOrEqual(32)
+    expect(TITLEBAR_ICON_SIZE).toBeGreaterThanOrEqual(16)
+    expect(titlebarIconSizeCss()).toBe('16px')
   })
 
   it('reserves width from abutting hit targets only', () => {
