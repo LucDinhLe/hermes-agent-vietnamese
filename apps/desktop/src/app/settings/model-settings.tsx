@@ -527,10 +527,16 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
 
   const fastOn = isFastTier(getNested(config ?? {}, 'agent.service_tier'))
 
-  // Persist a single agent.* default by round-tripping the whole config record
+  const advisorEnabled = getNested(config ?? {}, 'advisor.enabled') === true
+  const advisorAssignment = auxiliary?.tasks.find(entry => entry.task === 'advisor')
+
+  const advisorIsAuto =
+    !advisorAssignment || !advisorAssignment.provider || advisorAssignment.provider === 'auto'
+
+  // Persist a single behavioral default by round-tripping the whole config record
   // (PUT /api/config replaces it) — optimistic, with rollback on failure.
-  const writeAgentDefault = useCallback(
-    async (key: string, value: string) => {
+  const writeConfigDefault = useCallback(
+    async (key: string, value: unknown) => {
       if (!config) {
         return
       }
@@ -871,7 +877,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
               <div className="flex items-center gap-2 text-xs">
                 {m.reasoning}
                 <Select
-                  onValueChange={value => void writeAgentDefault('agent.reasoning_effort', value)}
+                  onValueChange={value => void writeConfigDefault('agent.reasoning_effort', value)}
                   value={effortValue}
                 >
                   <SelectTrigger className={cn('min-w-28', CONTROL_TEXT)}>
@@ -892,7 +898,9 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
                 {t.shell.modelOptions.fast}
                 <Switch
                   checked={fastOn}
-                  onCheckedChange={checked => void writeAgentDefault('agent.service_tier', checked ? 'fast' : 'normal')}
+                  onCheckedChange={checked =>
+                    void writeConfigDefault('agent.service_tier', checked ? 'fast' : 'normal')
+                  }
                   size="xs"
                 />
               </label>
@@ -910,6 +918,91 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
             />
           </div>
         )}
+      </section>
+
+      <section>
+        <div className="mb-2.5 flex items-center justify-between gap-3">
+          <SectionHeading icon={Cpu} title={m.advisorTitle} />
+          <label className="flex shrink-0 items-center gap-2 text-xs">
+            {m.advisorEnabled}
+            <Switch
+              checked={advisorEnabled}
+              disabled={!config || applying}
+              onCheckedChange={checked => void writeConfigDefault('advisor.enabled', checked)}
+              size="xs"
+            />
+          </label>
+        </div>
+        <p className="mb-2 text-xs text-muted-foreground">{m.advisorDesc}</p>
+        <p className="mb-2 text-xs text-amber-300/90">{m.advisorCost}</p>
+        <ListRow
+          action={
+            editingAuxTask !== 'advisor' && (
+              <Button
+                disabled={!providers.length || applying}
+                onClick={() => beginAuxiliaryEdit('advisor')}
+                size="sm"
+                variant="textStrong"
+              >
+                {m.change}
+              </Button>
+            )
+          }
+          below={
+            editingAuxTask === 'advisor' && (
+              <div className="mt-2 flex flex-wrap items-center gap-2 pt-1">
+                <Select
+                  onValueChange={value => setAuxDraft(prev => ({ ...prev, provider: value, model: '' }))}
+                  value={auxDraft.provider}
+                >
+                  <SelectTrigger className={cn('min-w-32', CONTROL_TEXT)}>
+                    <SelectValue placeholder={m.provider} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {providerOptions.map(provider => (
+                      <SelectItem key={provider.slug || 'none'} value={provider.slug || 'none'}>
+                        {provider.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select
+                  onValueChange={value => setAuxDraft(prev => ({ ...prev, model: value }))}
+                  value={auxDraft.model}
+                >
+                  <SelectTrigger className={cn('min-w-48', CONTROL_TEXT)}>
+                    <SelectValue placeholder={m.model} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {withActive(auxDraftProviderModels, auxDraft.model).map(model => (
+                      <SelectItem key={model} value={model}>
+                        {model}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  disabled={!auxDraft.provider || !auxDraft.model || applying}
+                  onClick={() => void applyAuxiliaryDraft('advisor')}
+                  size="sm"
+                >
+                  {applying ? m.applying : t.common.apply}
+                </Button>
+                <Button onClick={() => setEditingAuxTask(null)} size="sm" variant="ghost">
+                  {t.common.cancel}
+                </Button>
+              </div>
+            )
+          }
+          description={
+            <span className="font-mono text-[0.68rem]">
+              {advisorIsAuto
+                ? m.autoUseMain
+                : `${advisorAssignment.provider} · ${advisorAssignment.model || m.providerDefault}`}
+            </span>
+          }
+          title={m.advisorModel}
+        />
       </section>
 
       <section>

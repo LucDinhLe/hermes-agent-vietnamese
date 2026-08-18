@@ -840,6 +840,11 @@ export interface Translations {
       reasoning: string
       reasoningOff: string
       defaultsFailed: string
+      advisorTitle: string
+      advisorDesc: string
+      advisorEnabled: string
+      advisorCost: string
+      advisorModel: string
       auxiliaryTitle: string
       resetAllToMain: string
       auxiliaryDesc: string
