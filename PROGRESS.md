@@ -17,14 +17,18 @@
   gốc: npm trả `ENOTEMPTY` khi đổi `node_modules/ink` sang thư mục tạm
   `.ink-xKZbo5aM` còn sót từ lần cài trước. Đây là lỗi tính lặp lại an toàn của
   installer, không phải lỗi mạng hoặc thiếu package.
-- Bộ cài nay dọn trước chỉ các thư mục staging npm có hậu tố 8 ký tự trong
-  `node_modules` của root, TUI và web; giữ nguyên `.bin` cùng các thư mục ẩn hợp
-  lệ. Regression tạo đúng cây dở dang, yêu cầu npm chỉ được gọi sau khi cây tạm
-  đã bị dọn và xác nhận `.bin` không bị đụng tới.
-- `bash -n scripts/install.sh` đạt. Trên Windows, một kiểm tra tĩnh đạt và bốn
-  ca hành vi Linux được bỏ qua đúng marker; các ca Linux phải đạt trên CI trước
-  khi push tiếp. Candidate kế tiếp, nếu toàn bộ CI và E2E công khai đều xanh,
-  là `vi-v0.20.4-32`.
+- Checkpoint `bc7cefa6f92cac98350b74e3e769e0cd3728e0d7` đã qua CI và Docker.
+  E2E kế tiếp `32174589129` xác nhận bộ dò tìm đúng toàn bộ rename target nhưng
+  npm tiếp tục tự dừng với `Exit handler never called`; cây `node_modules` bị
+  gián đoạn trên diện rộng nên không còn an toàn để sửa từng thư mục.
+- Bộ cài nay chỉ kích hoạt phục hồi khi thấy staging npm hậu tố 8 ký tự đồng
+  thời có package gốc cùng tên. Khi đó nó dựng lại ba cây dependency có thể tái
+  tạo của root, TUI và web; source, lockfile, config và dữ liệu người dùng không
+  bị chạm. Một thư mục ẩn chỉ giống tên nhưng không có package gốc sẽ không kích
+  hoạt việc dọn cây.
+- `bash -n scripts/install.sh` đạt. Các ca hành vi Linux phải đạt trên CI và E2E
+  v25 phải xanh trước khi push candidate. Candidate kế tiếp, nếu toàn bộ CI và
+  E2E công khai đều xanh, là `vi-v0.20.4-32`.
 
 ## Cập nhật 2026-08-18 — chuẩn bị Hermes Vietnamese v28
 

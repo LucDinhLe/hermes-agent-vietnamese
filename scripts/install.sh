@@ -2350,12 +2350,11 @@ configure_browser_env_from_system_browser() {
     log_success "Configured browser tools to use $browser_path"
 }
 
-cleanup_stale_npm_rename_dirs() {
+has_stale_npm_rename_dirs() {
     # Interrupted npm installs can leave rename targets such as
     # node_modules/.ink-xKZbo5aM behind. The next install then fails with
-    # ENOTEMPTY before it can repair the dependency tree. Remove only npm's
-    # eight-character staging names in the three workspaces installed below;
-    # preserve ordinary hidden directories such as node_modules/.bin.
+    # ENOTEMPTY before it can repair the dependency tree. Recognize only npm's
+    # eight-character staging names in the three workspaces installed below.
     local modules_dir package_parent stale_dir stage_name package_name
     for modules_dir in \
         "$INSTALL_DIR/node_modules" \
@@ -2374,10 +2373,31 @@ cleanup_stale_npm_rename_dirs() {
                 # and its staging destination. Requiring that sibling avoids
                 # deleting an unrelated hidden directory with a similar name.
                 [ -e "$package_parent/$package_name" ] || continue
-                log_warn "Removing stale npm staging directory: ${stale_dir#"$INSTALL_DIR"/}"
-                rm -rf -- "$stale_dir"
+                return 0
             done
         done
+    done
+    return 1
+}
+
+cleanup_interrupted_npm_install() {
+    if ! has_stale_npm_rename_dirs; then
+        return 0
+    fi
+
+    # Once npm has left rename targets across the tree, removing them one by
+    # one is insufficient: Arborist can still abort with "Exit handler never
+    # called" because the reify state is inconsistent. These directories hold
+    # only reproducible dependencies for the managed checkout, so rebuild them
+    # cleanly while leaving source, lockfiles, config, and user data untouched.
+    log_warn "Interrupted npm dependency install detected; rebuilding managed Node dependencies"
+    local modules_dir
+    for modules_dir in \
+        "$INSTALL_DIR/node_modules" \
+        "$INSTALL_DIR/ui-tui/node_modules" \
+        "$INSTALL_DIR/web/node_modules"; do
+        [ -d "$modules_dir" ] || continue
+        rm -rf -- "$modules_dir"
     done
 }
 
@@ -2410,7 +2430,7 @@ install_node_deps() {
         # CLI installer and can exceed the bounded install window on a clean
         # machine. Match `hermes update`: install only the root, TUI, and web
         # workspaces. Desktop dependencies are installed by the desktop path.
-        cleanup_stale_npm_rename_dirs
+        cleanup_interrupted_npm_install
         if ! run_with_timeout "$NODE_DEPS_TIMEOUT" npm install --loglevel=warn \
                 --no-fund --no-audit --prefer-offline --progress=false \
                 --workspace ui-tui --workspace web --include-workspace-root \

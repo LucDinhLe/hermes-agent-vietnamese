@@ -24,6 +24,7 @@ def _run_node_deps_stage(
     *,
     fail_directory: str | None,
     stale_node_stage: bool = False,
+    orphan_node_stage: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], Path, list[str]]:
     install_dir = tmp_path / "install"
     tui_dir = install_dir / "ui-tui"
@@ -50,8 +51,9 @@ def _run_node_deps_stage(
         (package_dir / "package.json").write_text("{}\n", encoding="utf-8")
         stale_stage_dir.mkdir(parents=True)
         (stale_stage_dir / "partial-package").write_text("partial\n", encoding="utf-8")
+    if stale_node_stage or orphan_node_stage:
         unrelated_stage_dir = install_dir / "node_modules" / ".ghost-stale123"
-        unrelated_stage_dir.mkdir()
+        unrelated_stage_dir.mkdir(parents=True)
         (unrelated_stage_dir / "keep").write_text("keep\n", encoding="utf-8")
         keep_dir = install_dir / "node_modules" / ".bin"
         keep_dir.mkdir()
@@ -171,7 +173,7 @@ def test_node_dependency_success_remains_successful(tmp_path: Path) -> None:
 
 
 @pytest.mark.linux_only
-def test_stale_npm_rename_directory_is_cleaned_before_install(tmp_path: Path) -> None:
+def test_interrupted_npm_tree_is_rebuilt_before_install(tmp_path: Path) -> None:
     proc, install_dir, calls = _run_node_deps_stage(
         tmp_path,
         fail_directory=None,
@@ -181,7 +183,20 @@ def test_stale_npm_rename_directory_is_cleaned_before_install(tmp_path: Path) ->
     assert proc.returncode == 0, proc.stderr
     assert _stage_result(proc)["ok"] is True
     assert calls == [str(install_dir)]
-    assert not (install_dir / "node_modules" / ".ink-stale123").exists()
+    assert not (install_dir / "node_modules").exists()
+
+
+@pytest.mark.linux_only
+def test_unrelated_hidden_directory_does_not_trigger_tree_rebuild(tmp_path: Path) -> None:
+    proc, install_dir, calls = _run_node_deps_stage(
+        tmp_path,
+        fail_directory=None,
+        orphan_node_stage=True,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert _stage_result(proc)["ok"] is True
+    assert calls == [str(install_dir)]
     assert (install_dir / "node_modules" / ".ghost-stale123" / "keep").is_file()
     assert (install_dir / "node_modules" / ".bin" / "keep").is_file()
 
