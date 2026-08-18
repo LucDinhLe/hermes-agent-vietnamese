@@ -64,7 +64,7 @@ export function sha512IntegrityFile(filePath) {
 
 export function hostTarBin(platform = process.platform, systemRoot = process.env.SystemRoot || "C:\\Windows") {
   return platform === "win32"
-    ? path.join(systemRoot, "System32", "tar.exe")
+    ? path.win32.join(systemRoot, "System32", "tar.exe")
     : "tar"
 }
 
