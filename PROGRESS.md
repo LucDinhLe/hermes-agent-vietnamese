@@ -27,9 +27,13 @@
 - Candidate bất biến `vi-v0.20.0-28` bị cổng build từ chối trước khi tạo draft vì
   tag mang version `0.20.0` không khớp version nguồn upstream `0.20.4`. Tag lỗi
   được giữ nguyên làm bằng chứng, không di chuyển hoặc tái sử dụng.
-- Candidate thay thế phải dùng tag đúng sự thật `vi-v0.20.4-28`, trên một commit
-  mới chỉ cập nhật tài liệu/tag release. Sau khi CI nguồn xanh lại mới được dựng
-  native sáu target, tải lại exact artifact và chạy smoke/rollback theo workflow.
+- Candidate bất biến `vi-v0.20.4-28` đã qua cổng tag/version nhưng native build
+  phát hiện `agent-browser@0.26.0` bị rơi khỏi root dependency khi đồng bộ
+  upstream. Không có draft hay artifact nào được tạo; tag tiếp tục được giữ
+  nguyên làm bằng chứng thất bại.
+- Candidate thay thế phải dùng `vi-v0.20.4-29`, khôi phục dependency/browser
+  helper và khóa regression trước khi dựng lại sáu target, tải lại exact artifact
+  và chạy smoke/rollback theo workflow.
 - Public Latest vẫn là `vi-v0.20.0-25`; rollback giữ `vi-v0.20.0-14`. Candidate
   v28 chỉ được công khai dạng community prerelease sau toàn bộ exact-artifact gate.
 

@@ -1,4 +1,4 @@
-## Hermes Vietnamese vi-v0.20.4-28 — đồng bộ Hermes Agent 0.20.4
+## Hermes Vietnamese vi-v0.20.4-29 — đồng bộ Hermes Agent 0.20.4
 
 Hermes Vietnamese v26 bổ sung Hermes Connector chính chủ cho Chrome/Edge và tùy
 chọn tóm tắt phần suy luận công khai bằng tiếng Việt. Bản `-27` bổ sung Advisor

@@ -1,8 +1,8 @@
-# Kế hoạch phát hành Hermes Vietnamese vi-v0.20.4-28
+# Kế hoạch phát hành Hermes Vietnamese vi-v0.20.4-29
 
 ## Quyết định phạm vi
 
-`vi-v0.20.4-28` là community prerelease cài được ngay sau khi vượt đủ cổng phát
+`vi-v0.20.4-29` là community prerelease cài được ngay sau khi vượt đủ cổng phát
 hành. Đây không phải stable và không tự thay Public Latest `vi-v0.20.0-25`.
 Candidate bắt đầu ở trạng thái draft; chỉ workflow promotion mới được công khai
 đúng byte đã nghiệm thu.
@@ -53,7 +53,7 @@ Không phát hành trực tiếp từ `main` động.
   áp dụng cho gói phát hành, hoặc có đánh giá ngoại lệ công khai và được duyệt.
 - Release workflow contract, community distribution, installer, updater,
   connector, reasoning summary và Advisor tests đều đạt.
-- Tag `vi-v0.20.4-28` bất biến, trỏ đúng candidate commit; draft release chỉ được
+- Tag `vi-v0.20.4-29` bất biến, trỏ đúng candidate commit; draft release chỉ được
   tạo từ tag này.
 
 ## Cổng artifact chính xác
