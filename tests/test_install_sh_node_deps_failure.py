@@ -150,3 +150,5 @@ def test_node_dependency_install_excludes_desktop_workspace() -> None:
 
     assert "--workspace ui-tui --workspace web --include-workspace-root" in text
     assert "--workspace apps/desktop" not in text
+    assert "npm install --silent" not in text
+    assert "npm install --loglevel=warn" in text

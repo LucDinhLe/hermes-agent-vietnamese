@@ -2379,7 +2379,7 @@ install_node_deps() {
         # CLI installer and can exceed the bounded install window on a clean
         # machine. Match `hermes update`: install only the root, TUI, and web
         # workspaces. Desktop dependencies are installed by the desktop path.
-        if ! run_with_timeout "$NODE_DEPS_TIMEOUT" npm install --silent \
+        if ! run_with_timeout "$NODE_DEPS_TIMEOUT" npm install --loglevel=warn \
                 --no-fund --no-audit --prefer-offline --progress=false \
                 --workspace ui-tui --workspace web --include-workspace-root \
                 >"$npm_log" 2>&1; then
