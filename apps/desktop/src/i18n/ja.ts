@@ -2487,6 +2487,7 @@ export const ja = defineLocale({
     aria: '右サイドバー',
     panelsAria: '右サイドバーパネル',
     files: 'ファイルシステム',
+    browserNewTab: '新しいブラウザータブ',
     terminal: 'ターミナル',
     noFolderSelected: 'フォルダーが選択されていません',
     changeCwdTitle: '作業ディレクトリを変更',

@@ -2793,6 +2793,7 @@ export const en: Translations = {
     aria: 'Right sidebar',
     panelsAria: 'Right sidebar panels',
     files: 'File system',
+    browserNewTab: 'New browser tab',
     terminal: 'Terminal',
     noFolderSelected: 'No folder selected',
     changeCwdTitle: 'Change working directory',
