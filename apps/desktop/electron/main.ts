@@ -31,7 +31,12 @@ import {
 import nodePty from 'node-pty'
 
 import { classifyActiveRuntime, shouldRefreshManagedRuntime } from './active-runtime-state'
-import { applyAppUpdate, checkAppUpdate, shouldUseAppUpdater } from './app-updater'
+import {
+  applyAppUpdate,
+  checkAppUpdate,
+  COMMUNITY_RELEASES_API_URL,
+  shouldUseAppUpdater
+} from './app-updater'
 import { stopBackendChild as stopBackendChildImpl, stopBackendTreesForUpdate } from './backend-child'
 import { dashboardFallbackArgs, sourceDeclaresServe } from './backend-command'
 import { createBackendConnectionState } from './backend-connection-state'
@@ -2888,7 +2893,21 @@ async function checkUpdates() {
     // structured shape the git paths return, so the renderer never sees a
     // raw IPC rejection on an offline check.
     try {
-      return await checkAppUpdate(app.getVersion())
+      const response = await electronNet.fetch(COMMUNITY_RELEASES_API_URL, {
+        headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'hermes-desktop-update' }
+      })
+
+      if (!response.ok) {
+        throw new Error(`GitHub Releases returned HTTP ${response.status}`)
+      }
+
+      const releases = await response.json()
+
+      if (!Array.isArray(releases)) {
+        throw new Error('GitHub Releases returned an invalid response.')
+      }
+
+      return await checkAppUpdate(app.getVersion(), releases)
     } catch (error) {
       return {
         supported: true,

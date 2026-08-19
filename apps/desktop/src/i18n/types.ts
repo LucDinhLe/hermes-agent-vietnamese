@@ -476,6 +476,14 @@ export interface Translations {
       heading: string
       version: (value: string) => string
       versionUnavailable: string
+      projectInfo: string
+      upstreamPublisher: string
+      upstreamPublisherValue: string
+      communityMaintainer: string
+      communityMaintainerValue: string
+      license: string
+      licenseValue: string
+      communityUpdateChannel: string
       bundleOutOfSync: string
       bundleOutOfSyncDesc: string
       bundleOutOfSyncAction: string

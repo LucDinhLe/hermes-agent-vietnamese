@@ -1,5 +1,33 @@
 # Tiến độ
 
+## Cập nhật 2026-08-19 — sửa đường cập nhật đóng gói cho bản sau v28
+
+- Làm rõ nguyên nhân màn hình v28 báo không truy cập được máy chủ cập nhật:
+  release `vi-v0.20.4-34` không có `latest*.yml`, còn GitHub provider của
+  `electron-updater` không coi nhãn `vi-vX.Y.Z-N` là SemVer hợp lệ.
+- Nhánh cục bộ `feat/v29-community-updater` thêm resolver đọc GitHub Releases
+  công khai, bỏ draft/release thiếu manifest của target, chọn bản cộng đồng mới
+  nhất rồi ghim generic feed vào URL release bất biến.
+- Workflow candidate sinh đủ bốn manifest Windows/macOS/Linux từ đúng artifact
+  đã gom, ghi SHA-512 + byte size, sau đó mới lập `SHA256SUMS.txt` và upload
+  draft. Download vi sai vẫn tắt để cài đúng byte đã nghiệm thu.
+- Windows handoff đổi sang silent + relaunch. Nhận diện nâng cấp
+  `com.nousresearch.hermes`, tên executable/shortcut/uninstall và vùng dữ liệu
+  vẫn giữ nguyên; onboarding/config/chat không bị reset bởi update.
+- About hiển thị dự án gốc/nhà phát hành Nous Research, người duy trì bản Việt
+  hóa Lê Đình Lực (LucDinhLe), giấy phép MIT và kênh GitHub Releases. Bản đóng
+  gói không còn hiện `nhánh unknown · commit unknown`; link tải lại trỏ về
+  release cộng đồng.
+- Install stamp của build đóng gói dùng đúng `X.Y.Z-vi.N`, thay cho version
+  nguồn dạng `X.Y.Z+distance` từng xuất hiện lệch với bộ cài.
+- Gate workflow-equivalent cục bộ hiện đạt: 128/128 Electron/release, 110/110 UI
+  gồm About/Advisor/onboarding, 126/126 Python release và Desktop typecheck.
+  Bản dựng production Desktop và ESLint toàn dự án đều đạt; còn 133 cảnh báo
+  lint nền đã có sẵn, không có lỗi mới. Chưa dựng artifact native,
+  chưa chạy update-from-v28 exact-artifact, chưa push/tag/draft/public release.
+- v28 không thể tự nhận code sửa này. Bản sửa đầu tiên cần cài thủ công một lần;
+  các bản sau mới đi qua nút **Cập nhật ngay** và cài yên lặng.
+
 ## Cập nhật 2026-08-19 — chặn candidate v28 cho tới khi cài lại sạch
 
 - Candidate bất biến `vi-v0.20.4-29` dừng ở Windows ARM64 do Git for Windows

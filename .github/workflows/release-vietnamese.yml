@@ -103,6 +103,7 @@ jobs:
           npm run --prefix apps/desktop test:desktop:platforms --
           scripts/community-distribution.test.mjs
           scripts/collect-community-artifacts.test.mjs
+          scripts/generate-community-update-metadata.test.mjs
           scripts/packaged-layout.test.mjs
           scripts/release-workflow-contract.test.mjs
           scripts/stage-agent-payloads.test.mjs
@@ -136,6 +137,7 @@ jobs:
         run: >-
           npm run --prefix apps/desktop test:ui --
           src/app/settings/model-settings.test.tsx
+          src/app/settings/about-settings.test.tsx
           src/i18n/languages.test.ts
 
       - name: Kiểm tra kiểu dữ liệu
@@ -436,6 +438,15 @@ jobs:
           pattern: hermes-vietnamese-*
           path: release-assets
           merge-multiple: true
+
+      - name: Lập metadata cập nhật theo đúng artifact đã dựng
+        shell: bash
+        env:
+          TAG: ${{ needs.verify.outputs.tag }}
+          COMMIT: ${{ needs.verify.outputs.commit }}
+        run: >-
+          node apps/desktop/scripts/generate-community-update-metadata.mjs
+          release-assets "$TAG" "$(git show -s --format=%cI "$COMMIT")"
 
       - name: Lập manifest SHA-256 và provenance
         shell: bash

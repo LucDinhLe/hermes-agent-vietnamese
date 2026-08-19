@@ -69,6 +69,12 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /\.\/scripts\/run_tests\.sh -q/)
   assert.doesNotMatch(candidate, /uv run pytest/)
   assert.match(candidate, /Upload đúng byte vào draft/)
+  assert.match(candidate, /generate-community-update-metadata\.mjs/)
+  assert.ok(
+    candidate.indexOf('generate-community-update-metadata.mjs') <
+      candidate.indexOf('collect-community-artifacts.mjs checksums release-assets SHA256SUMS.txt'),
+    'update metadata must be generated before the combined SHA-256 manifest'
+  )
   assert.match(candidate, /\(cd release-assets && sha256sum candidate-provenance\.json >> SHA256SUMS\.txt\)/)
   assert.doesNotMatch(candidate, /sha256sum release-assets\/candidate-provenance\.json/)
 })

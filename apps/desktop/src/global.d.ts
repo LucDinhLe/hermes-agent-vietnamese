@@ -551,6 +551,8 @@ export interface DesktopUpdateCommit {
 
 export interface DesktopUpdateStatus {
   supported: boolean
+  mechanism?: 'app-updater' | 'git'
+  channel?: 'main' | 'stable'
   updateAvailable?: boolean
   branch?: string
   currentBranch?: string
@@ -564,6 +566,8 @@ export interface DesktopUpdateStatus {
   currentSha?: string
   /** Backend only: the version string the backend reports for itself. */
   currentVersion?: string
+  latestVersion?: string | null
+  latestTag?: string | null
   targetSha?: string
   commits?: DesktopUpdateCommit[]
   dirty?: boolean

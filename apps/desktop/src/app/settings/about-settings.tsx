@@ -22,7 +22,28 @@ import { ListRow, SectionHeading, SettingsContent } from './primitives'
 import { UninstallSection } from './uninstall-section'
 
 const RELEASE_NOTES_URL = 'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases'
-const INSTALLER_URL = 'https://hermes-agent.nousresearch.com/'
+const INSTALLER_URL = RELEASE_NOTES_URL
+const UPSTREAM_URL = 'https://github.com/NousResearch/hermes-agent'
+const COMMUNITY_URL = 'https://github.com/LucDinhLe/hermes-agent-vietnamese'
+const LICENSE_URL = 'https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/LICENSE'
+
+function ExternalProjectLink({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      className="inline-flex items-center gap-1 text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
+      href={href}
+      onClick={event => {
+        event.preventDefault()
+        void window.hermesDesktop?.openExternal?.(href)
+      }}
+      rel="noreferrer"
+      target="_blank"
+    >
+      {label}
+      <ExternalLink className="size-3" />
+    </a>
+  )
+}
 
 function relativeTime(ms: number | undefined, a: Translations['settings']['about']) {
   if (!ms) {
@@ -69,6 +90,13 @@ export function AboutSettings() {
   const updateAvailable = behind > 0 || Boolean(status?.updateAvailable)
   const supported = status?.supported !== false
   const applying = apply.applying || apply.stage === 'restart'
+
+  const updateSourceHint =
+    status?.mechanism === 'app-updater'
+      ? a.communityUpdateChannel
+      : status?.branch || status?.currentSha
+        ? a.branchCommit(status?.branch ?? 'main', status?.currentSha?.slice(0, 7) ?? '—')
+        : undefined
 
   const handleCheck = async () => {
     setJustChecked(false)
@@ -135,6 +163,24 @@ export function AboutSettings() {
       </div>
 
       <div className="mx-auto mt-4 w-full max-w-2xl">
+        <div aria-label={a.projectInfo} className="mb-5 rounded-xl border border-border/70 bg-muted/20 px-4 py-3">
+          <p className="mb-2 text-sm font-medium text-foreground">{a.projectInfo}</p>
+          <dl className="grid gap-2 text-xs sm:grid-cols-[minmax(0,1fr)_auto]">
+            <dt className="text-muted-foreground">{a.upstreamPublisher}</dt>
+            <dd>
+              <ExternalProjectLink href={UPSTREAM_URL} label={a.upstreamPublisherValue} />
+            </dd>
+            <dt className="text-muted-foreground">{a.communityMaintainer}</dt>
+            <dd>
+              <ExternalProjectLink href={COMMUNITY_URL} label={a.communityMaintainerValue} />
+            </dd>
+            <dt className="text-muted-foreground">{a.license}</dt>
+            <dd>
+              <ExternalProjectLink href={LICENSE_URL} label={a.licenseValue} />
+            </dd>
+          </dl>
+        </div>
+
         <SectionHeading icon={RefreshCw} title={a.updates} />
 
         <div
@@ -201,7 +247,7 @@ export function AboutSettings() {
 
         <ListRow
           description={a.automaticUpdatesDesc}
-          hint={a.branchCommit(status?.branch ?? 'unknown', status?.currentSha?.slice(0, 7) ?? 'unknown')}
+          hint={updateSourceHint}
           title={a.automaticUpdates}
         />
 

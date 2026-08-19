@@ -15,6 +15,23 @@
 
 import type { AppUpdater } from 'electron-updater'
 
+const COMMUNITY_RELEASE_DOWNLOAD_ROOT =
+  'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download'
+
+export const COMMUNITY_RELEASES_API_URL =
+  'https://api.github.com/repos/LucDinhLe/hermes-agent-vietnamese/releases?per_page=100'
+
+interface CommunityVersion {
+  key: [number, number, number, number]
+  version: string
+}
+
+export interface CommunityUpdateRelease {
+  feedUrl: string
+  tag: string
+  version: string
+}
+
 export interface UpdaterGateFacts {
   stampHasPayload: boolean
   installMode: string | null // from .hermes-install.json; null = no manifest
@@ -41,6 +58,148 @@ export function releaseTagForAppVersion(version: string): string {
     ? `vi-v${community[1]}.${community[2]}.${community[3]}-${community[4]}`
     : `v${version}`
 }
+
+function parseCommunityReleaseTag(tag: string): CommunityVersion | null {
+  const match = /^vi-v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)-(0|[1-9]\d*)$/.exec(tag)
+
+  if (!match) {
+    return null
+  }
+
+  const [, major, minor, patch, iteration] = match
+
+  return {
+    key: [Number(major), Number(minor), Number(patch), Number(iteration)],
+    version: `${major}.${minor}.${patch}-vi.${iteration}`
+  }
+}
+
+function parseInstalledVersion(version: string): CommunityVersion | null {
+  const community = /^(0|[1-9]\d{0,2})\.(\d+)\.(\d+)-vi\.(0|[1-9]\d*)$/.exec(version)
+
+  if (community) {
+    const [, major, minor, patch, iteration] = community
+
+    return {
+      key: [Number(major), Number(minor), Number(patch), Number(iteration)],
+      version
+    }
+  }
+
+  const upstream = /^(0|[1-9]\d{0,2})\.(\d+)\.(\d+)$/.exec(version)
+
+  if (!upstream) {
+    return null
+  }
+
+  const [, major, minor, patch] = upstream
+
+  return { key: [Number(major), Number(minor), Number(patch), -1], version }
+}
+
+function compareVersionKeys(left: CommunityVersion['key'], right: CommunityVersion['key']): number {
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return left[index] - right[index]
+    }
+  }
+
+  return 0
+}
+
+export function communityUpdateMetadataName(platform: string, arch: string): string | null {
+  if (platform === 'win32') {
+    return 'latest.yml'
+  }
+
+  if (platform === 'darwin') {
+    return 'latest-mac.yml'
+  }
+
+  if (platform === 'linux') {
+    return arch === 'arm64' ? 'latest-linux-arm64.yml' : arch === 'x64' ? 'latest-linux.yml' : null
+  }
+
+  return null
+}
+
+export function communityReleaseFeedUrl(tag: string): string {
+  if (!parseCommunityReleaseTag(tag)) {
+    throw new Error(`Invalid Hermes Vietnamese release tag: ${tag}`)
+  }
+
+  return `${COMMUNITY_RELEASE_DOWNLOAD_ROOT}/${tag}`
+}
+
+export function configureCommunityReleaseFeed(
+  updater: Pick<AppUpdater, 'setFeedURL'>,
+  release: Pick<CommunityUpdateRelease, 'feedUrl'>
+): void {
+  updater.setFeedURL({ provider: 'generic', url: release.feedUrl, channel: 'latest' })
+}
+
+/**
+ * Select a published community release that can update this exact platform.
+ *
+ * GitHub's provider cannot order the public `vi-vX.Y.Z-N` tags because that
+ * spelling is intentionally not SemVer. We therefore use the Releases API as
+ * an index, then pin electron-updater's generic feed to one immutable release.
+ */
+export function selectCommunityUpdateRelease(
+  releases: unknown,
+  currentVersion: string,
+  platform = process.platform,
+  arch = process.arch
+): CommunityUpdateRelease | null {
+  if (!Array.isArray(releases)) {
+    return null
+  }
+
+  const current = parseInstalledVersion(currentVersion)
+  const metadataName = communityUpdateMetadataName(platform, arch)
+
+  if (!current || !metadataName) {
+    return null
+  }
+
+  let best: CommunityUpdateRelease & { key: CommunityVersion['key'] } | null = null
+
+  for (const value of releases) {
+    if (!value || typeof value !== 'object' || (value as { draft?: unknown }).draft === true) {
+      continue
+    }
+
+    const release = value as { assets?: unknown; tag_name?: unknown }
+    const tag = typeof release.tag_name === 'string' ? release.tag_name : ''
+    const parsed = parseCommunityReleaseTag(tag)
+
+    const assetNames = Array.isArray(release.assets)
+      ? release.assets
+          .map(asset =>
+            asset && typeof asset === 'object' && typeof (asset as { name?: unknown }).name === 'string'
+              ? (asset as { name: string }).name
+              : null
+          )
+          .filter((name): name is string => name !== null)
+      : []
+
+    if (!parsed || !assetNames.includes(metadataName) || compareVersionKeys(parsed.key, current.key) <= 0) {
+      continue
+    }
+
+    if (!best || compareVersionKeys(parsed.key, best.key) > 0) {
+      best = {
+        feedUrl: communityReleaseFeedUrl(tag),
+        key: parsed.key,
+        tag,
+        version: parsed.version
+      }
+    }
+  }
+
+  return best ? { feedUrl: best.feedUrl, tag: best.tag, version: best.version } : null
+}
+
 /**
  * Map an electron-updater check result to the renderer's update-check shape
  * (the shape hermes:updates:check already returns for the git path). The
@@ -58,10 +217,13 @@ export function describeFeedCheck(
   currentVersion: string
   latestVersion: string | null
   latestTag: string | null
+  targetSha: string | null
   updateAvailable: boolean
   fetchedAt: number
 } {
   const latest = info && typeof info.version === 'string' ? info.version : null
+  const latestTag = latest ? releaseTagForAppVersion(latest) : null
+  const updateAvailable = isUpdateAvailable ?? (latest !== null && latest !== current)
 
   return {
     supported: true,
@@ -72,10 +234,13 @@ export function describeFeedCheck(
     channel: 'stable',
     currentVersion: current,
     latestVersion: latest,
-    latestTag: latest ? releaseTagForAppVersion(latest) : null,
+    latestTag,
+    // The renderer's ambient update notification keys on targetSha. For an
+    // immutable packaged release the tag is the stable target identity.
+    targetSha: updateAvailable ? latestTag : null,
     // Prefer electron-updater's own semver verdict: a plain string compare
     // would offer a locally-newer dev build a downgrade.
-    updateAvailable: isUpdateAvailable ?? (latest !== null && latest !== current),
+    updateAvailable,
     fetchedAt: Date.now()
   }
 }
@@ -108,17 +273,19 @@ export function configureAutoUpdater(updater: ConfigurableAutoUpdater): void {
 }
 
 /**
- * Start the already-downloaded installer with a visible progress window and
- * force a relaunch afterwards. `beforeInstall` lets main.ts disarm its normal
- * quit guard before electron-updater begins closing windows.
+ * Start the already-downloaded installer silently and force a relaunch.
+ * Download progress is already visible inside Hermes; `/S` prevents the
+ * assisted NSIS first-install pages from appearing again during an update.
+ * `beforeInstall` lets main.ts disarm its normal quit guard first.
  */
 export function beginAppUpdateInstall(
   updater: Pick<AppUpdater, 'quitAndInstall'>,
   beforeInstall?: () => void
 ): void {
   beforeInstall?.()
-  updater.quitAndInstall(false, true)
+  updater.quitAndInstall(true, true)
 }
+
 /**
  * Lazy singleton for electron-updater's autoUpdater. The require sits inside
  * the function so thin builds and tests never pay for the module load.
@@ -138,9 +305,21 @@ export function getAutoUpdater(): AppUpdater {
   return autoUpdater
 }
 
-/** Check the GitHub Releases feed. Returns the renderer-shaped result. */
-export async function checkAppUpdate(currentVersion: string): Promise<ReturnType<typeof describeFeedCheck>> {
+/** Check the newest eligible immutable community release feed. */
+export async function checkAppUpdate(
+  currentVersion: string,
+  releases: unknown,
+  platform = process.platform,
+  arch = process.arch
+): Promise<ReturnType<typeof describeFeedCheck>> {
+  const selected = selectCommunityUpdateRelease(releases, currentVersion, platform, arch)
+
+  if (!selected) {
+    return describeFeedCheck(currentVersion, { version: currentVersion }, false)
+  }
+
   const updater = getAutoUpdater()
+  configureCommunityReleaseFeed(updater, selected)
   const result = await updater.checkForUpdates()
 
   return describeFeedCheck(currentVersion, result?.updateInfo, result?.isUpdateAvailable)
