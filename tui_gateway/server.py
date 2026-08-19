@@ -8474,6 +8474,7 @@ def _lazy_resume_info(
     model: str = "",
     provider: str = "",
     profile: str | None = None,
+    advisor_enabled: bool | None = None,
 ) -> dict:
     """session.info for a not-yet-built session (the shape session.create
     returns). tools/skills land later when the deferred build emits session.info."""
@@ -8490,6 +8491,8 @@ def _lazy_resume_info(
     }
     if provider:
         info["provider"] = provider
+    if isinstance(advisor_enabled, bool):
+        info["advisor_enabled"] = advisor_enabled
     return info
 
 
@@ -8754,7 +8757,7 @@ def _fallback_session_info(session: dict) -> dict:
     # repo) so a client can clear a stale label instead of retaining it — the
     # same contract `_lazy_session_info` above already follows.
     cwd = _session_cwd(session)
-    return {
+    info = {
         "cwd": cwd,
         "branch": _git_branch_for_cwd(cwd),
         "project": _project_info_for_cwd(cwd),
@@ -8769,6 +8772,10 @@ def _fallback_session_info(session: dict) -> dict:
         # session.create shape (_lazy_resume_info) already carries it (#36112).
         "desktop_contract": DESKTOP_BACKEND_CONTRACT,
     }
+    advisor_override = session.get("create_advisor_override")
+    if isinstance(advisor_override, bool):
+        info["advisor_enabled"] = advisor_override
+    return info
 
 
 def _reconcile_display_with_live(

@@ -124,6 +124,32 @@ def test_advisor_override_round_trips_through_session_model_config() -> None:
     assert restored["advisor_enabled_override"] is True
 
 
+def test_lazy_resume_info_surfaces_persisted_advisor_override() -> None:
+    info = server._lazy_resume_info(
+        "C:/workspace",
+        advisor_enabled=True,
+    )
+
+    assert info["advisor_enabled"] is True
+
+
+def test_fallback_session_info_surfaces_deferred_advisor_override() -> None:
+    session = {
+        "agent": None,
+        "create_advisor_override": False,
+        "cwd": "C:/workspace",
+    }
+
+    with (
+        patch.object(server, "_git_branch_for_cwd", return_value=""),
+        patch.object(server, "_project_info_for_cwd", return_value=None),
+        patch.object(server, "_resolve_model", return_value="reviewed-model"),
+    ):
+        info = server._fallback_session_info(session)
+
+    assert info["advisor_enabled"] is False
+
+
 def test_apply_advisor_override_keeps_revision_and_failure_policy() -> None:
     agent = _agent(enabled=False)
 

@@ -1,4 +1,4 @@
-## Hermes Vietnamese vi-v0.20.4-35 — v29 cho công việc AI dài hơi
+## Hermes Vietnamese vi-v0.20.4-36 — v29 cho công việc AI dài hơi
 
 Hermes Vietnamese v29 là bản Desktop độc lập của
 [Hermes Agent](https://github.com/NousResearch/hermes-agent), do
@@ -99,16 +99,16 @@ lặp lại trải nghiệm cài lần đầu cho mỗi bản mới.
 
 | Máy đang dùng           | Tệp cài v29                                                                                                                                               |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows 10/11 x64       | [Windows x64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-35/Hermes-Vietnamese-Windows-x64-Setup.exe)         |
-| Windows 10/11 ARM64     | [Windows ARM64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-35/Hermes-Vietnamese-Windows-arm64-Setup.exe)     |
-| Mac chip Apple M-series | [macOS Apple Silicon DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-35/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
-| Mac chip Intel          | [macOS Intel DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-35/Hermes-Vietnamese-macOS-Intel.dmg)                 |
-| Ubuntu/Debian x64       | [Linux x64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-35/Hermes-Vietnamese-Linux-x64.deb)                     |
-| Ubuntu/Debian ARM64     | [Linux ARM64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-35/Hermes-Vietnamese-Linux-arm64.deb)                 |
-| Fedora/RHEL x64         | [Linux x64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-35/Hermes-Vietnamese-Linux-x64.rpm)                     |
-| Fedora/RHEL ARM64       | [Linux ARM64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-35/Hermes-Vietnamese-Linux-arm64.rpm)                 |
-| Linux khác x64          | [Linux x64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-35/Hermes-Vietnamese-Linux-x64.AppImage)           |
-| Linux khác ARM64        | [Linux ARM64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-35/Hermes-Vietnamese-Linux-arm64.AppImage)       |
+| Windows 10/11 x64       | [Windows x64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-36/Hermes-Vietnamese-Windows-x64-Setup.exe)         |
+| Windows 10/11 ARM64     | [Windows ARM64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-36/Hermes-Vietnamese-Windows-arm64-Setup.exe)     |
+| Mac chip Apple M-series | [macOS Apple Silicon DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-36/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
+| Mac chip Intel          | [macOS Intel DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-36/Hermes-Vietnamese-macOS-Intel.dmg)                 |
+| Ubuntu/Debian x64       | [Linux x64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-36/Hermes-Vietnamese-Linux-x64.deb)                     |
+| Ubuntu/Debian ARM64     | [Linux ARM64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-36/Hermes-Vietnamese-Linux-arm64.deb)                 |
+| Fedora/RHEL x64         | [Linux x64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-36/Hermes-Vietnamese-Linux-x64.rpm)                     |
+| Fedora/RHEL ARM64       | [Linux ARM64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-36/Hermes-Vietnamese-Linux-arm64.rpm)                 |
+| Linux khác x64          | [Linux x64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-36/Hermes-Vietnamese-Linux-x64.AppImage)           |
+| Linux khác ARM64        | [Linux ARM64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-36/Hermes-Vietnamese-Linux-arm64.AppImage)       |
 
 Người dùng v28 cần tải và chạy bộ cài v29 thủ công một lần vì v28 chưa đọc được
 manifest cập nhật cộng đồng. Sau khi đã ở v29, các bản kế tiếp có thể đi qua

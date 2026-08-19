@@ -2,7 +2,7 @@
 
 ## Candidate và phạm vi
 
-- Tag dự kiến: `vi-v0.20.4-35`.
+- Tag dự kiến: `vi-v0.20.4-36`.
 - Tên sản phẩm: Hermes Vietnamese v29.
 - Lớp: `community-prerelease`, không phải stable.
 - Đối tượng: người dùng cộng đồng muốn một bản Hermes Desktop tiếng Việt có

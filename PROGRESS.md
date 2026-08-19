@@ -2,9 +2,13 @@
 
 ## Cập nhật 2026-08-19 — chuẩn bị candidate Hermes Vietnamese v29
 
-- Chủ dự án cho phép phát hành v29. Candidate dự kiến là
-  `vi-v0.20.4-35`, lớp `community-prerelease`; tag/release này chưa tồn tại trên
-  GitHub và không thay Public Latest v25 nếu chưa có quyết định riêng.
+- Chủ dự án cho phép phát hành v29. Candidate hiện tại là
+  `vi-v0.20.4-36`, lớp `community-prerelease`; bản này không thay Public Latest
+  v25 nếu chưa có quyết định riêng.
+- Candidate bất biến `vi-v0.20.4-35` đã dừng trước promotion: exact-artifact
+  smoke chứng minh Advisor được ghi đúng vào `state.db` nhưng phản hồi cold
+  resume không trả lại `advisor_enabled`, làm công tắc hiện tắt sau khi mở lại.
+  Không thay tag/asset `-35`; bản sửa và regression test đi vào `-36`.
 - Viết lại toàn bộ ghi chú phát hành theo góc nhìn sản phẩm: Hermes Vietnamese
   có gì hơn cách dùng Hermes mặc định và từng lợi thế giúp người dùng thế nào.
   Phần giới thiệu không dùng changelog hoặc kể thay đổi qua v26–v28.
