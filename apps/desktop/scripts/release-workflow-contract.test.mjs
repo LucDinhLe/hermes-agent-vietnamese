@@ -45,10 +45,15 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /src\/app\/chat\/right-rail\/browser-connector-dialog\.test\.tsx/)
   assert.match(candidate, /src\/store\/reasoning-summary\.test\.ts/)
   assert.match(candidate, /src\/app\/settings\/model-settings\.test\.tsx/)
+  assert.match(candidate, /src\/app\/chat\/session-advisor-bar\.test\.tsx/)
+  assert.match(candidate, /src\/app\/chat\/sidebar\/projects\/project-menu\.test\.tsx/)
+  assert.match(candidate, /src\/store\/layout-pinned-order\.test\.ts/)
+  assert.match(candidate, /src\/store\/layout-connection-scope\.test\.ts/)
   assert.match(candidate, /src\/i18n\/languages\.test\.ts/)
   assert.match(candidate, /tests\/agent\/test_oneshot\.py/)
   assert.match(candidate, /tests\/agent\/test_advisor\.py/)
   assert.match(candidate, /tests\/run_agent\/test_advisor_checkpoints\.py/)
+  assert.match(candidate, /tests\/tui_gateway\/test_advisor_session_scope\.py/)
   assert.match(candidate, /tests\/tui_gateway\/test_protocol\.py/)
   assert.match(candidate, /signpath\/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627/)
   assert.match(candidate, /Get-AuthenticodeSignature/)
@@ -134,8 +139,13 @@ test('pilot promotion stays prerelease, validates every byte, and discloses miss
     'advisorReadOnly',
     'advisorRevisionBounded',
     'advisorModelPersistence',
+    'advisorSessionScoped',
+    'advisorPaneIsolation',
+    'projectPins',
+    'projectPinOrdering',
     'safeTool',
     'updateFromV25',
+    'updateFromV28',
     'rollback'
   ]) {
     assert.match(pilotPromotion, new RegExp(`'${gate}'`))

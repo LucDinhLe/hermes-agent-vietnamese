@@ -138,6 +138,10 @@ jobs:
           npm run --prefix apps/desktop test:ui --
           src/app/settings/model-settings.test.tsx
           src/app/settings/about-settings.test.tsx
+          src/app/chat/session-advisor-bar.test.tsx
+          src/app/chat/sidebar/projects/project-menu.test.tsx
+          src/store/layout-pinned-order.test.ts
+          src/store/layout-connection-scope.test.ts
           src/i18n/languages.test.ts
 
       - name: Kiểm tra kiểu dữ liệu
@@ -153,6 +157,7 @@ jobs:
           tests/agent/test_oneshot.py
           tests/agent/test_advisor.py
           tests/run_agent/test_advisor_checkpoints.py
+          tests/tui_gateway/test_advisor_session_scope.py
           tests/tui_gateway/test_protocol.py
 
   build:

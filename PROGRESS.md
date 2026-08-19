@@ -1,5 +1,25 @@
 # Tiến độ
 
+## Cập nhật 2026-08-19 — chuẩn bị candidate Hermes Vietnamese v29
+
+- Chủ dự án cho phép phát hành v29. Candidate dự kiến là
+  `vi-v0.20.4-35`, lớp `community-prerelease`; tag/release này chưa tồn tại trên
+  GitHub và không thay Public Latest v25 nếu chưa có quyết định riêng.
+- Viết lại toàn bộ ghi chú phát hành theo góc nhìn sản phẩm: Hermes Vietnamese
+  có gì hơn cách dùng Hermes mặc định và từng lợi thế giúp người dùng thế nào.
+  Phần giới thiệu không dùng changelog hoặc kể thay đổi qua v26–v28.
+- Hồ sơ công khai bao quát runtime/installer resident, workspace nhiều phiên và
+  dự án, Browser dùng chung, Connector có consent, tóm tắt reasoning tiếng Việt,
+  Advisor theo từng phiên, Project pin và cập nhật cộng đồng giữ dữ liệu.
+- Workflow candidate gọi đích danh test Advisor bar, project menu, thứ tự/cách
+  ly pin và backend Advisor theo phiên. Promotion pilot bổ sung cổng pane
+  isolation, session scope, project pin/reorder và chuyển tiếp exact v28 → v29.
+- Cổng source hiện đạt: 9/9 tag/runtime input, 23/23 release/updater Electron,
+  49/49 UI v29, 21/21 backend Advisor, Desktop typecheck, ESLint 0 lỗi (133 cảnh
+  báo nền), Ruff, Prettier, `uv lock --check` và npm runtime audit 0 lỗ hổng.
+- Chưa push nhánh, tạo PR/tag/draft/artifact hoặc công khai release. Bước tiếp
+  theo là commit sạch, push/fetch độc lập, chạy CI rồi mới tạo tag candidate.
+
 ## Cập nhật 2026-08-19 — Advisor theo phiên và dự án ghim
 
 - Thêm thanh bật/tắt Advisor ngay dưới đầu mỗi phiên trong panel giữa. Thanh
