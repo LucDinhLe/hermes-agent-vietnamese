@@ -18,6 +18,7 @@ import {
   pythonDirPattern,
   pythonRequest,
   repositoryGitQueries,
+  resolveAgentBrowserPackageRoot,
   resolveTag,
   resolveTargets,
   stageAgentBrowserLaunchers
@@ -158,6 +159,23 @@ test('manifest records staged vs explicitly-skipped vs failed per item', () => {
 })
 
 // ─── agent-browser launchers ──────────────────────────────────────
+
+test('resident agent-browser must come from the verified release-only package root', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-agent-browser-package-'))
+  try {
+    fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify({ name: 'agent-browser', version: '0.26.0' }))
+    assert.equal(resolveAgentBrowserPackageRoot({ HERMES_AGENT_BROWSER_PACKAGE_ROOT: tempDir }), path.resolve(tempDir))
+    assert.throws(() => resolveAgentBrowserPackageRoot({}), /PACKAGE_ROOT is required/)
+
+    fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify({ name: 'agent-browser', version: '0.27.0' }))
+    assert.throws(
+      () => resolveAgentBrowserPackageRoot({ HERMES_AGENT_BROWSER_PACKAGE_ROOT: tempDir }),
+      /expected agent-browser 0\.26\.0/
+    )
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true })
+  }
+})
 
 test('agent-browser launchers ignore host-specific npm bin entries', () => {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-agent-browser-shims-'))

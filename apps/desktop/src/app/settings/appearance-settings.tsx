@@ -13,11 +13,35 @@ import { selectableCardClass } from '@/lib/selectable-card'
 import { normalize } from '@/lib/text'
 import { cn } from '@/lib/utils'
 import { $backdrop, setBackdrop } from '@/store/backdrop'
+import { $composerPopoutGesturesEnabled, setComposerPopoutGesturesEnabled } from '@/store/composer-popout'
 import { $embedAllowed, $embedMode, clearEmbedAllowed, type EmbedMode, setEmbedMode } from '@/store/embed-consent'
 import { $activeGatewayProfile, $profiles, normalizeProfileKey } from '@/store/profile'
 import { $reactionsEnabled, setReactionsEnabled } from '@/store/reactions-enabled'
+import { $reasoningCollapsedByDefault, setReasoningCollapsedByDefault } from '@/store/reasoning-disclosure'
+import {
+  $reasoningSummaryEnabled,
+  clearReasoningSummaryCache,
+  setReasoningSummaryEnabled
+} from '@/store/reasoning-summary'
+import { $sessionListDensity, type SessionListDensity, setSessionListDensity } from '@/store/session-list-density'
 import { $toolViewMode, setToolViewMode } from '@/store/tool-view'
-import { $translucency, setTranslucency } from '@/store/translucency'
+import {
+  $translucency,
+  beginTranslucencyPeek,
+  endTranslucencyPeek,
+  GLASS_MATERIALS,
+  GLASS_SCOPES,
+  GLASS_SUPPORTED,
+  pulseTranslucencyPeek,
+  resetTranslucencyPeek,
+  setTranslucency,
+  setTranslucencyMaterial,
+  setTranslucencyMode,
+  setTranslucencyScope,
+  TRANSLUCENCY_MAX,
+  TRANSLUCENCY_MIN,
+  TRANSLUCENCY_STEP
+} from '@/store/translucency'
 import { $zoomPercent, setZoomPercent } from '@/store/zoom'
 import { getBaseColors, useTheme } from '@/themes/context'
 import { installVscodeThemeFromMarketplace } from '@/themes/install'
@@ -26,7 +50,7 @@ import { $marketplaceInstalls, isUserTheme, removeUserTheme } from '@/themes/use
 
 import { MODE_OPTIONS } from './constants'
 import { PetSettings } from './pet-settings'
-import { ListRow, SectionHeading, SettingsContent } from './primitives'
+import { ListRow, SectionHeading, SettingsContent, ToggleRow } from './primitives'
 import { TerminalFontSetting } from './terminal-font-setting'
 
 function ThemePreview({ name, mode }: { name: string; mode: 'light' | 'dark' }) {
@@ -108,7 +132,7 @@ function MarketplaceThemeResults({
   installs: ReadonlyMap<string, DesktopTheme>
   onInstalled: (name: string) => void
 }) {
-  const { locale, t } = useI18n()
+  const { t } = useI18n()
   const copy = t.commandCenter.installTheme
   const debounced = useDebounced(query.trim(), 300)
   const [installingId, setInstallingId] = useState<string | null>(null)
@@ -161,7 +185,7 @@ function MarketplaceThemeResults({
 
   const header = (
     <p className="mb-2 mt-4 text-[length:var(--conversation-caption-font-size)] font-medium text-(--ui-text-tertiary)">
-      {locale === 'vi' ? 'Từ VS Code Marketplace' : 'From the VS Code Marketplace'}
+      From the VS Code Marketplace
     </p>
   )
 
@@ -244,20 +268,57 @@ function MarketplaceThemeResults({
   )
 }
 
+// Keys a range input treats as a step, so the peek can flash the live window
+// for keyboard adjustment the way a pointer drag holds it open.
+const SLIDER_STEP_KEYS = new Set([
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowUp',
+  'End',
+  'Home',
+  'PageDown',
+  'PageUp'
+])
+
 export function AppearanceSettings() {
-  const { locale, t, isSavingLocale } = useI18n()
+  const { t, isSavingLocale } = useI18n()
   const { themeName, mode, resolvedMode, availableThemes, setTheme, setMode } = useTheme()
   const toolViewMode = useStore($toolViewMode)
+  const reasoningCollapsedByDefault = useStore($reasoningCollapsedByDefault)
+  const sessionListDensity = useStore($sessionListDensity)
   const zoomPercent = useStore($zoomPercent)
   const embedMode = useStore($embedMode)
   const embedAllowed = useStore($embedAllowed)
+  const composerPopoutGesturesEnabled = useStore($composerPopoutGesturesEnabled)
   const translucency = useStore($translucency)
   const reactionsEnabled = useStore($reactionsEnabled)
+  const reasoningSummaryEnabled = useStore($reasoningSummaryEnabled)
   const backdrop = useStore($backdrop)
   const installs = useStore($marketplaceInstalls)
   const profiles = useStore($profiles)
   const activeProfileKey = normalizeProfileKey(useStore($activeGatewayProfile))
   const a = t.settings.appearance
+
+  // A pointer held on the intensity slider when this overlay closes (Escape
+  // mid-drag) never delivers its pointerup here, which would strand the peek
+  // counter above zero and ghost the NEXT settings overlay. Unmount drops
+  // every outstanding hold.
+  useEffect(() => resetTranslucencyPeek, [])
+
+  // Shared by the mode/frost/area pickers: apply the choice, then show it
+  // through the overlay it just altered (a pulse, not a hold — see the peek
+  // notes on the slider itself).
+  const pickTranslucency =
+    <T,>(set: (value: T) => void) =>
+    (value: T) => {
+      triggerHaptic('selection')
+      set(value)
+
+      if (translucency.intensity > 0) {
+        pulseTranslucencyPeek()
+      }
+    }
 
   const [query, setQuery] = useState('')
 
@@ -290,6 +351,12 @@ export function AppearanceSettings() {
     { id: 'product', label: a.product },
     { id: 'technical', label: a.technical }
   ] as const
+
+  const sessionDensityOptions = [
+    { id: 'compact', label: a.sessionDensityCompact },
+    { id: 'comfortable', label: a.sessionDensityComfortable },
+    { id: 'detailed', label: a.sessionDensityDetailed }
+  ] as const satisfies readonly { id: SessionListDensity; label: string }[]
 
   const embedOptions = [
     { id: 'ask', label: a.embedsAsk },
@@ -325,11 +392,7 @@ export function AppearanceSettings() {
                   <input
                     className="w-full rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary) px-3 py-1.5 text-[length:var(--conversation-caption-font-size)] outline-none placeholder:text-(--ui-text-tertiary) focus:border-(--ui-stroke-secondary)"
                     onChange={event => setQuery(event.target.value)}
-                    placeholder={
-                      locale === 'vi'
-                        ? 'Tìm trong chủ đề đã cài hoặc VS Code Marketplace…'
-                        : 'Search your themes or the VS Code Marketplace…'
-                    }
+                    placeholder="Search your themes or the VS Code Marketplace…"
                     spellCheck={false}
                     value={query}
                   />
@@ -341,8 +404,7 @@ export function AppearanceSettings() {
                   {filteredThemes.length === 0 ? (
                     needle ? (
                       <p className="text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
-                        {locale === 'vi' ? 'Không có chủ đề đã cài nào khớp' : 'No installed themes match'} "
-                        {query.trim()}".
+                        No installed themes match "{query.trim()}".
                       </p>
                     ) : null
                   ) : (
@@ -440,27 +502,104 @@ export function AppearanceSettings() {
 
           <ListRow
             action={
-              <div className="flex items-center gap-3">
+              <SegmentedControl
+                onChange={id => {
+                  triggerHaptic('selection')
+                  setSessionListDensity(id)
+                }}
+                options={sessionDensityOptions}
+                value={sessionListDensity}
+              />
+            }
+            description={a.sessionDensityDesc}
+            title={a.sessionDensityTitle}
+          />
+
+          <ListRow
+            action={
+              <div
+                className="flex items-center gap-3"
+                // Arms the peek for the overlay this row lives in — the
+                // ghosting rules in styles.css scope to it, so no other
+                // overlay pays for an opacity transition it never uses.
+                data-translucency-peek-scope=""
+              >
+                {GLASS_SUPPORTED && (
+                  <SegmentedControl
+                    onChange={pickTranslucency(setTranslucencyMode)}
+                    options={[
+                      { id: 'clear' as const, label: a.translucencyModeClear },
+                      { id: 'glass' as const, label: a.translucencyModeGlass }
+                    ]}
+                    value={translucency.mode}
+                  />
+                )}
                 <input
                   aria-label={a.translucencyTitle}
                   className="h-1 w-40 cursor-pointer appearance-none rounded-full bg-(--ui-stroke-tertiary)"
-                  max={100}
-                  min={0}
+                  max={TRANSLUCENCY_MAX}
+                  min={TRANSLUCENCY_MIN}
+                  // Peek while the hand is on the slider: the overlay (scrim +
+                  // near-opaque card) ghosts so the window behind IS the live
+                  // preview. Pointer pair covers mouse/touch drags; the
+                  // keyboard path pulses per step instead (blur ends any
+                  // residual hold).
+                  onBlur={endTranslucencyPeek}
                   onChange={event => {
                     triggerHaptic('selection')
                     setTranslucency(Number(event.target.value))
                   }}
-                  step={5}
+                  onKeyDown={event => {
+                    if (SLIDER_STEP_KEYS.has(event.key)) {
+                      pulseTranslucencyPeek()
+                    }
+                  }}
+                  onLostPointerCapture={endTranslucencyPeek}
+                  onPointerDown={beginTranslucencyPeek}
+                  onPointerUp={endTranslucencyPeek}
+                  step={TRANSLUCENCY_STEP}
                   style={{ accentColor: 'var(--dt-primary)' }}
                   type="range"
-                  value={translucency}
+                  value={translucency.intensity}
                 />
                 <span className="w-9 text-right text-[length:var(--conversation-caption-font-size)] tabular-nums text-(--ui-text-tertiary)">
-                  {translucency}%
+                  {translucency.intensity}%
                 </span>
               </div>
             }
-            description={a.translucencyDesc}
+            below={
+              translucency.mode === 'glass' && GLASS_SUPPORTED ? (
+                <div className="mt-3 flex flex-col gap-2.5">
+                  <div className="flex items-center gap-3">
+                    <span className="w-12 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
+                      {a.translucencyFrostTitle}
+                    </span>
+                    <SegmentedControl
+                      onChange={pickTranslucency(setTranslucencyMaterial)}
+                      options={GLASS_MATERIALS.map(material => ({
+                        id: material,
+                        label: a.translucencyFrost[material]
+                      }))}
+                      value={translucency.material}
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="w-12 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
+                      {a.translucencyScopeTitle}
+                    </span>
+                    <SegmentedControl
+                      onChange={pickTranslucency(setTranslucencyScope)}
+                      options={GLASS_SCOPES.map(scope => ({
+                        id: scope,
+                        label: a.translucencyScope[scope]
+                      }))}
+                      value={translucency.scope}
+                    />
+                  </div>
+                </div>
+              ) : undefined
+            }
+            description={translucency.mode === 'glass' ? a.translucencyGlassDesc : a.translucencyDesc}
             title={a.translucencyTitle}
           />
 
@@ -482,6 +621,13 @@ export function AppearanceSettings() {
             title={a.backdropTitle}
           />
 
+          <ToggleRow
+            checked={composerPopoutGesturesEnabled}
+            description={a.composerPopoutDesc}
+            label={a.composerPopoutTitle}
+            onChange={setComposerPopoutGesturesEnabled}
+          />
+
           <ListRow
             action={
               <SegmentedControl
@@ -500,6 +646,23 @@ export function AppearanceSettings() {
             title={a.reactionsTitle}
           />
 
+          <ToggleRow
+            checked={reasoningSummaryEnabled}
+            description={a.reasoningSummaryDesc}
+            label={a.reasoningSummaryTitle}
+            onChange={setReasoningSummaryEnabled}
+          />
+
+          <ListRow
+            action={
+              <Button onClick={clearReasoningSummaryCache} size="inline" variant="text">
+                {a.reasoningSummaryClear}
+              </Button>
+            }
+            description={a.reasoningSummaryDesc}
+            title={a.reasoningSummaryClear}
+          />
+
           <ListRow
             action={
               <SegmentedControl
@@ -513,6 +676,24 @@ export function AppearanceSettings() {
             }
             description={a.toolViewDesc}
             title={a.toolViewTitle}
+          />
+
+          <ListRow
+            action={
+              <SegmentedControl
+                onChange={id => {
+                  triggerHaptic('selection')
+                  setReasoningCollapsedByDefault(id === 'on')
+                }}
+                options={[
+                  { id: 'off', label: t.common.off },
+                  { id: 'on', label: t.common.on }
+                ]}
+                value={reasoningCollapsedByDefault ? 'on' : 'off'}
+              />
+            }
+            description={a.reasoningCollapsedDesc}
+            title={a.reasoningCollapsedTitle}
           />
 
           <ListRow

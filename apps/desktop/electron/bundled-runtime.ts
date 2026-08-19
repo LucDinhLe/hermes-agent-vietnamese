@@ -113,7 +113,7 @@ export function decideResidentRuntime(facts: {
     return { resident: false, reason: 'payload predates the resident layout' }
   }
 
-  const missing = RESIDENT_RUNTIME_ITEMS.filter((item) => payload.items[item]?.status !== 'staged')
+  const missing = RESIDENT_RUNTIME_ITEMS.filter(item => payload.items[item]?.status !== 'staged')
 
   if (missing.length > 0) {
     return { resident: false, reason: `payload incomplete (missing: ${missing.join(', ')})` }
@@ -153,7 +153,10 @@ export function findResidentPython(
 
   // Prefer the patch-versioned real directory over the minor alias so the
   // resolved path is stable across launches (the alias is a symlink).
-  for (const entry of entries.filter((name) => name.startsWith('cpython-')).sort().reverse()) {
+  for (const entry of entries
+    .filter(name => name.startsWith('cpython-'))
+    .sort()
+    .reverse()) {
     const candidate =
       platform === 'win32'
         ? pathModule.join(pythonRoot, entry, 'python.exe')
@@ -203,9 +206,7 @@ export function latestReleaseFromLsRemote(output: string): { tag: string; sha: s
     // tags (v2026.7.20) would win every numeric sort. This mirrors
     // _RELEASE_TAG_RE in hermes_cli/update_cmd.py and _SEMVER_TAG_RE in
     // scripts/write_install_stamp.py.
-    const m = line.match(
-      /^([0-9a-f]{40})\trefs\/tags\/((?:vi-)?v(?:0|[1-9]\d{0,2})\.\d+\.\d+(?:-\d+)?)(\^\{\})?$/
-    )
+    const m = line.match(/^([0-9a-f]{40})\trefs\/tags\/((?:vi-)?v(?:0|[1-9]\d{0,2})\.\d+\.\d+(?:-\d+)?)(\^\{\})?$/)
 
     if (!m) {
       continue
@@ -256,4 +257,63 @@ export function latestReleaseFromLsRemote(output: string): { tag: string; sha: s
   }
 
   return best ? { tag: best.tag, sha: best.sha } : null
+}
+
+/** Pick the newest non-draft release returned by GitHub's Releases API. */
+export function latestPublicReleaseTag(releases: unknown): string | null {
+  if (!Array.isArray(releases)) {
+    return null
+  }
+
+  let best: { tag: string; key: [number, number, number, number, number] } | null = null
+
+  for (const release of releases) {
+    if (!release || typeof release !== 'object' || (release as { draft?: unknown }).draft === true) {
+      continue
+    }
+
+    const tag = (release as { tag_name?: unknown }).tag_name
+
+    if (typeof tag !== 'string') {
+      continue
+    }
+
+    const community = /^vi-v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)-(\d+)$/.exec(tag)
+    const upstream = /^v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)$/.exec(tag)
+    const parsed = community || upstream
+
+    if (!parsed) {
+      continue
+    }
+
+    const [, major, minor, patch, iteration] = parsed
+
+    const key: [number, number, number, number, number] = [
+      community ? 1 : 0,
+      Number(major),
+      Number(minor),
+      Number(patch),
+      community ? Number(iteration) : -1
+    ]
+
+    let newer = best === null
+
+    if (best !== null) {
+      for (let index = 0; index < key.length; index += 1) {
+        if (key[index] === best.key[index]) {
+          continue
+        }
+
+        newer = key[index] > best.key[index]
+
+        break
+      }
+    }
+
+    if (newer) {
+      best = { tag, key }
+    }
+  }
+
+  return best?.tag ?? null
 }

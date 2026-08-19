@@ -15,6 +15,7 @@
 # Usage:
 #   scripts/sandbox/pick-release-tags.sh [--count N] [--repo DIR]
 #                                        [--exclude TAG]
+#                                        [--published-tags-file FILE]
 #
 #   --count   how many tags to emit (default 5, minimum 1). Fewer tags than
 #             requested emits all of them.
@@ -22,6 +23,10 @@
 #   --exclude tag to omit from the update-from set. Tag-triggered workflows use
 #             this for the candidate itself, because updating a commit to
 #             itself is not an update test.
+#   --published-tags-file newline-delimited release tags that users could
+#             actually install. When present, local git tags are filtered to
+#             this list so drafts and failed immutable candidates are never
+#             treated as released update sources.
 #
 # Reads tags from the local checkout, so it needs one fetched with tags
 # (actions/checkout with fetch-depth: 0, or `fetch-tags: true`). A shallow
@@ -41,6 +46,7 @@ COUNT=5
 # rather than whatever repo the caller happens to be standing in.
 REPO=""
 EXCLUDE=""
+PUBLISHED_TAGS_FILE=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --count)
@@ -52,6 +58,9 @@ while [ "$#" -gt 0 ]; do
     --exclude)
       [ "$#" -ge 2 ] || { echo 'error: --exclude needs a value' >&2; exit 1; }
       EXCLUDE="$2"; shift 2 ;;
+    --published-tags-file)
+      [ "$#" -ge 2 ] || { echo 'error: --published-tags-file needs a value' >&2; exit 1; }
+      PUBLISHED_TAGS_FILE="$2"; shift 2 ;;
     -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "error: unknown argument: $1" >&2; exit 1 ;;
   esac
@@ -93,6 +102,20 @@ if [ "${#tags[@]}" -eq 0 ]; then
   tag_family='upstream'
 fi
 
+if [ -n "$PUBLISHED_TAGS_FILE" ]; then
+  [ -f "$PUBLISHED_TAGS_FILE" ] || {
+    echo "error: published tags file not found: $PUBLISHED_TAGS_FILE" >&2
+    exit 1
+  }
+  filtered=()
+  for tag in "${tags[@]}"; do
+    if grep -Fqx -- "$tag" "$PUBLISHED_TAGS_FILE"; then
+      filtered+=("$tag")
+    fi
+  done
+  tags=("${filtered[@]}")
+fi
+
 if [ -n "$EXCLUDE" ]; then
   filtered=()
   for tag in "${tags[@]}"; do
@@ -103,7 +126,7 @@ fi
 
 total="${#tags[@]}"
 if [ "$total" -eq 0 ]; then
-  echo "error: no prior supported release tags found in $REPO" >&2
+  echo "error: no prior published supported release tags found in $REPO" >&2
   echo '       A shallow clone has no tags: fetch with tags (actions/checkout' >&2
   echo '       with fetch-depth: 0, or fetch-tags: true).' >&2
   exit 1

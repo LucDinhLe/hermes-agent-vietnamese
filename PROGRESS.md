@@ -1,5 +1,242 @@
 # Tiến độ
 
+## Cập nhật 2026-08-19 — chuẩn bị candidate Hermes Vietnamese v29
+
+- Chủ dự án cho phép phát hành v29. Candidate hiện tại là
+  `vi-v0.20.4-36`, lớp `community-prerelease`; bản này không thay Public Latest
+  v25 nếu chưa có quyết định riêng.
+- Candidate bất biến `vi-v0.20.4-35` đã dừng trước promotion: exact-artifact
+  smoke chứng minh Advisor được ghi đúng vào `state.db` nhưng phản hồi cold
+  resume không trả lại `advisor_enabled`, làm công tắc hiện tắt sau khi mở lại.
+  Không thay tag/asset `-35`; bản sửa và regression test đi vào `-36`.
+- Viết lại toàn bộ ghi chú phát hành theo góc nhìn sản phẩm: Hermes Vietnamese
+  có gì hơn cách dùng Hermes mặc định và từng lợi thế giúp người dùng thế nào.
+  Phần giới thiệu không dùng changelog hoặc kể thay đổi qua v26–v28.
+- Hồ sơ công khai bao quát runtime/installer resident, workspace nhiều phiên và
+  dự án, Browser dùng chung, Connector có consent, tóm tắt reasoning tiếng Việt,
+  Advisor theo từng phiên, Project pin và cập nhật cộng đồng giữ dữ liệu.
+- Workflow candidate gọi đích danh test Advisor bar, project menu, thứ tự/cách
+  ly pin và backend Advisor theo phiên. Promotion pilot bổ sung cổng pane
+  isolation, session scope, project pin/reorder và chuyển tiếp exact v28 → v29.
+- Cổng source hiện đạt: 9/9 tag/runtime input, 23/23 release/updater Electron,
+  49/49 UI v29, 21/21 backend Advisor, Desktop typecheck, ESLint 0 lỗi (133 cảnh
+  báo nền), Ruff, Prettier, `uv lock --check` và npm runtime audit 0 lỗ hổng.
+- Chưa push nhánh, tạo PR/tag/draft/artifact hoặc công khai release. Bước tiếp
+  theo là commit sạch, push/fetch độc lập, chạy CI rồi mới tạo tag candidate.
+
+## Cập nhật 2026-08-19 — Advisor theo phiên và dự án ghim
+
+- Thêm thanh bật/tắt Advisor ngay dưới đầu mỗi phiên trong panel giữa. Thanh
+  dùng biên bố cục riêng của `ChatView`, tự ẩn model rồi ẩn nhãn khi người dùng
+  kéo hẹp và không chiếm sang panel Tệp/Trình duyệt/Terminal ngoài cùng bên phải.
+- Advisor nay có trạng thái riêng cho từng phiên, truyền qua `session.create`,
+  `session.info` và `config.set` có `session_id`; thay đổi ở một phiên không ghi
+  đè mặc định hồ sơ hoặc phiên khác. Trạng thái được lưu và khôi phục khi mở lại.
+- Bảo vệ hai trường hợp biên: ID phiên đã cũ trả lỗi và hoàn tác giao diện thay
+  vì rơi xuống ghi cấu hình toàn cục; compute-host áp dụng lại override mới cho
+  phiên đã tồn tại ở lượt tiếp theo.
+- Panel trái có khu vực **Dự án đã ghim** dạng một dòng. Menu thường và menu
+  chuột phải hỗ trợ Ghim/Bỏ ghim; người dùng có thể kéo thả đổi thứ tự. Pin chỉ
+  lưu ID theo từng kết nối, không di chuyển hay sao chép dữ liệu dự án.
+- Xóa/loại dự án sẽ xóa pin; khi dự án tự phát hiện được nhận làm dự án chính
+  thức, pin được chuyển sang ID mới mà không mất vị trí.
+- Xác minh: 335 kiểm thử UI liên quan Advisor/sidebar/project đã đạt ở các lượt
+  mục tiêu; 45/45 kiểm thử updater và 10/10 kiểm thử backend Advisor đạt;
+  Desktop typecheck, ESLint, Ruff, `git diff --check` và production build đều
+  đạt. Lượt UI toàn cục không tự kết thúc trong môi trường jsdom do các ca Canvas
+  cũ nên đã dừng, không được ghi nhận là đạt.
+- Tài liệu phạm vi: `docs/hermes-v29-session-advisor-and-project-pins.md`.
+  Chưa push, tạo PR, tag, candidate hoặc phát hành.
+
+## Cập nhật 2026-08-19 — sửa đường cập nhật đóng gói cho bản sau v28
+
+- Làm rõ nguyên nhân màn hình v28 báo không truy cập được máy chủ cập nhật:
+  release `vi-v0.20.4-34` không có `latest*.yml`, còn GitHub provider của
+  `electron-updater` không coi nhãn `vi-vX.Y.Z-N` là SemVer hợp lệ.
+- Nhánh cục bộ `feat/v29-community-updater` thêm resolver đọc GitHub Releases
+  công khai, bỏ draft/release thiếu manifest của target, chọn bản cộng đồng mới
+  nhất rồi ghim generic feed vào URL release bất biến.
+- Workflow candidate sinh đủ bốn manifest Windows/macOS/Linux từ đúng artifact
+  đã gom, ghi SHA-512 + byte size, sau đó mới lập `SHA256SUMS.txt` và upload
+  draft. Download vi sai vẫn tắt để cài đúng byte đã nghiệm thu.
+- Windows handoff đổi sang silent + relaunch. Nhận diện nâng cấp
+  `com.nousresearch.hermes`, tên executable/shortcut/uninstall và vùng dữ liệu
+  vẫn giữ nguyên; onboarding/config/chat không bị reset bởi update.
+- About hiển thị dự án gốc/nhà phát hành Nous Research, người duy trì bản Việt
+  hóa Lê Đình Lực (LucDinhLe), giấy phép MIT và kênh GitHub Releases. Bản đóng
+  gói không còn hiện `nhánh unknown · commit unknown`; link tải lại trỏ về
+  release cộng đồng.
+- Install stamp của build đóng gói dùng đúng `X.Y.Z-vi.N`, thay cho version
+  nguồn dạng `X.Y.Z+distance` từng xuất hiện lệch với bộ cài.
+- Gate workflow-equivalent cục bộ hiện đạt: 128/128 Electron/release, 110/110 UI
+  gồm About/Advisor/onboarding, 126/126 Python release và Desktop typecheck.
+  Bản dựng production Desktop và ESLint toàn dự án đều đạt; còn 133 cảnh báo
+  lint nền đã có sẵn, không có lỗi mới. Chưa dựng artifact native,
+  chưa chạy update-from-v28 exact-artifact, chưa push/tag/draft/public release.
+- v28 không thể tự nhận code sửa này. Bản sửa đầu tiên cần cài thủ công một lần;
+  các bản sau mới đi qua nút **Cập nhật ngay** và cài yên lặng.
+
+## Cập nhật 2026-08-19 — chặn candidate v28 cho tới khi cài lại sạch
+
+- Candidate bất biến `vi-v0.20.4-29` dừng ở Windows ARM64 do Git for Windows
+  `tar` hiểu đường dẫn ổ đĩa như tên máy; `vi-v0.20.4-30` dừng ở verifier do
+  so sánh chuỗi đường dẫn `tar.exe` khác dấu phân cách. Cả hai tag được giữ
+  nguyên làm bằng chứng và không được di chuyển hoặc tái sử dụng.
+- Candidate `vi-v0.20.4-31` đã dựng đủ 6/6 target và tạo draft prerelease 26
+  asset tại workflow `32165043998`; tải ngược từng asset khớp byte, checksum và
+  provenance. Candidate vẫn **NO-GO** vì Install & Update E2E phát hiện bộ cài
+  chạy lại thất bại ở bước Node dependencies.
+- PR #38 vẫn mở dạng draft, có nhãn `ci-reviewed`. CI commit
+  `0c7972bff2f426b59368fb5d4ed664749bb4e1d3` đạt ở lượt chạy lại
+  `32171281649`; Public Latest vẫn là `vi-v0.20.0-25`.
+- E2E chẩn đoán từ đúng bản công khai v25 tại run `32171292220` giữ được lỗi
+  gốc: npm trả `ENOTEMPTY` khi đổi `node_modules/ink` sang thư mục tạm
+  `.ink-xKZbo5aM` còn sót từ lần cài trước. Đây là lỗi tính lặp lại an toàn của
+  installer, không phải lỗi mạng hoặc thiếu package.
+- Checkpoint `bc7cefa6f92cac98350b74e3e769e0cd3728e0d7` đã qua CI và Docker.
+  E2E kế tiếp `32174589129` xác nhận bộ dò tìm đúng toàn bộ rename target nhưng
+  npm tiếp tục tự dừng với `Exit handler never called`; cây `node_modules` bị
+  gián đoạn trên diện rộng nên không còn an toàn để sửa từng thư mục.
+- Checkpoint `df8f41dbc1ce78f2f9ae7e41f8c0936bee87a366` đã qua CI
+  `32175819273` và Docker `32175818327`. E2E `32176441666` xác nhận việc dựng
+  lại toàn bộ cây dependency vẫn kết thúc sau khoảng 71 giây với cùng lỗi npm.
+  Ba lượt npm của bản v25 cũng dừng theo cùng nhịp; proxy ghi hàng loạt TLS EOF.
+  Đối chiếu cấu hình cho thấy sandbox chỉ đưa CA Internet thật vào
+  `NODE_EXTRA_CA_CERTS`, trong khi chính proxy E2E cấp chứng thư bằng CA tạm của
+  sandbox. Bản sửa hiện dùng bundle kết hợp hai CA, giữ xác minh TLS và đồng
+  thời lưu `~/.npm/_logs` vào artifact nếu còn lỗi.
+- Bộ cài nay chỉ kích hoạt phục hồi khi thấy staging npm hậu tố 8 ký tự đồng
+  thời có package gốc cùng tên. Khi đó nó dựng lại ba cây dependency có thể tái
+  tạo của root, TUI và web; source, lockfile, config và dữ liệu người dùng không
+  bị chạm. Một thư mục ẩn chỉ giống tên nhưng không có package gốc sẽ không kích
+  hoạt việc dọn cây.
+- `bash -n scripts/install.sh` đạt. Các ca hành vi Linux phải đạt trên CI và E2E
+  v25 phải xanh trước khi push candidate. Candidate kế tiếp, nếu toàn bộ CI và
+  E2E công khai đều xanh, là `vi-v0.20.4-32`.
+
+## Cập nhật 2026-08-18 — chuẩn bị Hermes Vietnamese v28
+
+- Worktree `projects/hermes-v28`, nhánh `release/v28-upstream-sync`, đồng bộ từ
+  upstream tag đã ký `v2026.8.18`, commit
+  `e624e9fde561e1add9388384012b295fde669ade`, Hermes Agent `0.20.4`.
+- Phạm vi v28 giữ trọn Connector và tóm tắt reasoning của v26, Advisor của v27;
+  sửa fresh profile mặc định tiếng Việt và đổi ô nhập thành **Gửi yêu cầu**.
+- Khôi phục kênh cập nhật stable theo tag cộng đồng `vi-v*`; các đường cài,
+  cập nhật, eject, release notes và bootstrap runtime đã trỏ về
+  `LucDinhLe/hermes-agent-vietnamese`. Eject tải script từ đúng commit đã đóng
+  gói, thay vì giao commit cộng đồng cho bộ cài upstream.
+- Stable resolver đọc GitHub Releases công khai và lọc draft, nên tag candidate
+  chưa promotion không bị đưa sớm tới các máy đang dùng.
+- Nâng Electron lên `42.8.0`, nanoid lên `3.3.18`; `npm audit` runtime và đầy đủ
+  đều trả `0 vulnerabilities`; `uv lock --check` đạt.
+- Cổng nguồn đã đạt: 120/120 release/runtime tests, 92/92 UI release + Advisor,
+  126/126 Python release tests, 11/11 eject tests, Desktop typecheck và production
+  source build. ESLint đạt 0 lỗi, còn 135 cảnh báo nền upstream được giữ công khai.
+- Full UI trước sửa có 4.779 test đạt và 8 lỗi; ba hồi quy thật đã được sửa, các
+  tệp ảnh hưởng và đúng suite workflow đều xanh. Full Electron có 1.463 test đạt,
+  28 lỗi và 3 skip do giả định POSIX/quyền/timing trên Windows; đúng suite release
+  workflow đạt sạch. Hai full-suite này không được diễn giải thành toàn bộ xanh.
+- Draft PR #38 đã mở và gắn `ci-reviewed`; CI nguồn cùng Docker xanh tại commit
+  `cd701e873ec43c04c93c200929237a62b1d074e0`.
+- Candidate bất biến `vi-v0.20.0-28` bị cổng build từ chối trước khi tạo draft vì
+  tag mang version `0.20.0` không khớp version nguồn upstream `0.20.4`. Tag lỗi
+  được giữ nguyên làm bằng chứng, không di chuyển hoặc tái sử dụng.
+- Candidate bất biến `vi-v0.20.4-28` đã qua cổng tag/version nhưng native build
+  phát hiện pipeline resident vẫn kỳ vọng `agent-browser@0.26.0` ở root, trong
+  khi upstream 0.20.4 đã chủ ý chuyển gói này ra khỏi workspace dependency graph.
+  Không có draft hay artifact nào được tạo; tag tiếp tục được giữ nguyên làm
+  bằng chứng thất bại.
+- Candidate thay thế phải dùng `vi-v0.20.4-29`, lấy tarball browser bất biến vào
+  vùng dựng release riêng rồi nhúng vào payload resident, không đưa dependency
+  trở lại root; sau đó dựng lại sáu target, tải exact artifact và chạy
+  smoke/rollback theo workflow.
+- PR CI đã chặn thử nghiệm đưa dependency trở lại root tại commit `c624465d5`;
+  commit này không được gắn tag. Bản sửa kế tiếp giữ nguyên hợp đồng lazy của
+  upstream và khóa tarball resident riêng bằng SHA-512.
+- Public Latest vẫn là `vi-v0.20.0-25`; rollback giữ `vi-v0.20.0-14`. Candidate
+  v28 chỉ được công khai dạng community prerelease sau toàn bộ exact-artifact gate.
+
+## Cập nhật 2026-08-18 — bổ sung Giám sát (Advisor) và mở candidate kế tiếp
+
+- Xác nhận `vi-v0.20.0-26` đã là tag bất biến tại
+  `8ea73dcb475e32b8171bb970cc98ba809119f9b8`; không di chuyển hoặc dựng lại tag.
+  Phạm vi v26 mở rộng chỉ có thể đi vào candidate kế tiếp
+  `vi-v0.20.0-27` sau khi commit sạch, push và CI nguồn xanh.
+- Thêm Advisor mặc định tắt, chỉ đọc và không có tools. Khi bật, Hermes tự rà
+  soát trước mutating batch đầu tiên, khi đổi nhóm công cụ/lặp lỗi và trước kết
+  quả cuối; verdict `PASS/REVISE/ASK_USER/BLOCK`, mặc định tối đa hai vòng sửa.
+- Batch bị yêu cầu sửa được đóng đủ synthetic tool result theo từng
+  `tool_call_id`; final candidate bị từ chối chỉ là scaffolding tạm và bị loại
+  khỏi transcript bền vững. Review packet redaction secret và không chứa hidden
+  chain-of-thought.
+- Settings → Model có mục **Giám sát (Advisor)** ngay sau model chính, chỉ gồm
+  công tắc bật/tắt và bộ chọn provider/model. Không thêm nút gọi thủ công trong
+  chat. Cấu hình/model tách profile và áp dụng cho phiên mới.
+- Cổng release nay gọi đích danh test Advisor Python, vòng hội thoại, model UI
+  và i18n; promotion pilot yêu cầu evidence off-zero-call, plan/recovery/final,
+  read-only, bounded revision và model persistence.
+- Kiểm thử hiện tại: 119/119 Electron/release, 61/61 UI v26 cũ,
+  26/26 Advisor UI+i18n, 107/107 Python release và Desktop typecheck đều đạt.
+  Một lượt chạy hai suite UI đồng thời từng timeout do tải máy; workflow đã tách
+  suite Advisor và cả hai suite đều xanh khi chạy tuần tự. Chưa build candidate mới, chưa tạo tag,
+  draft hay public release. GitHub CLI hiện không xác thực được nên chưa thể
+  push/tạo draft PR hoặc đọc CI từ máy này.
+
+## Cập nhật 2026-08-17 — khóa cổng candidate và promotion v26
+
+- Workflow tạo candidate nay gọi đích danh test extension MV3, ba lớp Connector
+  Electron, consent UI, preview pane, reasoning UI/store và RPC Python; không còn
+  dựa vào việc test mới vô tình được suite tổng quát thu thập.
+- Promotion community pilot bắt buộc bằng chứng Windows x64 cho Chrome/Edge
+  profile cô lập, consent/revoke/persistence/redaction, reasoning bật/tắt và giữ
+  nguyên bản gốc, safe tool, update exact v25, repair/uninstall và rollback.
+- Cổng release local sau thay đổi đạt 119/119 Electron/release tests, 61/61 UI
+  tests và 36/36 Python release tests. Desktop typecheck, `uv lock --check`,
+  dependency production audit (0 vulnerability) và scan mẫu secret trên toàn bộ
+  diff v26 đều đạt.
+- Full UI trước đó đạt 3.700 test và có 4 timeout không tái hiện khi chạy riêng;
+  full Electron có 20 lỗi thuộc giả định POSIX/quyền Windows, trong khi đúng bộ
+  release workflow đạt sạch. Hai kết quả full-suite này được giữ là cảnh báo môi
+  trường, không được ghi thành gate xanh.
+- Release notes được chuyển sang v26 và cố ý ghi candidate-only. Public Latest
+  vẫn là `vi-v0.20.0-25`; chưa có tag, draft hoặc artifact v26 tại thời điểm này.
+
+## Cập nhật 2026-08-17 — hoàn thiện lát cắt tóm tắt reasoning tiếng Việt v26
+
+- Thêm RPC stateless `reasoning.summarize`: backend kiểm SHA-256, giới hạn
+  reasoning công khai ở 64 KiB và gọi riêng auxiliary task
+  `reasoning_summary_vi`; không ghi vào transcript hoặc prompt của phiên chính.
+- Tùy chọn **Tóm tắt suy luận bằng tiếng Việt** mặc định tắt. Khi tắt, đường
+  hậu xử lý dừng trước hash và tạo đúng zero model call; khi bật chỉ chạy sau
+  `message.complete`, tối đa một lần cho cùng digest.
+- Giữ nguyên reasoning và câu trả lời gốc; summary nằm trong panel riêng với
+  model, độ trễ và trạng thái chi phí/usage. Lỗi auxiliary chỉ hiện trong panel,
+  không đổi lượt chính thành lỗi.
+- Cache local tách transcript, không lưu reasoning nguồn, bị khóa theo
+  `profile + session lineage + message id + source SHA-256`, giới hạn 120 bản
+  ghi/1 MiB, phục hồi qua restart và có nút xóa trong Settings.
+- Bổ sung copy VI/EN/JA/ZH/ZH-Hant và cấu hình model riêng cho task. Kiểm thử
+  targeted hiện đạt 58 Python tests, 22 Desktop tests, Desktop typecheck và
+  lint thay đổi đều không lỗi/cảnh báo.
+
+## Cập nhật 2026-08-17 — khóa threat model và đặc tả v26
+
+- Tạo worktree sạch `feat/v26-secure-connector` từ `origin/main` tại
+  `4d597f74600cdc3791edf7d34566534182946c55`; không chạm các worktree cũ và giữ
+  nguyên release/tag/asset v25.
+- Xác minh baseline: 6/6 public-release tests, 18/18 preview/reasoning UI tests,
+  26/26 bundled-runtime/hardening tests và Desktop typecheck đều đạt trong môi
+  trường cô lập, dùng đúng lockfile.
+- Khóa threat model tại `docs/hermes-connector-v26-threat-model.md`: consent hai
+  phía, optional domain permissions, loopback một lần, metadata-only IPC,
+  RAM-only payload, import đúng `persist:hermes-preview` và revoke theo ledger.
+- Khóa quyết định bỏ qua có cảnh báo đối với partitioned cookie vì Electron 41
+  chưa có API giữ `partitionKey`; không hạ cấp thành cookie không phân vùng.
+- Khóa đặc tả tại `docs/hermes-v26-spec.md`; nền móng trust v26 chỉ dành cho
+  companion chính chủ. Extension Manager tổng quát được hoãn sang v27.
+- Tạo `docs/release-vi-v0.20.0-26-plan.md` với cổng Chrome/Edge profile cô lập,
+  exact Windows x64, update v25 -> v26, redaction và public GO/NO-GO.
+
 ## Cập nhật 2026-08-17 — bàn giao v25 và khởi động phạm vi v26
 
 - Đóng gói toàn bộ hành trình từ tiếp nhận v15 tới public thành công v25 tại

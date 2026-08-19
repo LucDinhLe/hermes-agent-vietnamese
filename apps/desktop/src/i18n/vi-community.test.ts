@@ -16,4 +16,9 @@ describe('Vietnamese community interface', () => {
     expect(vi.rightSidebar.files).toBe('Hệ thống tệp')
     expect(vi.preview.diff).toBe('THAY ĐỔI')
   })
+
+  it('describes a follow-up as a request, not a tracking action', () => {
+    expect(vi.composer.followUpPlaceholders).toContain('Gửi yêu cầu')
+    expect(vi.composer.followUpPlaceholders).not.toContain('Gửi theo dõi')
+  })
 })

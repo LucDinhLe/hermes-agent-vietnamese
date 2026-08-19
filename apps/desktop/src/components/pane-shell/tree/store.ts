@@ -20,6 +20,7 @@ import {
   type DropPosition,
   findGroup,
   findGroupOfPane,
+  findParentSplit,
   groupLeafIds,
   type GroupNode,
   insertAtGroup,
@@ -171,9 +172,11 @@ function frontPaneInGroup(paneId: string) {
  *  - a registered closer (core panes whose visibility an app store owns:
  *    review/terminal/preview/sessions) closes through that store, so the
  *    titlebar/statusbar toggles stay truthful;
- *  - everything else (plugin panes, unbound core panes) is DISMISSED: removed
- *    from the tree and remembered so adoption doesn't re-add it. Reveal
- *    intent (a preview target, ⌘G) or a layout reset un-dismisses.
+ *  - unbound core panes and panes from multi-pane plugins are DISMISSED:
+ *    removed from the tree and remembered so adoption doesn't re-add them.
+ *    Reveal intent (a preview target, ⌘G) or a layout reset un-dismisses;
+ *  - closing the sole pane from a plugin disables that plugin, preserving the
+ *    discoverable Settings → Plugins recovery path for single-pane plugins.
  */
 const DISMISSED_KEY = 'hermes.desktop.dismissedPanes.v1'
 
@@ -194,6 +197,55 @@ function setDismissed(paneId: string, dismissed: boolean) {
   if (next) {
     saveDismissed(next)
   }
+}
+
+// SPLIT-SHARE MEMORY — a tile pane that leaves the tree (the browser closed,
+// a page tile closed) records the share it held against its seam neighbor, so
+// re-opening it docks at the size the user left it. Without this every
+// re-open split the anchor zone [1, 1] again: each agent-triggered browser
+// open re-took half the chat, whatever the user had resized it to.
+const PANE_SHARE_KEY = 'hermes.desktop.paneShare.v1'
+
+const paneShares: Record<string, number> = readJson<Record<string, number>>(PANE_SHARE_KEY) ?? {}
+
+const validShare = (share: unknown): share is number =>
+  typeof share === 'number' && Number.isFinite(share) && share > 0 && share < 1
+
+function rememberPaneShare(tree: LayoutNode, paneId: string) {
+  const zone = findGroupOfPane(tree, paneId)
+
+  // Only a pane ALONE in its zone owns the zone's track — a stacked tab's
+  // removal doesn't change geometry, so there's no share to remember.
+  if (!zone || zone.panes.length !== 1) {
+    return
+  }
+
+  const parent = findParentSplit(tree, zone.id)
+
+  if (!parent) {
+    return
+  }
+
+  // The previous sibling is the seam partner a re-dock will split again (a
+  // trailing dock lands the tile right of / below its anchor); the pane at
+  // index 0 pairs with the sibling after it instead.
+  const at = parent.children.findIndex(child => child.id === zone.id)
+  const partner = at > 0 ? at - 1 : at + 1
+  const pair = (parent.weights[at] ?? 1) + (parent.weights[partner] ?? 1)
+  const share = pair > 0 ? (parent.weights[at] ?? 1) / pair : null
+
+  if (validShare(share)) {
+    paneShares[paneId] = share
+    writeJson(PANE_SHARE_KEY, paneShares)
+  }
+}
+
+/** The [target, added] weight pair a re-inserted pane's edge split should get,
+ *  or undefined for the even default. Persisted state is untrusted. */
+function recalledEdgeWeights(paneId: string): [number, number] | undefined {
+  const share = paneShares[paneId]
+
+  return validShare(share) ? [1 - share, share] : undefined
 }
 
 const paneClosers: Record<string, () => void> = {}
@@ -635,6 +687,7 @@ export function removeTreePane(paneId: string) {
   const tree = $layoutTree.get()
 
   if (tree) {
+    rememberPaneShare(tree, paneId)
     commit(removePane(tree, paneId))
   }
 }
@@ -697,6 +750,7 @@ export function dismissTreePane(paneId: string) {
 
   if (tree) {
     setDismissed(paneId, true)
+    rememberPaneShare(tree, paneId)
     commit(removePane(tree, paneId))
   }
 }
@@ -710,14 +764,24 @@ export function closeTreePane(paneId: string) {
     return
   }
 
-  // A plugin's pane: Close = DISABLE the plugin — the same switch as
-  // Settings → Plugins, so recovery is discoverable and symmetric. The
-  // contribution unregisters but the pane id STAYS in the tree, so
-  // re-enabling restores it exactly where it was. (Dismissal + removal
-  // would strand the pane with no way back short of a layout reset.)
-  const source = registry.getArea('panes').find(c => c.id === paneId)?.source
+  const panes = registry.getArea('panes')
+  const source = panes.find(c => c.id === paneId)?.source
 
   if (source?.startsWith('plugin:')) {
+    // A plugin may own several independent panes. Closing one of them must not
+    // unload every contribution from that plugin (for example, closing Bot
+    // Mode's Cronjobs pane must leave its Bots roster and composer middleware
+    // alive). Dismiss just that pane; Layout reset remains the explicit way to
+    // restore dismissed contributed panes.
+    if (panes.filter(c => c.source === source).length > 1) {
+      dismissTreePane(paneId)
+
+      return
+    }
+
+    // A single-pane plugin keeps the existing symmetric behavior: Close uses
+    // the same switch as Settings → Plugins. Its contribution unregisters but
+    // the pane id stays in the tree, so re-enabling restores its exact place.
     const pluginId = source.slice('plugin:'.length)
     void setPluginEnabled(pluginId, false)
     notify({
@@ -1041,6 +1105,90 @@ interface PaneDockHint {
   pos: DropPosition
   /** Center docks: stack BEFORE this pane id (the strip divider's slot). */
   before?: null | string
+  /** Enforced dock invariant: the pane is re-homed onto this hint's center
+   *  anchor on EVERY boot when it isn't already stacked with the anchor —
+   *  no one-time token, and user placement does not exempt it. Once per
+   *  adoption lifetime (per boot), so an intra-session drag sticks until the
+   *  next boot. See `enforceDockedPanes`. */
+  enforce?: boolean
+}
+
+// The retired one-time dock-heal ledger (`heal: '<token>'` hints). Its guards
+// (token burned even when the heal was skipped; $userPlacedPanes exempt) left
+// exactly the users who had fought the old stacked layout stuck with it —
+// enforced docks (`enforce: true`) replaced it. Drop the stale key.
+writeKey('hermes.desktop.paneDockHeals.v1', null)
+
+// Panes already enforced THIS boot: the invariant re-asserts at boot, not
+// against a live user — a mid-session drag out of the anchor strip sticks
+// until the next launch, so there is never a tug-of-war.
+const enforcedDocksThisBoot = new Set<string>()
+
+/**
+ * A `panes` contribution whose dock hint carries `enforce: true` is re-homed
+ * onto the hint's center anchor at every boot's first adoption pass when it
+ * isn't already stacked there. Unlike the retired one-time heal, nothing
+ * exempts the pane — not a burned token, not $userPlacedPanes — because the
+ * hint is the owner's standing invariant about where the pane lives
+ * (Bot Mode's Bots pane IS the SESSIONS | BOTS tab strip), not a one-shot
+ * migration. Center re-homes only: the invariant consolidates the pane into
+ * its anchor's tab strip, it never re-runs arbitrary splits.
+ *
+ * Silent like adoption — the anchor zone keeps its active tab. The center
+ * insert pins the zone's header shown, which is the point: the strip is how
+ * the user finds the tab.
+ */
+function enforceDockedPanes(
+  tree: LayoutNode,
+  dataOf: (paneId: string) => { dock?: PaneDockHint; placement?: string } | undefined
+): LayoutNode {
+  let next = tree
+
+  for (const pane of registry.getArea('panes')) {
+    const dock = dataOf(pane.id)?.dock
+
+    if (!dock?.enforce || dock.pos !== 'center' || !allPaneIds(next).includes(pane.id)) {
+      continue
+    }
+
+    if (enforcedDocksThisBoot.has(pane.id)) {
+      continue
+    }
+
+    enforcedDocksThisBoot.add(pane.id)
+
+    const from = findGroupOfPane(next, pane.id)
+    const anchor = findGroupOfPane(next, dock.pane)
+
+    if (!from || !anchor) {
+      continue
+    }
+
+    if (from.id === anchor.id) {
+      // Already stacked with its anchor — but an enforced tab must be
+      // REACHABLE, not just co-located. Community regression (Aug 2026):
+      // persisted trees where the enforced pane was center-stacked with the
+      // strip hidden and itself active left the ANCHOR invisible with no
+      // strip to switch back ("my ui only shows bots now... cant find the
+      // sessions"). An enforced zone always shows its strip.
+      if (anchor.headerHidden === true) {
+        next = setGroupHeaderHiddenOp(next, anchor.id, false) ?? next
+      }
+
+      continue
+    }
+
+    const without = removePane(next, pane.id)
+    const target = without ? findGroupOfPane(without, dock.pane)?.id : undefined
+
+    if (!without || !target) {
+      continue
+    }
+
+    next = insertAtGroup(without, target, pane.id, 'center', dock.before, false) ?? next
+  }
+
+  return next
 }
 
 function adoptContributedPanes(): void {
@@ -1059,16 +1207,11 @@ function adoptContributedPanes(): void {
   const mainId = panes.find(c => placementOf(c.id) === 'main')?.id
   const inTree = new Set(allPaneIds(tree))
 
-  // Plugin panes are never dismissed anymore (Close disables the plugin
-  // instead) — drop stale entries so panes stranded by the old behavior
-  // re-adopt on their own.
-  for (const pane of panes) {
-    if (pane.source?.startsWith('plugin:') && $dismissedPanes.get().has(pane.id)) {
-      setDismissed(pane.id, false)
-    }
-  }
-
   const dismissed = $dismissedPanes.get()
+
+  // Enforced dock invariants run FIRST: they re-home panes that are ALREADY
+  // in the tree, so the missing-pane adoption below never sees them.
+  const healed = enforceDockedPanes(tree, dataOf)
 
   // `placement: 'floating'` opts OUT of the tree entirely — those panes render
   // as fixed cards above it (renderer/floating-panes.tsx). Adopting one would
@@ -1079,10 +1222,14 @@ function adoptContributedPanes(): void {
   )
 
   if (missing.length === 0) {
+    if (healed !== tree) {
+      commit(healed)
+    }
+
     return
   }
 
-  let next = tree
+  let next = healed
 
   for (const pane of missing) {
     const dock = dataOf(pane.id)?.dock
@@ -1102,8 +1249,18 @@ function adoptContributedPanes(): void {
       // drag but wrong for adoption into a zone whose bar the user hid.
       const hostHeaderHidden = findGroup(next, target)?.headerHidden === true
 
-      // Silent adoption: don't front over the zone's active tab — a reveal does.
-      next = insertAtGroup(next, target, pane.id, dock?.pos ?? 'center', dock?.before, false) ?? next
+      // Silent adoption: don't front over the zone's active tab — a reveal
+      // does. An edge dock re-takes the share the pane held when it closed.
+      next =
+        insertAtGroup(
+          next,
+          target,
+          pane.id,
+          dock?.pos ?? 'center',
+          dock?.before,
+          false,
+          recalledEdgeWeights(pane.id)
+        ) ?? next
 
       // An adopted pane ARRIVES with its chip showing — a surprise zone with
       // zero chrome has no obvious handle to drag or close. (Explicit reveal;
@@ -1214,7 +1371,7 @@ export function dockPaneBeside(paneId: string, anchorPaneId: string) {
 
   const next = findGroupOfPane(tree, paneId)
     ? movePaneOp(tree, paneId, { groupId: anchor.id, pos })
-    : insertAtGroup(tree, anchor.id, paneId, pos)
+    : insertAtGroup(tree, anchor.id, paneId, pos, undefined, true, recalledEdgeWeights(paneId))
 
   if (next && next !== tree) {
     commit(next)

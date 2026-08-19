@@ -134,6 +134,7 @@ describe('PreviewPane console state', () => {
     )
     expect(rendered.getByText('Shared with agent')).toBeTruthy()
     expect(rendered.getByRole('button', { name: 'Reload page' })).toBeTruthy()
+    expect(rendered.getByRole('button', { name: 'Use a Chrome or Edge session' })).toBeTruthy()
     expect(rendered.container.querySelector('webview')?.getAttribute('partition')).toBe('persist:hermes-preview')
     expect(rendered.container.querySelector('webview')?.getAttribute('allowpopups')).toBe('true')
   })

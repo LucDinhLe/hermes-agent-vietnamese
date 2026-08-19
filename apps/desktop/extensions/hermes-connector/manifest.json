@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_extensionName__",
+  "description": "__MSG_extensionDescription__",
+  "version": "0.20.0.26",
+  "default_locale": "vi",
+  "minimum_chrome_version": "119",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvKMueGBNxdwgCNU0JAnpCu2mqIdYd8dOgRjRNU14gHKNL19vAgiGjw3Yb/rJfSwTPlbHegES+GjXlbcKWhYXzCN5fpPbdOC5ceF4UgBsP00pO867QizMr0vlEkrXNQ/q+FZ9rpcgfmL8bkPXIu58YAO9cdvafOb1uuyZWQ4unlOu4QlEaMN6vyws0vaCSNQFypS7qKkZ/eDxi03Qo6IdnQ+yPsvb1wFuBFPzrYwg/0a+qtsiVG8eW1lzqVgMbzboTcfrkFo0D7p9B7Eg8OmlTEA+FNtoW4TMtKpRAxcU+Fc3zbgMNBitvKobzL9umD2g2h1w3PoWomihr4s3S0PzFwIDAQAB",
+  "incognito": "not_allowed",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "__MSG_actionTitle__"
+  },
+  "permissions": ["activeTab"],
+  "optional_permissions": ["cookies"],
+  "optional_host_permissions": ["http://*/*", "https://*/*", "http://127.0.0.1/*"]
+}

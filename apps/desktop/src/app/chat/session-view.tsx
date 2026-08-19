@@ -7,6 +7,7 @@ import {
   $activeSessionId,
   $awaitingResponse,
   $busy,
+  $currentAdvisorEnabled,
   $currentCwd,
   $currentFastMode,
   $currentModel,
@@ -52,6 +53,7 @@ export interface SessionView {
   $model: ReadableAtom<string>
   $provider: ReadableAtom<string>
   $fast: ReadableAtom<boolean>
+  $advisorEnabled: ReadableAtom<boolean>
   $reasoningEffort: ReadableAtom<string>
 }
 
@@ -76,10 +78,22 @@ function primaryField<T>(select: (state: ClientSessionState) => T, $draft: Reada
 
 const $primaryMessages = primaryField<ChatMessage[]>(state => state.messages, $messages)
 
+/**
+ * Turn-busy for the workspace pane. A selected stored session that has no
+ * slice yet (cold resume) must stay idle — the global `$busy` atom is a
+ * leftover from whichever session last published, and inheriting it is how
+ * focusing B while A runs marked B busy. The draft atom is only for a true
+ * new chat (no stored id) so the first-send optimistic lock still paints.
+ */
+const $primaryBusy = computed([$primaryState, $busy, $selectedStoredSessionId], (state, draftBusy, selected) =>
+  state ? state.busy : selected ? false : draftBusy
+)
+
 export const PRIMARY_SESSION_VIEW: SessionView = {
+  $advisorEnabled: primaryField<boolean>(state => state.advisorEnabled, $currentAdvisorEnabled),
   kind: 'primary',
   $awaitingResponse: primaryField<boolean>(state => state.awaitingResponse, $awaitingResponse),
-  $busy: primaryField<boolean>(state => state.busy, $busy),
+  $busy: $primaryBusy,
   $cwd: primaryField<string>(state => state.cwd, $currentCwd),
   $fast: primaryField<boolean>(state => state.fast, $currentFastMode),
   $lastVisibleIsUser: computed($primaryMessages, lastVisibleMessageIsUser),

@@ -16,6 +16,7 @@
  * itself here as the delegate so tile UI stays dependency-light.
  */
 
+import { registryBackendScopeKey } from '@hermes/shared'
 import { atom, computed } from 'nanostores'
 
 import type { ClientSessionState } from '@/app/types'
@@ -33,15 +34,20 @@ import { readJson, writeJson } from '@/lib/storage'
 import type { SessionInfo } from '@/types/hermes'
 
 import { $activeGatewayProfile, normalizeProfileKey } from './profile'
+import { clearAllProviderWaits, clearSessionProviderWait } from './provider-wait'
 import {
   $activeSessionId,
+  $lastReadAtBySessionId,
   $selectedStoredSessionId,
   $sessions,
-  $unreadFinishedSessionIds,
+  clearReadBaseline,
   lineageAliases,
+  markSessionRead,
   sessionMatchesStoredId,
-  setActiveSessionStoredIdRotation
+  setActiveSessionStoredIdRotation,
+  setSessions
 } from './session'
+import { ackStoredSessionId, markSessionUnreadFinished } from './session-unread'
 import { isSecondaryWindow } from './windows'
 
 // ---------------------------------------------------------------------------
@@ -49,6 +55,45 @@ import { isSecondaryWindow } from './windows'
 // ---------------------------------------------------------------------------
 
 export const $sessionStates = atom<Record<string, ClientSessionState>>({})
+
+// ---------------------------------------------------------------------------
+// Event-source scopes: which registry connection's socket delivered a runtime
+// session's events. Working/attention membership alone is profile-blind — two
+// connected gateways can both expose a 'default' profile, so the gateway
+// keep-set (pruneSecondaryGateways) must key live work by the composite
+// (connectionId, profile) scope, not the bare profile name. Recorded at
+// event fan-in (use-gateway-boot); local/primary events carry no connectionId
+// and record nothing, so single-source behavior is untouched.
+// ---------------------------------------------------------------------------
+
+const sessionScopeByRuntimeId = new Map<string, string>()
+
+export function recordSessionEventScope(event: { connectionId?: string; profile?: string; session_id?: string }): void {
+  if (event.session_id && event.connectionId) {
+    sessionScopeByRuntimeId.set(event.session_id, registryBackendScopeKey(event.connectionId, event.profile))
+  }
+}
+
+/** Composite scopes of registry-sourced sessions that are live (busy or
+ * waiting on input) — the (connectionId, profile) half of the gateway
+ * keep-set. Local-source live work keeps flowing through profile names. */
+export function liveSessionScopes(): Set<string> {
+  const scopes = new Set<string>()
+
+  for (const [runtimeId, state] of Object.entries($sessionStates.get())) {
+    if (!state || (!state.busy && !state.needsInput)) {
+      continue
+    }
+
+    const scope = sessionScopeByRuntimeId.get(runtimeId)
+
+    if (scope) {
+      scopes.add(scope)
+    }
+  }
+
+  return scopes
+}
 
 // Stored session ids whose authoritative state is still busy, but whose
 // runtime has produced no state publish for the watchdog window. Silence is
@@ -178,17 +223,52 @@ function handleTransition(previous: ClientSessionState | null, next: ClientSessi
 
   if (next.busy && !wasWorking) {
     clearSettled(storedId)
+    // A NEW turn is starting: the read baseline guarded the PREVIOUS
+    // completion's re-asserts. Dropping it here means this turn's finish
+    // re-lights even if it lands within the same millisecond as the last
+    // read (same-tick submit → finish in tests and fast local models).
+    clearReadBaseline(storedId)
   } else if (!next.busy && wasWorking) {
     markSettled(storedId)
 
-    if (storedId !== $selectedStoredSessionId.get()) {
-      const cur = $unreadFinishedSessionIds.get()
+    // FOCUSED, not selected: a session finishing in the tile the user is
+    // watching is already seen, and a tile is never the primary selection.
+    if (storedId !== $focusedStoredSessionId.get()) {
+      // Re-light only genuinely new completions: if the user already viewed
+      // this session (or its family) at or after this settle moment, a
+      // re-assert of the same completion must not re-arm the dot. `-1` for
+      // "never read" (not `0`) so fake-timer tests pinned to t=0 still light.
+      const lastReadAt = $lastReadAtBySessionId.get()[storedId] ?? -1
 
-      if (!cur.includes(storedId)) {
-        $unreadFinishedSessionIds.set([...cur, storedId])
+      if (Date.now() > lastReadAt) {
+        // Flags the transient atom AND persists a marker, so the green dot
+        // survives an app restart (see session-unread.ts).
+        markSessionUnreadFinished(storedId)
       }
     }
   }
+}
+
+/** Is any surface on THIS window still holding the runtime — the primary view
+ *  or an open tile? (A tile mid-resume references by stored id only; its
+ *  runtime binding is patched in after `resumeTile` returns.) */
+function runtimeReferenced(runtimeId: string, storedSessionId: null | string): boolean {
+  if (runtimeId === $activeSessionId.get()) {
+    return true
+  }
+
+  return $sessionTiles
+    .get()
+    .some(t => t.runtimeId === runtimeId || (storedSessionId !== null && t.storedSessionId === storedSessionId))
+}
+
+/** A state no surface needs anymore: its turn is over (not busy, not waiting
+ *  on the user) and neither the primary view nor any tile holds the runtime.
+ *  `needsInput` states stay — the sidebar's attention dot reads them. */
+function evictable(runtimeId: string, state: ClientSessionState): boolean {
+  return (
+    !state.busy && !state.needsInput && !state.awaitingResponse && !runtimeReferenced(runtimeId, state.storedSessionId)
+  )
 }
 
 /** Publish one session's state. Automatically fires transition side-effects
@@ -203,7 +283,15 @@ function handleTransition(previous: ClientSessionState | null, next: ClientSessi
  *  ($workingSessionIds, $attentionSessionIds) and their subscribers
  *  unnecessarily. The runtime-id→state cache (sessionStateByRuntimeIdRef)
  *  is updated independently by the caller, so the visual path stays live
- *  without the store churn. */
+ *  without the store churn.
+ *
+ *  A settled state nothing references releases its transcript instead of
+ *  republishing it. Gateway events keep flowing for sessions whose tile was
+ *  closed mid-turn, and parking each one's full transcript here forever is the
+ *  leak that made the app crawl after a day of tile use. Transition side
+ *  effects still fire, so lightweight status and the unread dot survive. A
+ *  FIRST publish always lands in full because a resume can publish its idle
+ *  state a beat before `$activeSessionId` / the tile binding points at it. */
 export function publishSessionState(runtimeId: string, state: ClientSessionState) {
   const current = $sessionStates.get()
   const prev = current[runtimeId] ?? null
@@ -212,8 +300,39 @@ export function publishSessionState(runtimeId: string, state: ClientSessionState
     return
   }
 
+  if (prev && evictable(runtimeId, state)) {
+    handleTransition(prev, state, runtimeId)
+    releaseSessionTranscript(runtimeId, state)
+
+    return
+  }
+
   $sessionStates.set({ ...current, [runtimeId]: state })
   handleTransition(prev, state, runtimeId)
+}
+
+/** Keep the cheap status projection for a cold session while releasing its
+ * transcript. Unread completion is stored separately, so it survives too. */
+export function releaseSessionTranscript(runtimeId: string, state?: ClientSessionState) {
+  const current = $sessionStates.get()
+
+  if (!(runtimeId in current)) {
+    return
+  }
+
+  const retained = state ?? current[runtimeId]
+
+  // Older persisted snapshots can contain an undefined state or omit the
+  // messages field. Treat either shape as already cold instead of throwing
+  // while memory pressure is being relieved.
+  if (!retained) {
+    return
+  }
+
+  const lightweight =
+    Array.isArray(retained.messages) && retained.messages.length === 0 ? retained : { ...retained, messages: [] }
+
+  $sessionStates.set({ ...current, [runtimeId]: lightweight })
 }
 
 export function dropSessionState(runtimeId: string) {
@@ -222,6 +341,8 @@ export function dropSessionState(runtimeId: string) {
   // a just-finished session's row survives merge eviction even if its tile or
   // cached runtime is dropped in the meantime.
   clearWatchdog(runtimeId)
+  clearSessionProviderWait(runtimeId)
+  sessionScopeByRuntimeId.delete(runtimeId)
 
   const current = $sessionStates.get()
   setSessionStalled(current[runtimeId]?.storedSessionId, false)
@@ -246,6 +367,8 @@ export function clearAllSessionStates() {
 
   sessionWatchdogTimers.clear()
   settledExpiry.clear()
+  clearAllProviderWaits()
+  sessionScopeByRuntimeId.clear()
   $stalledSessionIds.set([])
   $sessionStates.set({})
 }
@@ -488,12 +611,36 @@ export function patchSessionTile(storedSessionId: string, patch: Partial<Session
 }
 
 /** Drop live runtime bindings so every tile re-resumes — used on gateway
- *  reconnect, where a respawned backend re-mints (recycles) runtime ids. */
+ *  reconnect, where a respawned backend re-mints (recycles) runtime ids.
+ *  Also invalidates the wiring cache's stored→runtime map: clearing only the
+ *  tile atoms left `resumeTile`'s warm path free to re-bind the same dead
+ *  runtime id from the cache, so post-wake tiles repainted empty and never
+ *  actually re-resumed. */
 export function resetTileRuntimeBindings() {
+  sessionTileDelegate()?.invalidateRuntimeBindings?.()
+
   const tiles = $sessionTiles.get()
 
   if (tiles.some(t => t.runtimeId)) {
     $sessionTiles.set(tiles.map(toStored))
+  }
+}
+
+/** Unbind ONE reclaimed runtime from whichever tile holds it — the targeted
+ *  sibling of resetTileRuntimeBindings. The reconnect-time reset can't cover a
+ *  backend reclaim: the WS re-dials immediately, but the orphan reaper fires a
+ *  grace window LATER, so the reclaim lands after every reconnect-path unbind
+ *  already ran. Without this, the tile keeps pointing at the dead runtime whose
+ *  state `session.reclaimed` just dropped — an empty transcript under live
+ *  chrome — and SessionTilePane's resume effect (gated on `!runtimeId`) never
+ *  re-resumes. Clearing the binding re-arms that effect, which rebinds a fresh
+ *  runtime from the stored row. The pane itself stays: the stored session is
+ *  intact, only its live runtime was reclaimed. */
+export function unbindTileRuntime(runtimeId: string) {
+  const tiles = $sessionTiles.get()
+
+  if (tiles.some(t => t.runtimeId === runtimeId)) {
+    $sessionTiles.set(tiles.map(t => (t.runtimeId === runtimeId ? { ...t, runtimeId: undefined } : t)))
   }
 }
 
@@ -515,6 +662,12 @@ export interface SessionTileDelegate {
   executeSlash(rawCommand: string, sessionId: string): Promise<void>
   /** Interrupt a tile's running turn. */
   interruptSession(runtimeId: string): Promise<void>
+  /** Drop the wiring cache's stored→runtime bindings. Called on gateway
+   *  reconnect: a respawned backend re-mints runtime ids, so every binding
+   *  recorded before the reconnect is suspect — without this, `resumeTile`'s
+   *  warm path re-binds tiles to dead runtime ids (the sleep/wake "empty
+   *  right pane" bug). Bindings re-record from live post-reconnect events. */
+  invalidateRuntimeBindings?(): void
   /** Bind a live runtime id for a stored session (resume without touching
    *  the main view). Returns the runtime id, or throws. */
   resumeTile(storedSessionId: string): Promise<string>
@@ -602,6 +755,14 @@ export function openSessionTile(
   before?: null | string
 ) {
   const tiles = $sessionTiles.get()
+
+  // Opening a session in a tab/tile is "reading" it — clear its unread dot
+  // exactly like main-thread resume does. Previously only
+  // setSelectedStoredSessionId cleared unread, so tile-opened sessions kept
+  // their green dot even while the user was reading them. Acks the persisted
+  // watermark/marker too so a later list refresh doesn't repaint it.
+  markSessionRead(storedSessionId)
+  ackStoredSessionId(storedSessionId)
 
   if (storedSessionId === $selectedStoredSessionId.get()) {
     return
@@ -753,6 +914,18 @@ export function closeSessionTile(storedSessionId: string) {
   }
 
   saveTiles($sessionTiles.get().filter(t => t.storedSessionId !== storedSessionId))
+
+  // A settled session may never publish again, so the publish-time eviction
+  // in publishSessionState can't reach it — drop its cached state here. A
+  // BUSY one stays: its turn keeps streaming in the background, the sidebar
+  // dot reads it, and settle evicts it. ⌘⇧T reopen re-publishes from the
+  // wiring cache (resumeTile's warm path), so nothing is lost.
+  const runtimeId = tile?.runtimeId
+  const state = runtimeId ? $sessionStates.get()[runtimeId] : undefined
+
+  if (runtimeId && state && evictable(runtimeId, state)) {
+    dropSessionState(runtimeId)
+  }
 }
 
 /** Drop a DEAD tile — a persisted tile whose session no longer exists on the
@@ -838,6 +1011,20 @@ export const $focusedSessionState = computed([$focusedRuntimeId, $sessionStates]
 export const selectionHomesToWorkspace = (selected: null | string, tiles: readonly SessionTile[]): boolean =>
   !(selected && tiles.some(t => t.storedSessionId === selected))
 
+// Bringing a finished session to the front clears its green dot. Keyed on the
+// FOCUSED session, not the selected one: a tile is never $selectedStoredSessionId,
+// and a tile tab click goes through activateTreePane rather than focusOpenSession,
+// so this is the one hook that catches every way a tile reaches the front.
+// Clears the whole conversation family (markSessionRead) AND acks the
+// persisted watermark/marker (ackStoredSessionId) so the next list refresh
+// doesn't repaint the dot the user just cleared by looking at it.
+$focusedStoredSessionId.listen(focused => {
+  if (focused) {
+    markSessionRead(focused)
+    ackStoredSessionId(focused)
+  }
+})
+
 // Cold-start restore is the one selection change that is NOT a navigation: the
 // route already pointed at the primary session before the window loaded, and
 // homing on it would front the workspace tab over the PERSISTED active tab —
@@ -869,10 +1056,19 @@ $selectedStoredSessionId.listen(selected => {
 if ((import.meta.env.DEV || import.meta.env.VITE_PERF_PROBE === '1') && typeof window !== 'undefined') {
   ;(window as unknown as Record<string, unknown>).__HERMES_SESSION_TILES__ = {
     close: closeSessionTile,
+    drop: dropSessionState,
     open: openSessionTile,
     patch: patchSessionTile,
     publish: publishSessionState,
+    /** Seed the recents list — models a populated sessions DB in perf runs. */
+    seedSessions: (rows: SessionInfo[]) => setSessions(rows),
+    sessions: () => $sessions.get(),
     states: () => $sessionStates.get(),
-    tiles: () => $sessionTiles.get()
+    tiles: () => $sessionTiles.get(),
+    /** THE real gateway write path (wiring cache + journal + publish + view
+     *  sync), unlike `publish` which only touches the store. Perf scenarios
+     *  must drive this or they under-model streaming cost. */
+    update: (runtimeId: string, updater: (state: ClientSessionState) => ClientSessionState) =>
+      sessionTileDelegate()?.updateSession(runtimeId, updater)
   }
 }

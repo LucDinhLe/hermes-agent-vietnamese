@@ -91,10 +91,15 @@ jobs:
         env:
           TAG_COUNT: ${{ inputs['tag-count'] || '5' }}
           EXCLUDE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           echo "Selecting release tags for event=${{ github.event_name }} ref=${{ github.ref }} count=$TAG_COUNT"
-          picker_args=(--count "$TAG_COUNT")
+          published_tags_file="$RUNNER_TEMP/published-release-tags.txt"
+          gh api --paginate "/repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq '.[] | select(.draft == false) | .tag_name' \
+            > "$published_tags_file"
+          picker_args=(--count "$TAG_COUNT" --published-tags-file "$published_tags_file")
           if [ -n "$EXCLUDE_TAG" ]; then
             echo "Excluding current candidate tag from update-from matrix: $EXCLUDE_TAG"
             picker_args+=(--exclude "$EXCLUDE_TAG")

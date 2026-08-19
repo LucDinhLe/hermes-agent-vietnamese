@@ -41,3 +41,16 @@ test('upstream contributor bookkeeping stays disabled in community forks', () =>
 
   assert.match(workflow, /github\.repository == 'NousResearch\/hermes-agent'/)
 })
+
+test('packaged upgrades retain the installed identity and disclose the MIT license', () => {
+  const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'apps/desktop/package.json'), 'utf8'))
+
+  assert.equal(pkg.productName, 'Hermes')
+  assert.equal(pkg.build.appId, 'com.nousresearch.hermes')
+  assert.equal(pkg.build.productName, 'Hermes')
+  assert.equal(pkg.build.executableName, 'Hermes')
+  assert.equal(pkg.build.nsis.shortcutName, 'Hermes')
+  assert.equal(pkg.build.nsis.uninstallDisplayName, 'Hermes')
+  assert.equal(pkg.license, 'MIT')
+  assert.equal(pkg.author, 'Nous Research')
+})

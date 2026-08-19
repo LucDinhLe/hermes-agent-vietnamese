@@ -51,7 +51,7 @@ const buttonVariants = cva(
         'icon-lg': 'size-10 rounded-[4px]',
         'icon-pane': "size-8 rounded-[4px] [&_.codicon]:text-[1rem] [&_svg:not([class*='size-'])]:size-4",
         'icon-titlebar':
-          "h-(--titlebar-control-height) w-(--titlebar-control-size) rounded-[4px] [&_.codicon]:text-[1rem] [&_svg:not([class*='size-'])]:size-4"
+          'titlebar-icon-button h-(--titlebar-control-height) w-(--titlebar-control-size) rounded-[4px] [&_.codicon]:text-[1rem] [&_svg:not([class*="size-"])]:size-(--titlebar-icon-size)'
       }
     },
     compoundVariants: [

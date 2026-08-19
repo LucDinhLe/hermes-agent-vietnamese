@@ -59,11 +59,24 @@ jobs:
       # bubblewrap + slirp4netns are what the sandbox is built on; util-linux
       # supplies the `unshare` that builds the multi-uid userns for the
       # user-level (non-root) install.
-      - name: Install sandbox dependencies
-        run: |
-          set -euo pipefail
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq bubblewrap slirp4netns uidmap util-linux
+      - name: Refresh sandbox package index (bounded retry)
+        uses: ./.github/actions/retry
+        with:
+          command: >-
+            timeout --signal=TERM --kill-after=10s 180s
+            sudo apt-get update -qq
+          attempts: '3'
+          delay: '10'
+
+      - name: Install sandbox dependencies (bounded retry)
+        uses: ./.github/actions/retry
+        with:
+          command: >-
+            timeout --signal=TERM --kill-after=10s 300s
+            sudo apt-get install -y -qq
+            bubblewrap slirp4netns uidmap util-linux
+          attempts: '3'
+          delay: '10'
 
       # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor,
       # which is exactly what bwrap needs. Report the state before touching it

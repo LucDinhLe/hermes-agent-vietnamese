@@ -84,6 +84,10 @@ chuỗi trên.
     thay.
 13. **Hậu kiểm public:** sau promotion phải kiểm tag/Latest, asset count, digest,
     manifest, HTTP đường tải và thời điểm tạo/cập nhật asset.
+14. **Cập nhật là một artifact đã nghiệm thu:** mỗi release đóng gói phải mang
+    đủ `latest*.yml` theo nền tảng. Manifest dùng SHA-512 của đúng installer đã
+    staging, nằm trong `SHA256SUMS.txt`, và feed trong ứng dụng phải ghim vào
+    URL của một release bất biến thay vì nhánh hoặc nhãn động.
 
 ## Cổng bắt buộc
 
@@ -109,6 +113,10 @@ chuỗi trên.
 - [ ] Python, Hermes payload, dependency, installer metadata, icon và license
       hiện diện.
 - [ ] Windows giữ ổn định upgrade identity và install location.
+- [ ] Metadata cập nhật có đủ filename, byte size, SHA-512 và SemVer cộng đồng;
+      resolver bỏ qua draft và release thiếu manifest của target đang chạy.
+- [ ] `latest-mac.yml` phân biệt đúng Intel và Apple Silicon nhưng cả hai URL
+      vẫn tải đúng byte ZIP đã chuẩn hóa và nghiệm thu.
 - [ ] macOS kiểm cấu trúc app, DMG, signing và notarization.
 - [ ] Manifest ghi filename, byte size và SHA-256.
 
@@ -128,6 +136,8 @@ Chỉ dùng user/hồ sơ cô lập. Không đọc, nhập hoặc khôi phục d
 
 - [ ] Cài bản trước trên hồ sơ sạch và tạo dữ liệu đại diện.
 - [ ] Update qua đúng đường người dùng; shutdown, thay thế, relaunch thành công.
+- [ ] Update Windows dùng handoff silent; không hiện lại wizard cài mới sau khi
+      người dùng đã bấm cập nhật trong Hermes.
 - [ ] Gateway khỏe và dữ liệu còn nguyên sau update.
 - [ ] Kiểm mất mạng hoặc update gián đoạn.
 - [ ] Repair một fixture có thể phục hồi.

@@ -6,7 +6,7 @@
 //   1. preflight: uv, git, npm exist; a release tag is resolvable
 //   2. npm ci at the repo root (skip with --no-install)
 //   3. build ui-tui (with hermes-ink) and the dashboard SPA
-//   4. download the digest-pinned payload Node dist for this platform
+//   4. download the digest-pinned payload Node dist and agent-browser package
 //   5. npm run build in apps/desktop with HERMES_DESKTOP_BUNDLED=1
 //   6. npm run builder -- <platform targets>   (skip with --no-package)
 //
@@ -23,7 +23,7 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { hostTarBin } from "../apps/desktop/scripts/stage-agent-payloads.mjs"
-import { prepareAgentBrowserNative } from "./prepare-agent-browser-native.mjs"
+import { prepareAgentBrowserPackage } from "./prepare-agent-browser-native.mjs"
 import {
   parseVietnameseReleaseTag,
   payloadNodeDescriptor,
@@ -144,6 +144,12 @@ if (!fs.existsSync(nodeBinary)) {
   fail(`extracted node dist has no runnable node at ${nodeBinary}`)
 }
 
+const browserPackage = prepareAgentBrowserPackage(
+  path.join(work, "agent-browser-package"),
+  process.platform,
+  process.arch
+)
+
 // ── 5-6. bundled desktop build + package ────────────────────────────────────
 
 const env = {
@@ -152,10 +158,10 @@ const env = {
   HERMES_PAYLOAD_TAG: tag,
   HERMES_PAYLOAD_PYTHON: process.env.HERMES_PAYLOAD_PYTHON || "3.11",
   HERMES_PAYLOAD_NODE_DIST: nodeDir,
+  HERMES_AGENT_BROWSER_PACKAGE_ROOT: browserPackage,
 }
 
 const desktop = path.join(REPO_ROOT, "apps", "desktop")
-prepareAgentBrowserNative(process.platform, process.arch)
 run("npm", ["run", "build"], { cwd: desktop, env })
 
 if (skipPackage) {

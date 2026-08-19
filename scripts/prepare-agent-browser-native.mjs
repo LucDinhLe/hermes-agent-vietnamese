@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process"
+import crypto from "node:crypto"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -9,6 +10,11 @@ import { sha256File } from "./vietnamese-release.mjs"
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 
 export const AGENT_BROWSER_VERSION = "0.26.0"
+export const AGENT_BROWSER_PACKAGE = Object.freeze({
+  version: AGENT_BROWSER_VERSION,
+  integrity: "sha512-pdqSfjwbFSp+qnwlb2g23e9wXveIOfMi19xpPA9xZUbzEAUp6W4YBZj6Ybj8z4M7WkcbGDDYc+oDIHDt9R3EDQ==",
+  url: "https://registry.npmjs.org/agent-browser/-/agent-browser-0.26.0.tgz",
+})
 export const AGENT_BROWSER_SOURCE = Object.freeze({
   commit: "717d1b09e1c841a4c0206033886a1a861e3ca5d9",
   sha256: "10328d943918aaf04d96668912bea1a13850b5ff69976aed0170c9d711d78326",
@@ -51,15 +57,58 @@ function run(command, args, cwd = REPO_ROOT) {
   if (result.status !== 0) throw new Error(`${command} exited ${result.status}`)
 }
 
-export function prepareAgentBrowserNative(platform = process.platform, arch = process.arch) {
-  const packageRoot = path.join(REPO_ROOT, "node_modules", "agent-browser")
+export function sha512IntegrityFile(filePath) {
+  const digest = crypto.createHash("sha512").update(fs.readFileSync(filePath)).digest("base64")
+  return `sha512-${digest}`
+}
+
+export function hostTarBin(platform = process.platform, systemRoot = process.env.SystemRoot || "C:\\Windows") {
+  return platform === "win32"
+    ? path.win32.join(systemRoot, "System32", "tar.exe")
+    : "tar"
+}
+
+/**
+ * Materialize the exact npm tarball into a release-only work directory.
+ * agent-browser intentionally stays out of the root workspace dependency graph
+ * (#43564); the resident desktop still embeds an offline-ready copy whose
+ * tarball bytes are pinned here by SHA-512.
+ */
+export function prepareAgentBrowserPackage(outDir, platform = process.platform, arch = process.arch) {
+  fs.rmSync(outDir, { recursive: true, force: true })
+  const extractDir = path.join(outDir, "extract")
+  const archive = path.join(outDir, `agent-browser-${AGENT_BROWSER_PACKAGE.version}.tgz`)
+  fs.mkdirSync(extractDir, { recursive: true })
+
+  const curl = process.platform === "win32" ? "curl.exe" : "curl"
+  run(curl, ["-fsSL", "--retry", "5", "--retry-all-errors", "-o", archive, AGENT_BROWSER_PACKAGE.url])
+  const actualIntegrity = sha512IntegrityFile(archive)
+  if (actualIntegrity !== AGENT_BROWSER_PACKAGE.integrity) {
+    throw new Error(
+      `agent-browser npm integrity mismatch: expected ${AGENT_BROWSER_PACKAGE.integrity}, got ${actualIntegrity}`
+    )
+  }
+
+  run(hostTarBin(), ["-xf", archive, "-C", extractDir])
+  const packageRoot = path.join(extractDir, "package")
+  prepareAgentBrowserNative(platform, arch, packageRoot)
+  return packageRoot
+}
+
+export function prepareAgentBrowserNative(platform = process.platform, arch = process.arch, packageRoot) {
+  if (!packageRoot) {
+    throw new Error("agent-browser package root is required for resident release staging")
+  }
   const packageJson = JSON.parse(fs.readFileSync(path.join(packageRoot, "package.json"), "utf8"))
   if (packageJson.version !== AGENT_BROWSER_VERSION) {
     throw new Error(`agent-browser must be ${AGENT_BROWSER_VERSION}, got ${packageJson.version}`)
   }
 
   const binaryPath = path.join(packageRoot, "bin", agentBrowserBinaryName(platform, arch))
-  if (fs.existsSync(binaryPath)) return binaryPath
+  if (fs.existsSync(binaryPath)) {
+    if (platform !== "win32") fs.chmodSync(binaryPath, 0o755)
+    return binaryPath
+  }
   if (platform !== "win32" || arch !== "arm64") {
     throw new Error(`agent-browser package is missing ${path.basename(binaryPath)}`)
   }
@@ -77,7 +126,9 @@ export function prepareAgentBrowserNative(platform = process.platform, arch = pr
     if (actual !== AGENT_BROWSER_SOURCE.sha256) {
       throw new Error(`agent-browser source SHA-256 mismatch: expected ${AGENT_BROWSER_SOURCE.sha256}, got ${actual}`)
     }
-    run("tar.exe", ["-xf", archive, "-C", work])
+    // Resolve the Windows inbox bsdtar explicitly. Git for Windows also ships a
+    // tar.exe which treats drive-letter paths as remote archives ("C:" host).
+    run(hostTarBin(), ["-xf", archive, "-C", work])
     run("cargo.exe", [
       "build",
       "--locked",

@@ -10,6 +10,7 @@ import {
   expandRemotePath,
   fingerprintToken,
   isForwardBindCollision,
+  listRemoteHermesProfiles,
   locateHermes,
   LOCKFILE_SCHEMA_VERSION,
   lockfilePath,
@@ -78,6 +79,36 @@ function fakeSsh(rules: any[] = []) {
     }
   }
 }
+
+test('listRemoteHermesProfiles inventories Mini-style profile dirs without spawning a dashboard', async () => {
+  const ssh = fakeSsh([
+    [/HERMES_HOME/, '/Users/zillajr/.hermes\n'],
+    [/ls -1/, 'bob\ndixie\ngoose\nrambo\nbob.rollback-old\n']
+  ])
+
+  assert.deepEqual(await listRemoteHermesProfiles(ssh), ['default', 'bob', 'dixie', 'goose', 'rambo'])
+  assert.equal(
+    ssh.calls.some(cmd => cmd.includes('serve') || cmd.includes('dashboard')),
+    false
+  )
+})
+
+test('listRemoteHermesProfiles rejects a hostile HERMES_HOME', async () => {
+  const ssh = fakeSsh([[/HERMES_HOME/, '/tmp/x; echo pwned\n']])
+
+  await assert.rejects(
+    () => listRemoteHermesProfiles(ssh),
+    (err: any) => {
+      assert.equal(err.kind, 'unsafe-path')
+
+      return true
+    }
+  )
+  assert.equal(
+    ssh.calls.some(cmd => cmd.includes('ls -1')),
+    false
+  )
+})
 
 test('locateHermes prefers the explicit profile path when executable', async () => {
   const ssh = fakeSsh([[/\[ -x .*\/opt\/hermes/, 'OK']])
@@ -830,6 +861,12 @@ test('buildSpawnCommand always uses serve, never dashboard', () => {
   assert.doesNotMatch(cmd, /\bdashboard\b/)
   assert.doesNotMatch(cmd, /--skip-build/)
   assert.doesNotMatch(cmd, /--no-open/)
+})
+
+test('buildSpawnCommand raises the SSH child file limit before execing Hermes', () => {
+  const cmd = buildSpawnCommand('/x/hermes', '', { logPath: spawnLogPath(OWNERSHIP_ID, SPAWN_NONCE) })
+  assert.match(cmd, /ulimit -n 65536 2>\/dev\/null \|\| true; exec env HERMES_DESKTOP=1/)
+  assert.ok(cmd.indexOf('ulimit -n 65536') < cmd.indexOf('serve --isolated'))
 })
 
 test('spawnRemoteDashboard removes a token file when upload reporting fails', async () => {

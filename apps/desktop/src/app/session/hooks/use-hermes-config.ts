@@ -4,10 +4,12 @@ import { setTerminalFontFamilyFromConfig } from '@/app/right-sidebar/terminal/te
 import { getHermesConfig, getHermesConfigDefaults } from '@/hermes'
 import { BUILTIN_PERSONALITIES, normalizePersonalityValue, personalityNamesFromConfig } from '@/lib/chat-runtime'
 import { normalize } from '@/lib/text'
+import { setDisplayTimestampsFromConfig } from '@/store/display-timestamps'
 import {
   getComposerSelectionGeneration,
   getCurrentModelSource,
   setAvailablePersonalities,
+  setCurrentAdvisorEnabled,
   setCurrentFastMode,
   setCurrentPersonality,
   setCurrentReasoningEffort,
@@ -101,6 +103,7 @@ export function useHermesConfig({ activeSessionIdRef }: HermesConfigOptions) {
           (force || getCurrentModelSource() !== 'manual')
 
         if (shouldSeedComposer) {
+          setCurrentAdvisorEnabled(config.advisor?.enabled === true)
           setCurrentReasoningEffort(reasoning)
           setCurrentFastMode(FAST_TIERS.has(tier.toLowerCase()))
         }
@@ -109,6 +112,7 @@ export function useHermesConfig({ activeSessionIdRef }: HermesConfigOptions) {
 
         setVoiceMaxRecordingSeconds(recordingLimit(config.voice?.max_recording_seconds))
         setSttEnabled(config.stt?.enabled !== false)
+        setDisplayTimestampsFromConfig(config.display?.timestamps)
         setTerminalFontFamilyFromConfig(config.terminal?.font_family)
         applyAutoSpeakFromConfig(config)
         applyVoiceStopPhraseFromConfig(config)

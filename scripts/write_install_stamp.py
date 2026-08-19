@@ -182,10 +182,19 @@ def build_stamp(
     # cannot update itself.
     payload = os.environ.get("HERMES_DESKTOP_BUNDLED") == "1"
     tag = os.environ.get("HERMES_PAYLOAD_TAG") or None
-    if payload and not (tag and _VI_RELEASE_TAG_RE.fullmatch(tag)):
-        raise SystemExit(
-            "write_install_stamp: HERMES_DESKTOP_BUNDLED=1 requires "
-            f"HERMES_PAYLOAD_TAG=vi-vX.Y.Z-N (got {tag!r})"
+    if payload:
+        tag_match = tag and _VI_RELEASE_TAG_RE.fullmatch(tag)
+        if not tag_match:
+            raise SystemExit(
+                "write_install_stamp: HERMES_DESKTOP_BUNDLED=1 requires "
+                f"HERMES_PAYLOAD_TAG=vi-vX.Y.Z-N (got {tag!r})"
+            )
+        # The packaged app and its updater use valid SemVer X.Y.Z-vi.N.
+        # Keep About/version surfaces on that exact release identity instead
+        # of the source checkout's unrelated X.Y.Z+distance display string.
+        display_version = (
+            f"{tag_match.group(1)}.{tag_match.group(2)}.{tag_match.group(3)}"
+            f"-vi.{tag_match.group(4)}"
         )
 
     return {

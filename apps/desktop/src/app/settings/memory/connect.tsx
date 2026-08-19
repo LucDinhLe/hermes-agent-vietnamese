@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { getMemoryProviderOAuthStatus, startMemoryProviderOAuth } from '@/hermes'
-import { useI18n } from '@/i18n'
 import { Check, ExternalLink, Loader2 } from '@/lib/icons'
 import { notifyError } from '@/store/notifications'
 import type { MemoryProviderOAuthStatus } from '@/types/hermes'
@@ -13,9 +12,7 @@ const POLL_TIMEOUT_MS = 120_000
 // Small connect affordance rendered under the provider dropdown. Capability is
 // backend-driven: the status route 404s for providers without an oauth_flow
 // module, so non-OAuth providers render nothing.
-export function MemoryConnect({ provider }: { provider: string }) {
-  const { locale, t } = useI18n()
-  const isVi = locale === 'vi'
+export function MemoryConnect({ profile = null, provider }: { profile?: null | string; provider: string }) {
   const [capable, setCapable] = useState<'no' | 'unknown' | 'yes'>('unknown')
   const [connected, setConnected] = useState(false)
   const [auth, setAuth] = useState<MemoryProviderOAuthStatus['auth']>(null)
@@ -34,7 +31,7 @@ export function MemoryConnect({ provider }: { provider: string }) {
   useEffect(() => {
     let active = true
     setCapable('unknown')
-    getMemoryProviderOAuthStatus(provider)
+    getMemoryProviderOAuthStatus(provider, profile)
       .then(s => {
         if (!active) {
           return
@@ -54,7 +51,7 @@ export function MemoryConnect({ provider }: { provider: string }) {
       active = false
       stop()
     }
-  }, [provider, stop])
+  }, [profile, provider, stop])
 
   // An error message isn't sticky — it clears back to the steady state
   // (Connect link, plus the connected badge if a credential is stored).
@@ -75,11 +72,11 @@ export function MemoryConnect({ provider }: { provider: string }) {
     setPhase('pending')
 
     try {
-      await startMemoryProviderOAuth(provider)
+      await startMemoryProviderOAuth(provider, profile)
     } catch (err) {
       setPhase('error')
-      setDetail(isVi ? 'Không thể bắt đầu kết nối.' : 'Could not start the connection.')
-      notifyError(err, isVi ? 'Không thể bắt đầu kết nối' : 'Failed to start connection')
+      setDetail('Could not start the connection.')
+      notifyError(err, 'Failed to start connection')
 
       return
     }
@@ -89,13 +86,13 @@ export function MemoryConnect({ provider }: { provider: string }) {
     timer.current = setInterval(() => {
       void (async () => {
         try {
-          const next = await getMemoryProviderOAuthStatus(provider)
+          const next = await getMemoryProviderOAuthStatus(provider, profile)
 
           if (next.state === 'pending') {
             if (Date.now() > deadline.current) {
               stop()
               setPhase('error')
-              setDetail(isVi ? 'Đã hết thời gian chờ — hãy thử lại.' : 'Timed out — try again.')
+              setDetail('Timed out — try again.')
             }
 
             return
@@ -107,7 +104,7 @@ export function MemoryConnect({ provider }: { provider: string }) {
 
           if (next.state === 'error') {
             setPhase('error')
-            setDetail(next.detail || (isVi ? 'Kết nối thất bại.' : 'Connection failed.'))
+            setDetail(next.detail || 'Connection failed.')
           } else {
             setPhase('idle')
           }
@@ -116,7 +113,7 @@ export function MemoryConnect({ provider }: { provider: string }) {
         }
       })()
     }, POLL_MS)
-  }, [isVi, provider, stop])
+  }, [profile, provider, stop])
 
   const cancel = useCallback(() => {
     stop()
@@ -127,32 +124,24 @@ export function MemoryConnect({ provider }: { provider: string }) {
     return null
   }
 
-  const connectLabel = connected
-    ? auth === 'apikey'
-      ? isVi
-        ? 'Kết nối qua OAuth'
-        : 'Connect via OAuth'
-      : isVi
-        ? 'Kết nối lại'
-        : 'Reconnect'
-    : t.common.connect
+  const connectLabel = connected ? (auth === 'apikey' ? 'Connect via OAuth' : 'Reconnect') : 'Connect'
 
   return (
     <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
       {phase === 'idle' && connected && (
         <span className="inline-flex items-center gap-1 text-muted-foreground">
           <Check className="size-3" />
-          {auth === 'apikey' ? (isVi ? 'đã đặt khóa API' : 'api key set') : isVi ? 'đã đặt OAuth' : 'oauth set'}
+          {auth === 'apikey' ? 'api key set' : 'oauth set'}
         </span>
       )}
       {phase === 'pending' ? (
         <>
           <span className="inline-flex items-center gap-1.5 text-muted-foreground">
             <Loader2 className="size-3 animate-spin" />
-            {isVi ? 'Đang chờ phê duyệt trên trình duyệt…' : 'Waiting for browser consent…'}
+            Waiting for browser consent…
           </span>
           <Button className="h-auto p-0 text-xs" onClick={cancel} size="sm" type="button" variant="link">
-            {t.common.cancel}
+            Cancel
           </Button>
         </>
       ) : (

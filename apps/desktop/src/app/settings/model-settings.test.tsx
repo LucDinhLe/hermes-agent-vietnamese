@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -31,6 +31,7 @@ vi.mock('@/hermes', () => ({
   getGlobalModelInfo: () => getGlobalModelInfo(),
   getGlobalModelOptions: () => getGlobalModelOptions(),
   getAuxiliaryModels: () => getAuxiliaryModels(),
+  getApiRequestProfile: () => 'default',
   getMoaModels: () => getMoaModels(),
   setModelAssignment: (body: unknown) => setModelAssignment(body),
   getRecommendedDefaultModel: (slug: string) => getRecommendedDefaultModel(slug),
@@ -68,13 +69,19 @@ beforeEach(() => {
   })
   getAuxiliaryModels.mockResolvedValue({
     main: { provider: 'nous', model: 'hermes-4' },
-    tasks: [{ task: 'vision', provider: 'auto', model: '', base_url: '' }]
+    tasks: [
+      { task: 'advisor', provider: 'auto', model: '', base_url: '' },
+      { task: 'vision', provider: 'auto', model: '', base_url: '' }
+    ]
   })
   getMoaModels.mockResolvedValue(null)
-  setModelAssignment.mockResolvedValue({ provider: 'nous', model: 'hermes-4', gateway_tools: [] })
+  setModelAssignment.mockResolvedValue({ ok: true, provider: 'nous', model: 'hermes-4', gateway_tools: [] })
   getRecommendedDefaultModel.mockResolvedValue({ provider: 'nous', model: 'hermes-4', free_tier: null })
   setEnvVar.mockResolvedValue({ ok: true })
-  getHermesConfigRecord.mockResolvedValue({ agent: { reasoning_effort: 'medium', service_tier: 'normal' } })
+  getHermesConfigRecord.mockResolvedValue({
+    advisor: { enabled: false, max_revisions: 2, fail_open: true },
+    agent: { reasoning_effort: 'medium', service_tier: 'normal' }
+  })
   saveHermesConfig.mockResolvedValue({ ok: true })
 })
 
@@ -232,6 +239,7 @@ describe('ModelSettings', () => {
       ]
     })
     setModelAssignment.mockResolvedValueOnce({
+      ok: true,
       provider: 'local-ollama',
       model: 'qwen3:latest',
       gateway_tools: []
@@ -263,7 +271,7 @@ describe('ModelSettings', () => {
     await renderModelSettings()
     await waitFor(() => expect(getHermesConfigRecord).toHaveBeenCalled())
 
-    const fastSwitch = await screen.findByRole('switch')
+    const fastSwitch = await screen.findByRole('switch', { name: 'Fast' })
     fireEvent.click(fastSwitch)
 
     await waitFor(() =>
@@ -289,7 +297,42 @@ describe('ModelSettings', () => {
     await renderModelSettings()
     await waitFor(() => expect(getHermesConfigRecord).toHaveBeenCalled())
 
-    expect(screen.queryByRole('switch')).toBeNull()
+    expect(screen.queryByRole('switch', { name: 'Fast' })).toBeNull()
+  })
+
+  it('shows Advisor beside the main model controls and persists its opt-in toggle', async () => {
+    await renderModelSettings()
+
+    expect(await screen.findByText('Advisor model')).toBeTruthy()
+    expect(screen.getByText(/each checkpoint adds a model call/i)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Enable Advisor' }))
+
+    await waitFor(() =>
+      expect(saveHermesConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ advisor: expect.objectContaining({ enabled: true }) })
+      )
+    )
+  })
+
+  it('assigns the dedicated Advisor model through the auxiliary routing backend', async () => {
+    await renderModelSettings()
+
+    const section = (await screen.findByText('Advisor')).closest('section')
+    expect(section).toBeTruthy()
+    const advisor = within(section as HTMLElement)
+
+    fireEvent.click(advisor.getByRole('button', { name: 'Change' }))
+    fireEvent.click(advisor.getByRole('button', { name: 'Apply' }))
+
+    await waitFor(() =>
+      expect(setModelAssignment).toHaveBeenCalledWith({
+        model: 'hermes-4',
+        provider: 'nous',
+        scope: 'auxiliary',
+        task: 'advisor'
+      })
+    )
   })
 
   it('renders the auxiliary task rows', async () => {
@@ -353,6 +396,7 @@ describe('ModelSettings', () => {
 
   it('warns when a main switch leaves auxiliary tasks pinned to another provider', async () => {
     setModelAssignment.mockResolvedValueOnce({
+      ok: true,
       provider: 'openrouter',
       model: 'anthropic/claude-opus-4.7',
       gateway_tools: [],
