@@ -34,6 +34,7 @@ import {
   setActiveSessionStoredIdRotation,
   setAwaitingResponse,
   setBusy,
+  setCurrentAdvisorEnabled,
   setCurrentCwd,
   setCurrentFastMode,
   setCurrentModel,
@@ -480,6 +481,7 @@ describe('createBackendSessionForSend profile routing', () => {
     $activeGatewayProfile.set('default')
     $projectScope.set(ALL_PROJECTS)
     $projectTree.set([])
+    setCurrentAdvisorEnabled(false)
     $currentCwd.set('')
     $currentFastMode.set(false)
     $currentModel.set('')
@@ -542,6 +544,7 @@ describe('createBackendSessionForSend profile routing', () => {
     setCurrentProvider('anthropic')
     setCurrentReasoningEffort('high')
     setCurrentFastMode(false)
+    setCurrentAdvisorEnabled(false)
 
     let createParams: Record<string, unknown> | undefined
 
@@ -571,6 +574,7 @@ describe('createBackendSessionForSend profile routing', () => {
     setCurrentProvider('openai-codex')
     setCurrentReasoningEffort('low')
     setCurrentFastMode(true)
+    setCurrentAdvisorEnabled(true)
     profileReady.resolve()
 
     await act(async () => {
@@ -578,6 +582,7 @@ describe('createBackendSessionForSend profile routing', () => {
     })
 
     expect(createParams).toMatchObject({
+      advisor_enabled: false,
       fast: false,
       model: 'anthropic/claude-sonnet-4.6',
       provider: 'anthropic',
@@ -1114,6 +1119,7 @@ describe('resumeSession failure recovery', () => {
         [
           'runtime-stale',
           {
+            advisorEnabled: false,
             awaitingResponse: false,
             branch: '',
             busy: false,

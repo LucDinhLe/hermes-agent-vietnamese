@@ -2165,6 +2165,8 @@ export const vi = defineLocale({
     },
     projects: {
       sectionLabel: 'Dự án',
+      pinnedSectionLabel: 'Dự án đã ghim',
+      pinnedEmpty: 'Ghim dự án để truy cập nhanh tại đây.',
       home: 'Trang chủ',
       newButton: 'Dự án mới',
       createTitle: 'Dự án mới',

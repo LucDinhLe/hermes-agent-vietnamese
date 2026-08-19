@@ -35,6 +35,7 @@ import { $bindings } from '@/store/keybinds'
 import {
   $dismissedAutoProjectIds,
   $panesFlipped,
+  $pinnedProjectIds,
   $pinnedSessionIds,
   $sidebarCardRows,
   $sidebarCronOpen,
@@ -48,6 +49,7 @@ import {
   $sidebarProfileFilter,
   $sidebarProjectFilter,
   $sidebarProjectOrderIds,
+  $sidebarProjectsOpen,
   $sidebarRecentsOpen,
   $sidebarSessionOrderIds,
   $sidebarSessionOrderManual,
@@ -58,10 +60,12 @@ import {
   filterVisibleProjects,
   pinSession,
   SESSION_SEARCH_FOCUS_EVENT,
+  setPinnedProjectOrder,
   setPinnedSessionOrder,
   setSidebarCronOpen,
   setSidebarPinsOpen,
   setSidebarProjectOrderIds,
+  setSidebarProjectsOpen,
   setSidebarRecentsOpen,
   setSidebarSessionOrderIds,
   setSidebarSessionOrderManual,
@@ -91,9 +95,9 @@ import {
   $removedSessionIds,
   $reposScanning,
   ALL_PROJECTS,
-  enterProject,
   exitProjectScope,
   fetchProjectSessions,
+  goToProject,
   openProjectCreate,
   refreshProjects,
   refreshProjectTree,
@@ -359,7 +363,9 @@ export function ChatSidebar({
   const sortOrderIds = useStore($sidebarSessionRankIds)
   const agentsGrouped = grouping === 'project'
   const pinnedSessionIds = useStore($pinnedSessionIds)
+  const pinnedProjectIds = useStore($pinnedProjectIds)
   const pinsOpen = useStore($sidebarPinsOpen)
+  const projectsOpen = useStore($sidebarProjectsOpen)
   const agentsOpen = useStore($sidebarRecentsOpen)
   const cronOpen = useStore($sidebarCronOpen)
   // The sidebar highlight tracks the FOCUSED session — the interacted tile's
@@ -735,6 +741,16 @@ export function ChatSidebar({
       return
     }
 
+    // Pinned project shortcuts must resolve on first paint even while the
+    // sidebar is in its ordinary Sessions view. Fetch the lightweight tree
+    // immediately; repo discovery remains reserved for the full Projects view.
+    if (pinnedProjectIds.length) {
+      void refreshProjects()
+      void refreshProjectTree()
+
+      return
+    }
+
     // Flat view: warm the tree in the background anyway. Fetching it only on
     // the switch meant the first switch of every run paid for the whole round
     // trip behind a skeleton, and the menu's Project filter had nothing to
@@ -742,7 +758,7 @@ export function ChatSidebar({
     const warm = window.setTimeout(() => void refreshProjectTree(), PROJECT_TREE_WARM_MS)
 
     return () => window.clearTimeout(warm)
-  }, [worktreeGroupingActive, showAllProfiles, profileScope, gatewayReady])
+  }, [worktreeGroupingActive, showAllProfiles, profileScope, gatewayReady, pinnedProjectIds.length])
 
   // Sessions the branch join can't answer for get one look at their own
   // transcript — a `gh pr create` in there names the PR outright. Backfills
@@ -828,7 +844,7 @@ export function ChatSidebar({
   // session regrouping); the heavy disk crawl that surfaces brand-new repos is
   // throttled. Agent-driven changes already refresh via $workspaceChangeTick.
   useEffect(() => {
-    if (!worktreeGroupingActive || !gatewayReady) {
+    if ((!worktreeGroupingActive && !pinnedProjectIds.length) || !gatewayReady) {
       return
     }
 
@@ -845,7 +861,7 @@ export function ChatSidebar({
 
       // Discovery stays off while browsing every profile, for the reason the
       // first fetch leaves it out.
-      if (showAllProfiles) {
+      if (showAllProfiles || !worktreeGroupingActive) {
         return
       }
 
@@ -864,7 +880,7 @@ export function ChatSidebar({
       window.removeEventListener('focus', onActive)
       document.removeEventListener('visibilitychange', onActive)
     }
-  }, [worktreeGroupingActive, showAllProfiles, gatewayReady])
+  }, [worktreeGroupingActive, showAllProfiles, gatewayReady, pinnedProjectIds.length])
 
   // Apply the persisted repo + worktree orders to a project's repo subtrees.
   const orderRepos = useCallback(
@@ -920,6 +936,16 @@ export function ChatSidebar({
   // The overview only renders in grouped mode; the model stays live regardless
   // so scoping is consistent across views.
   const agentProjectTree = worktreeGroupingActive ? projectModel : undefined
+
+  const pinnedProjects = useMemo(() => {
+    const byId = new Map(projectModel.filter(project => !project.isNoProject).map(project => [project.id, project]))
+
+    return pinnedProjectIds.flatMap(id => {
+      const project = byId.get(id)
+
+      return project ? [project] : []
+    })
+  }, [pinnedProjectIds, projectModel])
 
   // ── Project switcher (drill-in) ────────────────────────────────────────────
   // Grouped, single-profile view is a project switcher: ALL_PROJECTS shows the
@@ -1114,7 +1140,7 @@ export function ChatSidebar({
         syncProjectCwd(project)
       }
 
-      enterProject(id)
+      goToProject(id)
     },
     [projectModel, syncProjectCwd]
   )
@@ -1424,6 +1450,8 @@ export function ChatSidebar({
   // it over the default sort, so stale/new ids reconcile on the next render.
   const reorderProjects = (ids: string[]) => setSidebarProjectOrderIds(ids)
 
+  const reorderPinnedProjects = (ids: string[]) => setPinnedProjectOrder(ids)
+
   // Sortable rows carry live session ids; the pinned store is keyed by durable
   // (lineage-root) ids, so translate before persisting the new order.
   const reorderPinned = (ids: string[]) =>
@@ -1614,6 +1642,52 @@ export function ChatSidebar({
                 sessions={pinnedSessions}
                 showProfileTags={showAllProfiles}
                 sortable={pinnedSessions.length > 1}
+              />
+            )}
+
+            {!trimmedQuery && !worktreeGroupingActive && !showArchived && (
+              <SidebarSessionsSection
+                activeProjectId={activeProjectId}
+                activeSessionId={activeSidebarSessionId}
+                contentClassName="flex flex-col gap-px rounded-lg pb-2 pt-1"
+                dndSensors={dndSensors}
+                emptyState={
+                  <div className="wrap-anywhere grid min-h-12 place-items-center rounded-lg px-2 text-center text-xs text-(--ui-text-tertiary)">
+                    {s.projects.pinnedEmpty}
+                  </div>
+                }
+                headerAction={
+                  <Tip label={s.projects.newButton}>
+                    <Button
+                      aria-label={s.projects.newButton}
+                      className={HEADER_ACTION_BTN}
+                      onClick={event => {
+                        event.stopPropagation()
+                        openProjectCreate()
+                      }}
+                      size="icon-xs"
+                      variant="ghost"
+                    >
+                      <Codicon name="add" size="0.75rem" />
+                    </Button>
+                  </Tip>
+                }
+                label={s.projects.pinnedSectionLabel}
+                onArchiveSession={onArchiveSession}
+                onDeleteSession={onDeleteSession}
+                onEnterProject={onEnterProject}
+                onNewSessionInWorkspace={onNewSessionInWorkspace}
+                onReorderProjects={reorderPinnedProjects}
+                onResumeSession={onResumeSession}
+                onToggle={() => setSidebarProjectsOpen(!projectsOpen)}
+                onTogglePin={pinSession}
+                onToggleUnread={toggleUnread}
+                open={projectsOpen}
+                pinned={false}
+                projectOverview={pinnedProjects}
+                projectOverviewCompact
+                rootClassName="shrink-0 p-0 pb-1"
+                sessions={[]}
               />
             )}
 

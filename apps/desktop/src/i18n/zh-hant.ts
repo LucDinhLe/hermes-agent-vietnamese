@@ -1732,6 +1732,8 @@ export const zhHant = defineLocale({
     noFilterMatches: '沒有工作階段符合這些篩選條件',
     projects: {
       sectionLabel: '專案',
+      pinnedSectionLabel: '釘選的專案',
+      pinnedEmpty: '釘選專案即可從這裡快速存取。',
       home: '主頁',
       newButton: '新增專案',
       createTitle: '新增專案',

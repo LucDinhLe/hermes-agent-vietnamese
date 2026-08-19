@@ -895,7 +895,7 @@ export async function updateProject(
 export async function setProjectAppearance(
   project: Pick<SidebarProjectTree, 'color' | 'icon' | 'id' | 'isAuto' | 'label' | 'path'>,
   patch: { color?: null | string; icon?: null | string }
-): Promise<boolean> {
+): Promise<false | string> {
   if (!project.isAuto) {
     await updateProject(project.id, patch)
 
@@ -906,7 +906,7 @@ export async function setProjectAppearance(
     return false
   }
 
-  await createProject({
+  const created = await createProject({
     name: project.label,
     folders: [project.path],
     primaryPath: project.path,
@@ -915,7 +915,7 @@ export async function setProjectAppearance(
     icon: (patch.icon ?? project.icon) || undefined
   })
 
-  return true
+  return created?.id ?? false
 }
 
 export async function addProjectFolder(

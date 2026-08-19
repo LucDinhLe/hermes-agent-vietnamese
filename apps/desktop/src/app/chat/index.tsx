@@ -64,6 +64,7 @@ import { ProfileTag } from './profile-tag'
 import { isRouteSessionMismatch } from './route-session-state'
 import { useRuntimeMessageRepository } from './runtime-repository'
 import { ScrollToBottomButton } from './scroll-to-bottom-button'
+import { SessionAdvisorBar } from './session-advisor-bar'
 import { useSessionView } from './session-view'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
 import { threadLoadingState } from './thread-loading'
@@ -368,6 +369,7 @@ export const ChatView = memo(function ChatView({
   // Per-session (SessionView) reads — a tile IS its session, so these come
   // from the view slice, not the global atoms (which track the primary only).
   const currentCwd = useStore(view.$cwd)
+  const advisorEnabled = useStore(view.$advisorEnabled)
   const currentModel = useStore(view.$model)
   const currentProvider = useStore(view.$provider)
   // A pet anywhere (in-window or popped out) owns the hearts; composer only when none.
@@ -581,6 +583,13 @@ export const ChatView = memo(function ChatView({
           selectedSessionId={selectedSessionId}
         />
       )}
+
+      <SessionAdvisorBar
+        enabled={advisorEnabled}
+        gateway={gateway}
+        gatewayOpen={gatewayOpen}
+        sessionId={activeSessionId}
+      />
 
       {/* Mounted for the primary AND every tile, each scoped to its own session
           so a tiled/background session's blocking prompt surfaces instead of

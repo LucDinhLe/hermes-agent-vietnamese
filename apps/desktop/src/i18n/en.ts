@@ -2089,6 +2089,8 @@ export const en: Translations = {
     },
     projects: {
       sectionLabel: 'Projects',
+      pinnedSectionLabel: 'Pinned projects',
+      pinnedEmpty: 'Pin a project to keep it here.',
       home: 'Home',
       newButton: 'New project',
       createTitle: 'New project',

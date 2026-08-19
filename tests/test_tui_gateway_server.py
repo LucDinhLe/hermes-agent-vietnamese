@@ -17045,6 +17045,7 @@ def test_session_create_records_ui_model_as_session_override(monkeypatch):
                 "provider": "anthropic",
                 "reasoning_effort": "high",
                 "fast": True,
+                "advisor_enabled": True,
             },
         )
         sid = resp["result"]["session_id"]
@@ -17052,18 +17053,21 @@ def test_session_create_records_ui_model_as_session_override(monkeypatch):
         assert sess["model_override"] == {"model": "claude-sonnet-4.6", "provider": "anthropic"}
         assert sess["create_reasoning_override"] is not None
         assert sess["create_service_tier_override"] == "priority"
+        assert sess["create_advisor_override"] is True
         # The immediate response reflects the override (not the global default) so
         # the client never clobbers its sticky pick before the build lands.
         assert resp["result"]["info"]["model"] == "claude-sonnet-4.6"
         assert resp["result"]["info"]["provider"] == "anthropic"
+        assert resp["result"]["info"]["advisor_enabled"] is True
 
         # Explicit false is not the same as omission: it must suppress a Fast
         # profile default for this session's first request.
         normal = server._methods["session.create"](
-            "r2", {"cols": 80, "fast": False}
+            "r2", {"cols": 80, "fast": False, "advisor_enabled": False}
         )
         normal_sess = server._sessions[normal["result"]["session_id"]]
         assert normal_sess["create_service_tier_override"] == ""
+        assert normal_sess["create_advisor_override"] is False
 
         # No knobs → no overrides; the session builds from the profile default.
         plain = server._methods["session.create"]("r3", {"cols": 80})
@@ -17071,6 +17075,7 @@ def test_session_create_records_ui_model_as_session_override(monkeypatch):
         assert plain_sess["model_override"] is None
         assert plain_sess["create_reasoning_override"] is None
         assert plain_sess["create_service_tier_override"] is None
+        assert plain_sess["create_advisor_override"] is None
     finally:
         server._sessions.clear()
 
@@ -17119,6 +17124,7 @@ def test_start_agent_build_passes_session_model_override(
         "model_override": override,
         "create_reasoning_override": reasoning,
         "create_service_tier_override": service_tier_override,
+        "create_advisor_override": True,
     }
     server._sessions[sid] = session
     try:
@@ -17127,6 +17133,7 @@ def test_start_agent_build_passes_session_model_override(
         assert captured.get("model_override") == override
         assert captured.get("reasoning_config_override") == reasoning
         assert captured.get("service_tier_override") == service_tier_override
+        assert captured.get("advisor_enabled_override") is True
         assert session["agent"].model == "claude-sonnet-4.6"
     finally:
         server._sessions.clear()

@@ -7,6 +7,7 @@ import {
   $activeSessionId,
   $awaitingResponse,
   $busy,
+  $currentAdvisorEnabled,
   $currentCwd,
   $currentFastMode,
   $currentModel,
@@ -52,6 +53,7 @@ export interface SessionView {
   $model: ReadableAtom<string>
   $provider: ReadableAtom<string>
   $fast: ReadableAtom<boolean>
+  $advisorEnabled: ReadableAtom<boolean>
   $reasoningEffort: ReadableAtom<string>
 }
 
@@ -88,6 +90,7 @@ const $primaryBusy = computed([$primaryState, $busy, $selectedStoredSessionId], 
 )
 
 export const PRIMARY_SESSION_VIEW: SessionView = {
+  $advisorEnabled: primaryField<boolean>(state => state.advisorEnabled, $currentAdvisorEnabled),
   kind: 'primary',
   $awaitingResponse: primaryField<boolean>(state => state.awaitingResponse, $awaitingResponse),
   $busy: $primaryBusy,

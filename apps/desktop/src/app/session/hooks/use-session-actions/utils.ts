@@ -14,6 +14,7 @@ import {
   commitWorkspaceCwdForSelectedSession,
   releaseWorkspaceCwdOwner,
   sessionMatchesStoredId,
+  setCurrentAdvisorEnabled,
   setCurrentBranch,
   setCurrentCwdTransient,
   setCurrentFastMode,
@@ -1382,7 +1383,16 @@ export async function resolveSessionProfile(storedSessionId: null | string): Pro
 type SessionRuntimeStatePatch = Partial<
   Pick<
     ClientSessionState,
-    'branch' | 'cwd' | 'fast' | 'model' | 'personality' | 'provider' | 'reasoningEffort' | 'serviceTier' | 'yolo'
+    | 'advisorEnabled'
+    | 'branch'
+    | 'cwd'
+    | 'fast'
+    | 'model'
+    | 'personality'
+    | 'provider'
+    | 'reasoningEffort'
+    | 'serviceTier'
+    | 'yolo'
   >
 >
 
@@ -1405,6 +1415,10 @@ interface ApplyRuntimeInfoOptions {
 /** Mirror a session's runtime state into the composer atoms the MAIN pane
  *  renders from. Foreground sessions only — see ApplyRuntimeInfoOptions. */
 function publishRuntimeToComposer(state: SessionRuntimeStatePatch): void {
+  if (state.advisorEnabled !== undefined) {
+    setCurrentAdvisorEnabled(state.advisorEnabled)
+  }
+
   if (state.model !== undefined) {
     setCurrentModel(state.model)
   }
@@ -1510,6 +1524,10 @@ export function applyRuntimeInfo(
     sessionState.fast = info.fast
   }
 
+  if (typeof info.advisor_enabled === 'boolean') {
+    sessionState.advisorEnabled = info.advisor_enabled
+  }
+
   if (typeof info.yolo === 'boolean') {
     sessionState.yolo = info.yolo
   }
@@ -1534,6 +1552,7 @@ export function applyStoredSessionPreviewRuntimeInfo(
   setCurrentReasoningEffort('')
   setCurrentServiceTier('')
   setCurrentFastMode(false)
+  setCurrentAdvisorEnabled(false)
   setYoloActive(false)
   setCurrentPersonality('')
 

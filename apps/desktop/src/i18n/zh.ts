@@ -2228,6 +2228,8 @@ export const zh: Translations = {
     noFilterMatches: '没有会话符合这些筛选条件',
     projects: {
       sectionLabel: '项目',
+      pinnedSectionLabel: '置顶项目',
+      pinnedEmpty: '置顶项目即可从这里快速访问。',
       home: '主页',
       newButton: '新建项目',
       createTitle: '新建项目',

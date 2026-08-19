@@ -6,7 +6,16 @@ import type { ClientSessionState } from '../../../types'
 type SessionRuntimeStatePatch = Partial<
   Pick<
     ClientSessionState,
-    'branch' | 'cwd' | 'fast' | 'model' | 'personality' | 'provider' | 'reasoningEffort' | 'serviceTier' | 'yolo'
+    | 'advisorEnabled'
+    | 'branch'
+    | 'cwd'
+    | 'fast'
+    | 'model'
+    | 'personality'
+    | 'provider'
+    | 'reasoningEffort'
+    | 'serviceTier'
+    | 'yolo'
   >
 >
 
@@ -43,6 +52,10 @@ export function sessionInfoStatePatch(payload: GatewayEventPayload | undefined):
 
   if (typeof payload?.fast === 'boolean') {
     patch.fast = payload.fast
+  }
+
+  if (typeof payload?.advisor_enabled === 'boolean') {
+    patch.advisorEnabled = payload.advisor_enabled
   }
 
   if (typeof payload?.yolo === 'boolean') {

@@ -21,7 +21,7 @@ import {
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
-import { $panesFlipped, dismissAutoProject } from '@/store/layout'
+import { $panesFlipped, $pinnedProjectIds, dismissAutoProject, pinProject, unpinProject } from '@/store/layout'
 import {
   copyPath,
   deleteProject,
@@ -34,6 +34,21 @@ import {
 
 import { ProjectAppearancePicker } from './project-appearance'
 import type { SidebarProjectTree } from './workspace-groups'
+
+function migrateAdoptedProjectPin(previousId: string, adoptedId: false | string): void {
+  if (!adoptedId) {
+    return
+  }
+
+  const index = $pinnedProjectIds.get().indexOf(previousId)
+
+  if (index < 0) {
+    return
+  }
+
+  unpinProject(previousId)
+  pinProject(adoptedId, index)
+}
 
 // Shared per-project state + handlers, so the kebab dropdown and the row's
 // right-click menu drive the exact same actions. Modeled on git GUIs (GitHub
@@ -54,10 +69,13 @@ function useProjectActions({
 }) {
   const { t } = useI18n()
   const p = t.sidebar.projects
+  const row = t.sidebar.row
   const target = { id: project.id, name: project.label }
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const pinned = useStore($pinnedProjectIds).includes(project.id)
 
   const removeAuto = () => {
+    unpinProject(project.id)
     dismissAutoProject(project.id)
 
     if (scoped) {
@@ -67,6 +85,7 @@ function useProjectActions({
 
   const confirmDelete = async () => {
     await deleteProject(project.id)
+    unpinProject(project.id)
 
     if (scoped) {
       onExitScope?.()
@@ -122,6 +141,13 @@ function useProjectActions({
         variant: 'destructive'
       }
 
+  const pinItem: ActionItemSpec = {
+    icon: 'pin',
+    key: pinned ? 'unpin' : 'pin',
+    label: pinned ? row.unpin : row.pin,
+    onSelect: () => (pinned ? unpinProject(project.id) : pinProject(project.id))
+  }
+
   const confirmDialog = (
     <ConfirmDialog
       confirmLabel={p.menuDelete}
@@ -134,7 +160,7 @@ function useProjectActions({
     />
   )
 
-  return { confirmDialog, dangerItem, identityItems, pathItems }
+  return { confirmDialog, dangerItem, identityItems, pathItems, pinItem }
 }
 
 // Per-project actions. The kebab keeps its row-anchored Appearance popover; the
@@ -166,7 +192,7 @@ export function ProjectMenu({
   // when the panes are flipped (sidebar on the right).
   const panesFlipped = useStore($panesFlipped)
 
-  const { confirmDialog, dangerItem, identityItems, pathItems } = useProjectActions({
+  const { confirmDialog, dangerItem, identityItems, pathItems, pinItem } = useProjectActions({
     isActive,
     onExitScope,
     project,
@@ -177,7 +203,11 @@ export function ProjectMenu({
   // materialized on its first change (its id then changes), so close the picker
   // on adopt to stop a second write double-creating from a now-stale node.
   const applyAppearance = async (patch: { color?: null | string; icon?: null | string }) => {
-    if (await setProjectAppearance(project, patch)) {
+    const adoptedId = await setProjectAppearance(project, patch)
+
+    migrateAdoptedProjectPin(project.id, adoptedId)
+
+    if (adoptedId) {
       setAppearanceOpen(false)
     }
   }
@@ -230,6 +260,8 @@ export function ProjectMenu({
           onCloseAutoFocus={event => event.preventDefault()}
           sideOffset={6}
         >
+          {renderActionItem(DROPDOWN_KIT, pinItem)}
+          <DropdownMenuSeparator />
           {project.isAuto ? (
             // Inherited (auto) repos can still be themed — the change adopts the
             // repo as a real project. Rename / add-folder / set-active stay out
@@ -294,7 +326,7 @@ export function ProjectContextMenu({
   const { t } = useI18n()
   const p = t.sidebar.projects
 
-  const { confirmDialog, dangerItem, identityItems, pathItems } = useProjectActions({
+  const { confirmDialog, dangerItem, identityItems, pathItems, pinItem } = useProjectActions({
     isActive,
     onExitScope,
     project,
@@ -304,11 +336,13 @@ export function ProjectContextMenu({
   const canTheme = !project.isAuto || Boolean(project.path)
 
   const applyAppearance = (patch: { color?: null | string; icon?: null | string }) => {
-    void setProjectAppearance(project, patch)
+    void setProjectAppearance(project, patch).then(adoptedId => migrateAdoptedProjectPin(project.id, adoptedId))
   }
 
   const items = (kit: MenuKit) => (
     <>
+      {renderActionItem(kit, pinItem)}
+      <kit.Separator />
       {identityItems.map(item => renderActionItem(kit, item))}
       {canTheme && (
         <kit.Sub>

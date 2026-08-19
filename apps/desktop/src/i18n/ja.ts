@@ -1790,6 +1790,8 @@ export const ja = defineLocale({
     noFilterMatches: 'このフィルターに一致するセッションはありません',
     projects: {
       sectionLabel: 'プロジェクト',
+      pinnedSectionLabel: 'ピン留めしたプロジェクト',
+      pinnedEmpty: 'プロジェクトをピン留めすると、ここからすぐ開けます。',
       home: 'ホーム',
       newButton: '新規プロジェクト',
       createTitle: '新規プロジェクト',

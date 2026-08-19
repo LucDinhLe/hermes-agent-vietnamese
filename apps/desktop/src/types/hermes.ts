@@ -327,6 +327,9 @@ export interface HermesConfig {
     personalities?: Record<string, unknown>
     service_tier?: string
   }
+  advisor?: {
+    enabled?: boolean
+  }
   display?: {
     personality?: string
     skin?: string
@@ -672,6 +675,7 @@ export interface SessionResumeResponse {
 }
 
 export interface SessionRuntimeInfo {
+  advisor_enabled?: boolean
   approval_mode?: 'manual' | 'off' | 'smart'
   branch?: string
   config_warning?: string

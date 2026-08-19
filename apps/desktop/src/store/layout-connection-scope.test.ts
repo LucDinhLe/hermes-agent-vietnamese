@@ -3,7 +3,14 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import type { HermesConnection } from '@/global'
 import { readKey } from '@/lib/storage'
 
-import { $pinnedSessionIds, $sidebarSessionOrderIds, $sidebarSessionOrderManual, pinSession } from './layout'
+import {
+  $pinnedProjectIds,
+  $pinnedSessionIds,
+  $sidebarSessionOrderIds,
+  $sidebarSessionOrderManual,
+  pinProject,
+  pinSession
+} from './layout'
 import { getRememberedSessionId, setConnection, setRememberedSessionId } from './session'
 
 // Two Desktop windows share one renderer origin (and therefore one
@@ -35,6 +42,7 @@ beforeEach(() => {
   window.localStorage.clear()
   // Return to the local scope and empty every list under it.
   setConnection(localConn)
+  $pinnedProjectIds.set([])
   $pinnedSessionIds.set([])
   $sidebarSessionOrderIds.set([])
   $sidebarSessionOrderManual.set(false)
@@ -66,6 +74,20 @@ describe('connection-scoped sidebar lists (#77318)', () => {
 
     setConnection(remoteB)
     expect($pinnedSessionIds.get()).toEqual(['b-1'])
+  })
+
+  it('keeps project shortcuts isolated between gateways', () => {
+    pinProject('local-project')
+
+    setConnection(remoteA)
+    expect($pinnedProjectIds.get()).toEqual([])
+    pinProject('remote-project')
+
+    setConnection(localConn)
+    expect($pinnedProjectIds.get()).toEqual(['local-project'])
+
+    setConnection(remoteA)
+    expect($pinnedProjectIds.get()).toEqual(['remote-project'])
   })
 
   it('restores the local pin set when returning to the local connection', () => {

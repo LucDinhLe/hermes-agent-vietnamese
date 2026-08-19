@@ -1786,6 +1786,7 @@ def _compute_host_turn_frame(
         "model_override": session.get("model_override"),
         "reasoning_config_override": session.get("create_reasoning_override"),
         "service_tier_override": session.get("create_service_tier_override"),
+        "advisor_enabled_override": session.get("create_advisor_override"),
         "source": _session_source(session),
         "attached_images": attached_images,
         "queued_prompt_generation": queued_prompt_generation,
@@ -2367,7 +2368,7 @@ def _start_agent_build(sid: str, session: dict) -> None:
                     # provider and fail with "No LLM provider configured".
                     kw.update(resume_overrides)
                 else:
-                    # Model/effort/fast the desktop picked for a brand-new chat
+                    # Model/effort/fast/advisor the desktop picked for a brand-new chat
                     # ride in as per-session overrides so the first build uses
                     # them directly (no global config, no build-then-switch).
                     if override := current.get("model_override"):
@@ -2376,6 +2377,8 @@ def _start_agent_build(sid: str, session: dict) -> None:
                         kw["reasoning_config_override"] = reasoning
                     if (tier := current.get("create_service_tier_override")) is not None:
                         kw["service_tier_override"] = tier
+                    if (advisor := current.get("create_advisor_override")) is not None:
+                        kw["advisor_enabled_override"] = advisor
                 agent = _make_agent(sid, key, **kw)
             finally:
                 _clear_session_context(tokens)
@@ -2993,6 +2996,9 @@ def _ensure_session_db_row(session: dict) -> None:
         # service_tier value to the provider. Persist a durable marker so resume
         # can distinguish that choice from an omitted/inherited tier.
         model_config["service_tier"] = create_service_tier_override or "normal"
+    create_advisor_override = session.get("create_advisor_override")
+    if create_advisor_override is not None:
+        model_config["advisor_enabled"] = bool(create_advisor_override)
     # Branch lineage: stamp the same ``_branched_from`` marker the TUI /branch
     # uses so list_sessions_rich keeps the branch listed and the desktop sidebar
     # can nest it under its parent.
@@ -4009,6 +4015,7 @@ def _stored_session_runtime_overrides(row: dict | None) -> dict:
     api_mode = str(model_config.get("api_mode") or "").strip()
     reasoning_config = model_config.get("reasoning_config")
     service_tier = str(model_config.get("service_tier") or "").strip()
+    advisor_enabled = model_config.get("advisor_enabled")
 
     # Heal a bare ``"custom"`` provider stored by an older build (or any leak
     # site that bypassed _runtime_model_config's normalization). Bare custom is
@@ -4057,6 +4064,8 @@ def _stored_session_runtime_overrides(row: dict | None) -> dict:
         overrides["service_tier_override"] = ""
     elif service_tier:
         overrides["service_tier_override"] = service_tier
+    if isinstance(advisor_enabled, bool):
+        overrides["advisor_enabled_override"] = advisor_enabled
 
     return overrides
 
@@ -4069,6 +4078,7 @@ def _runtime_model_config(agent, existing: dict | None = None) -> dict:
     api_mode = str(getattr(agent, "api_mode", "") or "").strip()
     reasoning_config = getattr(agent, "reasoning_config", None)
     service_tier = getattr(agent, "service_tier", None)
+    advisor_settings = getattr(agent, "_advisor_settings", None)
 
     if model:
         config["model"] = model
@@ -4118,6 +4128,8 @@ def _runtime_model_config(agent, existing: dict | None = None) -> dict:
         config["service_tier"] = service_tier
     else:
         config.pop("service_tier", None)
+    if advisor_settings is not None:
+        config["advisor_enabled"] = bool(getattr(advisor_settings, "enabled", False))
 
     return config
 
@@ -4152,6 +4164,9 @@ def _persist_live_session_runtime(session: dict | None) -> None:
             # normal and would otherwise erase the distinction on every live
             # metadata persist.
             model_config["service_tier"] = create_service_tier_override or "normal"
+        create_advisor_override = session.get("create_advisor_override")
+        if create_advisor_override is not None:
+            model_config["advisor_enabled"] = bool(create_advisor_override)
         model = str(getattr(agent, "model", "") or "").strip()
         if hasattr(db, "update_session_meta"):
             db.update_session_meta(session_key, json.dumps(model_config), model or None)
@@ -4159,6 +4174,43 @@ def _persist_live_session_runtime(session: dict | None) -> None:
             db.update_session_model(session_key, model)
     except Exception:
         logger.debug("failed to persist live session runtime", exc_info=True)
+
+
+def _persist_session_advisor_override(session: dict | None) -> None:
+    """Persist an Advisor pin without materializing an abandoned draft row."""
+    if not session:
+        return
+    if session.get("agent") is not None:
+        _persist_live_session_runtime(session)
+        return
+
+    session_key = str(session.get("session_key") or "").strip()
+    if not session_key:
+        return
+    try:
+        with _session_db(session) as db:
+            if db is None or not hasattr(db, "update_session_meta"):
+                return
+            row = db.get_session(session_key)
+            if not row:
+                # A new zero-message draft intentionally has no durable row.
+                # Its in-memory override is written by _ensure_session_db_row
+                # on first submit instead of polluting the sidebar database.
+                return
+            raw_config = row.get("model_config")
+            if isinstance(raw_config, dict):
+                model_config = dict(raw_config)
+            elif isinstance(raw_config, str) and raw_config.strip():
+                parsed = json.loads(raw_config)
+                model_config = parsed if isinstance(parsed, dict) else {}
+            else:
+                model_config = {}
+            model_config["advisor_enabled"] = bool(
+                session.get("create_advisor_override")
+            )
+            db.update_session_meta(session_key, json.dumps(model_config), None)
+    except Exception:
+        logger.debug("failed to persist session Advisor override", exc_info=True)
 
 
 def _persist_live_session_system_prompt(session: dict | None) -> None:
@@ -5469,7 +5521,7 @@ def _current_profile_name() -> str:
 # v5: uvicorn ws_max_size raised for one-shot base64 file.attach frames (>16 MiB).
 # v6: plugins.manage list rows carry the canonical registry key; toggles are
 #     key-addressed (keyless rows render read-only in Desktop Settings).
-DESKTOP_BACKEND_CONTRACT = 6
+DESKTOP_BACKEND_CONTRACT = 7
 
 
 def _session_usage_snapshot(session: dict | None) -> dict:
@@ -5571,6 +5623,17 @@ def _session_info(agent, session: dict | None = None) -> dict:
         if isinstance(inflight, dict) and inflight.get("started_at")
         else None
     )
+    advisor_settings = getattr(agent, "_advisor_settings", None)
+    advisor_override = (session or {}).get("create_advisor_override")
+    advisor_enabled = (
+        bool(getattr(advisor_settings, "enabled", False))
+        if advisor_settings is not None
+        else (
+            bool(advisor_override)
+            if advisor_override is not None
+            else is_truthy_value((_load_cfg().get("advisor") or {}).get("enabled"))
+        )
+    )
 
     info: dict = {
         "model": pending_model or mirror.get("model", getattr(agent, "model", "")),
@@ -5579,6 +5642,7 @@ def _session_info(agent, session: dict | None = None) -> dict:
         "reasoning_effort": reasoning_effort,
         "service_tier": service_tier,
         "fast": service_tier == "priority",
+        "advisor_enabled": advisor_enabled,
         "yolo": yolo,
         "approval_mode": approval_mode,
         "tools": dict(mirror.get("tools") or {}) if isinstance(mirror.get("tools"), dict) else {},
@@ -6699,6 +6763,7 @@ def _reset_session_agent(sid: str, session: dict) -> dict:
         session.pop("model_override", None)
         session.pop("create_reasoning_override", None)
         session.pop("create_service_tier_override", None)
+        session.pop("create_advisor_override", None)
         session.pop("one_turn_model_restore", None)
         new_agent = _make_agent(
             sid,
@@ -6865,6 +6930,20 @@ def _resolve_runtime_with_fallback(
         raise
 
 
+def _apply_advisor_enabled_override(agent, enabled: bool | None) -> None:
+    """Apply one session's Advisor pin without touching profile config."""
+    if agent is None or enabled is None:
+        return
+    try:
+        from dataclasses import replace
+        from agent.advisor import AdvisorSettings
+
+        current = getattr(agent, "_advisor_settings", AdvisorSettings())
+        agent._advisor_settings = replace(current, enabled=bool(enabled))
+    except Exception:
+        logger.debug("failed to apply session Advisor override", exc_info=True)
+
+
 def _make_agent(
     sid: str,
     key: str,
@@ -6874,6 +6953,7 @@ def _make_agent(
     provider_override: str | None = None,
     reasoning_config_override: dict | None = None,
     service_tier_override: str | None = None,
+    advisor_enabled_override: bool | None = None,
     platform_override: str | None = None,
 ):
     # AC-4 test seam: dead unless explicitly armed by the isolated certify
@@ -6883,6 +6963,7 @@ def _make_agent(
 
     synthetic = maybe_build_synthetic_agent(session_id or key, model_override)
     if synthetic is not None:
+        _apply_advisor_enabled_override(synthetic, advisor_enabled_override)
         return synthetic
 
     from run_agent import AIAgent
@@ -7004,7 +7085,7 @@ def _make_agent(
                 raise RuntimeError("Auth fallback resolved without a model")
             model = resolution.selected_model
     _pr = _load_provider_routing()
-    return AIAgent(
+    agent = AIAgent(
         model=model,
         max_iterations=_cfg_max_turns(cfg, 500),
         provider=runtime.get("provider"),
@@ -7051,6 +7132,8 @@ def _make_agent(
         fallback_model=_load_fallback_model(),
         **_agent_cbs(sid),
     )
+    _apply_advisor_enabled_override(agent, advisor_enabled_override)
+    return agent
 
 
 def _init_session(
@@ -8449,6 +8532,11 @@ def _deferred_session_record(
         "last_active": now,
         "lazy": lazy,
         "model_override": model_override,
+        "create_advisor_override": (
+            resume_runtime_overrides.get("advisor_enabled_override")
+            if isinstance(resume_runtime_overrides, dict)
+            else None
+        ),
         "pending_title": None,
         "profile_home": str(profile_home) if profile_home is not None else None,
         "resume_runtime_overrides": resume_runtime_overrides,
@@ -11944,6 +12032,63 @@ def _(rid, params: dict) -> dict:
                 _session_info(agent, session),
             )
         return _ok(rid, {"key": key, "value": nv})
+
+    if key == "advisor":
+        requested_session_id = str(params.get("session_id") or "").strip()
+        if requested_session_id and session is None:
+            # A stale pane must never fall through to the global-profile path.
+            # The Desktop will roll its optimistic switch back on this error.
+            return _err(rid, 4041, "session not found")
+        raw = str(value or "").strip().lower()
+        agent = session.get("agent") if session else None
+        advisor_settings = getattr(agent, "_advisor_settings", None)
+        session_override = session.get("create_advisor_override") if session else None
+        if advisor_settings is not None:
+            current_enabled = bool(getattr(advisor_settings, "enabled", False))
+        elif session_override is not None:
+            current_enabled = bool(session_override)
+        else:
+            current_enabled = is_truthy_value(
+                (_load_cfg().get("advisor") or {}).get("enabled")
+            )
+
+        if raw == "status":
+            return _ok(
+                rid,
+                {"key": key, "value": "on" if current_enabled else "off"},
+            )
+        if raw in {"", "toggle"}:
+            enabled = not current_enabled
+        elif raw in {"on", "true", "enabled"}:
+            enabled = True
+        elif raw in {"off", "false", "disabled"}:
+            enabled = False
+        else:
+            return _err(rid, 4002, f"unknown advisor mode: {value}")
+
+        if session is not None:
+            session["create_advisor_override"] = enabled
+            if agent is None:
+                _persist_session_advisor_override(session)
+        else:
+            _write_config_key("advisor.enabled", enabled)
+        if agent is not None:
+            _apply_advisor_enabled_override(agent, enabled)
+            _persist_session_advisor_override(session)
+            _emit(
+                "session.info",
+                params.get("session_id", ""),
+                _session_info(agent, session),
+            )
+        return _ok(
+            rid,
+            {
+                "key": key,
+                "value": "on" if enabled else "off",
+                "scope": "session" if session is not None else "global",
+                "deferred": bool(session and session.get("running")),
+            },
+        )
 
     if key == "busy":
         raw = str(value or "").strip().lower()

@@ -542,6 +542,12 @@ class ComputeHost:
                 session["profile_home"] = str(frame.get("profile_home"))
             if isinstance(frame.get("attached_images"), list):
                 session["attached_images"] = list(frame.get("attached_images") or [])
+            advisor_override = frame.get("advisor_enabled_override")
+            if advisor_override is not None:
+                session["create_advisor_override"] = bool(advisor_override)
+                server._apply_advisor_enabled_override(
+                    session.get("agent"), bool(advisor_override)
+                )
             return session
 
         history = frame.get("history") if isinstance(frame.get("history"), list) else []
@@ -572,6 +578,7 @@ class ComputeHost:
                 model_override=frame.get("model_override"),
                 reasoning_config_override=frame.get("reasoning_config_override"),
                 service_tier_override=frame.get("service_tier_override"),
+                advisor_enabled_override=frame.get("advisor_enabled_override"),
                 platform_override=frame.get("source"),
                 session_db=session_db,
             )
@@ -641,6 +648,10 @@ class ComputeHost:
             session["attached_images"] = list(frame.get("attached_images") or [])
         if frame.get("model_override") is not None:
             session["model_override"] = frame.get("model_override")
+        if frame.get("advisor_enabled_override") is not None:
+            session["create_advisor_override"] = bool(
+                frame.get("advisor_enabled_override")
+            )
         return session
 
     def _handle_reload_mcp(self, frame: dict[str, Any]) -> None:

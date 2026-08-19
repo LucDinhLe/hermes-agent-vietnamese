@@ -6,8 +6,10 @@ import { $approvalModes, approvalModeForProfile } from '@/store/approval-mode'
 import { $desktopOnboarding, consumePendingCredentialWarning } from '@/store/onboarding'
 import { $activeGatewayProfile } from '@/store/profile'
 import {
+  $currentAdvisorEnabled,
   $currentBranch,
   $currentCwd,
+  setCurrentAdvisorEnabled,
   setCurrentBranch,
   setCurrentCwd,
   setSelectedStoredSessionId,
@@ -116,31 +118,38 @@ describe('applyRuntimeInfo credential warnings', () => {
 
 describe('applyRuntimeInfo foreground scoping', () => {
   beforeEach(() => {
+    setCurrentAdvisorEnabled(false)
     setCurrentCwd('/main-repo')
     setCurrentBranch('main')
   })
 
   afterEach(() => {
+    setCurrentAdvisorEnabled(false)
     setCurrentCwd('')
     setCurrentBranch('')
   })
 
   it('publishes a foreground runtime into the composer atoms', () => {
-    const patch = applyRuntimeInfo({ branch: 'bb/feature', cwd: '/main-repo/worktree' })
+    const patch = applyRuntimeInfo({ advisor_enabled: true, branch: 'bb/feature', cwd: '/main-repo/worktree' })
 
+    expect($currentAdvisorEnabled.get()).toBe(true)
     expect($currentCwd.get()).toBe('/main-repo/worktree')
     expect($currentBranch.get()).toBe('bb/feature')
     expect(patch).toMatchObject({ branch: 'bb/feature', cwd: '/main-repo/worktree' })
   })
 
   it('keeps a background runtime out of the composer atoms but still returns its patch', () => {
-    const patch = applyRuntimeInfo({ branch: 'bb/tile', cwd: '/other-worktree' }, { foreground: false })
+    const patch = applyRuntimeInfo(
+      { advisor_enabled: true, branch: 'bb/tile', cwd: '/other-worktree' },
+      { foreground: false }
+    )
 
     // The main pane's rail must stay on its own tree.
+    expect($currentAdvisorEnabled.get()).toBe(false)
     expect($currentCwd.get()).toBe('/main-repo')
     expect($currentBranch.get()).toBe('main')
     // ...while the caller still gets everything it needs for its own session.
-    expect(patch).toMatchObject({ branch: 'bb/tile', cwd: '/other-worktree' })
+    expect(patch).toMatchObject({ advisorEnabled: true, branch: 'bb/tile', cwd: '/other-worktree' })
   })
 
   // #71254: `if (info.cwd)` treated '' as "no opinion", so a detached session

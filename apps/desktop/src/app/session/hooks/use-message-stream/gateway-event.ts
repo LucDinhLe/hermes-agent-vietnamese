@@ -67,6 +67,7 @@ import {
   $selectedStoredSessionId,
   $sessions,
   sessionMatchesStoredId,
+  setCurrentAdvisorEnabled,
   setCurrentBranch,
   setCurrentCwdTransient,
   setCurrentFastMode,
@@ -586,6 +587,10 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
 
           if (typeof payload?.fast === 'boolean') {
             setCurrentFastMode(payload.fast)
+          }
+
+          if (typeof payload?.advisor_enabled === 'boolean') {
+            setCurrentAdvisorEnabled(payload.advisor_enabled)
           }
 
           if (typeof payload?.yolo === 'boolean') {

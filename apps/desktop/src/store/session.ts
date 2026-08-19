@@ -27,6 +27,7 @@ const COMPOSER_PROVIDER_KEY = 'hermes.desktop.composer.provider'
 const COMPOSER_MODEL_SOURCE_KEY = 'hermes.desktop.composer.model-source'
 const COMPOSER_EFFORT_KEY = 'hermes.desktop.composer.reasoning-effort'
 const COMPOSER_FAST_KEY = 'hermes.desktop.composer.fast'
+const COMPOSER_ADVISOR_KEY = 'hermes.desktop.composer.advisor'
 
 // The last chat the user had open, so a relaunch lands back on it instead of an
 // empty new-chat. Stored (not runtime) id — the route is keyed by stored id.
@@ -612,6 +613,7 @@ export const $currentProvider = atom(storedString(COMPOSER_PROVIDER_KEY) ?? '')
 export const $currentReasoningEffort = atom(storedString(COMPOSER_EFFORT_KEY) ?? '')
 export const $currentServiceTier = atom('')
 export const $currentFastMode = atom(storedBoolean(COMPOSER_FAST_KEY, false))
+export const $currentAdvisorEnabled = atom(storedBoolean(COMPOSER_ADVISOR_KEY, false))
 // Effective approval-bypass state mirrored from the gateway (session.info).
 // Persistence lives in the backend config (approvals.mode), so this is a plain
 // reflection of the truth the gateway reports rather than its own store.
@@ -832,6 +834,11 @@ export const setCurrentServiceTier = (next: Updater<string>) => updateAtom($curr
 export const setCurrentFastMode = (next: Updater<boolean>) => {
   updateAtom($currentFastMode, next)
   persistBoolean(COMPOSER_FAST_KEY, $currentFastMode.get())
+}
+
+export const setCurrentAdvisorEnabled = (next: Updater<boolean>) => {
+  updateAtom($currentAdvisorEnabled, next)
+  persistBoolean(COMPOSER_ADVISOR_KEY, $currentAdvisorEnabled.get())
 }
 
 export const setYoloActive = (next: Updater<boolean>) => updateAtom($yoloActive, next)

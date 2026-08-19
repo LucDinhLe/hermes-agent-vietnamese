@@ -1,5 +1,29 @@
 # Tiến độ
 
+## Cập nhật 2026-08-19 — Advisor theo phiên và dự án ghim
+
+- Thêm thanh bật/tắt Advisor ngay dưới đầu mỗi phiên trong panel giữa. Thanh
+  dùng biên bố cục riêng của `ChatView`, tự ẩn model rồi ẩn nhãn khi người dùng
+  kéo hẹp và không chiếm sang panel Tệp/Trình duyệt/Terminal ngoài cùng bên phải.
+- Advisor nay có trạng thái riêng cho từng phiên, truyền qua `session.create`,
+  `session.info` và `config.set` có `session_id`; thay đổi ở một phiên không ghi
+  đè mặc định hồ sơ hoặc phiên khác. Trạng thái được lưu và khôi phục khi mở lại.
+- Bảo vệ hai trường hợp biên: ID phiên đã cũ trả lỗi và hoàn tác giao diện thay
+  vì rơi xuống ghi cấu hình toàn cục; compute-host áp dụng lại override mới cho
+  phiên đã tồn tại ở lượt tiếp theo.
+- Panel trái có khu vực **Dự án đã ghim** dạng một dòng. Menu thường và menu
+  chuột phải hỗ trợ Ghim/Bỏ ghim; người dùng có thể kéo thả đổi thứ tự. Pin chỉ
+  lưu ID theo từng kết nối, không di chuyển hay sao chép dữ liệu dự án.
+- Xóa/loại dự án sẽ xóa pin; khi dự án tự phát hiện được nhận làm dự án chính
+  thức, pin được chuyển sang ID mới mà không mất vị trí.
+- Xác minh: 335 kiểm thử UI liên quan Advisor/sidebar/project đã đạt ở các lượt
+  mục tiêu; 45/45 kiểm thử updater và 10/10 kiểm thử backend Advisor đạt;
+  Desktop typecheck, ESLint, Ruff, `git diff --check` và production build đều
+  đạt. Lượt UI toàn cục không tự kết thúc trong môi trường jsdom do các ca Canvas
+  cũ nên đã dừng, không được ghi nhận là đạt.
+- Tài liệu phạm vi: `docs/hermes-v29-session-advisor-and-project-pins.md`.
+  Chưa push, tạo PR, tag, candidate hoặc phát hành.
+
 ## Cập nhật 2026-08-19 — sửa đường cập nhật đóng gói cho bản sau v28
 
 - Làm rõ nguyên nhân màn hình v28 báo không truy cập được máy chủ cập nhật:

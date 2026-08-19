@@ -120,6 +120,9 @@ interface SidebarSessionsSectionProps {
   // which then passes `projectContent` on the next render. Takes precedence
   // over `tree` / `groups`.
   projectOverview?: SidebarProjectTree[]
+  // Pinned-project shortcuts stay one line tall: no preview sessions or
+  // disclosure state, even when the project itself contains recent sessions.
+  projectOverviewCompact?: boolean
   // Per-project preview rows (from the backend tree), keyed by project id.
   projectOverviewPreviews?: Record<string, SessionInfo[]>
   // True while the backend project tree is loading (overview skeleton).
@@ -193,6 +196,7 @@ export function SidebarSessionsSection({
   footer,
   groups,
   projectOverview,
+  projectOverviewCompact = false,
   projectOverviewPreviews,
   projectsLoading = false,
   onEnterProject,
@@ -421,7 +425,7 @@ export function SidebarSessionsSection({
         onNewSession={onNewSessionInWorkspace}
         previewSessions={projectOverviewPreviews?.[project.id]}
         project={project}
-        renderRows={renderRows}
+        renderRows={projectOverviewCompact ? undefined : renderRows}
       />
     )
 

@@ -9,6 +9,7 @@ import {
   getComposerSelectionGeneration,
   getCurrentModelSource,
   setAvailablePersonalities,
+  setCurrentAdvisorEnabled,
   setCurrentFastMode,
   setCurrentPersonality,
   setCurrentReasoningEffort,
@@ -102,6 +103,7 @@ export function useHermesConfig({ activeSessionIdRef }: HermesConfigOptions) {
           (force || getCurrentModelSource() !== 'manual')
 
         if (shouldSeedComposer) {
+          setCurrentAdvisorEnabled(config.advisor?.enabled === true)
           setCurrentReasoningEffort(reasoning)
           setCurrentFastMode(FAST_TIERS.has(tier.toLowerCase()))
         }

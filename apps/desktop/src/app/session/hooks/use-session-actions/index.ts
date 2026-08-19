@@ -33,6 +33,7 @@ import {
 import { setApprovalRequest } from '@/store/prompts'
 import {
   $activeSessionStoredIdRotation,
+  $currentAdvisorEnabled,
   $currentCwd,
   $currentFastMode,
   $currentModel,
@@ -174,7 +175,7 @@ function reconcileAuthoritativeMessages(
   return reconcileAuthoritativeChatMessages(toChatMessages(authoritativeMessages), previousMessages, liveProjection)
 }
 
-// `session.create` params from the current profile + sticky-UI model/effort/fast,
+// `session.create` params from the current profile + sticky-UI model/effort/fast/advisor,
 // ensuring the gateway is on that profile first. Shared by the primary send path
 // and the "open in split" tile path; `cwd` is the one thing that differs (the
 // live composer cwd for a send, the resolved new-session cwd for a fresh tile).
@@ -183,7 +184,7 @@ function reconcileAuthoritativeMessages(
 // mode one backend serves every profile, so an omitted profile silently lands the
 // chat on the launch (default) profile — the "rubberbands back to default" bug.
 // A no-op for single-profile/local-pooled users (a backend resolves its own launch
-// profile to None). The sticky UI model/effort/fast ride as per-session overrides,
+// profile to None). The sticky UI model/effort/fast/advisor ride as per-session overrides,
 // never the profile default (that lives in Settings → Model).
 async function desktopSessionCreateParams(cwd: string): Promise<Record<string, unknown>> {
   // Treat Send as the linearization point for the visible selector state. The
@@ -191,6 +192,7 @@ async function desktopSessionCreateParams(cwd: string): Promise<Record<string, u
   // refreshes to finish; reading atoms afterward would silently create the
   // session with a different selection than the one the user submitted.
   const selection = {
+    advisorEnabled: $currentAdvisorEnabled.get(),
     effort: $currentReasoningEffort.get().trim(),
     fast: $currentFastMode.get(),
     model: $currentModel.get().trim(),
@@ -209,6 +211,7 @@ async function desktopSessionCreateParams(cwd: string): Promise<Record<string, u
       ? { model: selection.model, ...(selection.provider ? { provider: selection.provider } : {}) }
       : {}),
     ...(selection.effort ? { reasoning_effort: selection.effort } : {}),
+    advisor_enabled: selection.advisorEnabled,
     fast: selection.fast
   }
 }

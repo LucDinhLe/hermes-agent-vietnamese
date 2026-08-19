@@ -32,6 +32,7 @@ export const SIDEBAR_SESSIONS_PAGE_SIZE = 50
 export const SIDEBAR_FILTERED_PAGE_SIZE = 300
 
 const SIDEBAR_PINNED_STORAGE_KEY = 'hermes.desktop.pinnedSessions'
+const SIDEBAR_PINNED_PROJECTS_STORAGE_KEY = 'hermes.desktop.pinnedProjects'
 const SIDEBAR_AGENTS_GROUPED_STORAGE_KEY = 'hermes.desktop.agentsGroupedByWorkspace'
 const SIDEBAR_CRON_OPEN_STORAGE_KEY = 'hermes.desktop.sidebarCronOpen'
 const SIDEBAR_MESSAGING_OPEN_STORAGE_KEY = 'hermes.desktop.sidebarMessagingOpen'
@@ -115,6 +116,11 @@ export const $sidebarWidth: ReadableAtom<number> = computed($paneStates, states 
 // into another window's sidebar (#77318). The local connection keeps the
 // bare legacy key; remote connections get their own namespaced keys.
 export const $pinnedSessionIds = connectionScopedAtom(SIDEBAR_PINNED_STORAGE_KEY, [] as string[], Codecs.stringArray)
+export const $pinnedProjectIds = connectionScopedAtom(
+  SIDEBAR_PINNED_PROJECTS_STORAGE_KEY,
+  [] as string[],
+  Codecs.stringArray
+)
 export const $sidebarSessionOrderIds = connectionScopedAtom(
   SIDEBAR_SESSION_ORDER_STORAGE_KEY,
   [] as string[],
@@ -218,6 +224,7 @@ export const $dismissedWorktreeIds = persistentAtom(
   Codecs.stringArray
 )
 export const $sidebarPinsOpen = atom(true)
+export const $sidebarProjectsOpen = atom(true)
 export const $sidebarRecentsOpen = atom(true)
 // Cron-job sessions live in their own section below recents, collapsed by
 // default (it only renders at all when cron sessions exist) so the
@@ -575,6 +582,10 @@ export function setSidebarPinsOpen(open: boolean) {
   $sidebarPinsOpen.set(open)
 }
 
+export function setSidebarProjectsOpen(open: boolean) {
+  $sidebarProjectsOpen.set(open)
+}
+
 export function setSidebarRecentsOpen(open: boolean) {
   $sidebarRecentsOpen.set(open)
 }
@@ -748,6 +759,19 @@ export function unpinSession(sessionId: string) {
   )
 }
 
+export function pinProject(projectId: string, index?: number) {
+  const prev = $pinnedProjectIds.get()
+
+  setOrderIds($pinnedProjectIds, insertUniqueId(prev, projectId, index ?? prev.filter(id => id !== projectId).length))
+}
+
+export function unpinProject(projectId: string) {
+  setOrderIds(
+    $pinnedProjectIds,
+    $pinnedProjectIds.get().filter(id => id !== projectId)
+  )
+}
+
 // Apply a new pinned order from a drag. The dragged list only holds the pins
 // that currently RESOLVE to a loaded row, so this is a permutation of a subset:
 // re-slot the ids it names into the positions they already occupied, leaving
@@ -774,6 +798,31 @@ export function setPinnedSessionOrder(ids: string[]) {
   })
 
   setOrderIds($pinnedSessionIds, next)
+}
+
+// Project rows can be temporarily unresolved while the backend tree warms or
+// a profile changes. Reorder only the visible subset and leave every hidden id
+// in its existing slot, matching the session-pin contract above.
+export function setPinnedProjectOrder(ids: string[]) {
+  const prev = $pinnedProjectIds.get()
+  const pinned = new Set(prev)
+  const moving = ids.filter(id => pinned.has(id))
+
+  if (!moving.length) {
+    return
+  }
+
+  const movingSet = new Set(moving)
+  const next = [...prev]
+  let cursor = 0
+
+  prev.forEach((id, index) => {
+    if (movingSet.has(id)) {
+      next[index] = moving[cursor++]
+    }
+  })
+
+  setOrderIds($pinnedProjectIds, next)
 }
 
 export function bumpSessionsLimit(step: number = SIDEBAR_SESSIONS_PAGE_SIZE) {

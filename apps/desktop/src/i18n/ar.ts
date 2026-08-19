@@ -821,7 +821,8 @@ export const ar = defineLocale({
       reasoningOff: 'إيقاف',
       defaultsFailed: 'فشل حفظ افتراضيات النموذج',
       advisorTitle: 'المستشار',
-      advisorDesc: 'يراجع نموذج مستقل الخطة والتغييرات الكبيرة أو الأخطاء المتكررة والنتيجة النهائية قبل أن يجيب Hermes.',
+      advisorDesc:
+        'يراجع نموذج مستقل الخطة والتغييرات الكبيرة أو الأخطاء المتكررة والنتيجة النهائية قبل أن يجيب Hermes.',
       advisorEnabled: 'تفعيل المستشار',
       advisorCost: 'عند التفعيل، تضيف كل نقطة مراجعة استدعاء نموذج وزمنا وتكلفة.',
       advisorModel: 'نموذج المستشار',
@@ -1628,6 +1629,8 @@ export const ar = defineLocale({
     noFilterMatches: 'لا توجد جلسات تطابق عوامل التصفية هذه',
     projects: {
       sectionLabel: 'المشاريع',
+      pinnedSectionLabel: 'المشاريع المثبتة',
+      pinnedEmpty: 'ثبّت مشروعًا للوصول السريع إليه من هنا.',
       home: 'الرئيسية',
       newButton: 'مشروع جديد',
       createTitle: 'مشروع جديد',

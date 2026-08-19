@@ -42,7 +42,7 @@ def _(rid, params: dict) -> dict:
     profile = (params.get("profile") or "").strip() or None
     profile_home = _profile_home(profile)
 
-    # The desktop composer owns its model/effort/fast as plain UI state and ships
+    # The desktop composer owns its model/effort/fast/advisor as plain UI state and ships
     # it on every session.create. Honor each as a PER-SESSION override (built into
     # the agent below) — never a global config write, so picking a model/effort
     # for a new chat can't mutate the profile default. provider is optional
@@ -69,6 +69,11 @@ def _(rid, params: dict) -> dict:
         create_service_tier_override = (
             "priority" if is_truthy_value(params.get("fast")) else ""
         )
+    # Presence is significant just like ``fast``: omitted inherits the profile
+    # default, while either boolean pins the Advisor state to this session.
+    create_advisor_override = None
+    if "advisor_enabled" in params:
+        create_advisor_override = is_truthy_value(params.get("advisor_enabled"))
 
     ready = threading.Event()
     now = time.time()
@@ -96,6 +101,7 @@ def _(rid, params: dict) -> dict:
             "model_override": session_model_override,
             "create_reasoning_override": create_reasoning_override,
             "create_service_tier_override": create_service_tier_override,
+            "create_advisor_override": create_advisor_override,
             "parent_session_id": parent_session_id,
             "pending_title": title or None,
             "pending_hidden": is_truthy_value(params.get("hidden", False)),
@@ -152,6 +158,11 @@ def _(rid, params: dict) -> dict:
                 "cwd": _sessions[sid]["cwd"],
                 "branch": _git_branch_for_cwd(_sessions[sid]["cwd"]),
                 "project": _project_info_for_cwd(_sessions[sid]["cwd"]),
+                "advisor_enabled": (
+                    create_advisor_override
+                    if create_advisor_override is not None
+                    else is_truthy_value((_load_cfg().get("advisor") or {}).get("enabled"))
+                ),
                 "lazy": True,
                 "desktop_contract": DESKTOP_BACKEND_CONTRACT,
                 "profile_name": _response_profile_name(profile),

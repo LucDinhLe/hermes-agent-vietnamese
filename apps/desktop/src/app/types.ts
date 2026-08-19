@@ -159,14 +159,7 @@ export type CommandDispatchResponse =
   | PrefillCommandDispatchResponse
 
 export type SidebarNavId =
-  | 'artifacts'
-  | 'browser'
-  | 'command-center'
-  | 'cron'
-  | 'messaging'
-  | 'new-session'
-  | 'settings'
-  | 'skills'
+  'artifacts' | 'browser' | 'command-center' | 'cron' | 'messaging' | 'new-session' | 'settings' | 'skills'
 
 export interface SidebarNavItem {
   /** Built-in view id, or a contributed row's namespaced contribution id. */
@@ -189,6 +182,7 @@ export interface ClientSessionState {
   reasoningEffort: string
   serviceTier: string
   fast: boolean
+  advisorEnabled: boolean
   yolo: boolean
   personality: string
   busy: boolean

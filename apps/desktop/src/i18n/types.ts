@@ -1745,6 +1745,8 @@ export interface Translations {
     }
     projects: {
       sectionLabel: string
+      pinnedSectionLabel: string
+      pinnedEmpty: string
       home: string
       newButton: string
       createTitle: string
