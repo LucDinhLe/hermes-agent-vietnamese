@@ -11,7 +11,12 @@ không muốn tự dựng Hermes từ mã nguồn.
 > hiện chưa ký số/công chứng đầy đủ. Hãy tải đúng kho phát hành chính thức và
 > kiểm SHA-256 trước khi cài.
 
-### Hermes Vietnamese có gì hơn bản Hermes mặc định?
+v29 được công bố dưới dạng prerelease để người dùng chủ động tham gia thử nghiệm.
+Nếu chưa muốn dùng prerelease, **bản tải mặc định/Latest** vẫn là
+[`vi-v0.20.0-25`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-25);
+[`vi-v0.20.0-14`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-14) được giữ nguyên làm bản quay lui.
+
+### Điểm mạnh so với cách tự cài Hermes Agent từ mã nguồn
 
 #### Cài xong là có môi trường Desktop để làm việc
 
@@ -108,6 +113,32 @@ lặp lại trải nghiệm cài lần đầu cho mỗi bản mới.
 Người dùng v28 cần tải và chạy bộ cài v29 thủ công một lần vì v28 chưa đọc được
 manifest cập nhật cộng đồng. Sau khi đã ở v29, các bản kế tiếp có thể đi qua
 **Cài đặt → Giới thiệu → Cập nhật ngay**.
+
+#### Chưa muốn thử prerelease?
+
+Các đường tải dưới đây tiếp tục trỏ tới bản mặc định/Latest `vi-v0.20.0-25`:
+
+- [Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Windows-x64-Setup.exe)
+- [Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Windows-arm64-Setup.exe)
+- [macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-macOS-Apple-Silicon.dmg)
+- [macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-macOS-Intel.dmg)
+- [Linux x64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-x64.deb)
+- [Linux ARM64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-arm64.deb)
+- [Linux x64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-x64.rpm)
+- [Linux ARM64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-arm64.rpm)
+- [Linux x64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-x64.AppImage)
+- [Linux ARM64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-arm64.AppImage)
+
+#### Lưu ý khi Windows cảnh báo tệp chưa phổ biến
+
+Bộ cài cộng đồng hiện chưa ký số nên Edge hoặc SmartScreen có thể cảnh báo.
+Chỉ tiếp tục khi URL thuộc kho phát hành này, tên tệp đúng với máy và SHA-256
+khớp `SHA256SUMS.txt`. Hình minh họa từng bước:
+
+| Xem thêm và giữ tệp                                                                                                                                             | Kiểm tra nguồn rồi tiếp tục                                                                                                                         |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ![Edge: See more](https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/docs/assets/windows-install/edge-warning-see-more-v25.jpg)           | ![Edge: Keep](https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/docs/assets/windows-install/edge-download-menu-keep-v25.jpg) |
+| ![Edge: Publisher Unknown](https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/docs/assets/windows-install/edge-publisher-unknown-v25.jpg) | ![Edge: Keep anyway](https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/docs/assets/windows-install/edge-keep-anyway-v25.jpg) |
 
 ### Quyền riêng tư và chi phí
 
