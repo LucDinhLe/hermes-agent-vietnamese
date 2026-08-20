@@ -1689,7 +1689,7 @@ export function getAutomationBlueprints(): Promise<{ blueprints: AutomationBluep
 }
 
 export function instantiateAutomationBlueprint(
-  body: { blueprint: string; values: Record<string, string> },
+  body: { blueprint: string; name?: string; values: Record<string, string> },
   profile: string
 ): Promise<CronJob> {
   return window.hermesDesktop.api<CronJob>({

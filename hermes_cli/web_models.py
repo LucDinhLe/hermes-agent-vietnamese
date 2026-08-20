@@ -398,7 +398,10 @@ class CronJobUpdate(BaseModel):
 
 class AutomationBlueprintInstantiate(BaseModel):
     blueprint: str                      # blueprint key, e.g. "morning-brief"
-    values: Dict[str, Any] = {}      # filled slot values from the form
+    values: Dict[str, Any] = {}         # filled slot values from the form
+    # Optional localized display name supplied by a graphical client. The
+    # blueprint key remains the semantic identity; older clients omit this.
+    name: Optional[str] = None
 
 
 # --- from web_server.py (originally lines 13002-13019) ---
@@ -738,4 +741,3 @@ class _PluginProvidersPutBody(BaseModel):
 
 class _PluginVisibilityBody(BaseModel):
     hidden: bool
-
