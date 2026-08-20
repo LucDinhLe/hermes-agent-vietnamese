@@ -46,6 +46,11 @@ release bất biến đã chọn. Windows tải trọn bộ cài đã nghiệm t
 và uninstall identity được giữ nguyên nên cấu hình, bí mật, cuộc trò chuyện,
 lịch định kỳ và trạng thái onboarding không bị chuyển sang một vùng dữ liệu mới.
 
+Exact-artifact update phải giữ cả marker bootstrap do bản cũ tạo. Với gói
+resident đầy đủ, marker schema 1 hợp lệ vẫn là bằng chứng cài đặt dù chưa có
+`desktopVersion`; Hermes phải mở thẳng runtime tích hợp và không được đưa người
+dùng về bootstrap hoặc tải/chạy `uv` trong AppData.
+
 `vi-v0.20.4-34` chưa mang các manifest này và code updater trong bản đó chưa đọc
 được nhãn cộng đồng. Vì vậy người dùng v28 cần cài thủ công bản sửa đầu tiên một
 lần; từ bản sửa đó trở đi dùng **Cài đặt → Giới thiệu → Cập nhật ngay**. Đường

@@ -1,5 +1,19 @@
 # Tiến độ
 
+## Cập nhật 2026-08-20 — chuẩn bị candidate V30 `vi-v0.20.4-37`
+
+- Chủ dự án cho phép tạo candidate kế tiếp, build/staging và smoke Windows x64
+  bằng hồ sơ cô lập; chưa cho phép promotion hoặc thay Public Latest.
+- Candidate gom đúng V30 Foundation tại `8f9b5534c`, tài liệu ranh giới edition
+  tại `db1c9b6b9` và bản sửa tương thích marker bootstrap cũ. Không đổi thương
+  hiệu Hermes, MIT license, app identity, data root hoặc updater feed.
+- Workflow candidate gọi đích danh kiểm thử Dự án, Thống kê sử dụng, tiến trình
+  công việc, panel phải, Advisor và runtime marker cũ. Promotion pilot về sau
+  phải có bằng chứng các bề mặt này trước khi được phép công khai.
+- Tag dự kiến là `vi-v0.20.4-37`, lớp `community-prerelease`; rollback kỹ thuật
+  cho lỗi đường nâng cấp là `vi-v0.20.4-34`. Chưa tạo commit/tag/draft/artifact
+  tại thời điểm ghi mục này.
+
 ## Cập nhật 2026-08-20 — chốt V30 Foundation và kiến trúc AI for Boss Edition
 
 - Chủ sản phẩm đã chấp thuận mô hình một lõi Hermes-derived công khai theo MIT

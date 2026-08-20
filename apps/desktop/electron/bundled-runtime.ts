@@ -13,6 +13,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { type BootstrapMarkerLike, hasValidBootstrapMarker } from './active-runtime-state'
+
 // ─── payload discovery ──────────────────────────────────────────────────────
 
 export interface PayloadInfo {
@@ -78,6 +80,32 @@ export const RESIDENT_RUNTIME_ITEMS = ['repo', 'uv', 'python', 'site-packages', 
 export interface ResidentDecision {
   resident: boolean
   reason: string
+}
+
+export interface ResidentRuntimeStateFacts {
+  payload: PayloadInfo | null
+  checkoutExists: boolean
+  checkoutManifest: { installMode?: string } | null
+  bootstrapMarker: BootstrapMarkerLike | null | undefined
+  bootstrapMarkerSchemaVersion: number
+}
+
+/**
+ * Adapt persisted install state to the resident-runtime decision.
+ *
+ * Legacy install.ps1/install.sh markers intentionally omit desktopVersion.
+ * Their stable compatibility contract is schemaVersion + pinnedCommit, the
+ * same contract used to decide whether a managed checkout needs refreshing.
+ * Keeping that validation in one place prevents the two startup decisions
+ * from disagreeing and sending an offline-ready bundle back through setup.
+ */
+export function decideResidentRuntimeFromState(facts: ResidentRuntimeStateFacts): ResidentDecision {
+  return decideResidentRuntime({
+    payload: facts.payload,
+    checkoutExists: facts.checkoutExists,
+    checkoutManifest: facts.checkoutManifest,
+    markerSaysDesktop: hasValidBootstrapMarker(facts.bootstrapMarker, facts.bootstrapMarkerSchemaVersion)
+  })
 }
 
 /**

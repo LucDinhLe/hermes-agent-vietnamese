@@ -112,6 +112,9 @@ chuỗi trên.
 - [ ] Executable và module native đúng kiến trúc.
 - [ ] Python, Hermes payload, dependency, installer metadata, icon và license
       hiện diện.
+- [ ] Gói resident đầy đủ nhận marker bootstrap schema 1 hợp lệ từ bản cũ kể
+      cả khi marker chưa có `desktopVersion`; không quay lại network bootstrap
+      hoặc chạy runtime quản lý trong AppData.
 - [ ] Windows giữ ổn định upgrade identity và install location.
 - [ ] Metadata cập nhật có đủ filename, byte size, SHA-512 và SemVer cộng đồng;
       resolver bỏ qua draft và release thiếu manifest của target đang chạy.
@@ -138,6 +141,9 @@ Chỉ dùng user/hồ sơ cô lập. Không đọc, nhập hoặc khôi phục d
 - [ ] Update qua đúng đường người dùng; shutdown, thay thế, relaunch thành công.
 - [ ] Update Windows dùng handoff silent; không hiện lại wizard cài mới sau khi
       người dùng đã bấm cập nhật trong Hermes.
+- [ ] Fixture nâng cấp giữ nguyên marker do `install.ps1`/`install.sh` bản cũ
+      tạo ra và chứng minh bản resident mở thẳng runtime tích hợp, không hiện
+      lại trình thiết lập lần đầu.
 - [ ] Gateway khỏe và dữ liệu còn nguyên sau update.
 - [ ] Kiểm mất mạng hoặc update gián đoạn.
 - [ ] Repair một fixture có thể phục hồi.

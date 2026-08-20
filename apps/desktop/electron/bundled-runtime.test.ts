@@ -4,6 +4,7 @@ import { test } from 'vitest'
 
 import {
   decideResidentRuntime,
+  decideResidentRuntimeFromState,
   findResidentPython,
   latestPublicReleaseTag,
   latestReleaseFromLsRemote,
@@ -93,6 +94,51 @@ test('resident even over an old desktop-managed checkout (marker or bundled mani
     }).resident,
     true
   )
+})
+
+test('legacy installer marker without desktopVersion selects the resident runtime', () => {
+  const d = decideResidentRuntimeFromState({
+    payload: residentPayload(),
+    checkoutExists: true,
+    checkoutManifest: null,
+    bootstrapMarker: {
+      schemaVersion: 1,
+      pinnedCommit: '48fb23a881d2d5eb1fbbcb7e16866cabc1244ff3'
+    },
+    bootstrapMarkerSchemaVersion: 1
+  })
+
+  assert.equal(d.resident, true)
+  assert.equal(d.reason, 'complete resident payload')
+})
+
+test('checkout without a valid legacy marker remains CLI-owned', () => {
+  const d = decideResidentRuntimeFromState({
+    payload: residentPayload(),
+    checkoutExists: true,
+    checkoutManifest: null,
+    bootstrapMarker: { schemaVersion: 1, pinnedCommit: 'short' },
+    bootstrapMarkerSchemaVersion: 1
+  })
+
+  assert.equal(d.resident, false)
+  assert.match(d.reason, /CLI-first/)
+})
+
+test('valid legacy marker never overrides an explicitly source-managed checkout', () => {
+  const d = decideResidentRuntimeFromState({
+    payload: residentPayload(),
+    checkoutExists: true,
+    checkoutManifest: { installMode: 'source' },
+    bootstrapMarker: {
+      schemaVersion: 1,
+      pinnedCommit: '48fb23a881d2d5eb1fbbcb7e16866cabc1244ff3'
+    },
+    bootstrapMarkerSchemaVersion: 1
+  })
+
+  assert.equal(d.resident, false)
+  assert.match(d.reason, /source-managed/)
 })
 
 test('never resident over a checkout the user owns', () => {

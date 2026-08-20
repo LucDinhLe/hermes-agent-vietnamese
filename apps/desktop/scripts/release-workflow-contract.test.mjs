@@ -38,6 +38,7 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /Kiểm thử cleanup uninstaller trên runner Windows thật/)
   assert.match(candidate, /if: matrix\.platform == 'win32'/)
   assert.match(candidate, /electron\/desktop-uninstall\.test\.ts/)
+  assert.match(candidate, /electron\/active-runtime-state\.test\.ts/)
   assert.match(candidate, /scripts\/browser-connector-extension\.test\.mjs/)
   assert.match(candidate, /electron\/browser-connector\/controller\.test\.ts/)
   assert.match(candidate, /electron\/browser-connector\/cookie-import\.test\.ts/)
@@ -46,9 +47,17 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /src\/store\/reasoning-summary\.test\.ts/)
   assert.match(candidate, /src\/app\/settings\/model-settings\.test\.tsx/)
   assert.match(candidate, /src\/app\/chat\/session-advisor-bar\.test\.tsx/)
+  assert.match(candidate, /src\/app\/chat\/sidebar\/project-dialog\.test\.tsx/)
   assert.match(candidate, /src\/app\/chat\/sidebar\/projects\/project-menu\.test\.tsx/)
+  assert.match(candidate, /src\/app\/projects\/index\.test\.tsx/)
+  assert.match(candidate, /src\/app\/routes\.workspace-reveal\.test\.ts/)
+  assert.match(candidate, /src\/app\/session\/hooks\/use-message-stream\/work-progress-event\.test\.tsx/)
+  assert.match(candidate, /src\/app\/usage\/usage-overview\.test\.tsx/)
+  assert.match(candidate, /src\/components\/assistant-ui\/thread\/status\.test\.tsx/)
+  assert.match(candidate, /src\/store\/layout-right-sidebar\.test\.ts/)
   assert.match(candidate, /src\/store\/layout-pinned-order\.test\.ts/)
   assert.match(candidate, /src\/store\/layout-connection-scope\.test\.ts/)
+  assert.match(candidate, /src\/store\/projects\.test\.ts/)
   assert.match(candidate, /src\/i18n\/languages\.test\.ts/)
   assert.match(candidate, /tests\/agent\/test_oneshot\.py/)
   assert.match(candidate, /tests\/agent\/test_advisor\.py/)
@@ -141,8 +150,17 @@ test('pilot promotion stays prerelease, validates every byte, and discloses miss
     'advisorModelPersistence',
     'advisorSessionScoped',
     'advisorPaneIsolation',
+    'advisorProgressPlan',
+    'advisorProgressFinal',
+    'workProgressActionReason',
+    'contextUsagePerSession',
+    'legacyMarkerResidentUpgrade',
     'projectPins',
     'projectPinOrdering',
+    'projectsOverview',
+    'usageAnalytics',
+    'rightPanelDefault',
+    'scheduledJobsVietnamese',
     'safeTool',
     'updateFromV25',
     'updateFromV28',

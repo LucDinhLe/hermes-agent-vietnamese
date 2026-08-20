@@ -68,7 +68,7 @@ import { BrowserConnectorController } from './browser-connector/controller'
 import { HERMES_PREVIEW_PARTITION } from './browser-connector/cookie-import'
 import { detectBundleSkew } from './bundle-skew'
 import {
-  decideResidentRuntime,
+  decideResidentRuntimeFromState,
   findResidentPython,
   latestPublicReleaseTag,
   latestReleaseFromLsRemote,
@@ -4370,13 +4370,12 @@ const INSTALL_MANIFEST_PATH = path.join(ACTIVE_HERMES_ROOT, '.hermes-install.jso
 function residentRuntimeDecision() {
   const marker = readBootstrapMarker() as any
 
-  return decideResidentRuntime({
+  return decideResidentRuntimeFromState({
     payload: resolvePayload(process.resourcesPath),
     checkoutExists: directoryExists(ACTIVE_HERMES_ROOT),
     checkoutManifest: readJson(INSTALL_MANIFEST_PATH) as any,
-    // desktopVersion has been written by every desktop bootstrap since the
-    // marker existed; its presence is desktop provenance for the checkout.
-    markerSaysDesktop: Boolean(marker && typeof marker.desktopVersion === 'string')
+    bootstrapMarker: marker,
+    bootstrapMarkerSchemaVersion: BOOTSTRAP_MARKER_SCHEMA_VERSION
   })
 }
 

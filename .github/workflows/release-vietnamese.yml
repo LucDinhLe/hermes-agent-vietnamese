@@ -109,6 +109,7 @@ jobs:
           scripts/stage-agent-payloads.test.mjs
           scripts/browser-connector-extension.test.mjs
           electron/app-updater.test.ts
+          electron/active-runtime-state.test.ts
           electron/bootstrap-runner.test.ts
           electron/browser-connector/controller.test.ts
           electron/browser-connector/cookie-import.test.ts
@@ -139,9 +140,17 @@ jobs:
           src/app/settings/model-settings.test.tsx
           src/app/settings/about-settings.test.tsx
           src/app/chat/session-advisor-bar.test.tsx
+          src/app/chat/sidebar/project-dialog.test.tsx
           src/app/chat/sidebar/projects/project-menu.test.tsx
+          src/app/projects/index.test.tsx
+          src/app/routes.workspace-reveal.test.ts
+          src/app/session/hooks/use-message-stream/work-progress-event.test.tsx
+          src/app/usage/usage-overview.test.tsx
+          src/components/assistant-ui/thread/status.test.tsx
+          src/store/layout-right-sidebar.test.ts
           src/store/layout-pinned-order.test.ts
           src/store/layout-connection-scope.test.ts
+          src/store/projects.test.ts
           src/i18n/languages.test.ts
 
       - name: Kiểm tra kiểu dữ liệu
