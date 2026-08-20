@@ -23,8 +23,8 @@
   **AI for Boss**.
 - Tài liệu quyết định và cổng nghiệm thu:
   `docs/hermes-v30-foundation-and-ai-for-boss-edition.md`. Bước nhỏ kế tiếp là
-  thiết kế Edition Contract trung tính trên một branch riêng; chưa áp brand AI
-  for Boss vào ứng dụng.
+  thiết kế Edition Contract trung tính trên một branch riêng, sau đó mới tạo
+  product-overlay repo sạch; chưa áp brand AI for Boss vào ứng dụng.
 - Không push, PR, tag, candidate, installer hoặc thay Public Latest.
 
 ## Cập nhật 2026-08-20 — tiến trình công việc và checkpoint Advisor trong từng phiên

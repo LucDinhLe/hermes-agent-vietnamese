@@ -15,7 +15,8 @@ chung lõi đó, được phát triển và phân phối bằng một lớp riê
 Quyết định này tạo ra một cây nguồn kỹ thuật, hai sản phẩm có ranh giới rõ:
 
 1. `hermes-agent-vietnamese` / `projects/hermes-v28` là lõi Community MIT.
-2. `ai-for-boss` là lớp sản phẩm riêng cho chủ doanh nghiệp.
+2. Một kho product overlay sạch, tên chính thức sẽ được chốt ở lát cắt sau, là
+   lớp sản phẩm AI for Boss riêng cho chủ doanh nghiệp.
 3. Lõi chỉ biết một hợp đồng edition trung tính. Lõi không phụ thuộc ngược vào
    kho riêng, thương hiệu AI for Boss hoặc cơ chế cấp phép thương mại.
 4. Mọi mã đã có trong lõi, gồm Advisor, Dự án, Thống kê sử dụng, panel công cụ
@@ -87,7 +88,7 @@ nhập dữ liệu từ Hermes, luồng đó phải:
 
 Mốc sạch `c849fd5210a4b96290511cefe3266f7537071f50` của kho `ai-for-boss` được
 giữ như hồ sơ nghiên cứu/thiết kế của hướng OpenClaw. Không merge prototype đó
-vào lõi Hermes.
+vào lõi Hermes và không tái dùng kho archive này làm product overlay mới.
 
 Những ý tưởng được phép chuyển thành yêu cầu sản phẩm:
 
@@ -125,8 +126,8 @@ không cần kho AI for Boss để build hoặc chạy.
 
 ### AI for Boss Preview — sau khi contract đạt
 
-Tạo overlay mỏng trong kho sản phẩm riêng, kèm license/notice inventory và một
-build nội bộ. Preview chưa được phát hành cho đến khi đạt các cổng pháp lý,
+Tạo overlay mỏng trong một kho sản phẩm sạch, kèm license/notice inventory và
+một build nội bộ. Preview chưa được phát hành cho đến khi đạt các cổng pháp lý,
 nhận diện, ký mã, updater và migration.
 
 ### Product Identity Migration — release riêng
