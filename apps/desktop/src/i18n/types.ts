@@ -2399,6 +2399,14 @@ export interface Translations {
         }
         compactAt: (tokens: string, percent: number) => string
         compactNow: string
+        costActual: (amount: string) => string
+        costDisclaimer: string
+        costEstimated: (amount: string) => string
+        costIncluded: string
+        costReference: (amount: string) => string
+        costTitle: string
+        costTokens: (input: string, output: string, cache: string) => string
+        costUnknown: string
         effectiveCapacity: (tokens: string) => string
         empty: string
         estimated: string

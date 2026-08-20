@@ -720,6 +720,9 @@ def finalize_turn(
         "estimated_cost_usd": agent.session_estimated_cost_usd,
         "cost_status": agent.session_cost_status,
         "cost_source": agent.session_cost_source,
+        "reference_cost_usd": getattr(agent, "session_reference_cost_usd", 0.0),
+        "reference_cost_status": getattr(agent, "session_reference_cost_status", "unknown"),
+        "reference_cost_source": getattr(agent, "session_reference_cost_source", "none"),
         # Requested service tier (from request_overrides.extra_body), for
         # billing audits by callers like `hermes -z --usage-file`.
         "service_tier": (

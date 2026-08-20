@@ -8,7 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/compon
 import { Tip } from '@/components/ui/tooltip'
 import type { HermesGateway } from '@/hermes'
 import { useI18n } from '@/i18n'
-import { compactNumber } from '@/lib/format'
+import { compactNumber, formatUsdCost } from '@/lib/format'
 import type { UsageStats } from '@/types/hermes'
 
 interface SessionContextMeterProps {
@@ -18,6 +18,7 @@ interface SessionContextMeterProps {
   model: string
   provider: string
   sessionId: string | null
+  sessionUsage?: UsageStats | null
 }
 
 /** Context occupancy for exactly one chat tile.
@@ -32,7 +33,8 @@ export function SessionContextMeter({
   gatewayOpen,
   model,
   provider,
-  sessionId
+  sessionId,
+  sessionUsage
 }: SessionContextMeterProps) {
   const { t } = useI18n()
   const copy = t.shell.statusbar
@@ -64,19 +66,32 @@ export function SessionContextMeter({
   const fraction =
     contextMax > 0 ? `${estimated ? '~' : ''}${compactNumber(contextUsed)}/${compactNumber(contextMax, 2)}` : '…'
 
-  const title = contextMax > 0 ? `${copy.contextUsage}: ${fraction} (${contextPercent}%)` : copy.contextUsage
+  const included = sessionUsage?.cost_status === 'included'
+  const referenceKnown = sessionUsage?.reference_cost_status === 'estimated'
+  const billedKnown = sessionUsage?.cost_status === 'actual' || sessionUsage?.cost_status === 'estimated'
+  const displayedCost = included && referenceKnown ? sessionUsage?.reference_cost_usd : sessionUsage?.cost_usd
+  const costKnown = (included && referenceKnown) || billedKnown
+  const costLabel = costKnown ? formatUsdCost(displayedCost, included || sessionUsage?.cost_status === 'estimated') : ''
+  const titleParts = [contextMax > 0 ? `${copy.contextUsage}: ${fraction} (${contextPercent}%)` : copy.contextUsage]
+
+  if (costLabel) {
+    titleParts.push(costLabel)
+  }
+
+  const title = titleParts.join(' · ')
 
   const usage = useMemo<UsageStats>(
     () => ({
-      calls: 0,
+      calls: sessionUsage?.calls ?? 0,
+      ...sessionUsage,
       context_max: contextMax,
       context_percent: contextPercent,
       context_used: contextUsed,
-      input: 0,
-      output: 0,
-      total: 0
+      input: sessionUsage?.input ?? 0,
+      output: sessionUsage?.output ?? 0,
+      total: sessionUsage?.total ?? 0
     }),
-    [contextMax, contextPercent, contextUsed]
+    [contextMax, contextPercent, contextUsed, sessionUsage]
   )
 
   return (
@@ -97,6 +112,7 @@ export function SessionContextMeter({
             <span className="hidden whitespace-nowrap tabular-nums @md:inline">
               {fraction} ({contextPercent}%)
             </span>
+            {costLabel && <span className="hidden whitespace-nowrap tabular-nums @xl:inline">· {costLabel}</span>}
           </Button>
         </DropdownMenuTrigger>
       </Tip>

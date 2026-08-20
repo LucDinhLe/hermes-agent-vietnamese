@@ -3,12 +3,49 @@ from types import SimpleNamespace
 from agent.usage_pricing import (
     CanonicalUsage,
     format_cost_label,
+    estimate_reference_api_cost,
     estimate_usage_cost,
     get_pricing_entry,
     normalize_usage,
     resolve_billing_route,
 )
 from decimal import Decimal
+
+
+def test_current_openai_gpt55_and_gpt56_prices_match_official_docs():
+    expected = {
+        "gpt-5.5": ("5.00", "0.50", "30.00"),
+        "gpt-5.6-sol": ("5.00", "0.50", "30.00"),
+        "gpt-5.6-terra": ("2.00", "0.20", "12.00"),
+        "gpt-5.6-luna": ("0.20", "0.02", "1.20"),
+    }
+    for model, (input_rate, cache_rate, output_rate) in expected.items():
+        entry = get_pricing_entry(model, provider="openai")
+        assert entry is not None, model
+        assert entry.input_cost_per_million == Decimal(input_rate), model
+        assert entry.cache_read_cost_per_million == Decimal(cache_rate), model
+        assert entry.output_cost_per_million == Decimal(output_rate), model
+
+
+def test_openai_long_context_multiplier_is_applied_per_request():
+    result = estimate_usage_cost(
+        "gpt-5.6-terra",
+        CanonicalUsage(input_tokens=300_000, output_tokens=10_000),
+        provider="openai",
+    )
+    assert result.amount_usd == Decimal("1.380")
+    assert any("long-context" in note for note in result.notes)
+
+
+def test_codex_subscription_keeps_invoice_zero_and_exposes_api_reference():
+    usage = CanonicalUsage(input_tokens=100_000, output_tokens=10_000)
+    billed = estimate_usage_cost("gpt-5.6-luna", usage, provider="openai-codex")
+    reference = estimate_reference_api_cost("gpt-5.6-luna", usage, provider="openai-codex")
+    assert billed.status == "included"
+    assert billed.amount_usd == Decimal("0")
+    assert reference.status == "estimated"
+    assert reference.amount_usd == Decimal("0.032")
+    assert any("API-equivalent" in note for note in reference.notes)
 
 
 

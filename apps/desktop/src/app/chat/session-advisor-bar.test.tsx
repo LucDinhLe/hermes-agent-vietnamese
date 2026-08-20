@@ -199,10 +199,21 @@ describe('SessionAdvisorBar', () => {
       gatewayOpen: true,
       model: 'gpt-5.6-sol',
       provider: 'openai-codex',
-      sessionId: 'runtime-42'
+      sessionId: 'runtime-42',
+      usage: {
+        calls: 3,
+        cost_status: 'included',
+        cost_usd: 0,
+        input: 100_000,
+        output: 10_000,
+        reference_cost_status: 'estimated',
+        reference_cost_usd: 0.8,
+        total: 110_000
+      }
     })
 
     expect(await screen.findByText('161.8k/1.05M (15%)')).toBeTruthy()
+    expect(screen.getByText('· ~$0.80')).toBeTruthy()
     expect(request).toHaveBeenCalledWith('session.context_breakdown', { session_id: 'runtime-42' })
 
     const meter = container.querySelector('[data-session-context-meter]')

@@ -23,3 +23,29 @@ export function compactNumber(value: null | number | undefined, maximumFractionD
 
   return `${Math.round(num)}`
 }
+
+/** Honest USD formatter for model-usage estimates.
+ *
+ * Keeps sub-cent values visible instead of rounding them to a fake $0.00.
+ * `approximate` is reserved for published-list-price estimates; provider-
+ * reported actual charges should render without the tilde.
+ */
+export function formatUsdCost(value: null | number | undefined, approximate = false): string {
+  const amount = Number(value ?? 0)
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return '$0.00'
+  }
+
+  const prefix = approximate ? '~' : ''
+
+  if (amount < 0.00005) {
+    return `${prefix}$<0.0001`
+  }
+
+  if (amount < 0.01) {
+    return `${prefix}$${amount.toFixed(4)}`
+  }
+
+  return `${prefix}$${amount.toFixed(2)}`
+}

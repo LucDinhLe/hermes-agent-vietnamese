@@ -5424,6 +5424,14 @@ def _get_usage(agent) -> dict:
         "completion": g("session_completion_tokens"),
         "total": g("session_total_tokens"),
         "calls": g("session_api_calls"),
+        "cache_read": g("session_cache_read_tokens"),
+        "cache_write": g("session_cache_write_tokens"),
+        "cost_usd": float(getattr(agent, "session_estimated_cost_usd", 0.0) or 0.0),
+        "cost_status": getattr(agent, "session_cost_status", "unknown") or "unknown",
+        "cost_source": getattr(agent, "session_cost_source", "none") or "none",
+        "reference_cost_usd": float(getattr(agent, "session_reference_cost_usd", 0.0) or 0.0),
+        "reference_cost_status": getattr(agent, "session_reference_cost_status", "unknown") or "unknown",
+        "reference_cost_source": getattr(agent, "session_reference_cost_source", "none") or "none",
     }
     comp = getattr(agent, "context_compressor", None)
     if comp:

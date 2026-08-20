@@ -698,13 +698,20 @@ export interface SessionRuntimeInfo {
 }
 
 export interface UsageStats {
+  cache_read?: number
+  cache_write?: number
   calls: number
   context_max?: number
   context_percent?: number
   context_used?: number
   cost_usd?: number
+  cost_source?: string
+  cost_status?: 'actual' | 'estimated' | 'included' | 'unknown'
   input: number
   output: number
+  reference_cost_source?: string
+  reference_cost_status?: 'actual' | 'estimated' | 'included' | 'unknown'
+  reference_cost_usd?: number
   total: number
 }
 

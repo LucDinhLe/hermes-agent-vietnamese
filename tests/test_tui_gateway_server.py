@@ -17440,6 +17440,31 @@ def test_get_usage_includes_active_subagents(monkeypatch):
     assert usage["active_subagents"] == 4
 
 
+def test_get_usage_includes_per_session_usd_and_cache_buckets(monkeypatch):
+    import tools.async_delegation as ad_mod
+    monkeypatch.setattr(ad_mod, "active_count", lambda: 0)
+    agent = types.SimpleNamespace(
+        model="gpt-5.6-sol",
+        session_input_tokens=1000,
+        session_output_tokens=250,
+        session_cache_read_tokens=700,
+        session_cache_write_tokens=100,
+        session_estimated_cost_usd=0.0,
+        session_cost_status="included",
+        session_cost_source="none",
+        session_reference_cost_usd=0.0123,
+        session_reference_cost_status="estimated",
+        session_reference_cost_source="official_docs_snapshot",
+    )
+    usage = server._get_usage(agent)
+    assert usage["cache_read"] == 700
+    assert usage["cache_write"] == 100
+    assert usage["cost_usd"] == 0.0
+    assert usage["cost_status"] == "included"
+    assert usage["reference_cost_usd"] == 0.0123
+    assert usage["reference_cost_status"] == "estimated"
+
+
 def test_get_usage_active_subagents_zero(monkeypatch):
     import tools.async_delegation as ad_mod
     monkeypatch.setattr(ad_mod, "active_count", lambda: 0)

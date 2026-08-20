@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 
 import { useI18n } from '@/i18n'
 import { ExternalLink } from '@/lib/external-link'
-import { compactNumber } from '@/lib/format'
+import { compactNumber, formatUsdCost } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { ContextBreakdown, ContextUsageCategory, UsageStats } from '@/types/hermes'
 
@@ -36,6 +36,23 @@ export function ContextUsagePanel({ breakdown, loading, usage }: ContextUsagePan
   const effectiveMax = breakdown?.context_max ?? 0
   const remaining = breakdown?.remaining_tokens ?? Math.max(0, publishedMax - contextUsed)
   const summaryUsed = `${breakdown?.context_measurement === 'estimated' ? '~' : ''}${compactNumber(contextUsed)}`
+  const included = usage.cost_status === 'included'
+  const referenceKnown = usage.reference_cost_status === 'estimated'
+  const billedKnown = usage.cost_status === 'actual' || usage.cost_status === 'estimated'
+  const displayedCost = included && referenceKnown ? usage.reference_cost_usd : usage.cost_usd
+  const approximate = included || usage.cost_status === 'estimated'
+  const costAmount = formatUsdCost(displayedCost, approximate)
+
+  const costSummary =
+    included && referenceKnown
+      ? copy.costReference(costAmount)
+      : usage.cost_status === 'actual'
+        ? copy.costActual(costAmount)
+        : billedKnown
+          ? copy.costEstimated(costAmount)
+          : copy.costUnknown
+
+  const cacheTokens = (usage.cache_read ?? 0) + (usage.cache_write ?? 0)
 
   const categories = useMemo(
     () =>
@@ -100,6 +117,18 @@ export function ContextUsagePanel({ breakdown, loading, usage }: ContextUsagePan
           )}
         </div>
       )}
+
+      <div className="flex flex-col gap-1 rounded-md bg-(--ui-bg-elevated) p-2 text-[0.6875rem]">
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-medium text-foreground">{copy.costTitle}</span>
+          {included && <span className="text-muted-foreground">{copy.costIncluded}</span>}
+        </div>
+        <span className="tabular-nums text-foreground">{costSummary}</span>
+        <span className="text-muted-foreground">
+          {copy.costTokens(compactNumber(usage.input), compactNumber(usage.output), compactNumber(cacheTokens))}
+        </span>
+        {(billedKnown || referenceKnown) && <span className="text-muted-foreground">{copy.costDisclaimer}</span>}
+      </div>
 
       <ul className="flex flex-col gap-1.5">
         {categories.map(category => (

@@ -372,6 +372,7 @@ export const ChatView = memo(function ChatView({
   const advisorEnabled = useStore(view.$advisorEnabled)
   const currentModel = useStore(view.$model)
   const currentProvider = useStore(view.$provider)
+  const currentUsage = useStore(view.$usage)
   // A pet anywhere (in-window or popped out) owns the hearts; composer only when none.
   const petActive = useStore($petActive)
   const petOverlayActive = useStore($petOverlayActive)
@@ -592,6 +593,7 @@ export const ChatView = memo(function ChatView({
         model={currentModel}
         provider={currentProvider}
         sessionId={activeSessionId}
+        usage={currentUsage}
       />
 
       {/* Mounted for the primary AND every tile, each scoped to its own session

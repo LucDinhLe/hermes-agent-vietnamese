@@ -1,5 +1,21 @@
 # Tiến độ
 
+## Cập nhật 2026-08-20 — chi phí USD theo từng phiên cho V31
+
+- Meter cạnh Advisor hiển thị thêm chi phí model của đúng phiên khi panel đủ
+  rộng; bảng chi tiết tách token đầu vào, đầu ra và cache.
+- Tuyến API trực tiếp dùng chi phí ước tính theo bảng giá công khai. Tuyến
+  Codex thuộc gói thuê bao hiển thị **đã gồm trong gói** kèm giá trị API tương
+  đương để tham khảo, không diễn giải thành khoản người dùng sẽ bị trừ thêm.
+- Cập nhật bảng giá chính thức GPT-5.5 và dòng GPT-5.6 tại ngày 2026-08-20;
+  xử lý hệ số dài ngữ cảnh OpenAI trên từng lượt vượt 272.000 token và giữ bảng
+  giá Claude hiện hành từ tài liệu Anthropic.
+- Backend chuyển đủ token cache, trạng thái/nguồn giá và giá trị tham chiếu theo
+  runtime session; giao diện không dùng mức chiếm cửa sổ ngữ cảnh để tính tiền.
+- Xác minh cục bộ đạt 52/52 kiểm thử Python mục tiêu, 23/23 kiểm thử UI mục
+  tiêu, Desktop typecheck, Ruff và `git diff --check`. Thay đổi chưa được push,
+  đóng gói, tạo candidate hoặc phát hành.
+
 ## Cập nhật 2026-08-20 — meter ngữ cảnh theo từng phiên cho V31
 
 - Chủ dự án chốt meter nằm cạnh Advisor, dùng dung lượng từng model theo công

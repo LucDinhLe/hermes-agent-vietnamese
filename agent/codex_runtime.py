@@ -150,7 +150,7 @@ def _record_codex_app_server_usage(agent, turn) -> dict[str, Any]:
                 )
         return {}
 
-    from agent.usage_pricing import CanonicalUsage, estimate_usage_cost
+    from agent.usage_pricing import CanonicalUsage, estimate_reference_api_cost, estimate_usage_cost
 
     input_tokens = _coerce_usage_int(usage.get("inputTokens"))
     cache_read_tokens = _coerce_usage_int(usage.get("cachedInputTokens"))
@@ -210,6 +210,19 @@ def _record_codex_app_server_usage(agent, turn) -> dict[str, Any]:
         agent.session_estimated_cost_usd += float(cost_result.amount_usd)
     agent.session_cost_status = cost_result.status
     agent.session_cost_source = cost_result.source
+    reference_cost_result = estimate_reference_api_cost(
+        agent.model,
+        canonical_usage,
+        provider=agent.provider,
+        base_url=agent.base_url,
+        api_key=getattr(agent, "api_key", ""),
+    )
+    if reference_cost_result.amount_usd is not None:
+        agent.session_reference_cost_usd = float(
+            getattr(agent, "session_reference_cost_usd", 0.0) or 0.0
+        ) + float(reference_cost_result.amount_usd)
+    agent.session_reference_cost_status = reference_cost_result.status
+    agent.session_reference_cost_source = reference_cost_result.source
 
     if agent._session_db and agent.session_id:
         try:
@@ -247,6 +260,10 @@ def _record_codex_app_server_usage(agent, turn) -> dict[str, Any]:
         if cost_result.amount_usd is not None else None,
         "cost_status": cost_result.status,
         "cost_source": cost_result.source,
+        "reference_cost_usd": float(reference_cost_result.amount_usd)
+        if reference_cost_result.amount_usd is not None else None,
+        "reference_cost_status": reference_cost_result.status,
+        "reference_cost_source": reference_cost_result.source,
     }
 
 

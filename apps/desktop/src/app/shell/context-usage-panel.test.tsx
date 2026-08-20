@@ -12,8 +12,13 @@ const usage: UsageStats = {
   context_max: 272_000,
   context_percent: 47,
   context_used: 128_200,
+  cost_status: 'included',
+  cost_usd: 0,
+  cache_read: 80_000,
   input: 0,
   output: 0,
+  reference_cost_status: 'estimated',
+  reference_cost_usd: 1.234,
   total: 0
 }
 
@@ -134,6 +139,8 @@ describe('ContextUsagePanel', () => {
 
     expect(screen.getByText('47% Full')).toBeTruthy()
     expect(screen.getByText('Published capacity: 1.05M · OpenAI')).toBeTruthy()
+    expect(screen.getByText('API-equivalent value: ~$1.23 USD')).toBeTruthy()
+    expect(screen.getByText('Included in the current subscription')).toBeTruthy()
     expect(screen.getByText('Conversation')).toBeTruthy()
   })
 

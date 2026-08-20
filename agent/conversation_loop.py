@@ -92,7 +92,7 @@ from agent.trajectory import has_incomplete_scratchpad
 # Bind before the turn starts so a source-tree swap cannot load a skewed
 # finalizer at turn end.
 from agent.turn_finalizer import finalize_turn
-from agent.usage_pricing import estimate_usage_cost, normalize_usage
+from agent.usage_pricing import estimate_reference_api_cost, estimate_usage_cost, normalize_usage
 from agent import empty_response_guard as _empty_guard
 from hermes_constants import PARTIAL_STREAM_STUB_ID
 from hermes_logging import set_session_context
@@ -4121,6 +4121,19 @@ def run_conversation(
                     )
                     if cost_result.amount_usd is not None:
                         agent.session_estimated_cost_usd += float(cost_result.amount_usd)
+                    reference_cost_result = estimate_reference_api_cost(
+                        _agg_cost_model,
+                        aggregator_usage,
+                        provider=_agg_cost_provider,
+                        base_url=_agg_cost_base_url,
+                        api_key=getattr(agent, "api_key", ""),
+                    )
+                    if reference_cost_result.amount_usd is not None:
+                        agent.session_reference_cost_usd = float(
+                            getattr(agent, "session_reference_cost_usd", 0.0) or 0.0
+                        ) + float(reference_cost_result.amount_usd)
+                    agent.session_reference_cost_status = reference_cost_result.status
+                    agent.session_reference_cost_source = reference_cost_result.source
                     # Add MoA advisor cost (already priced per-advisor at each
                     # advisor's own model rate) on top of the aggregator cost.
                     if _moa_ref_cost is not None:

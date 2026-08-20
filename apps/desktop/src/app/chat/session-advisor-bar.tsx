@@ -16,7 +16,7 @@ import { notifyError } from '@/store/notifications'
 import { $activeGatewayProfile } from '@/store/profile'
 import { setCurrentAdvisorEnabled } from '@/store/session'
 import { sessionTileDelegate } from '@/store/session-states'
-import type { AuxiliaryModelsResponse } from '@/types/hermes'
+import type { AuxiliaryModelsResponse, UsageStats } from '@/types/hermes'
 
 import { SessionContextMeter } from './session-context-meter'
 
@@ -28,6 +28,7 @@ interface SessionAdvisorBarProps {
   model: string
   provider: string
   sessionId: string | null
+  usage?: UsageStats | null
 }
 
 const advisorModelQueryKey = (profile: string) => ['advisor-model', profile] as const
@@ -90,7 +91,8 @@ export function SessionAdvisorBar({
   gatewayOpen,
   model,
   provider,
-  sessionId
+  sessionId,
+  usage
 }: SessionAdvisorBarProps) {
   const { t } = useI18n()
   const profile = useStore($activeGatewayProfile)
@@ -221,6 +223,7 @@ export function SessionAdvisorBar({
           model={model}
           provider={provider}
           sessionId={sessionId}
+          sessionUsage={usage}
         />
         <Codicon
           className={cn('size-3.5 shrink-0', enabled ? 'text-primary' : 'text-(--ui-text-quaternary)')}

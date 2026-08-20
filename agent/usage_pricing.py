@@ -146,18 +146,42 @@ _UTC_NOW = lambda: datetime.now(timezone.utc)
 # Official docs snapshot entries. Models whose published pricing and cache
 # semantics are stable enough to encode exactly.
 _OFFICIAL_DOCS_PRICING: Dict[tuple[str, str], PricingEntry] = {
+    # ── OpenAI GPT-5.5 series ────────────────────────────────────────────
+    # Standard API list prices. GPT-5.5 Pro has no separately published
+    # cached-input rate, so that field intentionally stays unknown.
+    # Source: https://developers.openai.com/api/docs/models/gpt-5.5
+    (
+        "openai",
+        "gpt-5.5",
+    ): PricingEntry(
+        input_cost_per_million=Decimal("5.00"),
+        output_cost_per_million=Decimal("30.00"),
+        cache_read_cost_per_million=Decimal("0.50"),
+        source="official_docs_snapshot",
+        source_url="https://developers.openai.com/api/docs/models/gpt-5.5",
+        pricing_version="openai-gpt-5.5-2026-08-20",
+    ),
+    (
+        "openai",
+        "gpt-5.5-pro",
+    ): PricingEntry(
+        input_cost_per_million=Decimal("30.00"),
+        output_cost_per_million=Decimal("180.00"),
+        source="official_docs_snapshot",
+        source_url="https://developers.openai.com/api/docs/models/gpt-5.5-pro",
+        pricing_version="openai-gpt-5.5-pro-2026-08-20",
+    ),
     # ── OpenAI GPT-5.6 series (Sol/Terra/Luna) ───────────────────────────
-    # Announced in limited preview 2026-06-26; GA 2026-07-09 at the same
-    # rates (Sol $5/$30, Terra $2.50/$15, Luna $1/$6 per 1M in/out). Cache
-    # writes are billed at 1.25x the uncached input rate; cache reads get the
-    # standard 90% discount (0.10x input, confirmed: Sol $0.50/M cached).
+    # Current direct-API rates per 1M tokens: Sol $5/$30, Terra $2/$12,
+    # Luna $0.20/$1.20 input/output. Cache writes are billed at 1.25x the
+    # uncached input rate; cache reads get the standard 90% discount.
     # Note: "Sol Fast mode" ($12.5/$75, up to 750 tok/s via Cerebras) is a
     # separate serving tier, not covered by these entries. The "-pro"
     # variants (high-effort modes, GA alongside base tiers) bill at the
     # SAME per-token rates and are aliased onto these entries below the
     # dict (they cost more per task by consuming more tokens, not by a
     # higher rate — verified against OpenRouter's live pricing 2026-07-09).
-    # Source: https://openai.com/index/previewing-gpt-5-6-sol/
+    # Source: https://developers.openai.com/api/docs/models/compare
     (
         "openai",
         "gpt-5.6-sol",
@@ -167,32 +191,32 @@ _OFFICIAL_DOCS_PRICING: Dict[tuple[str, str], PricingEntry] = {
         cache_read_cost_per_million=Decimal("0.50"),
         cache_write_cost_per_million=Decimal("6.25"),
         source="official_docs_snapshot",
-        source_url="https://openai.com/index/previewing-gpt-5-6-sol/",
-        pricing_version="openai-gpt-5.6-2026-07",
+        source_url="https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+        pricing_version="openai-gpt-5.6-2026-08-20",
     ),
     (
         "openai",
         "gpt-5.6-terra",
     ): PricingEntry(
-        input_cost_per_million=Decimal("2.50"),
-        output_cost_per_million=Decimal("15.00"),
-        cache_read_cost_per_million=Decimal("0.25"),
-        cache_write_cost_per_million=Decimal("3.125"),
+        input_cost_per_million=Decimal("2.00"),
+        output_cost_per_million=Decimal("12.00"),
+        cache_read_cost_per_million=Decimal("0.20"),
+        cache_write_cost_per_million=Decimal("2.50"),
         source="official_docs_snapshot",
-        source_url="https://openai.com/index/previewing-gpt-5-6-sol/",
-        pricing_version="openai-gpt-5.6-2026-07",
+        source_url="https://developers.openai.com/api/docs/models/gpt-5.6-terra",
+        pricing_version="openai-gpt-5.6-2026-08-20",
     ),
     (
         "openai",
         "gpt-5.6-luna",
     ): PricingEntry(
-        input_cost_per_million=Decimal("1.00"),
-        output_cost_per_million=Decimal("6.00"),
-        cache_read_cost_per_million=Decimal("0.10"),
-        cache_write_cost_per_million=Decimal("1.25"),
+        input_cost_per_million=Decimal("0.20"),
+        output_cost_per_million=Decimal("1.20"),
+        cache_read_cost_per_million=Decimal("0.02"),
+        cache_write_cost_per_million=Decimal("0.25"),
         source="official_docs_snapshot",
-        source_url="https://openai.com/index/previewing-gpt-5-6-sol/",
-        pricing_version="openai-gpt-5.6-2026-07",
+        source_url="https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+        pricing_version="openai-gpt-5.6-2026-08-20",
     ),
     # ── Anthropic Claude 4.8 ─────────────────────────────────────────────
     # Same $5/$25 base pricing as 4.6/4.7.  Fast-mode variant is a separate
@@ -223,9 +247,8 @@ _OFFICIAL_DOCS_PRICING: Dict[tuple[str, str], PricingEntry] = {
         pricing_version="anthropic-pricing-2026-05",
     ),
     # ── Anthropic Claude Sonnet 5 ────────────────────────────────────────
-    # Launched 2026-06-30. Introductory pricing ($2/$10 per MTok) runs
-    # through 2026-08-31, after which it reverts to $3/$15 (matching
-    # Sonnet 4.6). Update this entry when the intro window closes.
+    # $2/$10 per MTok is now the standard price. Anthropic explicitly
+    # cancelled the previously announced September increase.
     # Source: https://platform.claude.com/docs/en/about-claude/pricing
     (
         "anthropic",
@@ -237,7 +260,7 @@ _OFFICIAL_DOCS_PRICING: Dict[tuple[str, str], PricingEntry] = {
         cache_write_cost_per_million=Decimal("2.50"),
         source="official_docs_snapshot",
         source_url="https://platform.claude.com/docs/en/about-claude/pricing",
-        pricing_version="anthropic-pricing-2026-06-intro",
+        pricing_version="anthropic-pricing-2026-08-20",
     ),
     # ── Anthropic Claude 4.7 ─────────────────────────────────────────────
     # Opus 4.5/4.6/4.7 share $5/$25 pricing (new tokenizer, up to 35% more
@@ -1001,6 +1024,16 @@ for _base_56 in ("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"):
     ]
 del _base_56
 
+# Published aliases/snapshots share the base model's list price.
+for _alias, _canonical in {
+    "gpt-5.5-2026-04-23": "gpt-5.5",
+    "gpt-5.6": "gpt-5.6-sol",
+}.items():
+    _OFFICIAL_DOCS_PRICING[("openai", _alias)] = _OFFICIAL_DOCS_PRICING[
+        ("openai", _canonical)
+    ]
+del _alias, _canonical
+
 # The direct Gemini provider currently exposes preview IDs for these two
 # models. Keep the official snapshot keyed by both their documented stable
 # names and the provider's emitted IDs so a catalog selection is billable.
@@ -1449,6 +1482,21 @@ def estimate_usage_cost(
     notes: list[str] = []
     amount = _ZERO
 
+    # Apply OpenAI's >272K prompt multiplier per provider request. Applying it
+    # later to a cumulative session total would overprice multi-turn sessions.
+    normalized_model = route.model.lower()
+    openai_long_context = route.provider == "openai" and (
+        normalized_model == "gpt-5.5"
+        or normalized_model == "gpt-5.5-2026-04-23"
+        or normalized_model == "gpt-5.6"
+        or normalized_model.startswith("gpt-5.6-")
+    )
+    long_context = openai_long_context and usage.prompt_tokens > 272_000
+    input_multiplier = Decimal("2") if long_context else Decimal("1")
+    output_multiplier = Decimal("1.5") if long_context else Decimal("1")
+    if long_context:
+        notes.append("OpenAI long-context pricing applied (>272K input tokens).")
+
     if usage.input_tokens and entry.input_cost_per_million is None:
         return CostResult(amount_usd=None, status="unknown", source=entry.source, label="n/a")
     if usage.output_tokens and entry.output_cost_per_million is None:
@@ -1473,13 +1521,13 @@ def estimate_usage_cost(
             )
 
     if entry.input_cost_per_million is not None:
-        amount += Decimal(usage.input_tokens) * entry.input_cost_per_million / _ONE_MILLION
+        amount += Decimal(usage.input_tokens) * entry.input_cost_per_million * input_multiplier / _ONE_MILLION
     if entry.output_cost_per_million is not None:
-        amount += Decimal(usage.output_tokens) * entry.output_cost_per_million / _ONE_MILLION
+        amount += Decimal(usage.output_tokens) * entry.output_cost_per_million * output_multiplier / _ONE_MILLION
     if entry.cache_read_cost_per_million is not None:
-        amount += Decimal(usage.cache_read_tokens) * entry.cache_read_cost_per_million / _ONE_MILLION
+        amount += Decimal(usage.cache_read_tokens) * entry.cache_read_cost_per_million * input_multiplier / _ONE_MILLION
     if entry.cache_write_cost_per_million is not None:
-        amount += Decimal(usage.cache_write_tokens) * entry.cache_write_cost_per_million / _ONE_MILLION
+        amount += Decimal(usage.cache_write_tokens) * entry.cache_write_cost_per_million * input_multiplier / _ONE_MILLION
     if entry.request_cost is not None and usage.request_count:
         amount += Decimal(usage.request_count) * entry.request_cost
 
@@ -1501,6 +1549,37 @@ def estimate_usage_cost(
         fetched_at=entry.fetched_at,
         pricing_version=entry.pricing_version,
         notes=tuple(notes),
+    )
+
+
+def estimate_reference_api_cost(
+    model_name: str,
+    usage: CanonicalUsage,
+    *,
+    provider: Optional[str] = None,
+    base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> CostResult:
+    """Return a public-API price reference for subscription-included usage."""
+    route = resolve_billing_route(model_name, provider=provider, base_url=base_url)
+    if route.provider != "openai-codex" or route.billing_mode != "subscription_included":
+        return estimate_usage_cost(
+            model_name, usage, provider=provider, base_url=base_url, api_key=api_key
+        )
+
+    result = estimate_usage_cost(model_name, usage, provider="openai")
+    if result.amount_usd is None:
+        return result
+
+    return CostResult(
+        amount_usd=result.amount_usd,
+        status="estimated",
+        source=result.source,
+        label=result.label,
+        fetched_at=result.fetched_at,
+        pricing_version=result.pricing_version,
+        notes=result.notes
+        + ("API-equivalent reference; current Codex subscription is not billed per token.",),
     )
 
 
