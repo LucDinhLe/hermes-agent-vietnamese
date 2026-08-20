@@ -1,5 +1,32 @@
 # Tiến độ
 
+## Cập nhật 2026-08-20 — chốt V30 Foundation và kiến trúc AI for Boss Edition
+
+- Chủ sản phẩm đã chấp thuận mô hình một lõi Hermes-derived công khai theo MIT
+  và một lớp AI for Boss source-available/thương mại nằm ở kho riêng. Lõi chỉ
+  cung cấp hợp đồng edition trung tính; mã, thương hiệu, pháp lý, updater và
+  dịch vụ riêng của AI for Boss không được nhập ngược vào lõi.
+- Bốn nhóm thay đổi hậu V29 đã được checkpoint sạch trên branch
+  `feat/v30-foundation` tại commit
+  `8f9b5534c0c831cb953ccbd3852feab4febb8d9e`: Advisor trong từng phiên,
+  Dự án/Thống kê sử dụng, panel phải và tiến trình công việc có cấu trúc.
+- Gate cục bộ đạt: 16 kiểm thử Python mục tiêu, 99 kiểm thử UI, Desktop
+  typecheck, Ruff, Prettier và `git diff --check`; ESLint đạt 0 lỗi với 133 cảnh
+  báo nền có sẵn.
+- Lệnh build gộp vẫn bị Windows Device Guard chặn binary `uv` trong AppData.
+  Các bước tương đương đã đạt: tạo install stamp bằng venv, build connector và
+  renderer, bundle Electron, stage native dependencies, stage Agent payload và
+  `assert-dist-built`. Bước bundle Electron cần chạy ngoài sandbox sau lỗi
+  Access Denied; không có bước phát hành nào được thực hiện.
+- Chưa đổi root MIT license, app identity, dữ liệu, updater, signing hoặc tên
+  hiển thị. Chưa chọn văn bản license thương mại và chưa thông qua nhãn hiệu
+  **AI for Boss**.
+- Tài liệu quyết định và cổng nghiệm thu:
+  `docs/hermes-v30-foundation-and-ai-for-boss-edition.md`. Bước nhỏ kế tiếp là
+  thiết kế Edition Contract trung tính trên một branch riêng; chưa áp brand AI
+  for Boss vào ứng dụng.
+- Không push, PR, tag, candidate, installer hoặc thay Public Latest.
+
 ## Cập nhật 2026-08-20 — tiến trình công việc và checkpoint Advisor trong từng phiên
 
 - Mỗi phiên nay có một dòng tiến trình tạm thời ngay trong hội thoại, gồm việc
