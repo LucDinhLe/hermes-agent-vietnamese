@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 
 import { useI18n } from '@/i18n'
+import { ExternalLink } from '@/lib/external-link'
 import { compactNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { ContextBreakdown, ContextUsageCategory, UsageStats } from '@/types/hermes'
@@ -22,6 +23,19 @@ export function ContextUsagePanel({ breakdown, loading, usage }: ContextUsagePan
   const contextMax = usage.context_max ?? 0
   const contextUsed = usage.context_used ?? 0
   const contextPercent = Math.max(0, Math.min(100, Math.round(usage.context_percent ?? 0)))
+  const measurement = breakdown?.context_measurement === 'measured' ? copy.measured : copy.estimated
+
+  const source =
+    breakdown?.published_context_source === 'openai'
+      ? copy.sourceOpenAI
+      : breakdown?.published_context_source === 'anthropic'
+        ? copy.sourceAnthropic
+        : copy.sourceRuntime
+
+  const publishedMax = breakdown?.published_context_max ?? breakdown?.context_max ?? 0
+  const effectiveMax = breakdown?.context_max ?? 0
+  const remaining = breakdown?.remaining_tokens ?? Math.max(0, publishedMax - contextUsed)
+  const summaryUsed = `${breakdown?.context_measurement === 'estimated' ? '~' : ''}${compactNumber(contextUsed)}`
 
   const categories = useMemo(
     () =>
@@ -40,13 +54,52 @@ export function ContextUsagePanel({ breakdown, loading, usage }: ContextUsagePan
         <p className="font-medium text-foreground">{copy.title}</p>
 
         <span className="text-[0.6875rem] text-muted-foreground">
-          {copy.tokenSummary(`~${compactNumber(contextUsed)}`, compactNumber(contextMax))}
+          {copy.tokenSummary(summaryUsed, compactNumber(contextMax, 2))}
         </span>
       </div>
 
-      <p className="text-[0.6875rem] text-foreground">{copy.percentFull(contextPercent)}</p>
+      <div className="flex items-center justify-between gap-2 text-[0.6875rem]">
+        <p className="text-foreground">{copy.percentFull(contextPercent)}</p>
+        <span className="rounded-full bg-(--ui-bg-elevated) px-1.5 py-0.5 text-muted-foreground">{measurement}</span>
+      </div>
 
       <ContextUsageBar categories={categories} segmentTotal={segmentTotal} />
+
+      {breakdown && (
+        <div className="flex flex-col gap-1 border-b border-(--ui-stroke-tertiary) pb-2 text-[0.6875rem] text-muted-foreground">
+          {breakdown.model && <div>{copy.modelLabel(breakdown.model)}</div>}
+          {publishedMax > 0 && (
+            <div>
+              {breakdown.published_context_reference ? (
+                <ExternalLink href={breakdown.published_context_reference} showExternalIcon>
+                  {copy.publishedCapacity(compactNumber(publishedMax, 2), source)}
+                </ExternalLink>
+              ) : (
+                copy.publishedCapacity(compactNumber(publishedMax, 2), source)
+              )}
+            </div>
+          )}
+          {effectiveMax > 0 && effectiveMax !== publishedMax && (
+            <div>{copy.effectiveCapacity(compactNumber(effectiveMax, 2))}</div>
+          )}
+          {publishedMax > 0 && <div>{copy.remaining(compactNumber(remaining, 2))}</div>}
+          {(breakdown.compact_threshold_tokens ?? 0) > 0 && (
+            <div className={cn(breakdown.compact_recommended && 'font-medium text-amber-600 dark:text-amber-400')}>
+              {breakdown.compact_recommended
+                ? copy.compactNow
+                : copy.tokensUntilCompact(compactNumber(breakdown.tokens_until_compact, 2))}
+            </div>
+          )}
+          {(breakdown.compact_threshold_tokens ?? 0) > 0 && (
+            <div>
+              {copy.compactAt(
+                compactNumber(breakdown.compact_threshold_tokens, 2),
+                breakdown.compact_threshold_percent ?? 0
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <ul className="flex flex-col gap-1.5">
         {categories.map(category => (

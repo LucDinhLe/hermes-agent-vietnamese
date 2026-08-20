@@ -2397,11 +2397,23 @@ export interface Translations {
           system_prompt: string
           tool_definitions: string
         }
+        compactAt: (tokens: string, percent: number) => string
+        compactNow: string
+        effectiveCapacity: (tokens: string) => string
         empty: string
+        estimated: string
         loading: string
+        measured: string
+        modelLabel: (model: string) => string
         percentFull: (percent: number) => string
+        publishedCapacity: (tokens: string, source: string) => string
+        remaining: (tokens: string) => string
+        sourceAnthropic: string
+        sourceOpenAI: string
+        sourceRuntime: string
         title: string
         tokenSummary: (used: string, max: string) => string
+        tokensUntilCompact: (tokens: string) => string
       }
       session: string
       yoloOn: string

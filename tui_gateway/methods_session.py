@@ -1609,15 +1609,37 @@ def _(rid, params: dict) -> dict:
     agent = session.get("agent")
     if agent is None:
         usage = _session_usage_snapshot(session) or _get_usage(None)
+        model = _metadata_mirror(session).get("model", "")
+        from agent.model_metadata import get_published_model_context_window
+
+        published = get_published_model_context_window(model)
+        context_max = int(usage.get("context_max", 0) or 0)
+        context_used = int(usage.get("context_used", 0) or 0)
+        published_context_max = int(published["tokens"]) if published else context_max
         return _ok(
             rid,
             {
                 "categories": [],
-                "context_max": usage.get("context_max", 0) or 0,
+                "context_max": context_max,
                 "context_percent": usage.get("context_percent", 0) or 0,
-                "context_used": usage.get("context_used", 0) or 0,
-                "estimated_total": usage.get("context_used", 0) or usage.get("total", 0) or 0,
-                "model": _metadata_mirror(session).get("model", ""),
+                "context_used": context_used,
+                "context_measurement": "measured" if context_used > 0 else "estimated",
+                "effective_remaining_tokens": max(0, context_max - context_used),
+                "estimated_total": context_used or usage.get("total", 0) or 0,
+                "model": model,
+                "published_context_max": published_context_max,
+                "published_context_percent": (
+                    max(0, min(100, round(context_used / published_context_max * 100)))
+                    if published_context_max
+                    else 0
+                ),
+                "published_context_reference": published["reference"] if published else "",
+                "published_context_source": published["source"] if published else "runtime",
+                "remaining_tokens": max(0, published_context_max - context_used),
+                "compact_recommended": False,
+                "compact_threshold_percent": 0,
+                "compact_threshold_tokens": 0,
+                "tokens_until_compact": 0,
             },
         )
     with session["history_lock"]:

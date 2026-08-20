@@ -424,6 +424,8 @@ DEFAULT_CONTEXT_LENGTHS = {
     # OpenRouter-prefixed models resolve via OpenRouter live API or models.dev.
     "claude-fable-5": 1000000,
     "claude-fable": 1000000,
+    "claude-mythos-preview": 1000000,
+    "claude-mythos-5": 1000000,
     "claude-opus-5": 1000000,
     "claude-sonnet-5": 1000000,
     "claude-opus-4-8": 1000000,
@@ -578,6 +580,68 @@ DEFAULT_CONTEXT_LENGTHS = {
     "mimo-v2-flash": 262144,
     "zai-org/GLM-5": 202752,
 }
+
+
+_OPENAI_PUBLISHED_CONTEXT_REFERENCE = "https://developers.openai.com/api/docs/models"
+_ANTHROPIC_PUBLISHED_CONTEXT_REFERENCE = (
+    "https://platform.claude.com/docs/en/build-with-claude/context-windows"
+)
+
+
+def _published_model_slug(model: str) -> str:
+    """Return a provider-agnostic slug suitable for exact family matching."""
+    bare = str(model or "").strip().lower().rsplit("/", 1)[-1]
+    return re.sub(r"[-_.]+", "-", bare).strip("-")
+
+
+def _is_model_family(slug: str, family: str) -> bool:
+    return slug == family or slug.startswith(f"{family}-")
+
+
+def get_published_model_context_window(model: str) -> Optional[Dict[str, Any]]:
+    """Return a context window explicitly documented by the model publisher.
+
+    This intentionally covers only model families whose current first-party
+    documentation we have verified. Route-specific caps (for example Codex
+    OAuth) stay separate and continue to come from
+    :func:`get_model_context_length` / the live compressor.
+    """
+    slug = _published_model_slug(model)
+
+    if _is_model_family(slug, "gpt-5-6") or _is_model_family(slug, "gpt-5-5"):
+        reference = _OPENAI_PUBLISHED_CONTEXT_REFERENCE
+        for family in ("gpt-5-6-sol", "gpt-5-6-terra", "gpt-5-6-luna", "gpt-5-5"):
+            if _is_model_family(slug, family):
+                reference = f"{_OPENAI_PUBLISHED_CONTEXT_REFERENCE}/{family.replace('-5-6', '-5.6').replace('-5-5', '-5.5')}"
+                break
+
+        return {
+            "tokens": 1_050_000,
+            "source": "openai",
+            "reference": reference,
+        }
+
+    if not _is_model_family(slug, "claude"):
+        return None
+
+    one_million_families = (
+        "claude-fable-5",
+        "claude-mythos-5",
+        "claude-mythos-preview",
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-opus-4-8",
+        "claude-opus-4-7",
+        "claude-opus-4-6",
+        "claude-sonnet-4-6",
+    )
+    tokens = 1_000_000 if any(_is_model_family(slug, family) for family in one_million_families) else 200_000
+
+    return {
+        "tokens": tokens,
+        "source": "anthropic",
+        "reference": _ANTHROPIC_PUBLISHED_CONTEXT_REFERENCE,
+    }
 
 # xAI Grok models that ACCEPT the `reasoning.effort` parameter on
 # api.x.ai. Verified live against /v1/responses 2026-05-10:

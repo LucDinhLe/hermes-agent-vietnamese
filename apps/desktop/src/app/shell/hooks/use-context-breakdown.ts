@@ -5,6 +5,7 @@ import type { ContextBreakdown } from '@/types/hermes'
 interface ContextBreakdownOptions {
   busy: boolean
   enabled: boolean
+  refreshKey?: string
   requestGateway: <T = unknown>(method: string, params?: Record<string, unknown>) => Promise<T>
   sessionId: null | string
 }
@@ -24,7 +25,7 @@ interface ContextBreakdownOptions {
  *  transcript just grew). Held keyed by the session it describes so switching
  *  sessions drops the previous numbers instead of painting them under the new
  *  session's name. */
-export function useContextBreakdown({ busy, enabled, requestGateway, sessionId }: ContextBreakdownOptions) {
+export function useContextBreakdown({ busy, enabled, refreshKey, requestGateway, sessionId }: ContextBreakdownOptions) {
   const [fetched, setFetched] = useState<{ breakdown: ContextBreakdown; sessionId: string } | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -54,7 +55,7 @@ export function useContextBreakdown({ busy, enabled, requestGateway, sessionId }
     return () => {
       cancelled = true
     }
-  }, [busy, enabled, requestGateway, sessionId])
+  }, [busy, enabled, refreshKey, requestGateway, sessionId])
 
   return {
     breakdown: fetched && fetched.sessionId === sessionId ? fetched.breakdown : null,

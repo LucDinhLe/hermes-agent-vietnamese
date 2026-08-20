@@ -18,10 +18,15 @@ import { setCurrentAdvisorEnabled } from '@/store/session'
 import { sessionTileDelegate } from '@/store/session-states'
 import type { AuxiliaryModelsResponse } from '@/types/hermes'
 
+import { SessionContextMeter } from './session-context-meter'
+
 interface SessionAdvisorBarProps {
+  busy: boolean
   enabled: boolean
   gateway: HermesGateway | null
   gatewayOpen: boolean
+  model: string
+  provider: string
   sessionId: string | null
 }
 
@@ -78,7 +83,15 @@ function withAdvisorAssignment(
  * progressively hide copy as the user narrows a split instead of borrowing
  * space from the outer-right rail.
  */
-export function SessionAdvisorBar({ enabled, gateway, gatewayOpen, sessionId }: SessionAdvisorBarProps) {
+export function SessionAdvisorBar({
+  busy,
+  enabled,
+  gateway,
+  gatewayOpen,
+  model,
+  provider,
+  sessionId
+}: SessionAdvisorBarProps) {
   const { t } = useI18n()
   const profile = useStore($activeGatewayProfile)
   const [pending, setPending] = useState(false)
@@ -201,6 +214,14 @@ export function SessionAdvisorBar({ enabled, gateway, gatewayOpen, sessionId }: 
       data-session-advisor-bar=""
     >
       <div className="ml-auto flex min-w-0 max-w-full items-center justify-end gap-1.5">
+        <SessionContextMeter
+          busy={busy}
+          gateway={gateway}
+          gatewayOpen={gatewayOpen}
+          model={model}
+          provider={provider}
+          sessionId={sessionId}
+        />
         <Codicon
           className={cn('size-3.5 shrink-0', enabled ? 'text-primary' : 'text-(--ui-text-quaternary)')}
           name="shield"

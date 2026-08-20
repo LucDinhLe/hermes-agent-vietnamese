@@ -1,5 +1,25 @@
 # Tiến độ
 
+## Cập nhật 2026-08-20 — meter ngữ cảnh theo từng phiên cho V31
+
+- Chủ dự án chốt meter nằm cạnh Advisor, dùng dung lượng từng model theo công
+  bố của nhà phát hành và giúp người dùng biết lúc nào cần compact hoặc mở phiên
+  mới.
+- Nhánh thực hiện `feat/v31-session-context-meter` được tạo từ đúng commit V30
+  bất biến `0b53a0ab7bc48a2d6513a864df7176aafb2dbf07`; V30 không bị sửa.
+- Hợp đồng hiển thị tách ba dữ kiện: dung lượng model công bố, giới hạn tuyến
+  đang kết nối và ngưỡng compact thực của Hermes. Model chưa xác minh không
+  được gắn nhãn số liệu chính thức.
+- Đã triển khai cục bộ hợp đồng backend, nguồn tài liệu chính thức, meter theo
+  từng `ChatView`, chế độ thu gọn theo container và bảng chi tiết ngưỡng
+  compact. Nguồn công bố có liên kết trực tiếp tới tài liệu nhà phát hành.
+- Kiểm chứng sau thay đổi đạt 16/16 kiểm thử UI mục tiêu, 7/7 kiểm thử context
+  breakdown, 250/250 kiểm thử metadata/compressor, typecheck và lint mục tiêu.
+  Kết quả đã được checkpoint bằng commit cục bộ trên nhánh V31; chưa push, tag,
+  đóng gói hoặc phát hành.
+- Đặc tả và tiêu chí nghiệm thu nằm tại
+  `docs/hermes-v31-session-context-meter.md`.
+
 ## Cập nhật 2026-08-20 — chuẩn bị candidate V30 `vi-v0.20.4-37`
 
 - Chủ dự án cho phép tạo candidate kế tiếp, build/staging và smoke Windows x64

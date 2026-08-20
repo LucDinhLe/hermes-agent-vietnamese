@@ -585,9 +585,12 @@ export const ChatView = memo(function ChatView({
       )}
 
       <SessionAdvisorBar
+        busy={busy}
         enabled={advisorEnabled}
         gateway={gateway}
         gatewayOpen={gatewayOpen}
+        model={currentModel}
+        provider={currentProvider}
         sessionId={activeSessionId}
       />
 

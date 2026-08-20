@@ -19,11 +19,19 @@ const usage: UsageStats = {
 
 const breakdown: ContextBreakdown = {
   categories: [{ color: 'teal', id: 'conversation', label: 'Conversation', tokens: 241_400 }],
+  compact_recommended: false,
+  compact_threshold_percent: 50,
+  compact_threshold_tokens: 136_000,
   context_max: 272_000,
+  context_measurement: 'measured',
   context_percent: 89,
   context_used: 241_400,
   estimated_total: 286_600,
-  model: 'test-model'
+  model: 'test-model',
+  published_context_max: 1_050_000,
+  published_context_source: 'openai',
+  remaining_tokens: 808_600,
+  tokens_until_compact: 0
 }
 
 afterEach(() => {
@@ -98,6 +106,26 @@ describe('useContextBreakdown', () => {
 
     await waitFor(() => expect(result.current.breakdown?.context_used).toBe(12_000))
   })
+
+  it('refetches when the working model changes inside the same session', async () => {
+    const requestGateway = vi.fn().mockResolvedValue(breakdown)
+
+    const { rerender } = renderHook(
+      ({ refreshKey }) =>
+        useContextBreakdown({
+          busy: false,
+          enabled: true,
+          refreshKey,
+          requestGateway,
+          sessionId: 'runtime-1'
+        }),
+      { initialProps: { refreshKey: 'openai:gpt-5.5' } }
+    )
+
+    await waitFor(() => expect(requestGateway).toHaveBeenCalledTimes(1))
+    rerender({ refreshKey: 'anthropic:claude-sonnet-5' })
+    await waitFor(() => expect(requestGateway).toHaveBeenCalledTimes(2))
+  })
 })
 
 describe('ContextUsagePanel', () => {
@@ -105,6 +133,7 @@ describe('ContextUsagePanel', () => {
     render(<ContextUsagePanel breakdown={breakdown} loading={false} usage={usage} />)
 
     expect(screen.getByText('47% Full')).toBeTruthy()
+    expect(screen.getByText('Published capacity: 1.05M · OpenAI')).toBeTruthy()
     expect(screen.getByText('Conversation')).toBeTruthy()
   })
 

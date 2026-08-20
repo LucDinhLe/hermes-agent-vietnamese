@@ -46,7 +46,16 @@ afterEach(() => {
 
 describe('SessionAdvisorBar', () => {
   it('stays clipped to its chat-pane container and shows the configured model', async () => {
-    const { container } = renderBar({ enabled: false, gateway: null, gatewayOpen: true, sessionId: null })
+    const { container } = renderBar({
+      busy: false,
+      enabled: false,
+      gateway: null,
+      gatewayOpen: true,
+      model: 'working-model',
+      provider: 'openai',
+      sessionId: null
+    })
+
     const bar = container.querySelector('[data-session-advisor-bar]')
 
     expect(bar?.className).toContain('@container')
@@ -79,7 +88,16 @@ describe('SessionAdvisorBar', () => {
     })
 
     const gateway = { request } as unknown as HermesGateway
-    const { container } = renderBar({ enabled: true, gateway, gatewayOpen: true, sessionId: 'runtime-42' })
+
+    const { container } = renderBar({
+      busy: false,
+      enabled: true,
+      gateway,
+      gatewayOpen: true,
+      model: 'gpt-5.6-sol',
+      provider: 'openai-codex',
+      sessionId: 'runtime-42'
+    })
 
     const trigger = await screen.findByRole('button', { name: 'Advisor model: advisor-model' })
     expect(container.querySelector('[data-session-advisor-model-trigger] svg')).toBeTruthy()
@@ -107,7 +125,15 @@ describe('SessionAdvisorBar', () => {
   })
 
   it('stores a draft toggle locally so session.create can inherit it', () => {
-    renderBar({ enabled: false, gateway: null, gatewayOpen: true, sessionId: null })
+    renderBar({
+      busy: false,
+      enabled: false,
+      gateway: null,
+      gatewayOpen: true,
+      model: 'working-model',
+      provider: 'openai',
+      sessionId: null
+    })
 
     fireEvent.click(screen.getByRole('switch'))
 
@@ -117,7 +143,15 @@ describe('SessionAdvisorBar', () => {
   it('sends a live toggle only to the targeted session', async () => {
     const request = vi.fn().mockResolvedValue({})
     const gateway = { request } as unknown as HermesGateway
-    renderBar({ enabled: false, gateway, gatewayOpen: true, sessionId: 'runtime-42' })
+    renderBar({
+      busy: false,
+      enabled: false,
+      gateway,
+      gatewayOpen: true,
+      model: 'working-model',
+      provider: 'openai',
+      sessionId: 'runtime-42'
+    })
 
     fireEvent.click(screen.getByRole('switch'))
 
@@ -128,5 +162,114 @@ describe('SessionAdvisorBar', () => {
         value: 'on'
       })
     )
+  })
+
+  it('shows the working model published window for the exact chat session', async () => {
+    const request = vi.fn(async (method: string) => {
+      if (method === 'session.context_breakdown') {
+        return {
+          categories: [],
+          compact_recommended: false,
+          compact_threshold_percent: 50,
+          compact_threshold_tokens: 450_000,
+          context_max: 900_000,
+          context_measurement: 'measured',
+          context_percent: 18,
+          context_used: 161_800,
+          estimated_total: 161_800,
+          model: 'gpt-5.6-sol',
+          published_context_max: 1_050_000,
+          published_context_percent: 15,
+          published_context_reference: 'https://developers.openai.com/api/docs/models/gpt-5.6-sol',
+          published_context_source: 'openai',
+          remaining_tokens: 888_200,
+          tokens_until_compact: 288_200
+        }
+      }
+
+      return {}
+    })
+
+    const gateway = { request } as unknown as HermesGateway
+
+    const { container } = renderBar({
+      busy: false,
+      enabled: true,
+      gateway,
+      gatewayOpen: true,
+      model: 'gpt-5.6-sol',
+      provider: 'openai-codex',
+      sessionId: 'runtime-42'
+    })
+
+    expect(await screen.findByText('161.8k/1.05M (15%)')).toBeTruthy()
+    expect(request).toHaveBeenCalledWith('session.context_breakdown', { session_id: 'runtime-42' })
+
+    const meter = container.querySelector('[data-session-context-meter]')
+    const shield = container.querySelector('.codicon-shield')
+    expect(meter).toBeTruthy()
+    expect(shield).toBeTruthy()
+    expect(meter!.compareDocumentPosition(shield!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    fireEvent.pointerDown(meter as Element, { button: 0, ctrlKey: false })
+    const publisherLink = await screen.findByRole('link', { name: /Published capacity: 1\.05M · OpenAI/ })
+
+    expect(publisherLink.getAttribute('href')).toBe('https://developers.openai.com/api/docs/models/gpt-5.6-sol')
+    expect(screen.getByText('Current route limit: 900k')).toBeTruthy()
+    expect(screen.getByText('288.2k until Hermes compacts')).toBeTruthy()
+  })
+
+  it('keeps context readings independent across two chat panels', async () => {
+    const request = vi.fn(async (method: string, params?: Record<string, unknown>) => {
+      if (method !== 'session.context_breakdown') {
+        return {}
+      }
+
+      const first = params?.session_id === 'runtime-a'
+      const contextUsed = first ? 100_000 : 200_000
+
+      return {
+        categories: [],
+        context_max: 1_050_000,
+        context_measurement: 'measured',
+        context_percent: first ? 10 : 19,
+        context_used: contextUsed,
+        estimated_total: contextUsed,
+        model: 'gpt-5.5',
+        published_context_max: 1_050_000,
+        published_context_source: 'openai'
+      }
+    })
+
+    const gateway = { request } as unknown as HermesGateway
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={client}>
+        <SessionAdvisorBar
+          busy={false}
+          enabled={false}
+          gateway={gateway}
+          gatewayOpen
+          model="gpt-5.5"
+          provider="openai"
+          sessionId="runtime-a"
+        />
+        <SessionAdvisorBar
+          busy={false}
+          enabled={false}
+          gateway={gateway}
+          gatewayOpen
+          model="gpt-5.5"
+          provider="openai"
+          sessionId="runtime-b"
+        />
+      </QueryClientProvider>
+    )
+
+    expect(await screen.findByText('100k/1.05M (10%)')).toBeTruthy()
+    expect(await screen.findByText('200k/1.05M (19%)')).toBeTruthy()
+    expect(request).toHaveBeenCalledWith('session.context_breakdown', { session_id: 'runtime-a' })
+    expect(request).toHaveBeenCalledWith('session.context_breakdown', { session_id: 'runtime-b' })
   })
 })

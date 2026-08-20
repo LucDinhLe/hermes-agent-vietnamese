@@ -758,11 +758,22 @@ export interface ContextUsageCategory {
 
 export interface ContextBreakdown {
   categories: ContextUsageCategory[]
+  compact_recommended?: boolean
+  compact_threshold_percent?: number
+  compact_threshold_tokens?: number
   context_max: number
+  context_measurement?: 'estimated' | 'measured'
   context_percent: number
   context_used: number
+  effective_remaining_tokens?: number
   estimated_total: number
   model?: string
+  published_context_max?: number
+  published_context_percent?: number
+  published_context_reference?: string
+  published_context_source?: 'anthropic' | 'openai' | 'runtime'
+  remaining_tokens?: number
+  tokens_until_compact?: number
 }
 
 export interface AnalyticsDailyEntry {
