@@ -1,4 +1,4 @@
-name: Kiểm thử runtime artifact Hermes tiếng Việt
+name: Kiểm thử runtime artifact Hermes Vietnamese
 
 on:
   workflow_dispatch:

@@ -281,14 +281,14 @@ export const vi = defineLocale({
   },
 
   boot: {
-    ready: 'Hermes Desktop đã sẵn sàng',
+    ready: 'Hermes Vietnamese đã sẵn sàng',
     desktopBootFailedWithMessage: message => `Khởi động Desktop không thành công: ${message}`,
     steps: {
       connectingGateway: 'Kết nối cổng Desktop trực tiếp',
       loadingSettings: 'Đang tải cài đặt Hermes',
       loadingSessions: 'Đang tải các phiên gần đây',
       startingDesktopConnection: 'Đang bắt đầu kết nối Desktop',
-      startingHermesDesktop: 'Đang bắt đầu Hermes Desktop…'
+      startingHermesDesktop: 'Đang bắt đầu Hermes Vietnamese…'
     },
     errors: {
       backgroundExited: 'Tiến trình nền của Hermes đã dừng.',
@@ -354,7 +354,7 @@ export const vi = defineLocale({
       diskFull: 'Đĩa đầy — giải phóng một số dung lượng rồi thử lại.',
       gatewayAuthFailed: 'Xác thực cổng không thành công — hãy kiểm tra API_SERVER_KEY của bạn.',
       methodNotAllowed:
-        'Dịch vụ nền đã từ chối yêu cầu đó (HTTP 405: phương thức không được phép). Hãy thử khởi động lại Hermes Desktop.',
+        'Dịch vụ nền đã từ chối yêu cầu đó (HTTP 405: phương thức không được phép). Hãy thử khởi động lại Hermes Vietnamese.',
       microphonePermission: 'Quyền sử dụng micrô đã bị từ chối.',
       openaiRejectedApiKey: 'OpenAI đã từ chối khóa API.',
       openaiRejectedApiKeyWithStatus: status => `OpenAI đã từ chối khóa API (${status}: invalid_api_key).`,
@@ -635,7 +635,7 @@ export const vi = defineLocale({
         }
       },
       test: 'Gửi thông báo kiểm tra',
-      testTitle: 'Hermes',
+      testTitle: 'Hermes Vietnamese',
       testBody: 'Thông báo đang hoạt động.',
       testSent:
         'Đã gửi bài kiểm tra. Nếu không có gì xuất hiện, hãy kiểm tra quyền thông báo của hệ điều hành và Tập trung/Không làm phiền.',
@@ -655,7 +655,7 @@ export const vi = defineLocale({
       advanced: 'Nâng cao'
     },
     searchPlaceholder: {
-      about: 'Giới thiệu về Hermes Desktop',
+      about: 'Giới thiệu về Hermes Vietnamese',
       config: 'Cài đặt tìm kiếm...',
       gateway: 'Kết nối cổng...',
       keys: 'Tìm kiếm khóa API...',
@@ -760,13 +760,13 @@ export const vi = defineLocale({
     fieldLabels: VI_FIELD_LABELS,
     fieldDescriptions: VI_FIELD_DESCRIPTIONS,
     about: {
-      heading: 'Hermes Desktop',
+      heading: 'Hermes Vietnamese',
       version: value => `Phiên bản ${value}`,
       versionUnavailable: 'Phiên bản không có sẵn',
       projectInfo: 'Thông tin dự án',
       upstreamPublisher: 'Dự án gốc và nhà phát hành',
       upstreamPublisherValue: 'Hermes Agent · Nous Research',
-      communityMaintainer: 'Bản Việt hóa cộng đồng',
+      communityMaintainer: 'Nhà phát hành và duy trì Hermes Vietnamese',
       communityMaintainerValue: 'Lê Đình Lực (LucDinhLe)',
       license: 'Giấy phép',
       licenseValue: 'Giấy phép MIT',
@@ -942,7 +942,7 @@ export const vi = defineLocale({
       enterUrlFirst: 'Trước tiên hãy nhập URL từ xa.',
       restartingTitle: 'Đang khởi động lại kết nối cổng',
       savedTitle: 'Đã lưu cài đặt cổng',
-      restartingMessage: 'Hermes Desktop sẽ kết nối lại bằng cài đặt đã lưu; ứng dụng vẫn mở.',
+      restartingMessage: 'Hermes Vietnamese sẽ kết nối lại bằng cài đặt đã lưu; ứng dụng vẫn mở.',
       savedMessage: 'Được lưu cho lần khởi động lại tiếp theo.',
       connectedTo: (baseUrl, version) => `Đã kết nối với ${baseUrl}${version ? ` · Hermes ${version}` : ''}`,
       reachableTitle: 'Có thể truy cập cổng từ xa',
@@ -988,7 +988,7 @@ export const vi = defineLocale({
       sshErrNotInstalled:
         'Hermes chưa được cài đặt trên máy chủ từ xa. Cài đặt nó ở đó (curl -fsSL https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/scripts/install.sh | sh) hoặc đặt đường dẫn Hermes.',
       sshErrPlatform:
-        'Nền tảng từ xa không được hỗ trợ. Chế độ SSH Hermes Desktop hỗ trợ các máy chủ từ xa Linux, macOS và Windows.',
+        'Nền tảng từ xa không được hỗ trợ. Chế độ SSH Hermes Vietnamese hỗ trợ các máy chủ từ xa Linux, macOS và Windows.',
       sshErrTimeout: 'Kết nối SSH đã hết thời gian chờ. Máy chủ có thể không truy cập được hoặc đang ngủ.',
       sshErrUpdateRequired: 'Cập nhật Hermes trên máy chủ từ xa trước khi kết nối với Desktop SSH.',
       sshErrUnknown: 'Kết nối SSH không thành công.'
@@ -2539,7 +2539,7 @@ export const vi = defineLocale({
     manualPickedUp: 'Hermes sẽ nhận phiên bản mới vào lần tiếp theo bạn khởi chạy nó.',
     guiSkewTitle: 'Cập nhật ứng dụng Desktop',
     guiSkewBody:
-      'Dịch vụ nền đã cập nhật nhưng gói ứng dụng Desktop chưa đổi. Hãy cập nhật hoặc cài lại Hermes Desktop (AppImage / .deb / .rpm) để đồng bộ phiên bản.',
+      'Dịch vụ nền đã cập nhật nhưng gói ứng dụng Desktop chưa đổi. Hãy cập nhật hoặc cài lại Hermes Vietnamese (AppImage / .deb / .rpm) để đồng bộ phiên bản.',
     copy: 'Sao chép',
     copied: 'Đã sao chép',
     done: 'Hoàn tất',
@@ -2580,7 +2580,7 @@ export const vi = defineLocale({
     viewDocs: 'Xem tài liệu cài đặt',
     installTo: 'Sẽ cài đặt vào',
     retryAfterRun: 'Tôi đã chạy lệnh — thử lại',
-    setupChoiceTitle: 'Thiết lập Hermes Desktop',
+    setupChoiceTitle: 'Thiết lập Hermes Vietnamese',
     setupChoiceDesc:
       'Kết nối ứng dụng này với cổng Hermes mà bạn đã chạy hoặc cài đặt Hermes cục bộ trên máy tính này.',
     connectExistingTitle: 'Kết nối với Hermes hiện có',
@@ -2589,9 +2589,9 @@ export const vi = defineLocale({
       'Dùng dịch vụ nền từ xa bằng token phiên hoặc đăng nhập qua trình duyệt. Hermes sẽ không cài thêm dịch vụ cục bộ.',
     installLocalTitle: 'Cài đặt Hermes cục bộ',
     installLocalDesc: 'Tải xuống Hermes, tạo môi trường Python và chạy dịch vụ nền trên máy tính này.',
-    localStartUnavailable: 'Không thể khởi động cài đặt cục bộ. Khởi động lại Hermes Desktop và thử lại.',
+    localStartUnavailable: 'Không thể khởi động cài đặt cục bộ. Khởi động lại Hermes Vietnamese và thử lại.',
     remoteSetupTitle: 'Kết nối với Hermes hiện có',
-    remoteSetupDesc: 'Nhập URL cổng. Hermes Desktop sẽ tự phát hiện cổng cần token hay đăng nhập qua trình duyệt.',
+    remoteSetupDesc: 'Nhập URL cổng. Hermes Vietnamese sẽ tự phát hiện cổng cần token hay đăng nhập qua trình duyệt.',
     remoteUrlTitle: 'URL cổng kết nối',
     remoteUrlDesc: 'Sử dụng URL cơ sở của cổng Hermes, bao gồm https:// khi ở xa.',
     remoteUrlPlaceholder: 'https://gateway.example.com/hermes',
@@ -2802,7 +2802,7 @@ export const vi = defineLocale({
       update: 'cập nhật',
       updateInProgress: 'Đang cập nhật',
       commitsBehind: (count, branch) => `${count} commit phía sau ${branch}`,
-      desktopVersion: version => `Hermes Desktop v${version}`,
+      desktopVersion: version => `Hermes Vietnamese v${version}`,
       backendVersion: version => `dịch vụ nền v${version}`,
       clientLabel: version => `ứng dụng v${version}`,
       connectionSsh: host => `SSH: ${host}`,
@@ -3405,8 +3405,8 @@ export const vi = defineLocale({
     sessionExportFailed: 'Không thể xuất phiên',
     imageSaved: 'Đã lưu hình ảnh',
     downloadStarted: 'Đã bắt đầu tải xuống',
-    restartToUseSaveImage: 'Khởi động lại Hermes Desktop để sử dụng Lưu hình ảnh.',
-    restartToSaveImages: 'Khởi động lại Hermes Desktop để lưu hình ảnh',
+    restartToUseSaveImage: 'Khởi động lại Hermes Vietnamese để sử dụng Lưu hình ảnh.',
+    restartToSaveImages: 'Khởi động lại Hermes Vietnamese để lưu hình ảnh',
     imageDownloadFailed: 'Tải hình ảnh không thành công',
     openImage: 'Mở hình ảnh',
     downloadImage: 'Tải hình ảnh',

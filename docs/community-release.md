@@ -1,4 +1,4 @@
-# Quy trình phát hành Hermes tiếng Việt đa nền tảng
+# Quy trình phát hành Hermes Vietnamese đa nền tảng
 
 ## Hồ sơ vận hành hiện tại
 
@@ -39,12 +39,14 @@ Sau khi sáu target được gom về staging, workflow tạo bốn manifest c�
 `latest-linux-arm64.yml`. Từng mục ghi tên tệp chuẩn hóa, kích thước và SHA-512;
 bốn manifest tiếp tục được đưa vào `SHA256SUMS.txt` trước khi upload draft.
 
-Hermes đóng gói đọc danh sách GitHub Releases công khai, bỏ qua draft và release
+Hermes Vietnamese đóng gói đọc danh sách GitHub Releases công khai, bỏ qua draft và release
 không có manifest dành cho nền tảng đang chạy, rồi ghim bộ cập nhật vào URL của
 release bất biến đã chọn. Windows tải trọn bộ cài đã nghiệm thu, xác minh hash,
-đóng Hermes, cài yên lặng và mở lại. `appId`, tên sản phẩm, executable, shortcut
-và uninstall identity được giữ nguyên nên cấu hình, bí mật, cuộc trò chuyện,
-lịch định kỳ và trạng thái onboarding không bị chuyển sang một vùng dữ liệu mới.
+đóng ứng dụng, cài yên lặng và mở lại. `appId`, package product name, executable,
+protocol và vùng dữ liệu kỹ thuật được giữ nguyên. Tên cửa sổ, shortcut và tên
+trình gỡ cài đặt được đổi thành Hermes Vietnamese mà cấu hình, bí mật, cuộc trò
+chuyện, lịch định kỳ và trạng thái onboarding không bị chuyển sang vùng dữ liệu
+mới.
 
 Exact-artifact update phải giữ cả marker bootstrap do bản cũ tạo. Với gói
 resident đầy đủ, marker schema 1 hợp lệ vẫn là bằng chứng cài đặt dù chưa có

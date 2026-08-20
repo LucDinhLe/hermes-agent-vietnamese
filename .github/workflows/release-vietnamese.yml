@@ -1,4 +1,4 @@
-name: Dựng và staging Hermes tiếng Việt
+name: Dựng và staging Hermes Vietnamese
 
 on:
   push:
@@ -140,6 +140,7 @@ jobs:
           src/app/settings/model-settings.test.tsx
           src/app/settings/about-settings.test.tsx
           src/app/chat/session-advisor-bar.test.tsx
+          src/app/shell/context-usage-panel.test.tsx
           src/app/chat/sidebar/project-dialog.test.tsx
           src/app/chat/sidebar/projects/project-menu.test.tsx
           src/app/projects/index.test.tsx
@@ -151,6 +152,7 @@ jobs:
           src/store/layout-pinned-order.test.ts
           src/store/layout-connection-scope.test.ts
           src/store/projects.test.ts
+          src/lib/format.test.ts
           src/i18n/languages.test.ts
 
       - name: Kiểm tra kiểu dữ liệu
@@ -165,9 +167,11 @@ jobs:
           tests/hermes_cli/test_version_info.py
           tests/agent/test_oneshot.py
           tests/agent/test_advisor.py
+          tests/agent/test_usage_pricing.py
           tests/run_agent/test_advisor_checkpoints.py
           tests/tui_gateway/test_advisor_session_scope.py
           tests/tui_gateway/test_protocol.py
+          tests/test_tui_gateway_server.py
 
   build:
     name: Dựng một lần — ${{ matrix.label }}

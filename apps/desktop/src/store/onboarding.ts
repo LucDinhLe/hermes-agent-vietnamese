@@ -562,7 +562,7 @@ export async function refreshOnboarding(ctx: OnboardingContext) {
       kind: 'error',
       title: 'Runtime not ready',
       message:
-        'Hermes Desktop could not verify the running backend on startup. Some features may be unavailable until the gateway is reachable.'
+        'Hermes Vietnamese could not verify the running backend on startup. Some features may be unavailable until the gateway is reachable.'
     })
 
     return false

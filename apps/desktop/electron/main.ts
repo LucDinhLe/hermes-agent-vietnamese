@@ -31,12 +31,7 @@ import {
 import nodePty from 'node-pty'
 
 import { classifyActiveRuntime, shouldRefreshManagedRuntime } from './active-runtime-state'
-import {
-  applyAppUpdate,
-  checkAppUpdate,
-  COMMUNITY_RELEASES_API_URL,
-  shouldUseAppUpdater
-} from './app-updater'
+import { applyAppUpdate, checkAppUpdate, COMMUNITY_RELEASES_API_URL, shouldUseAppUpdater } from './app-updater'
 import { stopBackendChild as stopBackendChildImpl, stopBackendTreesForUpdate } from './backend-child'
 import { dashboardFallbackArgs, sourceDeclaresServe } from './backend-command'
 import { createBackendConnectionState } from './backend-connection-state'
@@ -864,7 +859,7 @@ const BOOT_FAKE_STEP_MS = (() => {
   return Math.max(120, raw)
 })()
 
-const APP_NAME = process.env.HERMES_DESKTOP_APP_NAME || 'Hermes'
+const APP_NAME = process.env.HERMES_DESKTOP_APP_NAME || 'Hermes Vietnamese'
 const HUD_WINDOW_TITLE = `${APP_NAME} HUD`
 const TITLEBAR_HEIGHT = 40
 const MACOS_TRAFFIC_LIGHTS_HEIGHT = 14
@@ -1247,7 +1242,7 @@ if (IS_WINDOWS) {
 app.setAboutPanelOptions({
   applicationName: APP_NAME,
   applicationVersion: resolveHermesVersion(),
-  copyright: 'Copyright © 2026 Nous Research'
+  copyright: 'Copyright © 2026 Lê Đình Lực (LucDinhLe) · MIT License'
 })
 
 // Custom scheme for streaming audio/video into the renderer. Local paths read
@@ -2829,16 +2824,9 @@ async function checkStableChannelUpdates() {
   }
 
   const [tags, currentSha, dirtyStr] = await Promise.all([
-    runGit(
-      [
-        'ls-remote',
-        '--tags',
-        OFFICIAL_REPO_HTTPS_URL,
-        `refs/tags/${latestTag}`,
-        `refs/tags/${latestTag}^{}`
-      ],
-      { cwd: updateRoot }
-    ),
+    runGit(['ls-remote', '--tags', OFFICIAL_REPO_HTTPS_URL, `refs/tags/${latestTag}`, `refs/tags/${latestTag}^{}`], {
+      cwd: updateRoot
+    }),
     runGit(['rev-parse', 'HEAD'], { cwd: updateRoot }).then(r => r.stdout.trim()),
     runGit(['status', '--porcelain'], { cwd: updateRoot }).then(r => r.stdout.trim())
   ])
@@ -4748,7 +4736,12 @@ function createResidentBackend(backendArgs) {
   // find the bundled runtimes before any system ones.
   const pathKey = Object.keys(env).find(key => key.toUpperCase() === 'PATH') || 'PATH'
 
-  env[pathKey] = [path.join(payload.dir, 'node', 'bin'), path.join(payload.dir, 'node'), path.join(payload.dir, 'uv'), env[pathKey]]
+  env[pathKey] = [
+    path.join(payload.dir, 'node', 'bin'),
+    path.join(payload.dir, 'node'),
+    path.join(payload.dir, 'uv'),
+    env[pathKey]
+  ]
     .filter(Boolean)
     .join(path.delimiter)
 
@@ -4775,7 +4768,10 @@ function resolveHermesBackend(backendArgs) {
   //    for. The HERMES_DESKTOP_HERMES_ROOT escape hatch still wins — it
   //    exists precisely to point a packaged app at a developer checkout.
   const overrideRoot = process.env.HERMES_DESKTOP_HERMES_ROOT && path.resolve(process.env.HERMES_DESKTOP_HERMES_ROOT)
-  const resident = overrideRoot ? { resident: false, reason: 'HERMES_DESKTOP_HERMES_ROOT override' } : residentRuntimeDecision()
+
+  const resident = overrideRoot
+    ? { resident: false, reason: 'HERMES_DESKTOP_HERMES_ROOT override' }
+    : residentRuntimeDecision()
 
   if (resident.resident) {
     const backend = createResidentBackend(backendArgs)
@@ -10610,7 +10606,7 @@ async function startHermes() {
   // otherwise SIGTERMs the running instance's live backend (#87295).
   if (!isPrimaryInstance) {
     rememberLog('[boot] non-primary instance: skipping backend machinery')
-    throw new Error('Hermes Desktop is already running in another window.')
+    throw new Error('Hermes Vietnamese is already running in another window.')
   }
 
   await reapOrphanedBackendsOnce()
@@ -11092,7 +11088,7 @@ function spawnSecondaryWindow({ sessionId, watch }: { sessionId?: string; watch?
     height: SESSION_WINDOW_MIN_HEIGHT,
     minWidth: SESSION_WINDOW_MIN_WIDTH,
     minHeight: SESSION_WINDOW_MIN_HEIGHT,
-    title: 'Hermes',
+    title: APP_NAME,
     titleBarStyle: 'hidden',
     titleBarOverlay: getTitleBarOverlayOptions(),
     trafficLightPosition: IS_MAC ? WINDOW_BUTTON_POSITION : undefined,
@@ -11194,7 +11190,7 @@ function createInstanceWindow() {
     ...nextInstanceBounds(),
     minWidth: WINDOW_MIN_WIDTH,
     minHeight: WINDOW_MIN_HEIGHT,
-    title: 'Hermes',
+    title: APP_NAME,
     titleBarStyle: 'hidden',
     titleBarOverlay: getTitleBarOverlayOptions(),
     trafficLightPosition: IS_MAC ? WINDOW_BUTTON_POSITION : undefined,
@@ -12050,7 +12046,7 @@ function createWindow() {
     ...computeWindowOptions(savedWindowState, screen.getAllDisplays()),
     minWidth: WINDOW_MIN_WIDTH,
     minHeight: WINDOW_MIN_HEIGHT,
-    title: 'Hermes',
+    title: APP_NAME,
     // Frameless title bar on every platform so the renderer can paint the
     // "hide sidebar" button (and other left-side titlebar tools) flush with
     // the top edge — matching the macOS layout where the traffic lights sit
@@ -13886,7 +13882,7 @@ ipcMain.handle('hermes:notify', (_event, payload) => {
   const actions = Array.isArray(payload?.actions) ? payload.actions : []
 
   const notification = new Notification({
-    title: payload?.title || 'Hermes',
+    title: payload?.title || APP_NAME,
     body: payload?.body || '',
     silent: Boolean(payload?.silent),
     actions: actions.map(action => ({ type: 'button', text: String(action?.text || '') }))
@@ -15129,7 +15125,7 @@ function showAboutPanelFresh() {
       applicationVersion: skew.outOfSync
         ? `${resolveHermesVersion()} — app build out of date, update the desktop app`
         : resolveHermesVersion(),
-      copyright: 'Copyright © 2026 Nous Research'
+      copyright: 'Copyright © 2026 Lê Đình Lực (LucDinhLe) · MIT License'
     })
     app.showAboutPanel()
   })

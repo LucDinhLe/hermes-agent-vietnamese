@@ -1,0 +1,32 @@
+{
+  "displayName": "Hermes Vietnamese",
+  "communityMaintainer": {
+    "name": "Lê Đình Lực",
+    "handle": "LucDinhLe",
+    "displayName": "Lê Đình Lực (LucDinhLe)",
+    "publicEmail": "LucDinhLe@users.noreply.github.com",
+    "url": "https://github.com/LucDinhLe"
+  },
+  "upstream": {
+    "productName": "Hermes Agent",
+    "publisher": "Nous Research",
+    "repository": "NousResearch/hermes-agent"
+  },
+  "license": {
+    "spdx": "MIT",
+    "url": "https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/LICENSE"
+  },
+  "technicalIdentity": {
+    "appId": "com.nousresearch.hermes",
+    "packageProductName": "Hermes",
+    "executableName": "Hermes",
+    "protocol": "hermes",
+    "windowsAppUserModelId": "com.nousresearch.hermes",
+    "windowsHermesHomeName": "hermes",
+    "posixHermesHomeName": ".hermes"
+  },
+  "updateRepository": {
+    "owner": "LucDinhLe",
+    "repo": "hermes-agent-vietnamese"
+  }
+}

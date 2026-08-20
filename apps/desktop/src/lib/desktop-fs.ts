@@ -51,7 +51,7 @@ function bridge() {
   const desktop = window.hermesDesktop
 
   if (!desktop) {
-    throw new Error('Hermes Desktop bridge is unavailable')
+    throw new Error('Hermes Vietnamese bridge is unavailable')
   }
 
   return desktop

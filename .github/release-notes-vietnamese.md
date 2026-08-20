@@ -1,6 +1,6 @@
-## Hermes Vietnamese vi-v0.20.4-37 — v30 cho công việc AI có kiểm soát
+## Hermes Vietnamese vi-v0.20.4-38 — v31 cho công việc AI có kiểm soát
 
-Hermes Vietnamese v30 là bản Desktop độc lập của
+Hermes Vietnamese v31 là bản Desktop độc lập của
 [Hermes Agent](https://github.com/NousResearch/hermes-agent), do
 [Lê Đình Lực (LucDinhLe)](https://github.com/LucDinhLe) phát triển cho cộng
 đồng theo giấy phép MIT. Bản này dùng lõi Hermes Agent 0.20.4 và cung cấp môi
@@ -30,10 +30,15 @@ dựng Hermes từ mã nguồn.
 - Panel phải giữ Tệp, Trình duyệt và Terminal, co giãn độc lập với vùng chat.
 - Trang **Dự án** cho phép tìm, mở, ghim và tạo phiên đúng thư mục.
 - Trang **Thống kê sử dụng** tổng hợp token theo thời gian, dự án và model.
-- Từng phiên có chỉ báo mức dùng cửa sổ ngữ cảnh của model đang chạy.
+- Từng phiên có chỉ báo mức dùng cửa sổ ngữ cảnh theo giới hạn model do nhà
+  cung cấp công bố, kèm ngưỡng rút gọn thực tế của Hermes.
+- Chi phí theo phiên được ước tính bằng USD từ token vào, token ra và cache,
+  có tách model làm việc với model Advisor.
 
 **Lợi ích:** người dùng biết công việc nằm ở đâu, model nào đang tiêu tốn tài
-nguyên và khi nào một phiên sắp chạm giới hạn ngữ cảnh.
+nguyên, chi phí tương đương API và khi nào một phiên sắp chạm giới hạn ngữ
+cảnh. Số tiền là ước tính theo bảng giá model, không thay thế hóa đơn thực tế
+của gói thuê bao hoặc nhà cung cấp.
 
 #### Advisor phản biện ngay trong từng phiên
 
@@ -73,24 +78,27 @@ toàn bộ hồ sơ trình duyệt của người dùng.
 
 ### Tải đúng bản cho máy
 
-| Máy đang dùng           | Tệp cài v30                                                                                                                                               |
+| Máy đang dùng           | Tệp cài v31                                                                                                                                               |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows 10/11 x64       | [Windows x64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-37/Hermes-Vietnamese-Windows-x64-Setup.exe)         |
-| Windows 10/11 ARM64     | [Windows ARM64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-37/Hermes-Vietnamese-Windows-arm64-Setup.exe)     |
-| Mac chip Apple M-series | [macOS Apple Silicon DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-37/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
-| Mac chip Intel          | [macOS Intel DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-37/Hermes-Vietnamese-macOS-Intel.dmg)                 |
-| Ubuntu/Debian x64       | [Linux x64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-37/Hermes-Vietnamese-Linux-x64.deb)                     |
-| Ubuntu/Debian ARM64     | [Linux ARM64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-37/Hermes-Vietnamese-Linux-arm64.deb)                 |
-| Fedora/RHEL x64         | [Linux x64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-37/Hermes-Vietnamese-Linux-x64.rpm)                     |
-| Fedora/RHEL ARM64       | [Linux ARM64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-37/Hermes-Vietnamese-Linux-arm64.rpm)                 |
-| Linux khác x64          | [Linux x64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-37/Hermes-Vietnamese-Linux-x64.AppImage)           |
-| Linux khác ARM64        | [Linux ARM64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-37/Hermes-Vietnamese-Linux-arm64.AppImage)       |
+| Windows 10/11 x64       | [Windows x64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-38/Hermes-Vietnamese-Windows-x64-Setup.exe)         |
+| Windows 10/11 ARM64     | [Windows ARM64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-38/Hermes-Vietnamese-Windows-arm64-Setup.exe)     |
+| Mac chip Apple M-series | [macOS Apple Silicon DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-38/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
+| Mac chip Intel          | [macOS Intel DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-38/Hermes-Vietnamese-macOS-Intel.dmg)                 |
+| Ubuntu/Debian x64       | [Linux x64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-38/Hermes-Vietnamese-Linux-x64.deb)                     |
+| Ubuntu/Debian ARM64     | [Linux ARM64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-38/Hermes-Vietnamese-Linux-arm64.deb)                 |
+| Fedora/RHEL x64         | [Linux x64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-38/Hermes-Vietnamese-Linux-x64.rpm)                     |
+| Fedora/RHEL ARM64       | [Linux ARM64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-38/Hermes-Vietnamese-Linux-arm64.rpm)                 |
+| Linux khác x64          | [Linux x64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-38/Hermes-Vietnamese-Linux-x64.AppImage)           |
+| Linux khác ARM64        | [Linux ARM64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-38/Hermes-Vietnamese-Linux-arm64.AppImage)       |
 
 ### Quyền riêng tư, chi phí và tình trạng nghiệm thu
 
 - Bản phân phối không kèm tài khoản, model trả phí, API key hoặc hạn mức sử
   dụng. Chi phí phụ thuộc model/provider người dùng chọn.
 - Cookie, token và bí mật không được đưa vào artifact hoặc bằng chứng phát hành.
+- Tên hiển thị, shortcut và metadata là **Hermes Vietnamese**. App ID, tên tệp
+  thực thi nội bộ, giao thức và vùng dữ liệu vẫn giữ nguyên để cài đè nhận đúng
+  cấu hình và cuộc trò chuyện hiện có.
 - Windows x64: exact-artifact smoke chưa chạy cho candidate này.
 - Windows ARM64, macOS Apple Silicon/Intel và Linux x64/ARM64 **chưa có smoke
   trên máy người dùng** và chỉ được xem là `BUILD-ONLY-PILOT` nếu công khai.

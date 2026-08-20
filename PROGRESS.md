@@ -1,5 +1,26 @@
 # Tiến độ
 
+## Cập nhật 2026-08-20 — khóa phạm vi candidate Hermes Vietnamese V31
+
+- Chủ dự án chốt tên sản phẩm công khai là **Hermes Vietnamese** và cho phép
+  hoàn tất candidate đa nền tảng để kiểm chứng; chưa cho phép thay Public
+  Latest hoặc gọi candidate là stable.
+- Tên hiển thị, shortcut, trình gỡ cài đặt, DMG, Linux desktop entry và Windows
+  version resource được đồng bộ từ một hợp đồng metadata. Giới thiệu ứng dụng
+  tách rõ Hermes Agent/Nous Research, Lê Đình Lực (LucDinhLe) và giấy phép MIT.
+- Để cài đè giữ dữ liệu, app ID, package product name, executable, protocol,
+  HERMES_HOME và updater repository vẫn giữ nguyên. Distribution test khóa
+  các định danh này và candidate Windows sẽ dừng nếu đóng dấu metadata lỗi.
+- Candidate dự kiến `vi-v0.20.4-38`, lớp `community-prerelease`; workflow dựng
+  sáu target native và chỉ staging draft. Kế hoạch gate nằm tại
+  `docs/release-vi-v0.20.4-38-plan.md`.
+- Cổng cục bộ đạt 80 kiểm thử runtime/phát hành, 88 kiểm thử giao diện và 754
+  kiểm thử Python liên quan pricing, gateway, Advisor, updater/rollback;
+  typecheck, ESLint 0 lỗi, Ruff, npm audit 0 lỗ hổng, `uv lock --check`,
+  Prettier mục tiêu và source build đều đạt.
+- Chưa commit, push, tag, build candidate native hoặc tạo draft tại thời điểm
+  ghi mục này.
+
 ## Cập nhật 2026-08-20 — chi phí USD theo từng phiên cho V31
 
 - Meter cạnh Advisor hiển thị thêm chi phí model của đúng phiên khi panel đủ

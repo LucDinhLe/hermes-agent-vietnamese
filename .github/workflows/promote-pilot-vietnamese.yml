@@ -1,4 +1,4 @@
-name: Công khai pilot Hermes tiếng Việt
+name: Công khai pilot Hermes Vietnamese
 
 on:
   workflow_dispatch:
@@ -57,7 +57,7 @@ jobs:
 
           candidate_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
           run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID")"
-          test "$(jq -r .name <<<"$run_json")" = "Dựng và staging Hermes tiếng Việt"
+          test "$(jq -r .name <<<"$run_json")" = "Dựng và staging Hermes Vietnamese"
           test "$(jq -r .conclusion <<<"$run_json")" = "success"
           test "$(jq -r .head_sha <<<"$run_json")" = "$candidate_commit"
 

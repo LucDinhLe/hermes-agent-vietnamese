@@ -3,6 +3,14 @@ import { describe, expect, it } from 'vitest'
 import { vi } from './vi'
 
 describe('Vietnamese community interface', () => {
+  it('uses the Hermes Vietnamese product name and factual attribution', () => {
+    expect(vi.settings.about.heading).toBe('Hermes Vietnamese')
+    expect(vi.settings.about.upstreamPublisherValue).toBe('Hermes Agent · Nous Research')
+    expect(vi.settings.about.communityMaintainer).toContain('Nhà phát hành')
+    expect(vi.settings.about.communityMaintainerValue).toBe('Lê Đình Lực (LucDinhLe)')
+    expect(vi.settings.about.licenseValue).toBe('Giấy phép MIT')
+  })
+
   it('localizes the settings copy that appears on the model page', () => {
     expect(vi.settings.fieldLabels.modelContextLength).toBe('Cửa sổ ngữ cảnh')
     expect(vi.settings.fieldLabels.fallbackProviders).toBe('Model dự phòng')

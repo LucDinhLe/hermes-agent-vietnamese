@@ -1,4 +1,4 @@
-name: Công khai Hermes tiếng Việt đã nghiệm thu
+name: Công khai Hermes Vietnamese đã nghiệm thu
 
 on:
   workflow_dispatch:
@@ -57,7 +57,7 @@ jobs:
           cd ..
           RELEASE_CLASS="$RELEASE_CLASS" node -e "const p=require('./candidate/candidate-provenance.json'); if(p.releaseClass!==process.env.RELEASE_CLASS) process.exit(1)"
           run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SMOKE_RUN_ID")"
-          test "$(jq -r .name <<<"$run_json")" = "Kiểm thử runtime artifact Hermes tiếng Việt"
+          test "$(jq -r .name <<<"$run_json")" = "Kiểm thử runtime artifact Hermes Vietnamese"
           test "$(jq -r .conclusion <<<"$run_json")" = "success"
           candidate_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
           gh run download "$SMOKE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "release-evidence-$TAG" --dir evidence

@@ -36,7 +36,7 @@
 // otherwise-good build (worst case: stock icon, not a broken app).
 
 import { resolve, join } from 'node:path'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 import { rcedit } from 'rcedit'
 
@@ -56,20 +56,24 @@ async function stampExeIdentity(exe, desktopRoot = resolve(import.meta.dirname, 
     throw new Error(`icon not found: ${icon}`)
   }
 
+  const metadata = JSON.parse(readFileSync(join(desktopRoot, 'product-metadata.json'), 'utf8'))
+  const displayName = metadata.displayName
+  const maintainer = metadata.communityMaintainer.displayName
+
   console.log(`[set-exe-identity] stamping ${exe}`)
   console.log(`[set-exe-identity] icon: ${icon}`)
 
   await rcedit(exe, {
     icon,
     'version-string': {
-      ProductName: 'Hermes',
-      FileDescription: 'Hermes',
-      CompanyName: 'Nous Research',
-      LegalCopyright: 'Copyright (c) 2026 Nous Research'
+      ProductName: displayName,
+      FileDescription: displayName,
+      CompanyName: maintainer,
+      LegalCopyright: `Copyright (c) 2026 ${maintainer} · MIT License`
     }
   })
 
-  console.log('[set-exe-identity] done — Hermes icon + identity stamped')
+  console.log(`[set-exe-identity] done — ${displayName} icon + identity stamped`)
 }
 
 export { stampExeIdentity }
