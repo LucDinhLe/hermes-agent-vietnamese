@@ -11,7 +11,6 @@ import { getActionStatus, getLogs, getStatus, getUsageAnalytics, restartGateway,
 import type { ActionStatusResponse, AnalyticsResponse, StatusResponse } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { sessionTitle } from '@/lib/chat-runtime'
-import { compactNumber } from '@/lib/format'
 import {
   Activity,
   AlertCircle,
@@ -35,6 +34,7 @@ import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
 import { OverlayMain, OverlayNav, OverlaySplitLayout } from '../overlays/overlay-split-layout'
 import { OverlayView } from '../overlays/overlay-view'
+import { USAGE_PERIODS, UsageOverview, type UsagePeriod } from '../usage/usage-overview'
 
 import { MaintenancePanel } from './maintenance'
 
@@ -44,9 +44,6 @@ const SECTIONS = ['sessions', 'system', 'usage', 'maintenance'] as const satisfi
 
 const LOG_FILES = ['agent', 'errors', 'gateway', 'desktop'] as const
 const LOG_LEVELS = ['ALL', 'INFO', 'WARNING', 'ERROR'] as const
-
-const USAGE_PERIODS = [7, 30, 90] as const
-type UsagePeriod = (typeof USAGE_PERIODS)[number]
 
 // Stable empty arrays so the selector returns the same reference when we're
 // not on the Sessions tab — useStoreSelector bails out on Object.is, so the
@@ -408,7 +405,7 @@ export function CommandCenterView({ initialSection, onClose, onDeleteSession, on
               )}
             </div>
           ) : section === 'usage' ? (
-            <UsagePanel
+            <UsageOverview
               error={usageError}
               loading={usageLoading}
               onRefresh={() => void refreshUsage(usagePeriod)}
@@ -510,183 +507,5 @@ export function CommandCenterView({ initialSection, onClose, onDeleteSession, on
         </OverlayMain>
       </OverlaySplitLayout>
     </OverlayView>
-  )
-}
-
-interface UsagePanelProps {
-  error: string
-  loading: boolean
-  onRefresh: () => void
-  period: UsagePeriod
-  usage: AnalyticsResponse | null
-}
-
-function UsagePanel({ error, loading, onRefresh, period, usage }: UsagePanelProps) {
-  const { t } = useI18n()
-  const cc = t.commandCenter
-  const daily = useMemo(() => usage?.daily ?? [], [usage])
-  const totals = usage?.totals
-  const byModel = usage?.by_model ?? []
-  const topSkills = usage?.skills?.top_skills ?? []
-
-  const maxTokens = useMemo(() => {
-    if (!daily.length) {
-      return 1
-    }
-
-    return daily.reduce((acc, entry) => Math.max(acc, (entry.input_tokens || 0) + (entry.output_tokens || 0)), 1)
-  }, [daily])
-
-  if (!totals) {
-    return (
-      <div className="min-h-0 flex-1">
-        {loading ? (
-          <PageLoader className="min-h-48" label={cc.loadingUsage} />
-        ) : (
-          <EmptyPanel
-            action={
-              <Button onClick={onRefresh} size="xs" variant="text">
-                {cc.retry}
-              </Button>
-            }
-            description={cc.noUsage(period)}
-          />
-        )}
-      </div>
-    )
-  }
-
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto pb-2">
-      {error && (
-        <span className="inline-flex items-center gap-1 text-[length:var(--conversation-caption-font-size)] text-destructive">
-          <AlertCircle className="size-3.5" />
-          {error}
-        </span>
-      )}
-
-      <div className="grid grid-cols-2 gap-x-4 gap-y-4 py-2 sm:grid-cols-3">
-        <UsageStat label={cc.statSessions} value={compactNumber(totals.total_sessions)} />
-        <UsageStat label={cc.statApiCalls} value={compactNumber(totals.total_api_calls)} />
-        <UsageStat
-          label={cc.statTokens}
-          value={`${compactNumber(totals.total_input)} / ${compactNumber(totals.total_output)}`}
-        />
-      </div>
-
-      <section>
-        <div className="mb-2 flex items-baseline justify-between">
-          <span className="text-[0.625rem] font-medium uppercase tracking-[0.08em] text-(--ui-text-tertiary)">
-            {cc.dailyTokens}
-          </span>
-          <span className="flex items-center gap-3 text-[0.65rem] text-(--ui-text-tertiary)">
-            <span className="inline-flex items-center gap-1">
-              <span className="size-2 rounded-[1px] bg-[color:var(--dt-primary)]/60" /> {cc.input}
-            </span>
-            <span className="inline-flex items-center gap-1">
-              <span className="size-2 rounded-[1px] bg-emerald-500/70" /> {cc.output}
-            </span>
-          </span>
-        </div>
-        {daily.length === 0 ? (
-          <div className="grid h-24 place-items-center text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
-            {cc.noDailyActivity}
-          </div>
-        ) : (
-          <>
-            <div className="flex h-24 items-end gap-px">
-              {daily.map(entry => {
-                const inputH = Math.round(((entry.input_tokens || 0) / maxTokens) * 96)
-                const outputH = Math.round(((entry.output_tokens || 0) / maxTokens) * 96)
-
-                return (
-                  <div
-                    className="group relative flex h-24 min-w-0 flex-1 flex-col justify-end"
-                    key={entry.day}
-                    title={`${entry.day} · in ${compactNumber(entry.input_tokens)} · out ${compactNumber(entry.output_tokens)}`}
-                  >
-                    <div
-                      className="w-full rounded-t-[1px] bg-[color:var(--dt-primary)]/50"
-                      style={{ height: Math.max(inputH, entry.input_tokens > 0 ? 1 : 0) }}
-                    />
-                    <div
-                      className="w-full bg-emerald-500/60"
-                      style={{ height: Math.max(outputH, entry.output_tokens > 0 ? 1 : 0) }}
-                    />
-                  </div>
-                )
-              })}
-            </div>
-            <div className="mt-1 flex justify-between text-[0.6rem] text-(--ui-text-tertiary)">
-              <span>{daily[0]?.day}</span>
-              <span>{daily[daily.length - 1]?.day}</span>
-            </div>
-          </>
-        )}
-      </section>
-
-      <div className="grid min-h-0 gap-x-8 gap-y-5 pt-1 sm:grid-cols-2">
-        <UsageList
-          emptyLabel={cc.noModelUsage}
-          rows={byModel.slice(0, 6).map(entry => ({
-            key: entry.model,
-            label: entry.model,
-            value: `${compactNumber((entry.input_tokens || 0) + (entry.output_tokens || 0))}`
-          }))}
-          title={cc.topModels}
-        />
-        <UsageList
-          emptyLabel={cc.noSkillActivity}
-          rows={topSkills.slice(0, 6).map(entry => ({
-            key: entry.skill,
-            label: entry.skill,
-            value: cc.actions(compactNumber(entry.total_count))
-          }))}
-          title={cc.topSkills}
-        />
-      </div>
-    </div>
-  )
-}
-
-function UsageList({
-  emptyLabel,
-  rows,
-  title
-}: {
-  emptyLabel: string
-  rows: Array<{ key: string; label: string; value: string }>
-  title: string
-}) {
-  return (
-    <section className="min-w-0">
-      <div className="mb-1.5 text-[0.625rem] font-medium uppercase tracking-[0.08em] text-(--ui-text-tertiary)">
-        {title}
-      </div>
-      {rows.length === 0 ? (
-        <div className="text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
-          {emptyLabel}
-        </div>
-      ) : (
-        <ul>
-          {rows.map(row => (
-            <li className="flex items-center justify-between gap-2 py-1.5" key={row.key}>
-              <span className="min-w-0 truncate font-mono text-[0.7rem] text-foreground">{row.label}</span>
-              <span className="shrink-0 text-[0.65rem] text-(--ui-text-tertiary)">{row.value}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  )
-}
-
-function UsageStat({ hint, label, value }: { hint?: string; label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <div className="text-[0.625rem] font-medium uppercase tracking-[0.12em] text-(--ui-text-tertiary)">{label}</div>
-      <div className="mt-1 truncate text-base font-semibold tracking-tight text-foreground">{value}</div>
-      {hint && <div className="mt-0.5 truncate text-[0.62rem] text-(--ui-text-tertiary)">{hint}</div>}
-    </div>
   )
 }

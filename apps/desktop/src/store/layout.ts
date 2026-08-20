@@ -6,7 +6,7 @@ import { isPaneVisible, revealTreePane } from '@/components/pane-shell/tree/stor
 import { matchesQuery } from '@/hooks/use-media-query'
 import { connectionScopedAtom } from '@/lib/connection-scoped'
 import { type Codec, Codecs, persistentAtom } from '@/lib/persisted'
-import { arraysEqual, insertUniqueId, readKey } from '@/lib/storage'
+import { arraysEqual, insertUniqueId, readKey, writeKey } from '@/lib/storage'
 
 import { $paneStates, ensurePaneRegistered, setPaneOpen, setPaneWidthOverride, togglePane } from './panes'
 import { $showAllProfiles, setShowAllProfiles } from './profile'
@@ -59,6 +59,7 @@ const SIDEBAR_DISMISSED_WORKTREES_STORAGE_KEY = 'hermes.desktop.dismissedWorktre
 const PANES_FLIPPED_STORAGE_KEY = 'hermes.desktop.panesFlipped'
 const RIGHT_RAIL_ACTIVE_TAB_STORAGE_KEY = 'hermes.desktop.rightRailActiveTab'
 const RIGHT_SIDEBAR_VIEW_STORAGE_KEY = 'hermes.desktop.rightSidebarView'
+const RIGHT_SIDEBAR_DEFAULT_OPEN_MIGRATION_STORAGE_KEY = 'hermes.desktop.migrations.rightSidebarDefaultOpen.v29'
 
 export const CHAT_SIDEBAR_PANE_ID = 'chat-sidebar'
 export const FILE_BROWSER_PANE_ID = 'file-browser'
@@ -72,7 +73,25 @@ export type RightRailTabId = `artifact:${string}` | `file:${string}` | `url:${st
 export type RightSidebarView = 'browser' | 'files'
 
 ensurePaneRegistered(CHAT_SIDEBAR_PANE_ID, { open: true })
-ensurePaneRegistered(FILE_BROWSER_PANE_ID, { open: false })
+ensurePaneRegistered(FILE_BROWSER_PANE_ID, { open: true })
+
+// Earlier v29 builds registered this pane as closed and persisted that default,
+// which is indistinguishable from a deliberate close. Reopen it exactly once
+// on upgrade so existing profiles receive the corrected layout; from then on,
+// ordinary pane persistence remembers whatever the user chooses.
+export function migrateRightSidebarDefaultOpen(): void {
+  if (readKey(RIGHT_SIDEBAR_DEFAULT_OPEN_MIGRATION_STORAGE_KEY) !== null) {
+    return
+  }
+
+  if ($paneStates.get()[FILE_BROWSER_PANE_ID]?.open === false) {
+    setPaneOpen(FILE_BROWSER_PANE_ID, true)
+  }
+
+  writeKey(RIGHT_SIDEBAR_DEFAULT_OPEN_MIGRATION_STORAGE_KEY, '1')
+}
+
+migrateRightSidebarDefaultOpen()
 
 export const $sidebarOpen: ReadableAtom<boolean> = computed(
   $paneStates,
@@ -81,7 +100,7 @@ export const $sidebarOpen: ReadableAtom<boolean> = computed(
 
 export const $fileBrowserOpen: ReadableAtom<boolean> = computed(
   $paneStates,
-  states => states[FILE_BROWSER_PANE_ID]?.open ?? false
+  states => states[FILE_BROWSER_PANE_ID]?.open ?? true
 )
 
 // Persisted so a relaunch reopens the same rail tab. Null when the rail has no

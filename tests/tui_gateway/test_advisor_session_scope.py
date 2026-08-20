@@ -199,3 +199,18 @@ def test_compute_host_existing_session_applies_latest_advisor_override() -> None
 
     assert resolved["create_advisor_override"] is True
     assert agent._advisor_settings.enabled is True
+
+
+def test_agent_callbacks_bridge_only_structured_advisor_progress() -> None:
+    payload = {
+        "checkpoint": "plan",
+        "state": "reviewing",
+        "summary": "Inspect the target first",
+    }
+
+    with patch.object(server, "_emit") as emit:
+        callback = server._agent_cbs("runtime-session")["event_callback"]
+        callback("advisor.progress", payload)
+        callback("session:compress", {"session_id": "stored-session"})
+
+    emit.assert_called_once_with("advisor.progress", "runtime-session", payload)

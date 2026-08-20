@@ -140,9 +140,11 @@ import {
   ARTIFACTS_ROUTE,
   CRON_ROUTE,
   MESSAGING_ROUTE,
+  PROJECTS_ROUTE,
   SIDEBAR_NAV_AREA,
   type SidebarNavContribution,
-  SKILLS_ROUTE
+  SKILLS_ROUTE,
+  USAGE_ROUTE
 } from '../../routes'
 import type { SidebarNavItem } from '../../types'
 
@@ -195,6 +197,18 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
     icon: props => <Codicon name="robot" {...props} />,
     action: 'new-session',
     keybindActionId: 'session.new'
+  },
+  {
+    id: 'projects',
+    label: '',
+    icon: props => <Codicon name="root-folder" {...props} />,
+    route: PROJECTS_ROUTE
+  },
+  {
+    id: 'usage',
+    label: '',
+    icon: props => <Codicon name="graph" {...props} />,
+    route: USAGE_ROUTE
   },
   {
     id: 'skills',
@@ -1486,6 +1500,8 @@ export function ChatSidebar({
                   (item.id === 'skills' && currentView === 'skills') ||
                   (item.id === 'messaging' && currentView === 'messaging') ||
                   (item.id === 'artifacts' && currentView === 'artifacts') ||
+                  (item.id === 'projects' && currentView === 'projects') ||
+                  (item.id === 'usage' && currentView === 'usage') ||
                   (item.id === 'cron' && currentView === 'cron') ||
                   // Contributed rows light up at their own route.
                   (Boolean(item.route) && pathname === item.route)

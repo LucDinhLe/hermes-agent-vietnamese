@@ -49,6 +49,7 @@ import {
 } from './session'
 import { ackStoredSessionId, markSessionUnreadFinished } from './session-unread'
 import { isSecondaryWindow } from './windows'
+import { clearAllWorkProgress, clearSessionWorkProgress } from './work-progress'
 
 // ---------------------------------------------------------------------------
 // Reactive per-runtime session state (view mirror of the wiring cache).
@@ -342,6 +343,7 @@ export function dropSessionState(runtimeId: string) {
   // cached runtime is dropped in the meantime.
   clearWatchdog(runtimeId)
   clearSessionProviderWait(runtimeId)
+  clearSessionWorkProgress(runtimeId)
   sessionScopeByRuntimeId.delete(runtimeId)
 
   const current = $sessionStates.get()
@@ -368,6 +370,7 @@ export function clearAllSessionStates() {
   sessionWatchdogTimers.clear()
   settledExpiry.clear()
   clearAllProviderWaits()
+  clearAllWorkProgress()
   sessionScopeByRuntimeId.clear()
   $stalledSessionIds.set([])
   $sessionStates.set({})

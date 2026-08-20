@@ -1,5 +1,91 @@
 # Tiến độ
 
+## Cập nhật 2026-08-20 — tiến trình công việc và checkpoint Advisor trong từng phiên
+
+- Mỗi phiên nay có một dòng tiến trình tạm thời ngay trong hội thoại, gồm việc
+  Hermes đang làm và lý do vận hành của bước đó. Dòng này theo các nhịp phân
+  tích yêu cầu, suy luận bước kế tiếp, chuẩn bị/chạy/kiểm tra công cụ, tóm tắt
+  ngữ cảnh và soạn kết quả; tự biến mất khi hoàn tất, lỗi, dừng hoặc runtime bị
+  thu hồi. Không có công tắc bật/tắt riêng.
+- Agent phát sự kiện có cấu trúc khi Advisor bắt đầu và kết thúc checkpoint
+  **kế hoạch**, **hướng xử lý mới** và **kết quả cuối**. Giao diện hiển thị rõ
+  mục đích của lượt gọi, trạng thái đạt/yêu cầu sửa/không sẵn sàng/chưa giải
+  quyết và nhận xét ngắn đã được giới hạn; không suy đoán từ chuỗi tiếng Anh và
+  không trình bày chain-of-thought ẩn.
+- Trạng thái được khóa theo runtime session. Phiên chính và từng tile không thể
+  ghi đè tiến trình của nhau; các đường kết thúc thiếu `message.complete` và
+  thao tác dừng cũng dọn đúng trạng thái của phiên liên quan.
+- Xác minh cục bộ: 25/25 kiểm thử Python Advisor/gateway, 58/58 kiểm thử UI liên
+  quan, Desktop typecheck, Ruff, Prettier và `git diff --check` đạt. ESLint toàn
+  dự án đạt 0 lỗi, còn 133 cảnh báo nền có sẵn.
+- Chuỗi build cục bộ đã dựng thành công renderer production, Electron main và
+  preload, native dependencies rồi qua `assert-dist-built`. Lệnh build gộp ban
+  đầu bị Windows Device Guard chặn binary `uv` trong AppData; bước tạo install
+  stamp được chạy tương đương bằng Python của venv dự án. Payload Agent cục bộ
+  là thin stub vì lượt này không bật chế độ build release resident.
+- Tài liệu phạm vi và rollback: `docs/hermes-session-work-progress.md`. Thay đổi
+  hiện chỉ nằm trong worktree, chưa commit, push, tạo candidate hoặc phát hành.
+
+## Cập nhật 2026-08-20 — khôi phục panel phải và hoàn thiện danh mục Advisor
+
+- Hồ sơ mới mặc định mở lại panel công cụ ngoài cùng bên phải, gồm **Tệp**,
+  **Trình duyệt** và **Terminal**. Hồ sơ đã chạy bản lỗi được chuyển đổi một
+  lần từ trạng thái đóng mặc định sang mở; sau đó lựa chọn đóng/mở của người
+  dùng tiếp tục được lưu và tôn trọng ở lần mở sau.
+- Menu model Advisor tiếp tục lấy toàn bộ model từ mọi nhà cung cấp đã kết nối.
+  Fixture kiểm thử Windows nay mô phỏng hai nhà cung cấp và năm model để lượt
+  nghiệm thu giao diện không còn tạo ấn tượng sai rằng chỉ có một lựa chọn.
+- Việt hóa mục `Scheduled jobs` thành **Tác vụ định kỳ** trong thanh trái.
+- Xác minh cục bộ: 24/24 kiểm thử UI liên quan đạt, Desktop typecheck đạt,
+  ESLint toàn dự án 0 lỗi (133 cảnh báo nền), Prettier đạt, `git diff --check`
+  đạt và production build đạt.
+- Smoke giao diện Windows x64 trong hồ sơ tạm cô lập xác nhận panel phải hiện
+  đủ Tệp/Trình duyệt/Terminal, menu Advisor hiện 5 model thuộc 2 nhà cung cấp,
+  đổi thành công từ `gpt-5.6-sol` sang `claude-sonnet-5`, và nhãn **Tác vụ định
+  kỳ** hiển thị đúng. Không đọc hoặc ghi dữ liệu Hermes đang cài.
+- Thay đổi hiện chỉ nằm trong worktree, chưa commit, push, tạo candidate hoặc
+  cập nhật bản Hermes đang cài.
+
+## Cập nhật 2026-08-19 — đưa Dự án và Thống kê sử dụng ra thanh trái
+
+- Ngay dưới **Phiên mới** có hai mục cố định mới: **Dự án** và
+  **Thống kê sử dụng**. Cả hai mở trong panel giữa như các trang Kỹ năng/Tệp kết
+  quả và không chiếm panel công cụ ngoài cùng bên phải.
+- Trang **Dự án** lấy trực tiếp cây dự án hiện có, cho phép tạo, tìm, mở,
+  ghim/bỏ ghim; mỗi dự án hiển thị thư mục chính, số phiên và tổng token đã dùng.
+  Dự án ghim được đưa lên đầu; thứ tự ghim hiện có trong sidebar vẫn được giữ.
+- Trang **Thống kê sử dụng** dùng cùng nguồn analytics của Hermes, có bộ lọc
+  7/30/90 ngày, token vào/ra theo ngày và danh sách model kèm lượng token tiêu
+  thụ. Dữ liệu bám theo hồ sơ Hermes đang hoạt động và gồm cả lượt gọi phụ như
+  Advisor khi backend đã ghi nhận.
+- Sửa phần **Ý tưởng** trong hộp tạo dự án: bỏ câu sai thời điểm “đã lưu vào
+  IDEA.md”, ghi rõ đây là nội dung không bắt buộc và chỉ được lưu thành
+  `IDEA.md` trong thư mục chính sau khi người dùng tạo dự án.
+- Xác minh cục bộ: 87/87 kiểm thử mục tiêu đạt, Desktop typecheck đạt, ESLint 0
+  lỗi (133 cảnh báo nền), Prettier đạt và production build đạt.
+- Smoke giao diện bằng `dev:mock` trên Windows x64 đã mở đúng bản build trong
+  hồ sơ tạm cô lập: **Dự án**, **Thống kê sử dụng** và thanh Advisor kèm model
+  `mock-model` xuất hiện đúng vùng làm việc. Công cụ mở thử cũng đã nhận đúng
+  tên nhị phân `electron.exe` trên Windows thay vì chỉ tìm tên POSIX.
+- Thay đổi hiện chỉ nằm trong worktree, chưa commit, push, tạo candidate hoặc
+  cập nhật bản Hermes đang cài.
+
+## Cập nhật 2026-08-19 — gom toàn bộ điều khiển Advisor vào phiên làm việc
+
+- Bỏ khu vực bật/tắt và chọn model Advisor khỏi **Cài đặt → Model**; trang Cài
+  đặt cũng không còn hiện cảnh báo định tuyến cũ của riêng tác vụ Advisor.
+- Thanh Advisor trong panel giữa giữ công tắc theo từng phiên và có thêm nút
+  model kèm mũi tên xuống. Menu dùng danh mục model chung nhưng chỉ lấy các nhà
+  cung cấp đã kết nối, luôn mở đủ model và không phụ thuộc trạng thái thu gọn
+  hoặc danh sách rút gọn của menu model làm việc.
+- Chọn model ghi vào định tuyến `auxiliary.advisor` của hồ sơ đang hoạt động,
+  cập nhật giao diện tức thời và hoàn tác nếu backend từ chối. Cấu hình model
+  Advisor vẫn dùng chung trong hồ sơ; trạng thái bật/tắt tiếp tục tách theo phiên.
+- Xác minh cục bộ: 48/48 kiểm thử mục tiêu đạt, Desktop typecheck đạt, ESLint và
+  Prettier các tệp thay đổi đạt, `git diff --check` đạt và production build đạt.
+- Thay đổi hiện chỉ nằm trong worktree, chưa commit, push, tạo candidate hoặc
+  đưa vào bản Hermes đã cài trên máy.
+
 ## Cập nhật 2026-08-19 — chuẩn bị candidate Hermes Vietnamese v29
 
 - Chủ dự án cho phép phát hành v29. Candidate hiện tại là

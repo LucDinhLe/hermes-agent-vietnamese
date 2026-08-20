@@ -5,6 +5,7 @@ import { __resetElapsedTimerRegistryForTests } from '@/components/chat/activity-
 import { I18nProvider } from '@/i18n'
 import { $providerWaitSessions, setSessionProviderWait } from '@/store/provider-wait'
 import { $activeSessionId, $turnStartedAt } from '@/store/session'
+import { $workProgressSessions, setSessionWorkProgress } from '@/store/work-progress'
 
 import { ResponseLoadingIndicator } from './status'
 
@@ -32,6 +33,7 @@ describe('ResponseLoadingIndicator timer', () => {
     $activeSessionId.set(null)
     $turnStartedAt.set(null)
     $providerWaitSessions.set({})
+    $workProgressSessions.set({})
     __resetElapsedTimerRegistryForTests()
     vi.restoreAllMocks()
     vi.useRealTimers()
@@ -69,6 +71,23 @@ describe('ResponseLoadingIndicator timer', () => {
     renderIndicator()
 
     expect(screen.getByText('⏳ waiting on local-model — 30s with no output yet')).toBeTruthy()
+  })
+
+  it('shows both the Advisor action and its workflow reason', () => {
+    $activeSessionId.set('session-a')
+    $turnStartedAt.set(Date.now())
+    setSessionWorkProgress('session-a', {
+      checkpoint: 'plan',
+      kind: 'advisor',
+      state: 'reviewing'
+    })
+
+    renderIndicator()
+
+    expect(screen.getByText('Advisor is reviewing the plan')).toBeTruthy()
+    expect(
+      screen.getByText('To verify goal alignment, constraints, and authorization before changes run.')
+    ).toBeTruthy()
   })
 })
 

@@ -29,6 +29,7 @@ import { broadcastSessionsChanged } from '@/store/session-sync'
 import { clearSessionSubagents } from '@/store/subagents'
 import { clearSessionTodos } from '@/store/todos'
 import { setSessionDraftingTool } from '@/store/tool-drafting'
+import { clearSessionWorkProgress } from '@/store/work-progress'
 import type { SessionInfo } from '@/types/hermes'
 
 import { uploadComposerAttachment } from '../session/hooks/use-prompt-actions'
@@ -298,6 +299,7 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId }: Ses
     clearSessionSubagents(sessionId)
     resetSessionBackground(sessionId)
     setSessionDraftingTool(sessionId, '')
+    clearSessionWorkProgress(sessionId)
     clearAllPrompts(sessionId)
     clearClarifyRequest(undefined, sessionId)
 

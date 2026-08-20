@@ -1997,6 +1997,29 @@ def _status_update(sid: str, kind: str, text: str | None = None):
     _emit("status.update", sid, {"kind": out_kind, "text": body})
 
 
+def _agent_event(sid: str, event_type: str, payload: dict | None = None) -> None:
+    """Bridge the small allowlisted core-event subset used by interactive UIs."""
+    if event_type != "advisor.progress" or not isinstance(payload, dict):
+        return
+    checkpoint = str(payload.get("checkpoint") or "")
+    state = str(payload.get("state") or "")
+    if checkpoint not in {"plan", "recovery", "final"}:
+        return
+    if state not in {
+        "reviewing",
+        "passed",
+        "revision_requested",
+        "unavailable",
+        "failed",
+        "unresolved",
+    }:
+        return
+    safe_payload = {"checkpoint": checkpoint, "state": state}
+    if summary := str(payload.get("summary") or "").strip()[:600]:
+        safe_payload["summary"] = summary
+    _emit("advisor.progress", sid, safe_payload)
+
+
 def _estimate_image_tokens(width: int, height: int) -> int:
     """Very rough UI estimate for image prompt cost.
 
@@ -6235,6 +6258,9 @@ def _agent_cbs(sid: str) -> dict:
         ),
         "status_callback": lambda kind, text=None: _status_update(
             sid, str(kind), None if text is None else str(text)
+        ),
+        "event_callback": lambda event_type, payload: _agent_event(
+            sid, str(event_type), payload
         ),
         # Credits/notice spine (L1): an AgentNotice fired by the agent becomes a
         # notification.show WS event; a recovery clear becomes notification.clear.

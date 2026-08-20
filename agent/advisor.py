@@ -21,6 +21,17 @@ from utils import is_truthy_value, safe_json_loads
 logger = logging.getLogger(__name__)
 
 _ALLOWED_VERDICTS = frozenset({"PASS", "REVISE", "ASK_USER", "BLOCK"})
+_PROGRESS_CHECKPOINTS = frozenset({"plan", "recovery", "final"})
+_PROGRESS_STATES = frozenset(
+    {
+        "reviewing",
+        "passed",
+        "revision_requested",
+        "unavailable",
+        "failed",
+        "unresolved",
+    }
+)
 _DEFAULT_MAX_REVISIONS = 2
 _MAX_OBJECTIVE_CHARS = 6000
 _MAX_CANDIDATE_CHARS = 12000
@@ -65,6 +76,32 @@ class AdvisorDecision:
     @property
     def passes(self) -> bool:
         return self.verdict == "PASS"
+
+
+def emit_progress(
+    agent: Any,
+    *,
+    checkpoint: str,
+    state: str,
+    summary: str = "",
+) -> None:
+    """Publish a compact Advisor checkpoint event for session-aware clients.
+
+    This is operational progress, not model reasoning. The callback is optional
+    and fail-open so a presentation transport can never alter enforcement.
+    """
+    if checkpoint not in _PROGRESS_CHECKPOINTS or state not in _PROGRESS_STATES:
+        return
+    callback = getattr(agent, "event_callback", None)
+    if not callable(callback):
+        return
+    payload = {"checkpoint": checkpoint, "state": state}
+    if clean_summary := _text(summary, _MAX_SUMMARY_CHARS):
+        payload["summary"] = clean_summary
+    try:
+        callback("advisor.progress", payload)
+    except Exception:
+        logger.debug("Advisor progress callback failed", exc_info=True)
 
 
 def settings_from_config(config: Mapping[str, Any] | None) -> AdvisorSettings:

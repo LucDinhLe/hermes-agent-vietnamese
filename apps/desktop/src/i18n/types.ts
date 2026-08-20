@@ -1745,6 +1745,13 @@ export interface Translations {
     }
     projects: {
       sectionLabel: string
+      manageDescription: string
+      searchPlaceholder: string
+      emptyTitle: string
+      emptyDescription: string
+      open: string
+      sessionsCount: (count: number) => string
+      tokensCount: (tokens: string) => string
       pinnedSectionLabel: string
       pinnedEmpty: string
       home: string
@@ -1757,6 +1764,8 @@ export interface Translations {
       foldersLabel: string
       ideaLabel: string
       ideaPlaceholder: string
+      ideaHint: string
+      ideaSaveFailed: string
       ideaGenerate: string
       ideaGenerating: string
       ideaShuffle: string
@@ -2672,6 +2681,41 @@ export interface Translations {
       goForward: string
       sendEdited: string
       attachingFile: string
+      workProgress: {
+        analyzingAction: string
+        analyzingReason: string
+        reasoningAction: string
+        reasoningReason: string
+        respondingAction: string
+        respondingReason: string
+        compactingAction: string
+        compactingReason: string
+        toolPreparingAction: (name: string) => string
+        toolPreparingReason: string
+        toolRunningAction: (name: string) => string
+        toolRunningReason: string
+        toolCheckingAction: (name: string) => string
+        toolCheckingReason: string
+        advisorPlanAction: string
+        advisorPlanReason: string
+        advisorRecoveryAction: string
+        advisorRecoveryReason: string
+        advisorFinalAction: string
+        advisorFinalReason: string
+        checkpointPlan: string
+        checkpointRecovery: string
+        checkpointFinal: string
+        advisorPassedAction: (checkpoint: string) => string
+        advisorPassedReason: string
+        advisorRevisionAction: (checkpoint: string) => string
+        advisorRevisionReason: string
+        advisorUnavailableAction: string
+        advisorUnavailableReason: string
+        advisorFailedAction: string
+        advisorFailedReason: string
+        advisorUnresolvedAction: string
+        advisorUnresolvedReason: string
+      }
     }
     approval: {
       gatewayDisconnected: string

@@ -62,6 +62,7 @@ def agent(tmp_path, monkeypatch):
 
 
 def test_plan_revise_withholds_mutating_tool_and_preserves_pairing(agent):
+    agent.event_callback = MagicMock()
     agent.valid_tool_names = ["patch"]
     answers = iter(
         [
@@ -96,9 +97,16 @@ def test_plan_revise_withholds_mutating_tool_and_preserves_pairing(agent):
     assert withheld[0]["tool_call_id"] == "call-1"
     assert "Inspect the target" in withheld[0]["content"]
     assert result["final_response"] == "I need the target file before editing."
+    states = [
+        call.args[1]["state"]
+        for call in agent.event_callback.call_args_list
+        if call.args and call.args[0] == "advisor.progress"
+    ]
+    assert states == ["reviewing", "revision_requested", "reviewing", "passed"]
 
 
 def test_final_revise_is_ephemeral_and_replaced_by_checked_answer(agent):
+    agent.event_callback = MagicMock()
     answers = iter([_response("Premature result"), _response("Corrected result")])
     agent._interruptible_api_call = lambda _kwargs: next(answers)
     decisions = [
@@ -121,6 +129,12 @@ def test_final_revise_is_ephemeral_and_replaced_by_checked_answer(agent):
     assert result["final_response"] == "Corrected result"
     assert [m["role"] for m in result["messages"]] == ["user", "assistant"]
     assert all(not m.get("_advisor_final_synthetic") for m in result["messages"])
+    states = [
+        call.args[1]["state"]
+        for call in agent.event_callback.call_args_list
+        if call.args and call.args[0] == "advisor.progress"
+    ]
+    assert states == ["reviewing", "revision_requested", "reviewing", "passed"]
 
 
 def test_advisor_off_makes_zero_review_calls(agent):
@@ -136,6 +150,82 @@ def test_advisor_off_makes_zero_review_calls(agent):
 
     review.assert_not_called()
     assert result["final_response"] == "Normal result"
+
+
+def test_progress_events_expose_plan_and_final_checkpoints_in_loop_order(agent):
+    agent.valid_tool_names = ["patch"]
+    agent.event_callback = MagicMock()
+    answers = iter(
+        [
+            _response(
+                "I will apply the requested change",
+                tool_calls=[_tool_call()],
+                finish_reason="tool_calls",
+            ),
+            _response("Verified result"),
+        ]
+    )
+    agent._interruptible_api_call = lambda _kwargs: next(answers)
+
+    def execute_success(message, messages, *_args):
+        for tool_call in message.tool_calls or []:
+            messages.append(
+                {
+                    "role": "tool",
+                    "name": tool_call.function.name,
+                    "tool_call_id": tool_call.id,
+                    "content": '{"ok":true}',
+                }
+            )
+
+    agent._execute_tool_calls = MagicMock(side_effect=execute_success)
+
+    with (
+        patch(
+            "agent.advisor.review_packet",
+            side_effect=[
+                AdvisorDecision(verdict="PASS", summary="Plan is aligned"),
+                AdvisorDecision(verdict="PASS", summary="Result is aligned"),
+            ],
+        ),
+        patch("hermes_cli.plugins.has_hook", return_value=False),
+        patch("hermes_cli.plugins.invoke_hook", return_value=[]),
+    ):
+        result = agent.run_conversation("Make the change and verify it")
+
+    progress = [
+        call.args
+        for call in agent.event_callback.call_args_list
+        if call.args and call.args[0] == "advisor.progress"
+    ]
+
+    assert result["final_response"] == "Verified result"
+    assert progress == [
+        (
+            "advisor.progress",
+            {"checkpoint": "plan", "state": "reviewing"},
+        ),
+        (
+            "advisor.progress",
+            {
+                "checkpoint": "plan",
+                "state": "passed",
+                "summary": "Plan is aligned",
+            },
+        ),
+        (
+            "advisor.progress",
+            {"checkpoint": "final", "state": "reviewing"},
+        ),
+        (
+            "advisor.progress",
+            {
+                "checkpoint": "final",
+                "state": "passed",
+                "summary": "Result is aligned",
+            },
+        ),
+    ]
 
 
 def test_passed_recovery_review_does_not_consume_revision_budget(agent):

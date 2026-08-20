@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -300,39 +300,13 @@ describe('ModelSettings', () => {
     expect(screen.queryByRole('switch', { name: 'Fast' })).toBeNull()
   })
 
-  it('shows Advisor beside the main model controls and persists its opt-in toggle', async () => {
+  it('keeps Advisor controls out of Settings because the session bar owns them', async () => {
     await renderModelSettings()
 
-    expect(await screen.findByText('Advisor model')).toBeTruthy()
-    expect(screen.getByText(/each checkpoint adds a model call/i)).toBeTruthy()
-
-    fireEvent.click(screen.getByRole('switch', { name: 'Enable Advisor' }))
-
-    await waitFor(() =>
-      expect(saveHermesConfig).toHaveBeenCalledWith(
-        expect.objectContaining({ advisor: expect.objectContaining({ enabled: true }) })
-      )
-    )
-  })
-
-  it('assigns the dedicated Advisor model through the auxiliary routing backend', async () => {
-    await renderModelSettings()
-
-    const section = (await screen.findByText('Advisor')).closest('section')
-    expect(section).toBeTruthy()
-    const advisor = within(section as HTMLElement)
-
-    fireEvent.click(advisor.getByRole('button', { name: 'Change' }))
-    fireEvent.click(advisor.getByRole('button', { name: 'Apply' }))
-
-    await waitFor(() =>
-      expect(setModelAssignment).toHaveBeenCalledWith({
-        model: 'hermes-4',
-        provider: 'nous',
-        scope: 'auxiliary',
-        task: 'advisor'
-      })
-    )
+    expect(await screen.findByText('Auxiliary models')).toBeTruthy()
+    expect(screen.queryByText('Advisor model')).toBeNull()
+    expect(screen.queryByRole('switch', { name: 'Enable Advisor' })).toBeNull()
+    expect(screen.queryByText(/each checkpoint adds a model call/i)).toBeNull()
   })
 
   it('renders the auxiliary task rows', async () => {

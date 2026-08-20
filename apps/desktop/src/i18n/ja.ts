@@ -1763,6 +1763,8 @@ export const ja = defineLocale({
   sidebar: {
     nav: {
       'new-session': '新しいセッション',
+      projects: 'プロジェクト',
+      usage: '使用状況',
       skills: 'スキルとツール',
       messaging: 'メッセージング',
       artifacts: 'アーティファクト',
@@ -1790,6 +1792,13 @@ export const ja = defineLocale({
     noFilterMatches: 'このフィルターに一致するセッションはありません',
     projects: {
       sectionLabel: 'プロジェクト',
+      manageDescription: '関連するフォルダー、セッション、使用量をまとめて管理します。',
+      searchPlaceholder: 'プロジェクトを検索…',
+      emptyTitle: 'プロジェクトはまだありません',
+      emptyDescription: 'プロジェクトを作成して、関連するフォルダーとセッションをまとめます。',
+      open: 'プロジェクトを開く',
+      sessionsCount: count => `${count} セッション`,
+      tokensCount: tokens => `${tokens} トークン`,
       pinnedSectionLabel: 'ピン留めしたプロジェクト',
       pinnedEmpty: 'プロジェクトをピン留めすると、ここからすぐ開けます。',
       home: 'ホーム',
@@ -1801,7 +1810,9 @@ export const ja = defineLocale({
       namePlaceholder: '例: Skunkworks',
       foldersLabel: 'フォルダ',
       ideaLabel: 'アイデア',
-      ideaPlaceholder: 'このプロジェクトは何ですか？（IDEA.md に保存）',
+      ideaPlaceholder: 'プロジェクトの目標と主なアイデアを説明します。',
+      ideaHint: '任意です。プロジェクト作成時に、Hermes はこの内容を主要フォルダーの IDEA.md に保存します。',
+      ideaSaveFailed: 'プロジェクトは作成されましたが、主要フォルダーに IDEA.md を保存できませんでした。',
       ideaGenerate: 'アイデアを生成',
       ideaGenerating: '生成中…',
       ideaShuffle: 'テンプレートをシャッフル',

@@ -22,13 +22,15 @@ import {
   MESSAGING_ROUTE,
   navigateToWorkspacePage,
   NEW_CHAT_ROUTE,
+  PROJECTS_ROUTE,
   routePathname,
   ROUTES_AREA,
   routeSessionId,
   sessionRoute,
   SETTINGS_ROUTE,
   SKILLS_ROUTE,
-  syncWorkspaceRoute
+  syncWorkspaceRoute,
+  USAGE_ROUTE
 } from './routes'
 
 vi.mock('@/components/pane-shell/tree/store', async importOriginal => ({
@@ -118,6 +120,17 @@ describe('syncWorkspaceRoute', () => {
 
     syncWorkspaceRoute(MESSAGING_ROUTE)
 
+    expect($workspaceIsPage.get()).toBe(true)
+    expect(fronted()).toBe(true)
+  })
+
+  it.each([
+    [PROJECTS_ROUTE, 'projects'],
+    [USAGE_ROUTE, 'usage']
+  ])('classifies and fronts the built-in workspace page %s', (to, view) => {
+    syncWorkspaceRoute(to)
+
+    expect(appViewForPath(to)).toBe(view)
     expect($workspaceIsPage.get()).toBe(true)
     expect(fronted()).toBe(true)
   })

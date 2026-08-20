@@ -70,6 +70,7 @@ const fs = await import('@/lib/desktop-fs')
 const desktopDefaultCwd = vi.mocked(fs.desktopDefaultCwd)
 const isDesktopFsRemoteMode = vi.mocked(fs.isDesktopFsRemoteMode)
 const selectDesktopPaths = vi.mocked(fs.selectDesktopPaths)
+const writeDesktopFileText = vi.mocked(fs.writeDesktopFileText)
 
 const gw = await import('@/store/gateway')
 const activeGateway = vi.mocked(gw.activeGateway)
@@ -380,6 +381,27 @@ describe('createProject', () => {
       'sidebar.projects.staleBackend'
     )
     expect($projectsRpcAvailable.get()).toBe(false)
+  })
+
+  it('writes IDEA.md after creation and warns when that file cannot be saved', async () => {
+    const created = { folders: [], id: 'p_new', name: 'Demo', primary_path: '/srv/demo' }
+
+    const request = vi.fn(async (method: string) =>
+      method === 'projects.create'
+        ? { project: created }
+        : { active_id: 'p_new', projects: [created], scoped_session_ids: [] }
+    )
+
+    activeGateway.mockReturnValue({ connectionState: 'open', request } as never)
+    writeDesktopFileText.mockRejectedValueOnce(new Error('read only'))
+
+    await createProject({ folders: ['/srv/demo'], idea: '# Demo', name: 'Demo' })
+
+    expect(writeDesktopFileText).toHaveBeenCalledWith('/srv/demo/IDEA.md', '# Demo\n')
+    expect(notify).toHaveBeenCalledWith({
+      kind: 'warning',
+      message: 'sidebar.projects.ideaSaveFailed'
+    })
   })
 })
 

@@ -91,6 +91,7 @@ import { clearActiveSessionTodos } from '@/store/todos'
 import { recordToolDiff } from '@/store/tool-diffs'
 import { setSessionDraftingTool } from '@/store/tool-drafting'
 import { reportInstallMethodWarning } from '@/store/updates'
+import { advisorWorkProgress, clearSessionWorkProgress, setSessionWorkProgress } from '@/store/work-progress'
 import { notifyWorkspaceChanged, toolChangedPath, toolMayMutateFiles } from '@/store/workspace-events'
 // Leaf import (not the `@/themes` barrel) to avoid pulling the ThemeProvider
 // module graph into the gateway event hot path.
@@ -200,6 +201,7 @@ function surfaceBillingBlock(sessionId: string, raw: unknown): void {
  */
 const DRAFT_SUPERSEDING_EVENT_TYPES = new Set([
   'error',
+  'advisor.progress',
   'message.complete',
   'message.delta',
   'message.start',
@@ -213,6 +215,7 @@ const DRAFT_SUPERSEDING_EVENT_TYPES = new Set([
 const COMPACTION_RESUME_EVENT_TYPES = new Set([
   'message.delta',
   'message.interim',
+  'advisor.progress',
   'thinking.delta',
   'reasoning.delta',
   'reasoning.available',
@@ -228,6 +231,7 @@ const COMPACTION_RESUME_EVENT_TYPES = new Set([
 
 const PROVIDER_WAIT_SUPERSEDING_EVENT_TYPES = new Set([
   'error',
+  'advisor.progress',
   'message.complete',
   'message.delta',
   'message.interim',
@@ -620,6 +624,10 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
         // mutates the per-runtime cache entry, and syncSessionStateToView
         // guards the view publish to the active session, so this is safe.
         if (runningChanged && sessionId) {
+          if (payload?.running === false) {
+            clearSessionWorkProgress(sessionId)
+          }
+
           // Set when THIS event released a turn that ended without ever
           // producing an assistant payload, so the catch-up side effects below
           // run on that edge only. The updater is invoked exactly once,
@@ -799,6 +807,7 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
         // A fresh turn on this session optimistically clears its billing wall;
         // if credits are still exhausted the next failure re-raises it.
         clearBillingBlock(sessionId)
+        setSessionWorkProgress(sessionId, { kind: 'analyzing' })
 
         if (isActiveEvent) {
           triggerHaptic('streamStart')
@@ -854,6 +863,7 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
         }
       } else if (event.type === 'message.delta') {
         if (sessionId) {
+          setSessionWorkProgress(sessionId, { kind: 'responding' })
           appendAssistantDelta(sessionId, coerceGatewayText(payload?.text), occurredAt)
         }
       } else if (event.type === 'message.interim') {
@@ -862,6 +872,7 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
         // Finalize it as its own sealed bubble so message.complete doesn't wipe
         // it — the text was already streamed via message.delta and is visible.
         if (sessionId) {
+          setSessionWorkProgress(sessionId, { kind: 'responding' })
           flushQueuedDeltas(sessionId)
           const text = coerceGatewayText(payload?.text)
 
@@ -885,6 +896,7 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
         }
       } else if (event.type === 'reasoning.delta') {
         if (sessionId) {
+          setSessionWorkProgress(sessionId, { kind: 'reasoning' })
           appendReasoningDelta(sessionId, coerceThinkingText(payload?.text), false, occurredAt)
         }
 
@@ -893,6 +905,7 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
         }
       } else if (event.type === 'reasoning.available') {
         if (sessionId) {
+          setSessionWorkProgress(sessionId, { kind: 'reasoning' })
           appendReasoningDelta(sessionId, coerceThinkingText(payload?.text), true, occurredAt)
         }
 
@@ -989,6 +1002,7 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
         // last item stuck pending/in_progress. Finished lists keep their linger.
         clearActiveSessionTodos(sessionId)
         setSessionCompacting(sessionId, false)
+        clearSessionWorkProgress(sessionId)
 
         flushQueuedDeltas(sessionId)
 
@@ -1069,7 +1083,10 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
           return
         }
 
-        setSessionDraftingTool(sessionId, typeof payload?.name === 'string' ? payload.name : '')
+        const toolName = typeof payload?.name === 'string' ? payload.name : ''
+
+        setSessionDraftingTool(sessionId, toolName)
+        setSessionWorkProgress(sessionId, { kind: 'tool-preparing', toolName })
 
         if (isActiveEvent) {
           setPetActivity({ reasoning: false, toolRunning: true })
@@ -1080,6 +1097,10 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
         }
 
         flushQueuedDeltas(sessionId)
+        setSessionWorkProgress(sessionId, {
+          kind: 'tool-running',
+          toolName: typeof payload?.name === 'string' ? payload.name : 'tool'
+        })
         upsertToolCall(sessionId, toTodoPayload(payload) ?? payload, 'running', event.type, occurredAt)
 
         if (isActiveEvent) {
@@ -1088,6 +1109,10 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
       } else if (event.type === 'tool.complete') {
         if (sessionId) {
           flushQueuedDeltas(sessionId)
+          setSessionWorkProgress(sessionId, {
+            kind: 'tool-checking',
+            toolName: typeof payload?.name === 'string' ? payload.name : 'tool'
+          })
           upsertToolCall(sessionId, toTodoPayload(payload) ?? payload, 'complete', event.type, occurredAt)
 
           if (isActiveEvent) {
@@ -1477,9 +1502,18 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
             )
           })
         }
+      } else if (event.type === 'advisor.progress') {
+        if (sessionId) {
+          const progress = advisorWorkProgress(payload)
+
+          if (progress) {
+            setSessionWorkProgress(sessionId, progress)
+          }
+        }
       } else if (event.type === 'status.update') {
         if (sessionId && payload?.kind === 'compacting') {
           setSessionCompacting(sessionId, true)
+          setSessionWorkProgress(sessionId, { kind: 'compacting' })
           compactedTurnRef.current.add(sessionId)
         } else if (sessionId && payload?.kind === 'compacted') {
           setSessionCompacting(sessionId, false)
@@ -1568,6 +1602,7 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
           clearActiveSessionTodos(sessionId)
           setSessionCompacting(sessionId, false)
           compactedTurnRef.current.delete(sessionId)
+          clearSessionWorkProgress(sessionId)
         }
 
         if (isActiveEvent) {

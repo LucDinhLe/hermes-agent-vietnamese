@@ -10,7 +10,7 @@ import { SCAFFOLD_LABEL_CLASS } from '@/components/chat/scaffold-row'
 import { Codicon } from '@/components/ui/codicon'
 import { Loader } from '@/components/ui/loader'
 import { StatusPulse } from '@/components/ui/status-pulse'
-import { useI18n } from '@/i18n'
+import { type Translations, useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
 import { $backgroundResume } from '@/store/background-delegation'
 import { sessionCompacting } from '@/store/compaction'
@@ -18,6 +18,7 @@ import { sessionAwaitingInput } from '@/store/prompts'
 import { sessionProviderWait } from '@/store/provider-wait'
 import { $turnStartedAt } from '@/store/session'
 import { type DraftingTool, sessionDraftingTool } from '@/store/tool-drafting'
+import { sessionWorkProgress, type WorkProgress } from '@/store/work-progress'
 
 // A status line is scaffolding like any other — "Editing" while the model
 // drafts a call is the same kind of line as "Explored 3 files" once it has run,
@@ -51,6 +52,87 @@ const HintText: FC<{ children: ReactNode }> = ({ children }) => (
   <span className={cn(SCAFFOLD_LABEL_CLASS, 'shimmer min-w-0 flex-1 truncate')}>{children}</span>
 )
 
+const ProgressText: FC<{ action: string; reason: string }> = ({ action, reason }) => (
+  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+    <span className={cn(SCAFFOLD_LABEL_CLASS, 'shimmer min-w-0 truncate')}>{action}</span>
+    <span className="max-w-[42rem] text-[0.6875rem] leading-4 text-muted-foreground/65">{reason}</span>
+  </span>
+)
+
+type WorkProgressCopy = Translations['assistant']['thread']['workProgress']
+
+function progressText(progress: WorkProgress, copy: WorkProgressCopy): { action: string; reason: string } {
+  switch (progress.kind) {
+    case 'analyzing':
+      return { action: copy.analyzingAction, reason: copy.analyzingReason }
+
+    case 'reasoning':
+      return { action: copy.reasoningAction, reason: copy.reasoningReason }
+
+    case 'responding':
+      return { action: copy.respondingAction, reason: copy.respondingReason }
+
+    case 'compacting':
+      return { action: copy.compactingAction, reason: copy.compactingReason }
+
+    case 'tool-preparing':
+      return { action: copy.toolPreparingAction(progress.toolName), reason: copy.toolPreparingReason }
+
+    case 'tool-running':
+      return { action: copy.toolRunningAction(progress.toolName), reason: copy.toolRunningReason }
+
+    case 'tool-checking':
+      return { action: copy.toolCheckingAction(progress.toolName), reason: copy.toolCheckingReason }
+    case 'advisor': {
+      const checkpoint =
+        progress.checkpoint === 'final'
+          ? copy.checkpointFinal
+          : progress.checkpoint === 'recovery'
+            ? copy.checkpointRecovery
+            : copy.checkpointPlan
+
+      if (progress.state === 'reviewing') {
+        if (progress.checkpoint === 'final') {
+          return { action: copy.advisorFinalAction, reason: copy.advisorFinalReason }
+        }
+
+        if (progress.checkpoint === 'recovery') {
+          return { action: copy.advisorRecoveryAction, reason: copy.advisorRecoveryReason }
+        }
+
+        return { action: copy.advisorPlanAction, reason: copy.advisorPlanReason }
+      }
+
+      if (progress.state === 'passed') {
+        return {
+          action: copy.advisorPassedAction(checkpoint),
+          reason: progress.summary || copy.advisorPassedReason
+        }
+      }
+
+      if (progress.state === 'revision_requested') {
+        return {
+          action: copy.advisorRevisionAction(checkpoint),
+          reason: progress.summary || copy.advisorRevisionReason
+        }
+      }
+
+      if (progress.state === 'unavailable') {
+        return { action: copy.advisorUnavailableAction, reason: copy.advisorUnavailableReason }
+      }
+
+      if (progress.state === 'failed') {
+        return { action: copy.advisorFailedAction, reason: copy.advisorFailedReason }
+      }
+
+      return {
+        action: copy.advisorUnresolvedAction,
+        reason: progress.summary || copy.advisorUnresolvedReason
+      }
+    }
+  }
+}
+
 /** These indicators render inside whichever transcript mounted them, so every
  *  session-scoped signal comes from that surface's view — a tile must never
  *  show the primary chat's compaction, prompt-wait, or turn timer. */
@@ -60,6 +142,7 @@ function useThreadSessionStatus() {
   const compacting = useStore(useMemo(() => sessionCompacting(sessionId), [sessionId]))
   const drafting = useStore(useMemo(() => sessionDraftingTool(sessionId), [sessionId]))
   const providerWait = useStore(useMemo(() => sessionProviderWait(sessionId), [sessionId]))
+  const workProgress = useStore(useMemo(() => sessionWorkProgress(sessionId), [sessionId]))
   // A pending clarify / approval / sudo / secret means the turn is paused on the
   // user, not working — so don't resurrect the "thinking" timer while they
   // decide (matches the pet's awaitingInput pose taking priority over busy).
@@ -70,6 +153,7 @@ function useThreadSessionStatus() {
     compacting,
     drafting,
     providerWait,
+    workProgress,
     turnTimerKey: sessionId && turnStartedAt ? `turn:${sessionId}:${turnStartedAt}` : undefined
   }
 }
@@ -132,18 +216,23 @@ export const CenteredThreadSpinner: FC = () => {
 
 export const ResponseLoadingIndicator: FC = () => {
   const { t } = useI18n()
-  const { compacting, drafting, providerWait, turnTimerKey } = useThreadSessionStatus()
+  const { compacting, drafting, providerWait, turnTimerKey, workProgress } = useThreadSessionStatus()
   const elapsed = useElapsedSeconds(true, turnTimerKey)
   const hint = useStatusHint(compacting, drafting, providerWait)
+  const progress = workProgress ? progressText(workProgress, t.assistant.thread.workProgress) : null
 
   return (
-    <StatusRow data-slot="aui_response-loading" label={hint || t.assistant.thread.loadingResponse}>
+    <StatusRow
+      className={progress ? 'items-start' : undefined}
+      data-slot="aui_response-loading"
+      label={progress?.action || hint || t.assistant.thread.loadingResponse}
+    >
       <StatusPulse
         aria-hidden="true"
-        className="dither inline-block size-3 rounded-[2px] text-midground/80"
+        className={cn('dither inline-block size-3 rounded-[2px] text-midground/80', progress && 'mt-1')}
         kind="opacity"
       />
-      {hint && <HintText>{hint}</HintText>}
+      {progress ? <ProgressText {...progress} /> : hint && <HintText>{hint}</HintText>}
       <ActivityTimerText seconds={elapsed} />
     </StatusRow>
   )
@@ -212,8 +301,10 @@ export const StreamStallIndicator: FC = () => {
   // what lets the timer read "quiet for 12s" rather than the age of this
   // component, which is the whole turn so far.
   const [quietSince, setQuietSince] = useState<number | undefined>(undefined)
-  const { awaitingInput, compacting, drafting, providerWait, turnTimerKey } = useThreadSessionStatus()
+  const { awaitingInput, compacting, drafting, providerWait, turnTimerKey, workProgress } = useThreadSessionStatus()
   const hint = useStatusHint(compacting, drafting, providerWait)
+  const { t } = useI18n()
+  const progress = workProgress ? progressText(workProgress, t.assistant.thread.workProgress) : null
 
   // A tool run at the tail already narrates the wait — its summary counts the
   // calls, its ticker names the current one, and it carries its own timer. A
@@ -231,15 +322,18 @@ export const StreamStallIndicator: FC = () => {
   // A named wait doesn't have to earn the stall threshold first — we already
   // know what the turn is doing, so say it as soon as the label is ready rather
   // than leaving the transcript silent for STREAM_STALL_S.
-  const active = (quietSince !== undefined || Boolean(hint)) && !awaitingInput && !toolNarrating
+  const active =
+    (Boolean(progress) || quietSince !== undefined || Boolean(hint)) &&
+    !awaitingInput &&
+    (!toolNarrating || Boolean(progress))
 
   // Compaction owns the whole turn, so it keeps counting from the turn's start;
   // anything else counts from the moment the stream went quiet — the stall's own
   // mark, or the draft's, whichever named the wait first.
   const elapsed = useElapsedSeconds(
     active,
-    compacting ? turnTimerKey : undefined,
-    compacting ? undefined : (quietSince ?? drafting?.since)
+    compacting || progress ? turnTimerKey : undefined,
+    compacting || progress ? undefined : (quietSince ?? drafting?.since)
   )
 
   if (!active) {
@@ -247,13 +341,17 @@ export const StreamStallIndicator: FC = () => {
   }
 
   return (
-    <StatusRow data-slot="aui_stream-stall" label={hint || 'Hermes is thinking'}>
+    <StatusRow
+      className={progress ? 'items-start' : undefined}
+      data-slot="aui_stream-stall"
+      label={progress?.action || hint || t.assistant.thread.thinking}
+    >
       <StatusPulse
         aria-hidden="true"
-        className="dither inline-block size-3 rounded-[2px] text-midground/80"
+        className={cn('dither inline-block size-3 rounded-[2px] text-midground/80', progress && 'mt-1')}
         kind="opacity"
       />
-      {hint && <HintText>{hint}</HintText>}
+      {progress ? <ProgressText {...progress} /> : hint && <HintText>{hint}</HintText>}
       <ActivityTimerText seconds={elapsed} />
     </StatusRow>
   )

@@ -31,8 +31,12 @@ const REPO_ROOT = path.resolve(DESKTOP_ROOT, '..', '..')
 
 // ── Canned reply ───────────────────────────────────────────────────────
 
-const CANNED_REPLY =
-  'Hello from the mock inference server! The full boot chain is working.'
+const CANNED_REPLY = 'Hello from the mock inference server! The full boot chain is working.'
+
+const MOCK_PROVIDER_MODELS = {
+  anthropic: ['claude-opus-4-8', 'claude-sonnet-5'],
+  openai: ['gpt-5.6-sol', 'gpt-5.5', 'gpt-5.4']
+}
 
 // ── Mock server (mirrors e2e/mock-server.ts) ───────────────────────────
 
@@ -49,32 +53,46 @@ function startMockServer() {
         return
       }
 
-      if (req.method === 'GET' && req.url === '/v1/models') {
+      const modelProvider =
+        req.url === '/openai/v1/models' ? 'openai' : req.url === '/anthropic/v1/models' ? 'anthropic' : null
+
+      if (req.method === 'GET' && modelProvider) {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(
           JSON.stringify({
             object: 'list',
-            data: [{ id: 'mock-model', object: 'model', created: 0, owned_by: 'mock' }],
-          }),
+            data: MOCK_PROVIDER_MODELS[modelProvider].map(id => ({
+              id,
+              object: 'model',
+              created: 0,
+              owned_by: modelProvider
+            }))
+          })
         )
         return
       }
 
-      if (req.method === 'POST' && req.url?.startsWith('/v1/chat/completions')) {
+      if (req.method === 'POST' && req.url?.endsWith('/v1/chat/completions')) {
         let body = ''
-        req.on('data', (chunk) => { body += chunk.toString() })
+        req.on('data', chunk => {
+          body += chunk.toString()
+        })
         req.on('end', () => {
           let parsed = {}
-          try { parsed = JSON.parse(body) } catch { /* non-streaming */ }
+          try {
+            parsed = JSON.parse(body)
+          } catch {
+            /* non-streaming */
+          }
 
           const stream = parsed.stream === true
-          const model = parsed.model || 'mock-model'
+          const model = parsed.model || 'gpt-5.6-sol'
 
           if (stream) {
             res.writeHead(200, {
               'Content-Type': 'text/event-stream',
               'Cache-Control': 'no-cache',
-              Connection: 'keep-alive',
+              Connection: 'keep-alive'
             })
             const words = CANNED_REPLY.split(' ')
             let i = 0
@@ -82,10 +100,12 @@ function startMockServer() {
               if (i >= words.length) {
                 res.write(
                   `data: ${JSON.stringify({
-                    id: 'mock-completion', object: 'chat.completion.chunk',
-                    created: 0, model,
-                    choices: [{ index: 0, delta: {}, finish_reason: 'stop' }],
-                  })}\n\n`,
+                    id: 'mock-completion',
+                    object: 'chat.completion.chunk',
+                    created: 0,
+                    model,
+                    choices: [{ index: 0, delta: {}, finish_reason: 'stop' }]
+                  })}\n\n`
                 )
                 res.write('data: [DONE]\n\n')
                 res.end()
@@ -94,10 +114,12 @@ function startMockServer() {
               const word = i === 0 ? words[i] : ' ' + words[i]
               res.write(
                 `data: ${JSON.stringify({
-                  id: 'mock-completion', object: 'chat.completion.chunk',
-                  created: 0, model,
-                  choices: [{ index: 0, delta: { content: word }, finish_reason: null }],
-                })}\n\n`,
+                  id: 'mock-completion',
+                  object: 'chat.completion.chunk',
+                  created: 0,
+                  model,
+                  choices: [{ index: 0, delta: { content: word }, finish_reason: null }]
+                })}\n\n`
               )
               i++
               setTimeout(sendChunk, 20)
@@ -107,19 +129,26 @@ function startMockServer() {
             res.writeHead(200, { 'Content-Type': 'application/json' })
             res.end(
               JSON.stringify({
-                id: 'mock-completion', object: 'chat.completion',
-                created: 0, model,
-                choices: [{
-                  index: 0,
-                  message: { role: 'assistant', content: CANNED_REPLY },
-                  finish_reason: 'stop',
-                }],
-                usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 },
-              }),
+                id: 'mock-completion',
+                object: 'chat.completion',
+                created: 0,
+                model,
+                choices: [
+                  {
+                    index: 0,
+                    message: { role: 'assistant', content: CANNED_REPLY },
+                    finish_reason: 'stop'
+                  }
+                ],
+                usage: { prompt_tokens: 10, completion_tokens: 20, total_tokens: 30 }
+              })
             )
           }
         })
-        req.on('error', () => { res.writeHead(400); res.end('Bad request') })
+        req.on('error', () => {
+          res.writeHead(400)
+          res.end('Bad request')
+        })
         return
       }
 
@@ -155,19 +184,30 @@ function writeMockConfig(hermesHome, mockUrl) {
     path.join(hermesHome, 'config.yaml'),
     `# Auto-generated by dev-mock.mjs
 model:
-  default: mock-model
-  provider: mock
+  default: gpt-5.6-sol
+  provider: mock-openai
 providers:
-  mock:
-    api: ${mockUrl}/v1
-    name: Mock
+  mock-openai:
+    api: ${mockUrl}/openai/v1
+    name: OpenAI (mô phỏng)
     api_mode: chat_completions
     key_env: MOCK_API_KEY
     models:
-      mock-model: {}
+      gpt-5.6-sol: {}
+      gpt-5.5: {}
+      gpt-5.4: {}
+    context_length: 4096
+  mock-anthropic:
+    api: ${mockUrl}/anthropic/v1
+    name: Anthropic (mô phỏng)
+    api_mode: chat_completions
+    key_env: MOCK_API_KEY
+    models:
+      claude-opus-4-8: {}
+      claude-sonnet-5: {}
     context_length: 4096
 `,
-    'utf8',
+    'utf8'
   )
   fs.writeFileSync(path.join(hermesHome, '.env'), 'MOCK_API_KEY=e2e-mock-key\n', 'utf8')
 }
@@ -175,7 +215,8 @@ providers:
 // ── Electron launch ────────────────────────────────────────────────────
 
 function findElectron() {
-  const local = path.join(REPO_ROOT, 'node_modules', 'electron', 'dist', 'electron')
+  const executable = process.platform === 'win32' ? 'electron.exe' : 'electron'
+  const local = path.join(REPO_ROOT, 'node_modules', 'electron', 'dist', executable)
   if (fs.existsSync(local)) return local
   const r = spawnSync('which', ['electron'], { encoding: 'utf8' })
   if (r.status === 0 && r.stdout.trim()) return r.stdout.trim()
@@ -187,8 +228,7 @@ function assertDistBuilt() {
   const indexHtml = path.join(DESKTOP_ROOT, 'dist', 'index.html')
   if (!fs.existsSync(electronMain) || !fs.existsSync(indexHtml)) {
     throw new Error(
-      `Desktop dist not built. Run 'cd apps/desktop && npm run build' first.\n` +
-      `Missing: ${electronMain}`,
+      `Desktop dist not built. Run 'cd apps/desktop && npm run build' first.\n` + `Missing: ${electronMain}`
     )
   }
 }
@@ -214,24 +254,24 @@ async function main() {
     HERMES_DESKTOP_USER_DATA_DIR: sandbox.userDataDir,
     HERMES_DESKTOP_IGNORE_EXISTING: '1',
     HERMES_DESKTOP_HERMES_ROOT: REPO_ROOT,
-    HERMES_DESKTOP_APP_NAME: `HermesDevMock-${Date.now()}`,
+    HERMES_DESKTOP_APP_NAME: `HermesDevMock-${Date.now()}`
   }
 
   console.log('Launching Electron...')
   const child = spawn(electronBin, [DESKTOP_ROOT, '--disable-gpu', '--no-sandbox'], {
     env,
     cwd: DESKTOP_ROOT,
-    stdio: 'inherit',
+    stdio: 'inherit'
   })
 
-  child.on('exit', (code) => {
+  child.on('exit', code => {
     mock.close()
     sandbox.cleanup()
     process.exit(code ?? 0)
   })
 }
 
-main().catch((err) => {
+main().catch(err => {
   console.error(err)
   process.exit(1)
 })

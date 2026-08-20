@@ -24,6 +24,7 @@ function asRecord(payload: unknown): Record<string, unknown> {
  * are pin-eligible when deciding whether an unpinned straggler is legitimate. */
 export const UNSCOPED_STREAM_EVENT_TYPES = new Set([
   'approval.request',
+  'advisor.progress',
   'browser.progress',
   'clarify.request',
   'error',

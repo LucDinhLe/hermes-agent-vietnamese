@@ -1705,6 +1705,8 @@ export const zhHant = defineLocale({
   sidebar: {
     nav: {
       'new-session': '新工作階段',
+      projects: '專案',
+      usage: '使用統計',
       skills: '技能與工具',
       messaging: '訊息平台',
       artifacts: '成品',
@@ -1732,6 +1734,13 @@ export const zhHant = defineLocale({
     noFilterMatches: '沒有工作階段符合這些篩選條件',
     projects: {
       sectionLabel: '專案',
+      manageDescription: '集中管理相關資料夾、工作階段與使用量。',
+      searchPlaceholder: '搜尋專案…',
+      emptyTitle: '尚無專案',
+      emptyDescription: '建立專案以彙整相關資料夾與工作階段。',
+      open: '開啟專案',
+      sessionsCount: count => `${count} 個工作階段`,
+      tokensCount: tokens => `${tokens} 個詞元`,
       pinnedSectionLabel: '釘選的專案',
       pinnedEmpty: '釘選專案即可從這裡快速存取。',
       home: '主頁',
@@ -1743,7 +1752,9 @@ export const zhHant = defineLocale({
       namePlaceholder: '例如 Skunkworks',
       foldersLabel: '資料夾',
       ideaLabel: '想法',
-      ideaPlaceholder: '這個專案是關於什麼的？（儲存到 IDEA.md）',
+      ideaPlaceholder: '描述專案目標與主要構想。',
+      ideaHint: '選填。建立專案時，Hermes 會將此內容儲存為主要資料夾中的 IDEA.md，讓代理了解目標。',
+      ideaSaveFailed: '專案已建立，但無法在主要資料夾中儲存 IDEA.md。',
       ideaGenerate: '產生想法',
       ideaGenerating: '產生中…',
       ideaShuffle: '隨機範本',

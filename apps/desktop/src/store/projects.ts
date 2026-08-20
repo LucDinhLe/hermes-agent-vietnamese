@@ -713,21 +713,24 @@ export async function generateProjectIdea(name: string): Promise<string> {
   }
 }
 
-// Write IDEA.md to a project's primary folder (best-effort). Routes through the
-// remote-aware fs write, so it lands on the backend for a remote gateway and on
-// disk locally — the project is created regardless of whether the file lands.
-async function writeProjectIdea(folder: null | string | undefined, idea: string): Promise<void> {
+// Write IDEA.md to a project's primary folder. Routes through the remote-aware
+// fs write, so it lands on the backend for a remote gateway and on disk locally.
+// Project creation still succeeds when this auxiliary file cannot be written;
+// the caller surfaces that partial result instead of silently claiming success.
+async function writeProjectIdea(folder: null | string | undefined, idea: string): Promise<boolean> {
   const dir = (folder || '').trim()
   const body = idea.trim()
 
   if (!dir || !body) {
-    return
+    return false
   }
 
   try {
     await writeDesktopFileText(`${dir.replace(/[/\\]+$/, '')}/IDEA.md`, body.endsWith('\n') ? body : `${body}\n`)
+
+    return true
   } catch {
-    // Best-effort: the project is created regardless of whether IDEA.md lands.
+    return false
   }
 }
 
@@ -824,7 +827,14 @@ export async function createProject(input: CreateProjectInput): Promise<ProjectI
 
   if (created) {
     if (input.idea) {
-      void writeProjectIdea(created.primary_path ?? created.folders?.[0]?.path ?? input.primaryPath, input.idea)
+      const saved = await writeProjectIdea(
+        created.primary_path ?? created.folders?.[0]?.path ?? input.primaryPath,
+        input.idea
+      )
+
+      if (!saved) {
+        notify({ kind: 'warning', message: translateNow('sidebar.projects.ideaSaveFailed') })
+      }
     }
 
     if (!$projects.get().some(proj => proj.id === created.id)) {

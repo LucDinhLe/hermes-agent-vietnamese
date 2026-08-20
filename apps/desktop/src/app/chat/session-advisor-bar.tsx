@@ -1,12 +1,16 @@
 import { useStore } from '@nanostores/react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
+import { ModelCatalogMenu, ModelMenuCloseContext, type ModelMenuController } from '@/app/shell/model-catalog-menu'
+import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Switch } from '@/components/ui/switch'
 import { Tip } from '@/components/ui/tooltip'
-import { getAuxiliaryModels, type HermesGateway } from '@/hermes'
+import { getAuxiliaryModels, type HermesGateway, setModelAssignment } from '@/hermes'
 import { useI18n } from '@/i18n'
+import { ChevronDown } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { notifyError } from '@/store/notifications'
 import { $activeGatewayProfile } from '@/store/profile'
@@ -21,18 +25,51 @@ interface SessionAdvisorBarProps {
   sessionId: string | null
 }
 
-function advisorModelLabel(data: AuxiliaryModelsResponse | undefined): string {
+const advisorModelQueryKey = (profile: string) => ['advisor-model', profile] as const
+
+interface AdvisorModelSelection {
+  model: string
+  provider: string
+}
+
+function advisorModelSelection(data: AuxiliaryModelsResponse | undefined): AdvisorModelSelection {
   if (!data) {
-    return ''
+    return { model: '', provider: '' }
   }
 
   const assignment = data.tasks.find(task => task.task === 'advisor')
 
   if (!assignment || assignment.provider === 'auto') {
-    return data.main.model
+    return data.main
   }
 
-  return assignment.model || data.main.model
+  return {
+    model: assignment.model || data.main.model,
+    provider: assignment.provider || data.main.provider
+  }
+}
+
+function withAdvisorAssignment(
+  data: AuxiliaryModelsResponse | undefined,
+  selection: AdvisorModelSelection
+): AuxiliaryModelsResponse | undefined {
+  if (!data) {
+    return data
+  }
+
+  const next = {
+    base_url: '',
+    model: selection.model,
+    provider: selection.provider,
+    task: 'advisor'
+  }
+
+  const index = data.tasks.findIndex(task => task.task === 'advisor')
+
+  return {
+    ...data,
+    tasks: index < 0 ? [...data.tasks, next] : data.tasks.map((task, taskIndex) => (taskIndex === index ? next : task))
+  }
 }
 
 /**
@@ -45,15 +82,17 @@ export function SessionAdvisorBar({ enabled, gateway, gatewayOpen, sessionId }: 
   const { t } = useI18n()
   const profile = useStore($activeGatewayProfile)
   const [pending, setPending] = useState(false)
+  const [modelMenuOpen, setModelMenuOpen] = useState(false)
+  const queryClient = useQueryClient()
 
   const auxiliary = useQuery({
     enabled: gatewayOpen,
     queryFn: () => getAuxiliaryModels(profile),
-    queryKey: ['advisor-model', profile],
+    queryKey: advisorModelQueryKey(profile),
     staleTime: 60_000
   })
 
-  const model = advisorModelLabel(auxiliary.data)
+  const selection = advisorModelSelection(auxiliary.data)
 
   const paint = (next: boolean) => {
     if (sessionId) {
@@ -97,6 +136,65 @@ export function SessionAdvisorBar({ enabled, gateway, gatewayOpen, sessionId }: 
     }
   }
 
+  const selectAdvisorModel = async (model: string, provider: string): Promise<boolean> => {
+    if (pending || !gatewayOpen) {
+      return false
+    }
+
+    const queryKey = advisorModelQueryKey(profile)
+    const previous = queryClient.getQueryData<AuxiliaryModelsResponse>(queryKey)
+    const next = { model, provider }
+
+    queryClient.setQueryData<AuxiliaryModelsResponse | undefined>(queryKey, current =>
+      withAdvisorAssignment(current, next)
+    )
+    setPending(true)
+
+    try {
+      const result = await setModelAssignment(
+        {
+          model,
+          provider,
+          scope: 'auxiliary',
+          task: 'advisor'
+        },
+        profile
+      )
+
+      if (result.ok !== true) {
+        throw new Error(result.confirm_message?.trim() || t.shell.modelOptions.updateFailed)
+      }
+
+      void queryClient.invalidateQueries({ queryKey })
+
+      return true
+    } catch (error) {
+      queryClient.setQueryData(queryKey, previous)
+      notifyError(error, t.shell.modelOptions.updateFailed)
+
+      return false
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const modelController: ModelMenuController = {
+    applyPreset: () => undefined,
+    current: {
+      effort: '',
+      fast: false,
+      model: selection.model,
+      provider: selection.provider
+    },
+    presetFor: () => ({}),
+    select: selectAdvisorModel,
+    setOptions: () => undefined
+  }
+
+  const modelTitle = selection.model
+    ? `${t.settings.model.advisorModel}: ${selection.model}`
+    : t.settings.model.advisorModel
+
   return (
     <div
       className="@container relative z-20 min-w-0 shrink-0 overflow-hidden border-b border-(--ui-stroke-secondary) bg-(--ui-chat-surface-background)/92 px-2 py-1"
@@ -110,13 +208,36 @@ export function SessionAdvisorBar({ enabled, gateway, gatewayOpen, sessionId }: 
         <span className="hidden shrink-0 text-[0.6875rem] font-medium text-(--ui-text-secondary) @sm:inline">
           {t.settings.model.advisorTitle}
         </span>
-        {model && (
-          <Tip label={`${t.settings.model.advisorModel}: ${model}`}>
-            <span className="hidden min-w-0 max-w-48 truncate rounded-md border border-(--ui-stroke-secondary) bg-(--ui-control-background) px-1.5 py-0.5 font-mono text-[0.625rem] text-(--ui-text-tertiary) @lg:inline">
-              {model}
-            </span>
+        <DropdownMenu onOpenChange={setModelMenuOpen} open={modelMenuOpen}>
+          <Tip label={modelTitle}>
+            <DropdownMenuTrigger asChild>
+              <Button
+                aria-label={modelTitle}
+                className="min-w-0 max-w-48 gap-1 font-mono text-[0.625rem] text-(--ui-text-tertiary)"
+                data-session-advisor-model-trigger=""
+                disabled={!gatewayOpen || pending}
+                size="xs"
+                type="button"
+                variant="ghost"
+              >
+                {selection.model && <span className="hidden min-w-0 truncate @lg:inline">{selection.model}</span>}
+                <ChevronDown className="size-2.5 shrink-0 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
           </Tip>
-        )}
+          <DropdownMenuContent align="end" className="w-72 p-0" side="bottom" sideOffset={6}>
+            <ModelMenuCloseContext.Provider value={() => setModelMenuOpen(false)}>
+              <ModelCatalogMenu
+                allModels
+                controller={modelController}
+                gateway={gateway ?? undefined}
+                profile={profile}
+                selectionOnly
+                showManageModels={false}
+              />
+            </ModelMenuCloseContext.Provider>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Switch
           aria-label={t.settings.model.advisorEnabled}
           checked={enabled}

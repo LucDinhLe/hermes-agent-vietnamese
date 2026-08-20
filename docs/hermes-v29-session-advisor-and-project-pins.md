@@ -15,7 +15,14 @@ Phân loại rủi ro: B. Hermes giữ cấu hình và lịch sử làm việc t
 - Khi người dùng kéo hẹp panel, thanh thu gọn theo thứ tự: ẩn tên model Advisor, ẩn chữ Advisor, giữ biểu tượng và công tắc.
 - Phiên mới nhận trạng thái Advisor từ mặc định của hồ sơ nhưng có thể đổi trước lần gửi đầu tiên.
 - Phiên đã tạo có trạng thái Advisor riêng, được gửi và lưu theo phiên. Đổi ở phiên A không đổi phiên B hoặc mặc định toàn cục.
-- Chọn model Advisor vẫn nằm trong Cài đặt. Thanh nhanh chỉ bật hoặc tắt.
+- Thanh Advisor có cả công tắc theo phiên và menu chọn model riêng. Menu hiển
+  thị toàn bộ model của mọi nhà cung cấp đã kết nối, không bị giới hạn bởi danh
+  sách model rút gọn của ô soạn tin.
+- Cài đặt không lặp lại công tắc hay menu model Advisor; toàn bộ điều khiển nằm
+  tại phiên đang làm việc.
+- Panel Tệp/Trình duyệt/Terminal ngoài cùng bên phải được giữ nguyên và mở sẵn
+  cho hồ sơ Desktop mới. Hồ sơ đã lưu trạng thái đóng mặc định từ bản lỗi được
+  mở lại đúng một lần; lựa chọn đóng/mở sau đó vẫn được lưu và tôn trọng.
 
 ### Dự án ở panel trái
 
@@ -38,6 +45,8 @@ Phân loại rủi ro: B. Hermes giữ cấu hình và lịch sử làm việc t
 ## Trường hợp biên
 
 - Panel chat rất hẹp: công tắc vẫn bấm được, nội dung bị thu gọn và không tạo cuộn ngang.
+- Chỉ có một model đã kết nối: menu hiển thị một lựa chọn. Có nhiều nhà cung cấp
+  hoặc nhiều model: menu phải hiển thị đầy đủ theo từng nhóm nhà cung cấp.
 - Nhiều panel chat: mỗi thanh đọc và ghi đúng session runtime của panel đó.
 - Mất kết nối khi bật Advisor: giao diện hoàn tác về trạng thái trước và báo lỗi.
 - Project pin chưa xuất hiện trong cây vừa tải: giữ ID ở đúng vị trí; khi cây tải lại, dự án xuất hiện mà không mất thứ tự.
@@ -47,20 +56,23 @@ Phân loại rủi ro: B. Hermes giữ cấu hình và lịch sử làm việc t
 ## Tiêu chí nghiệm thu
 
 1. Advisor bar nằm trong từng panel chat giữa và có `overflow-hidden` tại biên riêng.
-2. Kéo panel hẹp không làm panel phải đổi kích thước ngoài thao tác của người dùng và không tạo cuộn ngang.
-3. Bật Advisor ở một phiên không đổi phiên khác hay `advisor.enabled` toàn cục.
-4. Đóng rồi mở lại phiên vẫn khôi phục trạng thái Advisor của phiên.
-5. Mỗi dự án có thao tác Ghim hoặc Bỏ ghim trong menu thường và menu chuột phải.
-6. Dự án ghim mở đúng project scope và cho phép tạo phiên mới đúng thư mục.
-7. Kéo thả đổi thứ tự dự án ghim và thứ tự tồn tại sau tải lại.
-8. Pin chưa giải quyết không bị mất khi người dùng sắp xếp các pin đang hiển thị.
-9. Pin của hai kết nối Hermes được cách ly.
-10. Typecheck, lint và các kiểm thử mục tiêu cho Advisor, project pin, sidebar đều đạt.
+2. Menu model Advisor liệt kê đủ model từ mọi nhà cung cấp đã kết nối và lưu
+   đúng model được chọn cho tác vụ Advisor.
+3. Hồ sơ Desktop mới mở sẵn panel phải; hồ sơ nâng cấp được chuyển đổi một lần,
+   rồi người dùng vẫn có thể đóng và giữ lựa chọn đó qua lần chạy sau.
+4. Kéo panel hẹp không làm panel phải đổi kích thước ngoài thao tác của người dùng và không tạo cuộn ngang.
+5. Bật Advisor ở một phiên không đổi phiên khác hay `advisor.enabled` toàn cục.
+6. Đóng rồi mở lại phiên vẫn khôi phục trạng thái Advisor của phiên.
+7. Mỗi dự án có thao tác Ghim hoặc Bỏ ghim trong menu thường và menu chuột phải.
+8. Dự án ghim mở đúng project scope và cho phép tạo phiên mới đúng thư mục.
+9. Kéo thả đổi thứ tự dự án ghim và thứ tự tồn tại sau tải lại.
+10. Pin chưa giải quyết không bị mất khi người dùng sắp xếp các pin đang hiển thị.
+11. Pin của hai kết nối Hermes được cách ly.
+12. Typecheck, lint và các kiểm thử mục tiêu cho Advisor, project pin, sidebar đều đạt.
 
 ## Ngoài phạm vi
 
 - Không thêm nút “Gọi Giám sát ngay”.
-- Không chọn model Advisor trong thanh nhanh.
 - Không biến Project thành agent tự trị.
 - Không đồng bộ pin qua tài khoản hoặc cloud mới.
 - Không phát hành, tạo tag hoặc công khai candidate trong thay đổi này.

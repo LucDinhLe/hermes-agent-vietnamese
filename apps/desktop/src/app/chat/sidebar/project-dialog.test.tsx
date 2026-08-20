@@ -20,6 +20,7 @@ vi.mock('@/i18n', () => ({
           foldersLabel: 'Folders',
           ideaGenerate: 'Generate',
           ideaGenerating: 'Generating…',
+          ideaHint: 'Saved after project creation.',
           ideaLabel: 'Idea',
           ideaPlaceholder: 'What are you building?',
           ideaShuffle: 'Shuffle ideas',
@@ -72,6 +73,7 @@ describe('ProjectDialog', () => {
   it('wraps the "shuffle idea" button in a Tip', () => {
     render(<ProjectDialog />)
 
+    expect(screen.getByText('Saved after project creation.')).toBeTruthy()
     const button = screen.getByRole('button', { name: 'Shuffle ideas' })
     expect(tipTrigger(button)).toBeTruthy()
   })

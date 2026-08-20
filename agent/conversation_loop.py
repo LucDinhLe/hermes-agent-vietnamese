@@ -7225,11 +7225,13 @@ def run_conversation(
                 # without violating provider role/tool-call alternation.
                 _advisor_withheld = False
                 if _advisor_active:
+                    _advisor_checkpoint = None
                     try:
                         from agent.advisor import (
                             AdvisorDecision,
                             batch_requires_review,
                             build_plan_packet,
+                            emit_progress,
                             enforce_availability_policy,
                             material_tool_signature,
                             review_packet,
@@ -7244,7 +7246,6 @@ def run_conversation(
                                 tool_call_name(tc) or "unknown" for tc in _advisor_calls
                             }
                             _advisor_signature = material_tool_signature(_advisor_calls)
-                            _advisor_checkpoint = None
                             _advisor_exhausted = False
 
                             if _advisor_mutations_blocked:
@@ -7276,6 +7277,11 @@ def run_conversation(
                                         if _advisor_checkpoint == "plan"
                                         else "Advisor is reviewing the changed approach…"
                                     )
+                                    emit_progress(
+                                        agent,
+                                        checkpoint=_advisor_checkpoint,
+                                        state="reviewing",
+                                    )
                                     _advisor_decision = enforce_availability_policy(
                                         review_packet(build_plan_packet(
                                             objective=original_user_message,
@@ -7292,10 +7298,22 @@ def run_conversation(
                                     _advisor_recovery_pending = False
                                     _advisor_approved_tool_names.update(_advisor_names)
                                     if not _advisor_decision.available:
+                                        emit_progress(
+                                            agent,
+                                            checkpoint=_advisor_checkpoint or "plan",
+                                            state="unavailable",
+                                            summary=_advisor_decision.summary,
+                                        )
                                         agent._emit_status(
                                             "⚠️ Advisor was unavailable; continuing under fail-open policy"
                                         )
                                     else:
+                                        emit_progress(
+                                            agent,
+                                            checkpoint=_advisor_checkpoint or "plan",
+                                            state="passed",
+                                            summary=_advisor_decision.summary,
+                                        )
                                         agent._emit_status(
                                             f"Advisor passed {_advisor_checkpoint or 'plan'} checkpoint"
                                         )
@@ -7334,6 +7352,16 @@ def run_conversation(
                                             exc_info=True,
                                         )
                                     agent._session_messages = messages
+                                    emit_progress(
+                                        agent,
+                                        checkpoint=_advisor_checkpoint or "plan",
+                                        state=(
+                                            "unresolved"
+                                            if _advisor_exhausted
+                                            else "revision_requested"
+                                        ),
+                                        summary=_advisor_decision.summary,
+                                    )
                                     agent._emit_status(
                                         f"Advisor requested revision ({_advisor_count}/"
                                         f"{_advisor_settings.max_revisions}): "
@@ -7345,6 +7373,16 @@ def run_conversation(
                         # integration/parsing fault must not corrupt the main
                         # turn; fail open and leave a diagnostic breadcrumb.
                         logger.warning("Advisor plan checkpoint failed open", exc_info=True)
+                        try:
+                            from agent.advisor import emit_progress
+
+                            emit_progress(
+                                agent,
+                                checkpoint=_advisor_checkpoint or "plan",
+                                state="failed",
+                            )
+                        except Exception:
+                            pass
                         agent._emit_status(
                             "⚠️ Advisor checkpoint failed; continuing under fail-open policy"
                         )
@@ -8295,6 +8333,7 @@ def run_conversation(
                     try:
                         from agent.advisor import (
                             build_final_packet,
+                            emit_progress,
                             enforce_availability_policy,
                             final_revision_nudge,
                             review_packet,
@@ -8309,6 +8348,11 @@ def run_conversation(
                                 _advisor_used_tools.append(tool_call_name(_advisor_tc))
 
                         agent._emit_status("Advisor is checking the final result…")
+                        emit_progress(
+                            agent,
+                            checkpoint="final",
+                            state="reviewing",
+                        )
                         _advisor_final = enforce_availability_policy(
                             review_packet(build_final_packet(
                                 objective=original_user_message,
@@ -8321,10 +8365,22 @@ def run_conversation(
                             _advisor_settings,
                         )
                         if not _advisor_final.available:
+                            emit_progress(
+                                agent,
+                                checkpoint="final",
+                                state="unavailable",
+                                summary=_advisor_final.summary,
+                            )
                             agent._emit_status(
                                 "⚠️ Advisor was unavailable; delivering the result under fail-open policy"
                             )
                         elif _advisor_final.passes:
+                            emit_progress(
+                                agent,
+                                checkpoint="final",
+                                state="passed",
+                                summary=_advisor_final.summary,
+                            )
                             agent._emit_status("Advisor passed the final checkpoint")
                         elif (
                             _advisor_final_revisions < _advisor_settings.max_revisions
@@ -8340,6 +8396,12 @@ def run_conversation(
                                 "_advisor_final_synthetic": True,
                             })
                             agent._session_messages = messages
+                            emit_progress(
+                                agent,
+                                checkpoint="final",
+                                state="revision_requested",
+                                summary=_advisor_final.summary,
+                            )
                             agent._emit_status(
                                 f"Advisor requested final revision ("
                                 f"{_advisor_final_revisions}/"
@@ -8353,12 +8415,28 @@ def run_conversation(
                             final_response = None
                             continue
                         else:
+                            emit_progress(
+                                agent,
+                                checkpoint="final",
+                                state="unresolved",
+                                summary=_advisor_final.summary,
+                            )
                             agent._emit_status(
                                 "⚠️ Advisor still found unresolved concerns after the bounded review budget: "
                                 f"{_advisor_final.summary or _advisor_final.verdict}"
                             )
                     except Exception:
                         logger.warning("Advisor final checkpoint failed open", exc_info=True)
+                        try:
+                            from agent.advisor import emit_progress
+
+                            emit_progress(
+                                agent,
+                                checkpoint="final",
+                                state="failed",
+                            )
+                        except Exception:
+                            pass
                         agent._emit_status(
                             "⚠️ Advisor final checkpoint failed; delivering under fail-open policy"
                         )

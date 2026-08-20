@@ -89,6 +89,10 @@ export interface ModelMenuController {
 }
 
 interface ModelCatalogMenuProps {
+  /** Show every model returned by configured providers instead of the user's
+   *  curated composer shortlist. Useful for narrow, task-specific pickers
+   *  where the menu itself is the complete configuration surface. */
+  allModels?: boolean
   controller: ModelMenuController
   /** Rows appended under the catalog (Refresh Models, Edit Models, …). */
   footer?: ReactNode
@@ -97,11 +101,16 @@ interface ModelCatalogMenuProps {
    *  Off for override surfaces, where a MoA preset isn't a worker model. */
   includeMoa?: boolean
   profile?: string
+  /** Render plain selectable rows without the reasoning/fast edit submenu. */
+  selectionOnly?: boolean
   /** Session whose catalog to fetch. A live session's catalog can differ from
    *  the profile-global one, and the app invalidates the SESSION-scoped query
    *  key on model changes — a surface bound to a session must pass it or its
    *  menu goes stale. Detached surfaces (per-task overrides) omit it. */
   sessionId?: null | string
+  /** Keep the shared "Edit models" footer. Task-specific full-catalog pickers
+   *  can hide it because their inventory is intentionally not curated. */
+  showManageModels?: boolean
 }
 
 interface ProviderGroup {
@@ -117,12 +126,15 @@ interface ProviderGroup {
  * can never drift apart.
  */
 export function ModelCatalogMenu({
+  allModels = false,
   controller,
   footer,
   gateway,
   includeMoa = false,
   profile = 'default',
-  sessionId = null
+  selectionOnly = false,
+  sessionId = null,
+  showManageModels = true
 }: ModelCatalogMenuProps) {
   const { locale, t } = useI18n()
   const copy = t.shell.modelMenu
@@ -171,10 +183,17 @@ export function ModelCatalogMenu({
   // Resolve visibility HERE, against the catalog we actually fetched: an empty
   // provider list would otherwise resolve to an empty key set that reads as
   // "user hid everything" and blanks the menu on first open.
-  const shownKeys = useMemo(
-    () => effectiveVisibleKeys(visibleModels, pickerProviders),
-    [visibleModels, pickerProviders]
-  )
+  const shownKeys = useMemo(() => {
+    if (!allModels) {
+      return effectiveVisibleKeys(visibleModels, pickerProviders)
+    }
+
+    return new Set(
+      pickerProviders.flatMap(provider =>
+        collapseModelFamilies(provider.models ?? []).map(family => modelVisibilityKey(provider.slug, family.id))
+      )
+    )
+  }, [allModels, visibleModels, pickerProviders])
 
   const groups = useMemo(
     () => groupModels(pickerProviders, search, { model: current.model, provider: current.provider }, shownKeys),
@@ -232,7 +251,7 @@ export function ModelCatalogMenu({
   const kbRows = useMemo<KbRow[]>(
     () => [
       ...groups.flatMap(group =>
-        collapsedProviders.includes(group.provider.slug) && !search
+        !allModels && collapsedProviders.includes(group.provider.slug) && !search
           ? []
           : group.families.map((family): KbRow => ({
               family,
@@ -243,7 +262,7 @@ export function ModelCatalogMenu({
       ),
       ...shownMoaPresets.map((preset): KbRow => ({ key: `moa:${preset}`, kind: 'moa', preset }))
     ],
-    [groups, collapsedProviders, search, shownMoaPresets]
+    [allModels, groups, collapsedProviders, search, shownMoaPresets]
   )
 
   const [kbOverride, setKbOverride] = useState<null | number>(null)
@@ -370,7 +389,7 @@ export function ModelCatalogMenu({
 
             // Collapsed when the user stored it (and not while searching, which
             // spans every model regardless of collapse state).
-            const collapsed = collapsedProviders.includes(slug) && !search
+            const collapsed = !allModels && collapsedProviders.includes(slug) && !search
 
             return (
               <DropdownMenuGroup className="py-0.5" key={slug}>
@@ -389,11 +408,7 @@ export function ModelCatalogMenu({
                   <span aria-hidden className="shrink-0 font-mono font-normal normal-case tracking-normal">
                     · {group.families.length}
                   </span>
-                  <DisclosureCaret
-                    className="shrink-0 text-(--ui-text-tertiary)"
-                    open={!collapsed}
-                    size="0.625rem"
-                  />
+                  <DisclosureCaret className="shrink-0 text-(--ui-text-tertiary)" open={!collapsed} size="0.625rem" />
                 </DropdownMenuItem>
                 {!collapsed &&
                   group.families.map(family => {
@@ -439,6 +454,26 @@ export function ModelCatalogMenu({
                       }
 
                       closeMenu()
+                    }
+
+                    if (selectionOnly) {
+                      return (
+                        <DropdownMenuItem
+                          key={`${group.provider.slug}:${family.id}`}
+                          onSelect={event => {
+                            event.preventDefault()
+                            activate()
+                          }}
+                          {...kbRowProps(`${group.provider.slug}:${family.id}`)}
+                        >
+                          <span className="min-w-0 flex-1 truncate">
+                            <HighlightMatches query={search} text={name} />
+                          </span>
+                          {isCurrent ? (
+                            <Codicon className="ml-auto text-foreground" name="check" size="0.75rem" />
+                          ) : null}
+                        </DropdownMenuItem>
+                      )
                     }
 
                     return (
@@ -521,15 +556,21 @@ export function ModelCatalogMenu({
           host footer's group rather than opening a second one, so a host that
           contributes rows (the composer's Refresh Models) keeps the single
           trailing block it has always rendered. */}
-      <DropdownMenuSeparator className="mx-0" />
-      {footer}
-      <DropdownMenuItem
-        className={cn(dropdownMenuRow, 'text-(--ui-text-tertiary)')}
-        onSelect={() => setModelVisibilityOpen(true)}
-      >
-        <Codicon name="settings-gear" size="0.75rem" />
-        {copy.editModels}
-      </DropdownMenuItem>
+      {(footer || showManageModels) && (
+        <>
+          <DropdownMenuSeparator className="mx-0" />
+          {footer}
+          {showManageModels && (
+            <DropdownMenuItem
+              className={cn(dropdownMenuRow, 'text-(--ui-text-tertiary)')}
+              onSelect={() => setModelVisibilityOpen(true)}
+            >
+              <Codicon name="settings-gear" size="0.75rem" />
+              {copy.editModels}
+            </DropdownMenuItem>
+          )}
+        </>
+      )}
     </>
   )
 }

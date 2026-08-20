@@ -1599,6 +1599,8 @@ export const ar = defineLocale({
   sidebar: {
     nav: {
       'new-session': 'جلسة جديدة',
+      projects: 'المشاريع',
+      usage: 'إحصاءات الاستخدام',
       skills: 'المهارات',
       messaging: 'المراسلة',
       artifacts: 'العناصر',
@@ -1629,6 +1631,13 @@ export const ar = defineLocale({
     noFilterMatches: 'لا توجد جلسات تطابق عوامل التصفية هذه',
     projects: {
       sectionLabel: 'المشاريع',
+      manageDescription: 'إدارة المجلدات والجلسات والاستخدام المرتبط في مكان واحد.',
+      searchPlaceholder: 'البحث في المشاريع…',
+      emptyTitle: 'لا توجد مشاريع بعد',
+      emptyDescription: 'أنشئ مشروعاً لجمع المجلدات والجلسات المرتبطة.',
+      open: 'فتح المشروع',
+      sessionsCount: count => `${count} جلسة`,
+      tokensCount: tokens => `${tokens} رمزاً`,
       pinnedSectionLabel: 'المشاريع المثبتة',
       pinnedEmpty: 'ثبّت مشروعًا للوصول السريع إليه من هنا.',
       home: 'الرئيسية',
@@ -1640,7 +1649,9 @@ export const ar = defineLocale({
       namePlaceholder: 'مثال: Skunkworks',
       foldersLabel: 'المجلدات',
       ideaLabel: 'الفكرة',
-      ideaPlaceholder: 'ما موضوع هذا المشروع؟ (يُحفظ في IDEA.md)',
+      ideaPlaceholder: 'صِف هدف المشروع وفكرته الرئيسية.',
+      ideaHint: 'اختياري. عند إنشاء المشروع، يحفظ Hermes هذا المحتوى في IDEA.md داخل المجلد الرئيسي.',
+      ideaSaveFailed: 'تم إنشاء المشروع، لكن تعذر حفظ IDEA.md في المجلد الرئيسي.',
       ideaGenerate: 'توليد فكرة',
       ideaGenerating: 'جار التوليد...',
       ideaShuffle: 'خلط القوالب',
