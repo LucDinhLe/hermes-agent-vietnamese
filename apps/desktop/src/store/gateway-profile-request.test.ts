@@ -102,7 +102,12 @@ describe('requestGatewayForProfile', () => {
 
     expect(result).toEqual({ method: 'profiles.list', params: { include_sessions: true } })
     expect(secondaryGateways).toHaveLength(1)
-    expect(secondaryGateways[0].request).toHaveBeenCalledWith('profiles.list', { include_sessions: true })
+    expect(secondaryGateways[0].request).toHaveBeenCalledWith(
+      'profiles.list',
+      { include_sessions: true },
+      undefined,
+      undefined
+    )
     expect(secondaryGateways[0].close).toHaveBeenCalledOnce()
     expect($gateway.get()).toBe(primary)
   })
@@ -122,7 +127,12 @@ describe('requestGatewayForProfile', () => {
     const result = await requestGatewayForProfile('venture', 'session.list', { limit: 20, profile: 'wrong' })
 
     expect(result).toEqual({ method: 'session.list', params: { limit: 20, profile: 'venture' } })
-    expect(primary.request).toHaveBeenCalledWith('session.list', { limit: 20, profile: 'venture' })
+    expect(primary.request).toHaveBeenCalledWith(
+      'session.list',
+      { limit: 20, profile: 'venture' },
+      undefined,
+      undefined
+    )
     expect(secondaryGateways).toHaveLength(0)
     expect($gateway.get()).toBe(primary)
   })

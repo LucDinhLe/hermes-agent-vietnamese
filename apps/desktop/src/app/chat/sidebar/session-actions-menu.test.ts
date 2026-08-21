@@ -93,7 +93,7 @@ describe('renameSessionPreferringRpc', () => {
     const result = await renameSessionPreferringRpc(STORED_ID, 'My branch', 'work')
 
     expect(request).toHaveBeenCalledOnce()
-    expect(renameSession).toHaveBeenCalledWith(STORED_ID, 'My branch', 'work')
+    expect(renameSession).toHaveBeenCalledWith(STORED_ID, 'My branch', 'work', undefined)
     expect(result.title).toBe('rest-title')
   })
 
@@ -104,7 +104,7 @@ describe('renameSessionPreferringRpc', () => {
     await renameSessionPreferringRpc(STORED_ID, 'My branch', 'work')
 
     expect(request).not.toHaveBeenCalled()
-    expect(renameSession).toHaveBeenCalledWith(STORED_ID, 'My branch', 'work')
+    expect(renameSession).toHaveBeenCalledWith(STORED_ID, 'My branch', 'work', undefined)
   })
 
   it('uses REST when clearing the title (RPC rejects empty titles)', async () => {
@@ -114,7 +114,7 @@ describe('renameSessionPreferringRpc', () => {
     await renameSessionPreferringRpc(STORED_ID, '')
 
     expect(request).not.toHaveBeenCalled()
-    expect(renameSession).toHaveBeenCalledWith(STORED_ID, '', undefined)
+    expect(renameSession).toHaveBeenCalledWith(STORED_ID, '', undefined, undefined)
   })
 
   it('uses REST when no gateway is connected', async () => {
@@ -125,6 +125,6 @@ describe('renameSessionPreferringRpc', () => {
     await renameSessionPreferringRpc(STORED_ID, 'My branch')
 
     expect(request).not.toHaveBeenCalled()
-    expect(renameSession).toHaveBeenCalledWith(STORED_ID, 'My branch', undefined)
+    expect(renameSession).toHaveBeenCalledWith(STORED_ID, 'My branch', undefined, undefined)
   })
 })

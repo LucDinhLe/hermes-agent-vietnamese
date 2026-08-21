@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { HermesConnection } from '@/global'
+
 // The completed-unread dot is keyed on the FOCUSED session, not the selected
 // one. A tile is never $selectedStoredSessionId, so keying either half on the
 // selection left a tiled session's dot green with no way to clear it.
 
 describe('completed-unread dot follows the focused session', () => {
   beforeEach(() => {
+    window.localStorage.clear()
     vi.resetModules()
   })
 
@@ -18,10 +21,29 @@ describe('completed-unread dot follows the focused session', () => {
     const model = await import('@/components/pane-shell/tree/model')
     const { registry } = await import('@/contrib/registry')
     const { createClientSessionState } = await import('@/lib/chat-runtime')
+    const profile = await import('./profile')
     const session = await import('./session')
+
+    const owner = { connectionId: 'source-a', profile: 'default' }
+
+    profile.$activeGatewayProfile.set(owner.profile)
+    session.$connection.set({ ...owner, mode: 'remote' } as HermesConnection)
+
     const states = await import('./session-states')
 
-    for (const id of ['workspace', 'session-tile:tiled']) {
+    session.$unreadFinishedSessionIds.set([])
+    session.$selectedStoredSessionId.set('primary')
+
+    // Exercise the real source-qualified tile path. Since v3, the pane id is
+    // derived from (connection, profile, stored id), and focused-session
+    // resolution intentionally rejects a bare pane with no owning tile record.
+    states.openSessionTile('tiled', 'right', 'workspace', undefined, owner)
+    const tile = states.sessionTileForStoredId('tiled', owner)
+
+    expect(tile).not.toBeNull()
+    const tilePaneId = states.sessionTilePaneId(tile!)
+
+    for (const id of ['workspace', tilePaneId]) {
       registry.register({
         area: 'panes',
         data: id === 'workspace' ? { placement: 'main', uncloseable: true } : { placement: 'main' },
@@ -35,12 +57,9 @@ describe('completed-unread dot follows the focused session', () => {
     tree.declareDefaultTree(
       model.split('row', [
         model.group(['workspace'], { active: 'workspace', id: 'grp-main' }),
-        model.group(['session-tile:tiled'], { active: 'session-tile:tiled', id: 'grp-tile' })
+        model.group([tilePaneId], { active: tilePaneId, id: 'grp-tile' })
       ])
     )
-
-    session.$unreadFinishedSessionIds.set([])
-    session.$selectedStoredSessionId.set('primary')
 
     const finishTurn = (storedSessionId: string) => {
       const working = { ...createClientSessionState(null), busy: true, storedSessionId }

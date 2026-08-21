@@ -47,13 +47,20 @@ describe('requestModelOptions', () => {
 
     vi.mocked(getGlobalModelOptions).mockResolvedValueOnce(restPayload)
 
-    await expect(requestModelOptions({ gateway: gateway as never, sessionId: 'session-1' })).resolves.toEqual({
+    await expect(
+      requestModelOptions({
+        connectionId: 'source-a',
+        gateway: gateway as never,
+        profile: 'work',
+        sessionId: 'session-1'
+      })
+    ).resolves.toEqual({
       ...restPayload,
       model: 'hermes-local',
       provider: 'hermes-local'
     })
 
-    expect(getGlobalModelOptions).toHaveBeenCalledWith({ explicitOnly: true })
+    expect(getGlobalModelOptions).toHaveBeenCalledWith({ explicitOnly: true }, 'work', 'source-a')
   })
 
   it('recovers through profile-scoped REST when the gateway catalog request fails', async () => {
@@ -69,10 +76,15 @@ describe('requestModelOptions', () => {
 
     vi.mocked(getGlobalModelOptions).mockResolvedValueOnce(restPayload)
 
-    await expect(requestModelOptions({ gateway: gateway as never, sessionId: 'session-1' })).resolves.toEqual(
-      restPayload
-    )
-    expect(getGlobalModelOptions).toHaveBeenCalledWith({ explicitOnly: true })
+    await expect(
+      requestModelOptions({
+        connectionId: 'source-a',
+        gateway: gateway as never,
+        profile: 'work',
+        sessionId: 'session-1'
+      })
+    ).resolves.toEqual(restPayload)
+    expect(getGlobalModelOptions).toHaveBeenCalledWith({ explicitOnly: true }, 'work', 'source-a')
   })
 
   it('preserves the gateway error when its REST recovery path also fails', async () => {
@@ -102,20 +114,26 @@ describe('requestModelOptions', () => {
       request: vi.fn(() => Promise.resolve(globalOptions))
     }
 
-    await requestModelOptions({ gateway: gateway as never, refresh: true, sessionId: 'session-1' })
+    await requestModelOptions({
+      connectionId: 'source-a',
+      gateway: gateway as never,
+      profile: 'work',
+      refresh: true,
+      sessionId: 'session-1'
+    })
 
     expect(gateway.request).toHaveBeenCalledWith('model.options', {
       explicit_only: true,
       refresh: true,
       session_id: 'session-1'
     })
-    expect(getGlobalModelOptions).toHaveBeenCalledWith({ explicitOnly: true, refresh: true })
+    expect(getGlobalModelOptions).toHaveBeenCalledWith({ explicitOnly: true, refresh: true }, 'work', 'source-a')
   })
 
   it('falls back to REST when no gateway is connected', async () => {
-    await requestModelOptions({ refresh: true })
+    await requestModelOptions({ connectionId: 'source-a', profile: 'work', refresh: true })
 
-    expect(getGlobalModelOptions).toHaveBeenCalledWith({ explicitOnly: true, refresh: true })
+    expect(getGlobalModelOptions).toHaveBeenCalledWith({ explicitOnly: true, refresh: true }, 'work', 'source-a')
   })
 })
 
