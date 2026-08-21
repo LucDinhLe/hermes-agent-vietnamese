@@ -17,6 +17,9 @@ const jsTests = readFileSync(new URL('../../../.github/workflows/js-tests.yml', 
 const builderWrapper = readFileSync(new URL('../scripts/run-electron-builder.mjs', import.meta.url), 'utf8')
 
 test('candidate workflow builds the complete resident runtime on every advertised native target', () => {
+  assert.match(candidate, /scripts\/validate-release-evidence\.test\.mjs/)
+  assert.match(candidate, /scripts\/validate-pilot-release-evidence\.test\.mjs/)
+  assert.match(candidate, /scripts\/validate-public-release-contract\.test\.mjs/)
   for (const runner of [
     'windows-2025',
     'windows-11-arm',
@@ -43,10 +46,31 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /electron\/browser-connector\/controller\.test\.ts/)
   assert.match(candidate, /electron\/browser-connector\/cookie-import\.test\.ts/)
   assert.match(candidate, /electron\/browser-connector\/pairing-server\.test\.ts/)
+  assert.match(candidate, /electron\/connection-config\.test\.ts/)
+  assert.match(candidate, /electron\/connection-registry\.test\.ts/)
   assert.match(candidate, /src\/app\/chat\/right-rail\/browser-connector-dialog\.test\.tsx/)
   assert.match(candidate, /src\/store\/reasoning-summary\.test\.ts/)
   assert.match(candidate, /src\/app\/settings\/model-settings\.test\.tsx/)
   assert.match(candidate, /src\/app\/chat\/session-advisor-bar\.test\.tsx/)
+  assert.match(candidate, /src\/app\/chat\/index\.test\.tsx/)
+  assert.match(candidate, /src\/app\/gateway\/hooks\/use-gateway-boot\.test\.tsx/)
+  assert.match(candidate, /src\/app\/hooks\/use-config-record\.test\.ts/)
+  assert.match(candidate, /src\/app\/command-palette\/contrib\.test\.ts/)
+  assert.match(candidate, /src\/app\/settings\/plugins-settings\.test\.tsx/)
+  assert.match(candidate, /src\/app\/settings\/toolset-config-panel\.test\.tsx/)
+  assert.match(candidate, /src\/app\/skills\/index\.test\.tsx/)
+  assert.match(candidate, /src\/components\/pane-shell\/tree\/legacy-agent-pane-migration\.test\.ts/)
+  assert.match(candidate, /src\/components\/ui\/dropdown-menu\.test\.tsx/)
+  assert.match(candidate, /src\/contrib\/plugins-store\.test\.ts/)
+  assert.match(candidate, /src\/hermes-profile-scope\.test\.ts/)
+  assert.match(candidate, /src\/sdk\/index\.test\.ts/)
+  assert.match(candidate, /src\/sdk\/profile-routing\.test\.ts/)
+  assert.match(candidate, /src\/store\/gateway-agent-scope\.test\.ts/)
+  assert.match(candidate, /src\/store\/hub-actions\.test\.ts/)
+  assert.match(candidate, /src\/store\/onboarding\.test\.ts/)
+  assert.match(candidate, /src\/store\/profile-agent-activation\.test\.ts/)
+  assert.match(candidate, /src\/store\/profile-share\.test\.ts/)
+  assert.match(candidate, /src\/store\/session-states-scopes\.test\.ts/)
   assert.match(candidate, /src\/app\/shell\/context-usage-panel\.test\.tsx/)
   assert.match(candidate, /src\/app\/chat\/sidebar\/project-dialog\.test\.tsx/)
   assert.match(candidate, /src\/app\/chat\/sidebar\/projects\/project-menu\.test\.tsx/)
@@ -60,14 +84,40 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /src\/store\/layout-connection-scope\.test\.ts/)
   assert.match(candidate, /src\/store\/projects\.test\.ts/)
   assert.match(candidate, /src\/lib\/format\.test\.ts/)
+  assert.match(candidate, /src\/i18n\/context\.test\.tsx/)
   assert.match(candidate, /src\/i18n\/languages\.test\.ts/)
+  assert.match(candidate, /src\/i18n\/plugin-i18n\.test\.tsx/)
   assert.match(candidate, /tests\/agent\/test_oneshot\.py/)
   assert.match(candidate, /tests\/agent\/test_advisor\.py/)
   assert.match(candidate, /tests\/agent\/test_usage_pricing\.py/)
   assert.match(candidate, /tests\/run_agent\/test_advisor_checkpoints\.py/)
   assert.match(candidate, /tests\/tui_gateway\/test_advisor_session_scope\.py/)
+  assert.match(candidate, /tests\/tui_gateway\/test_profiles_create_credentials\.py/)
   assert.match(candidate, /tests\/tui_gateway\/test_protocol\.py/)
+  assert.match(candidate, /tests\/test_public_release_downloads\.py/)
   assert.match(candidate, /tests\/test_tui_gateway_server\.py/)
+  assert.match(candidate, /npm run --prefix apps\/desktop check:test:plugins/)
+  assert.match(candidate, /npm run --prefix apps\/desktop lint/)
+  for (const requiredPreDraftGate of [
+    'npm run --prefix apps/desktop lint',
+    'src/hermes-profile-scope.test.ts',
+    'src/app/hooks/use-config-record.test.ts',
+    'src/app/skills/index.test.tsx',
+    'src/app/settings/toolset-config-panel.test.tsx',
+    'src/store/hub-actions.test.ts',
+    'src/store/gateway-agent-scope.test.ts',
+    'src/store/backend-owner.test.ts',
+    'src/store/mcp-deeplink-install.test.ts',
+    'src/store/onboarding.test.ts',
+    'src/store/starmap.test.ts',
+    'src/store/voice-prefs.test.ts',
+    'src/sdk/profile-routing.test.ts'
+  ]) {
+    assert.ok(
+      candidate.indexOf(requiredPreDraftGate) < candidate.indexOf('gh release create "$TAG"'),
+      `${requiredPreDraftGate} must pass before draft creation`
+    )
+  }
   assert.match(candidate, /signpath\/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627/)
   assert.match(candidate, /Get-AuthenticodeSignature/)
   assert.match(candidate, /SIGNPATH_SIGNING_POLICY_SLUG/)
@@ -99,6 +149,10 @@ test('candidate workflow builds the complete resident runtime on every advertise
 
 test('candidate workflow can only create a draft and never promotes it', () => {
   assert.match(candidate, /gh release create "\$TAG" --verify-tag --target "\$COMMIT" --draft/)
+  assert.match(candidate, /release_title: \$\{\{ steps\.candidate\.outputs\.release_title \}\}/)
+  assert.match(candidate, /resolveVietnameseReleaseCandidate/)
+  assert.match(candidate, /--title "\$RELEASE_TITLE"/)
+  assert.doesNotMatch(candidate, /--title "\$TAG"/)
   assert.doesNotMatch(candidate, /--draft=false/)
   assert.match(candidate, /--draft --prerelease/)
   assert.match(builderWrapper, /args\.push\("--publish", "never"\)/)
@@ -106,14 +160,80 @@ test('candidate workflow can only create a draft and never promotes it', () => {
 
 test('promotion is separate and requires exact manifest plus successful runtime smoke evidence', () => {
   assert.match(promotion, /environment: release-production/)
+  assert.match(promotion, /^\s*group: hermes-vietnamese-promotion$/m)
+  assert.doesNotMatch(promotion, /group: hermes-vietnamese-promotion-\$\{\{ inputs\.tag \}\}/)
+  assert.match(promotion, /actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/)
+  assert.match(promotion, /ref: \$\{\{ inputs\.tag \}\}/)
+  assert.match(promotion, /test "\$\(git rev-parse HEAD\)" = "\$candidate_commit"/)
   assert.match(promotion, /sha256sums_sha256/)
   assert.match(promotion, /runtime_smoke_run_id/)
   assert.match(promotion, /release-evidence\.json/)
+  assert.match(promotion, /node scripts\/validate-release-evidence\.mjs/)
   assert.match(promotion, /e\.commit!==process\.env\.CANDIDATE_COMMIT/)
   assert.match(promotion, /\.conclusion.*success/)
   assert.match(promotion, /gh release edit "\$TAG" --repo "\$GITHUB_REPOSITORY" --draft=false --prerelease=true/)
   assert.match(promotion, /gh release edit "\$TAG" --repo "\$GITHUB_REPOSITORY" --draft=false --prerelease=false/)
   assert.match(promotion, /releaseClass!==process\.env\.RELEASE_CLASS/)
+  assert.match(promotion, /public-release\.json'\)\.tag/)
+  assert.match(promotion, /public-release\.json'\)\.releaseClass/)
+  assert.match(promotion, /validate-public-release-contract\.mjs candidate "\$TAG" "\$GITHUB_REPOSITORY"/)
+  assert.match(promotion, /release-asset-inventory\.mjs candidate release-runtime-evidence\.json/)
+  assert.match(promotion, /release-asset-inventory\.mjs public release-runtime-evidence\.json/)
+  assert.match(promotion, /candidate\/release-runtime-evidence\.json/)
+  assert.match(promotion, /assert\.deepStrictEqual\(candidate, validated/)
+  assert.match(promotion, /cmp candidate\/release-runtime-evidence\.json public\/release-runtime-evidence\.json/)
+  assert.match(promotion, /tests\/test_public_release_downloads\.py/)
+  assert.match(promotion, /browser_download_url/)
+  assert.match(promotion, /draft asset inventory mismatch/)
+  assert.match(promotion, /rollback_publication/)
+  assert.match(promotion, /--draft=true --prerelease="\$expected_prerelease" --latest=false/)
+  assert.match(promotion, /--draft=false --prerelease=true --latest=false/)
+  assert.match(promotion, /--draft=false --prerelease=false --latest/)
+  assert.match(promotion, /releases\/latest/)
+  assert.match(promotion, /test "\$latest_tag" != "\$TAG"/)
+  assert.equal((promotion.match(/^\s*validateStablePromotionOrder\(\{/gm) ?? []).length, 1)
+  assert.match(promotion, /PREVIOUS_LATEST="\$previous_latest"/)
+  assert.match(promotion, /previousLatestTag: process\.env\.PREVIOUS_LATEST/)
+  assert.ok(
+    promotion.indexOf('validateStablePromotionOrder({') <
+      promotion.indexOf('rollback_publication'),
+    'stable promotion must prove monotonic Latest order before mutation'
+  )
+  assert.equal(
+    (promotion.match(/^\s*validateVietnameseReleasePresentation\(\{/gm) ?? []).length,
+    2,
+    'general promotion must exact-check the release presentation before and after mutation'
+  )
+  assert.equal((promotion.match(/const candidate = resolveVietnameseReleaseCandidate/g) ?? []).length, 2)
+  assert.match(promotion, /expectedBody: fs\.readFileSync\('\.github\/release-notes-vietnamese\.md', 'utf8'\)/)
+  assert.match(promotion, /--json isDraft,isPrerelease,name,body > candidate-release\.json/)
+  assert.match(promotion, /--json isDraft,isPrerelease,name,body > published-release\.json/)
+  assert.equal((promotion.match(/^\s*validateFeaturedCandidatePromotion\(\{/gm) ?? []).length, 1)
+  assert.equal((promotion.match(/^\s*validateVietnameseReleaseNotesForClass\(\{/gm) ?? []).length, 1)
+  assert.match(promotion, /process\.env\.RELEASE_CLASS === 'community-prerelease'/)
+  assert.match(promotion, /releaseClass: process\.env\.RELEASE_CLASS/)
+  assert.match(promotion, /featuredCandidate: publicRelease\.featuredCandidate/)
+  assert.match(promotion, /tag: process\.env\.TAG/)
+  assert.ok(
+    promotion.indexOf('validateFeaturedCandidatePromotion({') <
+      promotion.indexOf('rollback_publication'),
+    'general prerelease promotion must bind its exact public callout before mutation'
+  )
+  assert.ok(
+    promotion.indexOf('validateVietnameseReleasePresentation') <
+      promotion.indexOf('rollback_publication'),
+    'general promotion must reject a stale title/body before any publication mutation is prepared'
+  )
+  assert.ok(
+    promotion.lastIndexOf('validateVietnameseReleasePresentation') >
+      promotion.lastIndexOf('gh release edit "$TAG"'),
+    'general promotion must recheck the title/body after publication'
+  )
+  assert.ok(
+    promotion.indexOf('validate-public-release-contract.mjs') <
+      promotion.indexOf('Công khai, hậu kiểm và tự quay về draft nếu hậu kiểm lỗi'),
+    'the exact public download contract must pass before release publication'
+  )
 })
 
 test('runtime smoke refuses missing platform, update, persistence, signing, or real-machine evidence', () => {
@@ -130,49 +250,62 @@ test('runtime smoke refuses missing platform, update, persistence, signing, or r
 
 test('pilot promotion stays prerelease, validates every byte, and discloses missing native smoke', () => {
   assert.match(pilotPromotion, /environment: release-production/)
+  assert.match(pilotPromotion, /^\s*group: hermes-vietnamese-promotion$/m)
+  assert.doesNotMatch(pilotPromotion, /group: hermes-vietnamese-pilot-promotion-/)
+  assert.match(pilotPromotion, /actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/)
+  assert.match(pilotPromotion, /ref: \$\{\{ inputs\.tag \}\}/)
+  assert.match(pilotPromotion, /test "\$\(git rev-parse HEAD\)" = "\$candidate_commit"/)
+  assert.match(pilotPromotion, /validate-pilot-release-evidence\.mjs/)
   assert.match(pilotPromotion, /Dựng và staging Hermes Vietnamese/)
   assert.match(pilotPromotion, /sha256sum --check SHA256SUMS\.txt/)
-  assert.match(pilotPromotion, /windows-x64.*PILOT-GO/s)
-  assert.match(pilotPromotion, /BUILD-ONLY-PILOT/)
-  assert.match(pilotPromotion, /realMachineSmoke !== false/)
-  for (const gate of [
-    'connectorChromeIsolated',
-    'connectorEdgeIsolated',
-    'connectorConsentPreview',
-    'connectorRevoke',
-    'connectorPersistence',
-    'connectorRedaction',
-    'reasoningSummaryEnabled',
-    'reasoningSummaryDisabledZeroCalls',
-    'reasoningOriginalPreserved',
-    'advisorDisabledZeroCalls',
-    'advisorPlanCheckpoint',
-    'advisorRecoveryCheckpoint',
-    'advisorFinalCheckpoint',
-    'advisorReadOnly',
-    'advisorRevisionBounded',
-    'advisorModelPersistence',
-    'advisorSessionScoped',
-    'advisorPaneIsolation',
-    'advisorProgressPlan',
-    'advisorProgressFinal',
-    'workProgressActionReason',
-    'contextUsagePerSession',
-    'legacyMarkerResidentUpgrade',
-    'projectPins',
-    'projectPinOrdering',
-    'projectsOverview',
-    'usageAnalytics',
-    'rightPanelDefault',
-    'scheduledJobsVietnamese',
-    'safeTool',
-    'updateFromV25',
-    'updateFromV28',
-    'rollback'
-  ]) {
-    assert.match(pilotPromotion, new RegExp(`'${gate}'`))
-  }
-  assert.match(pilotPromotion, /--draft=false --prerelease=true/)
+  assert.match(pilotPromotion, /browser_download_url/)
+  assert.match(pilotPromotion, /draft asset inventory mismatch/)
+  assert.match(pilotPromotion, /rollback_publication/)
+  assert.match(pilotPromotion, /--draft=true --prerelease=true --latest=false/)
+  assert.match(pilotPromotion, /--draft=false --prerelease=true --latest=false/)
+  assert.match(pilotPromotion, /releases\/latest/)
+  assert.match(pilotPromotion, /releases\/download\/\$TAG\/SHA256SUMS\.txt/)
+  assert.match(pilotPromotion, /head_sha/)
+  assert.match(pilotPromotion, /tests\/test_public_release_downloads\.py/)
+  assert.match(pilotPromotion, /URLs may still 404 while the release/)
+  assert.match(pilotPromotion, /stale\/false README metadata/)
+  assert.equal(
+    (pilotPromotion.match(/^\s*validateVietnameseReleasePresentation\(\{/gm) ?? []).length,
+    2,
+    'pilot promotion must exact-check the release presentation before and after mutation'
+  )
+  assert.equal((pilotPromotion.match(/const candidate = resolveVietnameseReleaseCandidate/g) ?? []).length, 2)
+  assert.match(pilotPromotion, /expectedBody: fs\.readFileSync\('\.github\/release-notes-vietnamese\.md', 'utf8'\)/)
+  assert.match(pilotPromotion, /--json isDraft,isPrerelease,name,body > candidate-release\.json/)
+  assert.match(pilotPromotion, /--json isDraft,isPrerelease,url,name,body > published-release\.json/)
+  assert.equal((pilotPromotion.match(/^\s*validateFeaturedCandidatePromotion\(\{/gm) ?? []).length, 1)
+  assert.equal((pilotPromotion.match(/^\s*validateVietnameseReleaseNotesForClass\(\{/gm) ?? []).length, 1)
+  assert.match(pilotPromotion, /releaseClass: 'community-prerelease'/)
+  assert.match(pilotPromotion, /featuredCandidate: publicRelease\.featuredCandidate/)
+  assert.match(pilotPromotion, /tag: process\.env\.TAG/)
+  assert.match(pilotPromotion, /committed_latest="\$\(node -p "require\('\.\/\.github\/public-release\.json'\)\.tag"\)"/)
+  assert.match(pilotPromotion, /test "\$previous_latest" = "\$committed_latest"/)
+  assert.match(pilotPromotion, /test "\$TAG" != "\$previous_latest"/)
+  assert.ok(
+    pilotPromotion.indexOf('validateFeaturedCandidatePromotion({') <
+      pilotPromotion.indexOf('rollback_publication'),
+    'pilot promotion must bind its exact public callout before mutation'
+  )
+  assert.ok(
+    pilotPromotion.indexOf('tests/test_public_release_downloads.py') <
+      pilotPromotion.indexOf('rollback_publication'),
+    'pilot promotion must validate prepared public callouts before publication'
+  )
+  assert.ok(
+    pilotPromotion.lastIndexOf('validateVietnameseReleasePresentation') >
+      pilotPromotion.lastIndexOf('gh release edit "$TAG"'),
+    'pilot promotion must recheck the title/body after publication'
+  )
+  assert.ok(
+    pilotPromotion.indexOf('test "$previous_latest" = "$committed_latest"') <
+      pilotPromotion.lastIndexOf('gh release edit "$TAG"'),
+    'pilot promotion must bind live Latest to the committed default before publication'
+  )
   assert.doesNotMatch(pilotPromotion, /--prerelease=false/)
 })
 

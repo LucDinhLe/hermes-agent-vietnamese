@@ -4,6 +4,7 @@ import test from 'node:test'
 import vm from 'node:vm'
 
 const source = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
+const LOCAL_OWNER = { connectionId: 'local', profile: 'default' }
 
 // ── canonical open-path harness (slice: createCanonicalChat + openBotCanonicalChat)
 function loadOpenPath({ openSession, request }) {
@@ -12,6 +13,7 @@ function loadOpenPath({ openSession, request }) {
   const saved = []
   const requests = []
   const context = {
+    agentText: (key, name) => (key === 'profile.openChatFailed' ? `Could not open ${name}'s chat — try again` : key),
     host: {
       openSession,
       request: async (method, params) => {
@@ -19,6 +21,8 @@ function loadOpenPath({ openSession, request }) {
         return request(method, params)
       }
     },
+    normalizeRosterOwner: (connectionId, profile) => ({ connectionId, profile }),
+    rosterOwnerStillActive: () => true,
     saveBotMeta: (name, patch) => saved.push({ name, patch: JSON.parse(JSON.stringify(patch)) }),
     $hideBotChats: { get: () => false },
     window: { setTimeout: callback => callback() }
@@ -30,7 +34,14 @@ function loadOpenPath({ openSession, request }) {
   assert.notEqual(start, -1, 'canonical creation section is missing')
   assert.notEqual(end, -1, 'canonical creation section delimiter is missing')
   vm.runInNewContext(section, context, { filename: 'canonical-open.js' })
-  return { ...context.__open, saved, requests, host: context.host }
+  return {
+    ...context.__open,
+    openBotCanonicalChat: (name, pinned, history) =>
+      context.__open.openBotCanonicalChat(name, pinned, history, LOCAL_OWNER),
+    saved,
+    requests,
+    host: context.host
+  }
 }
 
 const HISTORY = { id: 'hist-1', title: 'Weekly review', preview: 'history preview', last_active: 1000 }

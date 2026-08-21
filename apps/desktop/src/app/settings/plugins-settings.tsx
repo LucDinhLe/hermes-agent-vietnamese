@@ -326,6 +326,23 @@ function AgentPluginsSection() {
 function PluginRow({ record }: { record: PluginRecord }) {
   const { t } = useI18n()
   const p = t.settings.plugins
+  const description = typeof record.description === 'function' ? record.description() : record.description
+
+  const toggle = (
+    <Switch
+      aria-label={
+        record.required
+          ? `${record.name}: ${p.requiredDescription}`
+          : `${record.status === 'disabled' ? p.enable : p.disable} ${record.name}`
+      }
+      checked={record.status !== 'disabled'}
+      disabled={record.required}
+      onCheckedChange={on => {
+        triggerHaptic('selection')
+        void setPluginEnabled(record.id, on)
+      }}
+    />
+  )
 
   return (
     <PluginLine
@@ -338,27 +355,29 @@ function PluginRow({ record }: { record: PluginRecord }) {
               </Button>
             </Tip>
           )}
-          <Switch
-            aria-label={`${record.status === 'disabled' ? p.enable : p.disable} ${record.name}`}
-            checked={record.status !== 'disabled'}
-            onCheckedChange={on => {
-              triggerHaptic('selection')
-              void setPluginEnabled(record.id, on)
-            }}
-          />
+          {record.required ? (
+            <Tip label={p.requiredDescription}>
+              <span className="inline-flex cursor-help" data-required-plugin-control="" tabIndex={0}>
+                {toggle}
+              </span>
+            </Tip>
+          ) : (
+            toggle
+          )}
         </>
       }
       description={
         record.status === 'error' ? (
           <span className="text-(--ui-danger,#f87171)">{record.error}</span>
         ) : (
-          (record.description ?? record.file ?? record.id)
+          (description ?? record.file ?? record.id)
         )
       }
       title={
         <>
           <span>{record.name}</span>
           <Pill>{p.kinds[record.kind]}</Pill>
+          {record.required && <Pill>{p.required}</Pill>}
           {record.status === 'error' && <Pill tone="primary">{p.failed}</Pill>}
         </>
       }

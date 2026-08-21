@@ -1,9 +1,11 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { HermesConfigRecord } from '@/hermes'
+import type { BackendOwner } from '@/store/backend-owner'
 
 import { FIRST_RUN_LOCALE_KEY, type I18nConfigClient, I18nProvider, useI18n } from './context'
+import { getRuntimeI18nLocale } from './runtime'
 import type { Locale } from './types'
 
 function LanguageProbe({ target = 'zh' }: { target?: Locale }) {
@@ -22,6 +24,19 @@ function LanguageProbe({ target = 'zh' }: { target?: Locale }) {
       </button>
       <button onClick={() => previewLocale(target)} type="button">
         preview
+      </button>
+    </div>
+  )
+}
+
+function RuntimeLocaleProbe() {
+  const { setLocale } = useI18n()
+
+  return (
+    <div>
+      <p data-testid="runtime-locale">{getRuntimeI18nLocale()}</p>
+      <button onClick={() => void setLocale('vi')} type="button">
+        switch-runtime
       </button>
     </div>
   )
@@ -59,6 +74,19 @@ describe('I18nProvider', () => {
 
     await waitFor(() => expect(screen.getByTestId('locale').textContent).toBe('en'))
     expect(screen.getByTestId('label').textContent).toBe('Language')
+  })
+
+  it('publishes the new runtime locale before descendants render', async () => {
+    render(
+      <I18nProvider configClient={null} initialLocale="en">
+        <RuntimeLocaleProbe />
+      </I18nProvider>
+    )
+
+    expect(screen.getByTestId('runtime-locale').textContent).toBe('en')
+    fireEvent.click(screen.getByRole('button', { name: 'switch-runtime' }))
+
+    await waitFor(() => expect(screen.getByTestId('runtime-locale').textContent).toBe('vi'))
   })
 
   it('loads the initial locale from display.language config', async () => {
@@ -245,6 +273,57 @@ describe('I18nProvider', () => {
     })
   })
 
+  it('keeps a locale save on its captured backend and ignores its late rollback after an owner switch', async () => {
+    const ownerA = { connectionId: 'source-a', profile: 'research' }
+    const ownerB = { connectionId: 'source-b', profile: 'research' }
+    let rejectSaveA!: (error: Error) => void
+
+    const saveA = new Promise<{ ok: boolean }>((_resolve, reject) => {
+      rejectSaveA = reject
+    })
+
+    const getConfig = vi.fn(async (owner?: BackendOwner) => ({
+      display: { language: owner?.connectionId === 'source-b' ? 'ja' : 'en' }
+    }))
+
+    const saveConfig = vi.fn((_config: HermesConfigRecord, owner?: BackendOwner) =>
+      owner?.connectionId === 'source-a' ? saveA : Promise.resolve({ ok: true })
+    )
+
+    const configClient: I18nConfigClient = { getConfig, saveConfig }
+
+    const view = render(
+      <I18nProvider backendOwner={ownerA} configClient={configClient}>
+        <LanguageProbe />
+      </I18nProvider>
+    )
+
+    await waitFor(() => expect(screen.getByTestId('locale').textContent).toBe('en'))
+    fireEvent.click(screen.getByRole('button', { name: 'switch' }))
+
+    await waitFor(() =>
+      expect(saveConfig).toHaveBeenCalledWith({ display: { language: 'zh' } }, ownerA)
+    )
+
+    view.rerender(
+      <I18nProvider backendOwner={ownerB} configClient={configClient}>
+        <LanguageProbe />
+      </I18nProvider>
+    )
+
+    await waitFor(() => expect(screen.getByTestId('locale').textContent).toBe('ja'))
+
+    await act(async () => {
+      rejectSaveA(new Error('late source-a failure'))
+      await Promise.resolve()
+    })
+
+    expect(screen.getByTestId('locale').textContent).toBe('ja')
+    expect(screen.getByTestId('save-error').textContent).toBe('')
+    expect(getConfig).toHaveBeenCalledWith(ownerA)
+    expect(getConfig).toHaveBeenCalledWith(ownerB)
+  })
+
   it('saves newly supported locales to display.language', async () => {
     const saveConfig = vi.fn().mockResolvedValue({ ok: true })
 
@@ -279,14 +358,14 @@ describe('I18nProvider', () => {
     )
 
     expect(screen.getByTestId('locale').textContent).toBe('ar')
-    expect(document.documentElement.dir).toBe('rtl')
-    expect(document.documentElement.lang).toBe('ar')
+    expect(window.document.documentElement.dir).toBe('rtl')
+    expect(window.document.documentElement.lang).toBe('ar')
 
     fireEvent.click(screen.getByRole('button', { name: 'switch' }))
 
     await waitFor(() => expect(screen.getByTestId('locale').textContent).toBe('en'))
-    expect(document.documentElement.dir).toBe('ltr')
-    expect(document.documentElement.lang).toBe('en')
+    expect(window.document.documentElement.dir).toBe('ltr')
+    expect(window.document.documentElement.lang).toBe('en')
   })
 
   it('rolls back the visible locale when saving fails', async () => {

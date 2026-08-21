@@ -91,7 +91,7 @@ afterEach(() => {
   profileSwitchHandler = null
 })
 
-async function renderModelSettings() {
+async function renderModelSettings(props: { scopeProfile?: null | string } = {}) {
   const { ModelSettings } = await import('./model-settings')
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
@@ -100,7 +100,7 @@ async function renderModelSettings() {
     // needs a router context in tests (the app provides HashRouter at root).
     <MemoryRouter>
       <QueryClientProvider client={client}>
-        <ModelSettings />
+        <ModelSettings {...props} />
       </QueryClientProvider>
     </MemoryRouter>
   )
@@ -176,6 +176,31 @@ describe('ModelSettings', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Set up Anthropic' }))
 
     expect(startManualProviderOAuth).toHaveBeenCalledWith('anthropic')
+    expect(startManualLocalEndpoint).not.toHaveBeenCalled()
+    expect(startManualOnboarding).not.toHaveBeenCalled()
+  })
+
+  it('fails closed instead of starting OAuth while editing a non-active profile override', async () => {
+    getGlobalModelInfo.mockResolvedValueOnce({ provider: 'anthropic', model: '' })
+    getGlobalModelOptions.mockResolvedValueOnce({
+      providers: [
+        {
+          name: 'Anthropic',
+          slug: 'anthropic',
+          models: [],
+          authenticated: false,
+          auth_type: 'oauth'
+        }
+      ]
+    })
+
+    await renderModelSettings({ scopeProfile: 'profile-b' })
+
+    const setup = await screen.findByRole('button', { name: 'Set up Anthropic' })
+
+    expect(setup.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(setup)
+    expect(startManualProviderOAuth).not.toHaveBeenCalled()
     expect(startManualLocalEndpoint).not.toHaveBeenCalled()
     expect(startManualOnboarding).not.toHaveBeenCalled()
   })

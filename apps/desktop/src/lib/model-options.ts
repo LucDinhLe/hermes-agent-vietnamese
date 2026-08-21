@@ -35,19 +35,28 @@ export function manualPickRemoved(
 }
 
 interface ModelOptionsRequest {
+  /** Exact registry source for the REST recovery path. */
+  connectionId?: null | string
   /** When false, include ambient/unconfigured providers (onboarding/setup
    *  surfaces). Chat pickers default to true so only explicitly configured
    *  providers are listed (#56974). */
   explicitOnly?: boolean
   gateway?: HermesGateway
   refresh?: boolean
+  profile?: null | string
   sessionId?: null | string
 }
 
-export function modelOptionsQueryKey(profile: null | string | undefined, sessionId?: null | string) {
+export function modelOptionsQueryKey(
+  profile: null | string | undefined,
+  sessionId?: null | string,
+  connectionId?: null | string
+) {
   const profileKey = (profile ?? '').trim() || 'default'
 
-  return ['model-options', profileKey, sessionId || 'global'] as const
+  return connectionId
+    ? (['model-options', connectionId, profileKey, sessionId || 'global'] as const)
+    : (['model-options', profileKey, sessionId || 'global'] as const)
 }
 
 function hasSelectableModels(options: ModelOptionsResponse | null | undefined): boolean {
@@ -55,8 +64,10 @@ function hasSelectableModels(options: ModelOptionsResponse | null | undefined): 
 }
 
 export async function requestModelOptions({
+  connectionId,
   explicitOnly = true,
   gateway,
+  profile,
   refresh = false,
   sessionId
 }: ModelOptionsRequest): Promise<ModelOptionsResponse> {
@@ -93,7 +104,11 @@ export async function requestModelOptions({
     // catalog is already populated. Recover through the same profile-scoped
     // endpoint Settings uses, but keep the live session selection authoritative.
     try {
-      const restOptions = await getGlobalModelOptions({ explicitOnly, ...(refresh ? { refresh: true } : {}) })
+      const restOptions = await getGlobalModelOptions(
+        { explicitOnly, ...(refresh ? { refresh: true } : {}) },
+        profile,
+        connectionId
+      )
 
       if (hasSelectableModels(restOptions)) {
         return {
@@ -114,5 +129,5 @@ export async function requestModelOptions({
     throw gatewayError
   }
 
-  return getGlobalModelOptions({ explicitOnly, ...(refresh ? { refresh: true } : {}) })
+  return getGlobalModelOptions({ explicitOnly, ...(refresh ? { refresh: true } : {}) }, profile, connectionId)
 }

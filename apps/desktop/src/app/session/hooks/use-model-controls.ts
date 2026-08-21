@@ -7,6 +7,7 @@ import { useI18n } from '@/i18n'
 import { isBusySessionModelSwitch } from '@/lib/gateway-rpc'
 import { manualPickRemoved, modelOptionsQueryKey } from '@/lib/model-options'
 import { notifyError } from '@/store/notifications'
+import type { BackendOwner } from '@/store/backend-owner'
 import { $activeGatewayProfile } from '@/store/profile'
 import {
   $activeSessionId,
@@ -23,11 +24,12 @@ import { $sessionStates, sessionTileDelegate } from '@/store/session-states'
 import type { ModelOptionsResponse } from '@/types/hermes'
 
 interface ModelControlsOptions {
+  owner?: BackendOwner
   queryClient: QueryClient
   requestGateway: <T = unknown>(method: string, params?: Record<string, unknown>) => Promise<T>
 }
 
-export function useModelControls({ queryClient, requestGateway }: ModelControlsOptions) {
+export function useModelControls({ owner, queryClient, requestGateway }: ModelControlsOptions) {
   const { t } = useI18n()
   const copy = t.desktop
   const profileRefreshEpochRef = useRef(0)
@@ -43,7 +45,7 @@ export function useModelControls({ queryClient, requestGateway }: ModelControlsO
       provider: string,
       model: string,
       includeGlobal: boolean,
-      profile = $activeGatewayProfile.get()
+      profile = owner?.profile ?? $activeGatewayProfile.get()
     ) => {
       const patch = (prev: ModelOptionsResponse | undefined) => {
         // Selection state can update before the catalog query has resolved.
@@ -58,13 +60,13 @@ export function useModelControls({ queryClient, requestGateway }: ModelControlsO
         return { ...prev, provider, model, providers }
       }
 
-      queryClient.setQueryData<ModelOptionsResponse>(modelOptionsQueryKey(profile, sessionId), patch)
+      queryClient.setQueryData<ModelOptionsResponse>(modelOptionsQueryKey(profile, sessionId, owner?.connectionId), patch)
 
       if (includeGlobal) {
-        queryClient.setQueryData<ModelOptionsResponse>(modelOptionsQueryKey(profile), patch)
+        queryClient.setQueryData<ModelOptionsResponse>(modelOptionsQueryKey(profile, undefined, owner?.connectionId), patch)
       }
     },
-    [queryClient]
+    [owner?.connectionId, owner?.profile, queryClient]
   )
 
   // Settings → Model writes the profile default, which the backend applies to
@@ -188,7 +190,7 @@ export function useModelControls({ queryClient, requestGateway }: ModelControlsO
         : ($sessionStates.get()[liveSessionId!]?.provider ?? '')
 
       const prevSource = getCurrentModelSource()
-      const liveGatewayProfile = $activeGatewayProfile.get()
+      const liveGatewayProfile = owner?.profile ?? $activeGatewayProfile.get()
 
       if (touchesPrimary) {
         setCurrentModel(selection.model)
@@ -247,7 +249,9 @@ export function useModelControls({ queryClient, requestGateway }: ModelControlsO
         // the switch publishes session.info when it lands, and that is what
         // re-syncs every surface.
         if (!result?.deferred) {
-          void queryClient.invalidateQueries({ queryKey: modelOptionsQueryKey(liveGatewayProfile, liveSessionId) })
+          void queryClient.invalidateQueries({
+            queryKey: modelOptionsQueryKey(liveGatewayProfile, liveSessionId, owner?.connectionId)
+          })
         }
 
         return true
@@ -285,7 +289,7 @@ export function useModelControls({ queryClient, requestGateway }: ModelControlsO
         return false
       }
     },
-    [copy.modelSwitchFailed, queryClient, requestGateway, updateModelOptionsCache]
+    [copy.modelSwitchFailed, owner?.connectionId, owner?.profile, queryClient, requestGateway, updateModelOptionsCache]
   )
 
   return { applySavedMainModel, refreshCurrentModel, selectModel }

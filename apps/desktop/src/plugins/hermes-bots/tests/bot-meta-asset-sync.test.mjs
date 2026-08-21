@@ -11,6 +11,7 @@ import vm from 'node:vm'
 // only when the image actually changed; ui_meta sync is untouched.
 
 const pluginSource = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
+const LOCAL_OWNER = { connectionId: 'local', profile: 'default' }
 
 function load() {
   const values = new Map()
@@ -30,7 +31,11 @@ function load() {
         requests.push([method, params])
         return Promise.resolve({})
       },
-      state: { profile: { get: () => 'default', listen: () => undefined }, gateway: { listen: () => undefined } }
+      state: {
+        connectionId: { get: () => 'local', listen: () => undefined },
+        profile: { get: () => 'default', listen: () => undefined },
+        gateway: { listen: () => undefined }
+      }
     }
   }
   const source = pluginSource
@@ -53,10 +58,10 @@ test('regression: set_asset fires only when the avatar image changes', async () 
   const { saveBotMeta, $botMeta, requests } = load()
   const png = 'data:image/png;base64,AAAA'
 
-  saveBotMeta('ops', { image: png, title: 'One' })
-  saveBotMeta('ops', { image: png, title: 'Two' }) // re-save, same image
-  saveBotMeta('ops', { image: null, title: 'Three' }) // removed
-  saveBotMeta('ops', { title: 'Four' }) // no image key at all
+  saveBotMeta('ops', { image: png, title: 'One' }, null, LOCAL_OWNER)
+  saveBotMeta('ops', { image: png, title: 'Two' }, null, LOCAL_OWNER) // re-save, same image
+  saveBotMeta('ops', { image: null, title: 'Three' }, null, LOCAL_OWNER) // removed
+  saveBotMeta('ops', { title: 'Four' }, null, LOCAL_OWNER) // no image key at all
   await Promise.resolve()
 
   const assetCalls = JSON.parse(
@@ -77,8 +82,8 @@ test('regression: duplicating a bot still pushes the copied avatar once', async 
   const { saveBotMeta, requests } = load()
   const png = 'data:image/png;base64,BBBB'
 
-  saveBotMeta('source', { image: png, title: 'Original' })
-  saveBotMeta('source-2', { image: png, title: 'Original (copy)' })
+  saveBotMeta('source', { image: png, title: 'Original' }, null, LOCAL_OWNER)
+  saveBotMeta('source-2', { image: png, title: 'Original (copy)' }, null, LOCAL_OWNER)
   await Promise.resolve()
 
   const assetCalls = JSON.parse(

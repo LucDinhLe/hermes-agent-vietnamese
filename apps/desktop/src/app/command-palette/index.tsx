@@ -102,7 +102,7 @@ import { FIELD_LABELS, SECTIONS } from '../settings/constants'
 import { fieldCopyForSchemaKey } from '../settings/field-copy'
 import { prettyName } from '../settings/helpers'
 
-import { usePaletteContributions } from './contrib'
+import { resolvePaletteContributionLabel, usePaletteContributions } from './contrib'
 import { MarketplaceThemePage } from './marketplace-theme-page'
 import { PetInlineToggle, PetPalettePage } from './pet-palette-page'
 
@@ -851,7 +851,7 @@ function CommandPaletteBody({ onExited }: { onExited: () => void }) {
                 id: item.key,
                 keepOpen: item.keepOpen,
                 keywords: item.keywords,
-                label: item.label,
+                label: resolvePaletteContributionLabel(item.label),
                 run: item.run
               }))
             }

@@ -181,6 +181,19 @@ describe('blankDraftTile', () => {
     expect(blankDraftTile(tiles, states)).toEqual(tiles[1])
   })
 
+  it('does not spend another source\'s same-profile blank draft', () => {
+    const ownerA = { connectionId: 'source-a', profile: 'default' }
+    const ownerB = { connectionId: 'source-b', profile: 'default' }
+    const tiles: SessionTile[] = [
+      { ...ownerA, runtimeId: 'run-a', storedSessionId: 'draft-a' },
+      { ...ownerB, runtimeId: 'run-b', storedSessionId: 'draft-b' }
+    ]
+    const states = { 'run-a': state(0), 'run-b': state(0) }
+
+    expect(blankDraftTile(tiles, states, ownerA)).toEqual(tiles[0])
+    expect(blankDraftTile(tiles, states, ownerB)).toEqual(tiles[1])
+  })
+
   it('leaves a blank-but-busy tab alone — its first turn is already in flight', () => {
     expect(blankDraftTile([bound('a', 'run-a')], { 'run-a': state(0, true) })).toBeNull()
   })
@@ -213,8 +226,12 @@ describe('reopenLastClosedTile focuses the restored tab', () => {
     const tree = await import('@/components/pane-shell/tree/store')
     const model = await import('@/components/pane-shell/tree/model')
     const { registry } = await import('@/contrib/registry')
+    const profile = await import('@/store/profile')
     const session = await import('@/store/session')
     const states = await import('@/store/session-states')
+
+    profile.$activeGatewayProfile.set('default')
+    session.$connection.set({ connectionId: 'local', mode: 'local', profile: 'default' } as HermesConnection)
 
     registry.register({
       area: 'panes',
@@ -229,9 +246,9 @@ describe('reopenLastClosedTile focuses the restored tab', () => {
     const registered = new Map<string, () => void>()
 
     const syncTiles = () => {
-      const wanted = new Set(states.$sessionTiles.get().map(t => t.storedSessionId))
+      const wanted = new Map(states.$sessionTiles.get().map(tile => [states.sessionTileKey(tile), tile]))
 
-      for (const id of wanted) {
+      for (const [id, tile] of wanted) {
         if (registered.has(id)) {
           continue
         }
@@ -241,9 +258,9 @@ describe('reopenLastClosedTile focuses the restored tab', () => {
           registry.register({
             area: 'panes',
             data: { dock: { pane: 'workspace', pos: 'center' }, placement: 'main' },
-            id: tilePane(id),
+            id: states.sessionTilePaneId(tile),
             render: () => null,
-            title: id
+            title: tile.storedSessionId
           })
         )
       }
@@ -265,13 +282,15 @@ describe('reopenLastClosedTile focuses the restored tab', () => {
     states.openSessionTile('closed', 'center', 'workspace')
     states.focusOpenSession('closed')
     tree.noteActiveTreeGroup('grp-main')
-    expect(findGroupOfPane(tree.$layoutTree.get()!, tilePane('closed'))?.active).toBe(tilePane('closed'))
+    const opened = states.sessionTileForStoredId('closed', { connectionId: 'local', profile: 'default' })!
+    const paneId = states.sessionTilePaneId(opened)
+    expect(findGroupOfPane(tree.$layoutTree.get()!, paneId)?.active).toBe(paneId)
 
-    return { states, tree }
+    return { paneId, states, tree }
   }
 
   it('fronts the restored tab after ⌘⇧T', async () => {
-    const { states, tree } = await setup()
+    const { paneId, states, tree } = await setup()
 
     states.closeSessionTile('closed')
     expect(states.$sessionTiles.get().some(t => t.storedSessionId === 'closed')).toBe(false)
@@ -280,7 +299,7 @@ describe('reopenLastClosedTile focuses the restored tab', () => {
     states.reopenLastClosedTile()
 
     expect(states.$sessionTiles.get().some(t => t.storedSessionId === 'closed')).toBe(true)
-    expect(findGroupOfPane(tree.$layoutTree.get()!, tilePane('closed'))?.active).toBe(tilePane('closed'))
+    expect(findGroupOfPane(tree.$layoutTree.get()!, paneId)?.active).toBe(paneId)
     expect(tree.$activeTreeGroup.get()).toBe('grp-main')
   })
 })

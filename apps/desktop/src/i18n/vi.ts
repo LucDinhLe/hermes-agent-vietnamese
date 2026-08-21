@@ -582,6 +582,8 @@ export const vi = defineLocale({
       reveal: 'Hiển thị trong trình quản lý tệp',
       enable: 'Bật',
       disable: 'Tắt',
+      required: 'bắt buộc',
+      requiredDescription: 'Đây là tính năng đi kèm bắt buộc của Hermes Vietnamese và luôn được bật.',
       failed: 'không thành công',
       empty: 'Chưa cài đặt plugin Desktop nào.',
       kinds: { bundled: 'đi kèm', disk: 'trên máy', runtime: 'đang chạy' },
@@ -764,6 +766,8 @@ export const vi = defineLocale({
       version: value => `Phiên bản ${value}`,
       versionUnavailable: 'Phiên bản không có sẵn',
       projectInfo: 'Thông tin dự án',
+      technicalVersion: 'Phiên bản kỹ thuật',
+      upstreamVersion: 'Phiên bản Hermes Agent gốc',
       upstreamPublisher: 'Dự án gốc và nhà phát hành',
       upstreamPublisherValue: 'Hermes Agent · Nous Research',
       communityMaintainer: 'Nhà phát hành và duy trì Hermes Vietnamese',
@@ -1300,6 +1304,10 @@ export const vi = defineLocale({
     archive: 'Lưu trữ',
     skillArchivedTitle: 'Đã lưu trữ kỹ năng',
     skillArchivedMessage: 'Có thể khôi phục bằng công cụ quản lý kỹ năng của Hermes.',
+    archiveConfirmTitle: name => `Lưu trữ ${name}?`,
+    archiveDescription: 'Kỹ năng sẽ được lưu trữ và có thể khôi phục bằng công cụ quản lý kỹ năng của Hermes.',
+    archiveFailed: 'Không thể lưu trữ kỹ năng',
+    defaultProfile: 'Hermes (mặc định)',
     hub: {
       searchPlaceholder: 'Tìm kiếm trung tâm kỹ năng',
       search: 'Tìm kiếm',
@@ -2422,6 +2430,16 @@ export const vi = defineLocale({
     snippetsDesc: 'Chọn một yêu cầu mẫu để đưa vào khung soạn thảo.',
     dropFiles: 'Thả tệp để đính kèm',
     dropSession: 'Thả để liên kết cuộc trò chuyện này',
+    mcpSuggestions: {
+      label: server => `Thêm ${server}`,
+      tip: keyword => `Đề xuất vì bạn nhắc “${keyword}” — bấm để kết nối`,
+      connecting: server => `Đang kết nối ${server}…`,
+      cancelTip: 'Bấm để hủy',
+      added: server => `Đã thêm ${server}`,
+      addedTip: 'Đã kết nối — các công cụ đã sẵn sàng trong cuộc trò chuyện này',
+      connectFailed: server => `Không thể kết nối ${server}`,
+      sourceChanged: 'Đề xuất MCP thuộc một nguồn Agent khác. Hãy thử lại trong phiên này.'
+    },
     snippets: {
       codeReview: {
         label: 'Đánh giá mã',
@@ -3134,6 +3152,10 @@ export const vi = defineLocale({
       loadingResponse: 'Hermes đang tải phản hồi',
       resumeWhenBackgroundDone: count =>
         count === 1 ? 'Sẽ tiếp tục khi tác vụ nền kết thúc' : `Sẽ tiếp tục khi ${count} nhiệm vụ nền đã hoàn tất`,
+      agentMessaging: name => `Đang nhắn cho ${name}…`,
+      agentMessaged: name => `Đã nhắn cho ${name}`,
+      agentMessageFrom: name => `Tin nhắn từ ${name}`,
+      showAgentMessage: 'Hiện tin nhắn',
       thinking: 'Đang suy nghĩ',
       thought: 'Suy nghĩ',
       thoughtBriefly: 'Đã suy nghĩ trong chốc lát',

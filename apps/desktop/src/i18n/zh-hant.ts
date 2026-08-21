@@ -651,6 +651,8 @@ export const zhHant = defineLocale({
       version: value => `版本 ${value}`,
       versionUnavailable: '版本不可用',
       projectInfo: '專案資訊',
+      technicalVersion: '技術版本',
+      upstreamVersion: '上游 Hermes Agent 版本',
       upstreamPublisher: '原始專案與發行者',
       upstreamPublisherValue: 'Hermes Agent · Nous Research',
       communityMaintainer: '越南語社群版本',
@@ -660,7 +662,7 @@ export const zhHant = defineLocale({
       communityUpdateChannel: 'Hermes Vietnamese 頻道 · GitHub Releases',
       bundleOutOfSync: '應用程式建置版本過舊',
       bundleOutOfSyncDesc:
-        'Hermes 執行環境已更新,但桌面應用程式本身仍是舊建置——在應用程式更新之前,新的介面功能(如 Bot Mode)不會顯示。請執行下方的更新以重新建置應用程式。如果此警告仍未消除,請從最新的桌面安裝程式重新安裝。',
+        'Hermes 執行環境已更新,但桌面應用程式本身仍是舊建置——在應用程式更新之前,新的介面功能(如 Agents)不會顯示。請執行下方的更新以重新建置應用程式。如果此警告仍未消除,請從最新的桌面安裝程式重新安裝。',
       bundleOutOfSyncAction: '取得安裝程式',
       updates: '更新',
       checkNow: '立即檢查',
@@ -2656,6 +2658,10 @@ export const zhHant = defineLocale({
       loadingResponse: 'Hermes 正在載入回覆',
       resumeWhenBackgroundDone: count =>
         count === 1 ? '背景工作完成後將自動繼續' : `${count} 個背景工作完成後將自動繼續`,
+      agentMessaging: name => `正在傳訊息給 ${name}…`,
+      agentMessaged: name => `已傳訊息給 ${name}`,
+      agentMessageFrom: name => `來自 ${name} 的訊息`,
+      showAgentMessage: '顯示訊息',
       thinking: '思考中',
       thought: '已思考',
       thoughtBriefly: '思考了片刻',

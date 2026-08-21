@@ -4,6 +4,7 @@ import { assistantTextPart, type ChatMessage, chatMessageText, textPart } from '
 import { normalizePersonalityValue } from '@/lib/chat-runtime'
 import { embeddedImageUrls, textWithoutEmbeddedImages } from '@/lib/embedded-images'
 import { reconcileApprovalModeForProfile } from '@/store/approval-mode'
+import { activeBackendOwner, type BackendOwner, sameBackendOwner } from '@/store/backend-owner'
 import { requestDesktopOnboardingForCredentialWarning } from '@/store/onboarding'
 import { $activeGatewayProfile, $profiles, normalizeProfileKey } from '@/store/profile'
 import {
@@ -1293,7 +1294,36 @@ function upsertResolvedSession(session: SessionInfo, storedSessionId: string) {
   ])
 }
 
-export async function resolveStoredSession(storedSessionId: string): Promise<SessionInfo | undefined> {
+export async function resolveStoredSession(
+  storedSessionId: string,
+  owner?: BackendOwner
+): Promise<SessionInfo | undefined> {
+  if (owner) {
+    const foregroundOwnsRowCache = sameBackendOwner(activeBackendOwner(), owner)
+    const cached = foregroundOwnsRowCache
+      ? [...$sessions.get(), ...$cronSessions.get(), ...$messagingSessions.get()].find(session =>
+          sessionMatchesStoredId(session, storedSessionId)
+        )
+      : undefined
+
+    if (cached) {
+      return cached
+    }
+
+    try {
+      const session = await getSession(storedSessionId, owner.profile, owner.connectionId)
+      session.profile = owner.profile
+
+      if (foregroundOwnsRowCache) {
+        upsertResolvedSession(session, storedSessionId)
+      }
+
+      return session
+    } catch {
+      return undefined
+    }
+  }
+
   const cached = [...$sessions.get(), ...$cronSessions.get(), ...$messagingSessions.get()].find(session =>
     sessionMatchesStoredId(session, storedSessionId)
   )

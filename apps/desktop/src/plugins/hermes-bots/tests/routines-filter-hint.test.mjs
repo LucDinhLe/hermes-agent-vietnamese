@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import vm from 'node:vm'
 
-// UX improvement: when a bot's cron store HAS jobs but none are namespaced
-// `[bot:<name>]` for the active bot, the Routines pane now explains why it's
-// empty instead of showing the generic empty state with no hint.
+// UX improvement: when an Agent's cron store HAS jobs but none use its legacy
+// `[bot:<name>]` namespace, the Routines view explains why it is empty instead
+// of showing a generic empty state with no hint.
 
 const pluginSource = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
 
@@ -35,7 +35,7 @@ function load() {
   return context
 }
 
-test('hint: null when the active bot already has tagged jobs', () => {
+test('hint: null when the active Agent already has tagged jobs', () => {
   const all = [{ name: '[bot:ops] Morning', job_id: '1' }]
   assert.equal(load().__api.routineFilterHint(all, all), null)
 })
@@ -45,12 +45,17 @@ test('hint: null when the store is genuinely empty', () => {
   assert.equal(load().__api.routineFilterHint(undefined, []), null)
 })
 
-test('hint: explains hidden jobs when store has jobs but none match the bot', () => {
+test('hint: requests the localized explanation when jobs do not match the Agent', () => {
   const all = [
     { name: '[bot:research] Digest', job_id: '2' },
     { name: 'untagged job', job_id: '3' }
   ]
-  const hint = load().__api.routineFilterHint(all, [])
-  assert.ok(hint)
-  assert.match(hint, /tagged for this bot/)
+  const requested = []
+  const hint = load().__api.routineFilterHint(all, [], key => {
+    requested.push(key)
+    return 'localized routine filter explanation'
+  })
+
+  assert.equal(hint, 'localized routine filter explanation')
+  assert.deepEqual(requested, ['routines.filterHint'])
 })

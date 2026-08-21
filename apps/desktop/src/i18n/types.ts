@@ -324,6 +324,8 @@ export interface Translations {
       reveal: string
       enable: string
       disable: string
+      required: string
+      requiredDescription: string
       failed: string
       empty: string
       kinds: { bundled: string; disk: string; runtime: string }
@@ -477,6 +479,8 @@ export interface Translations {
       version: (value: string) => string
       versionUnavailable: string
       projectInfo: string
+      technicalVersion: string
+      upstreamVersion: string
       upstreamPublisher: string
       upstreamPublisherValue: string
       communityMaintainer: string
@@ -1060,6 +1064,10 @@ export interface Translations {
     archive: string
     skillArchivedTitle: string
     skillArchivedMessage: string
+    archiveConfirmTitle: (name: string) => string
+    archiveDescription: string
+    archiveFailed: string
+    defaultProfile: string
     hub: {
       searchPlaceholder: string
       search: string
@@ -1986,6 +1994,7 @@ export interface Translations {
       added: (server: string) => string
       addedTip: string
       connectFailed: (server: string) => string
+      sourceChanged: string
     }
     skillSuggestions: {
       label: (skill: string) => string
@@ -2662,6 +2671,10 @@ export interface Translations {
       showEarlier: string
       loadingResponse: string
       resumeWhenBackgroundDone: (count: number) => string
+      agentMessaging: (name: string) => string
+      agentMessaged: (name: string) => string
+      agentMessageFrom: (name: string) => string
+      showAgentMessage: string
       thinking: string
       thought: string
       thoughtBriefly: string

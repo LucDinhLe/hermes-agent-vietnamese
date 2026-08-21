@@ -24,6 +24,7 @@ import { handoffOriginSource, sessionSourceLabel } from '@/lib/session-source'
 import { coarseElapsed } from '@/lib/time'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
+import { activeBackendOwner } from '@/store/backend-owner'
 import { $sidebarRowMeta } from '@/store/layout'
 import { normalizeProfileKey } from '@/store/profile'
 import { $projects } from '@/store/projects'
@@ -379,7 +380,16 @@ function SidebarSessionRowImpl({
           // no macOS snap-back, Esc aborts instantly). Sub-threshold releases
           // stay ordinary clicks, so resume / pin / open-in-window are
           // untouched.
-          startSessionDrag({ id: session.id, profile: session.profile || 'default', title }, event)
+          const owner = activeBackendOwner()
+          startSessionDrag(
+            {
+              connectionId: owner?.connectionId,
+              id: session.id,
+              profile: session.profile || owner?.profile || 'default',
+              title
+            },
+            event
+          )
           dragHandleProps?.onPointerDown?.(event)
         }}
         // Hovering a row from another profile (the all-profiles view) telegraphs

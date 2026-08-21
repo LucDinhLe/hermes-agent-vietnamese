@@ -18,6 +18,8 @@ import {
   startActiveUpdate
 } from '@/store/updates'
 
+import productMetadata from '../../../product-metadata.json'
+
 import { ListRow, SectionHeading, SettingsContent } from './primitives'
 import { UninstallSection } from './uninstall-section'
 
@@ -26,6 +28,8 @@ const INSTALLER_URL = RELEASE_NOTES_URL
 const UPSTREAM_URL = 'https://github.com/NousResearch/hermes-agent'
 const COMMUNITY_URL = 'https://github.com/LucDinhLe/hermes-agent-vietnamese'
 const LICENSE_URL = 'https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/LICENSE'
+const PRODUCT_VERSION = productMetadata.productVersion
+const UPSTREAM_VERSION = productMetadata.upstream.version
 
 function ExternalProjectLink({ href, label }: { href: string; label: string }) {
   return (
@@ -132,7 +136,7 @@ export function AboutSettings() {
         <div>
           <h2 className="text-lg font-semibold tracking-tight">{a.heading}</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            {version?.appVersion ? a.version(version.appVersion) : a.versionUnavailable}
+            {a.version(PRODUCT_VERSION)}
           </p>
         </div>
         {version?.bundleOutOfSync && (
@@ -166,6 +170,10 @@ export function AboutSettings() {
         <div aria-label={a.projectInfo} className="mb-5 rounded-xl border border-border/70 bg-muted/20 px-4 py-3">
           <p className="mb-2 text-sm font-medium text-foreground">{a.projectInfo}</p>
           <dl className="grid gap-2 text-xs sm:grid-cols-[minmax(0,1fr)_auto]">
+            <dt className="text-muted-foreground">{a.technicalVersion}</dt>
+            <dd>{version?.appVersion ?? a.versionUnavailable}</dd>
+            <dt className="text-muted-foreground">{a.upstreamVersion}</dt>
+            <dd>{UPSTREAM_VERSION}</dd>
             <dt className="text-muted-foreground">{a.upstreamPublisher}</dt>
             <dd>
               <ExternalProjectLink href={UPSTREAM_URL} label={a.upstreamPublisherValue} />

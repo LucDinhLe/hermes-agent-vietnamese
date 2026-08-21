@@ -54,7 +54,7 @@ The bar along the bottom of the chat shows live session state and exposes quick 
 
 - **Per-session YOLO toggle** — flip YOLO on or off for just this session (matching the TUI). YOLO bypasses the dangerous-command approval prompts, so know what you're turning off — see [Security → YOLO Mode](./security.md#yolo-mode).
 - **Context-usage meter** — a live "% full" meter of the session's context window. Click it to open the **Context Usage** popover with a token breakdown by category (system prompt, tool definitions, skills, memory, rules, MCP, subagent definitions, and the conversation itself) so you can see exactly what's eating the window before compression kicks in.
-- **Customizable items** — right-click the status bar (**Show in status bar**) to choose what appears: the context meter, workspace, model, approvals, turn/session timers, terminal, Command Center, backend version, and more — or hide the bar entirely (**Cmd/Ctrl+Shift+S** toggles it).
+- **Customizable items** — open the status bar menu (**Show in status bar**) to choose what appears: the context meter, workspace, model, approvals, turn/session timers, terminal, Command Center, backend version, and more — or hide the bar entirely (**Cmd/Ctrl+Shift+S** toggles it).
 
 Chatting against a Hermes instance on another machine instead of the bundled local backend? See [Connecting to a remote backend](#connecting-to-a-remote-backend) below — and for the full picture of how the remote-hosted dashboard connection works (the auth gate, the `/api/ws` chat socket, and WebSocket close-code triage), see [Web Dashboard → Connecting Hermes Desktop to a remote backend](./features/web-dashboard.md#connecting-hermes-desktop-to-a-remote-backend).
 
@@ -97,7 +97,7 @@ The **Artifacts** view collects what your sessions generate — **images, files,
 The app is built for working on several things at once:
 
 - **Tabs** — **Cmd/Ctrl+T** opens a new session tab; **Ctrl+Tab** / **Ctrl+Shift+Tab** cycle sessions, and **Ctrl+1…9** jump to a recent session by position. **Cmd/Ctrl+W** closes the focused tab and **Cmd/Ctrl+Shift+T** reopens the last closed one.
-- **Multiple windows** — **Cmd/Ctrl+Shift+N** opens a new window, and any session can be popped out via its context menu (**New window**) or from the command palette. A popped-out window renders that single chat without the global sidebar — handy for parking a long-running session on another monitor. Live agent output streams into every window showing the session.
+- **Multiple windows** — **Cmd/Ctrl+Shift+N** opens a new window, and any session can be popped out via its menu (**New window**) or from the command palette. A popped-out window renders that single chat without the global sidebar — handy for parking a long-running session on another monitor. Live agent output streams into every window showing the session.
 - **Panes** — **Cmd/Ctrl+B** toggles the left sidebar, **Cmd/Ctrl+J** the right one, and **Cmd/Ctrl+\\** swaps which side the sidebars sit on.
 
 ### Terminal
@@ -173,61 +173,17 @@ The app also surfaces the broader Hermes management surface so you don't have to
 - **Messaging** — set up gateway channels.
 - **Agents** and **Command Center** — orchestration surfaces for multi-agent work.
 
-### Bot Mode (built in)
+### Agents (built in)
 
-**Bot Mode** ships with the app and is on by default: a "one chat per agent"
-roster where every [Hermes profile](./profiles.md) appears as a bot with its
-own avatar (geometric face, uploaded image, AI-generated portrait, or a pixel
-pet), its own canonical **Bot Chat** conversation, and its own **Routines**
-(recurring tasks backed by Hermes cron). The roster lives in the left
-sidebar as a tab next to your conversations — a **Sessions | Bots** tab
-strip — rather than a second pane stacked below the session list. Installs
-that picked up the older stacked layout are re-homed into the tab strip
-automatically, once; if you've hand-placed panes yourself, your layout is
-left alone. The **Cronjobs** (Routines) pane docks beside the chat only
-while the Bots tab is active and disappears when you switch back to
-Sessions (older desktop builds keep it always visible).
+**Agents** is a required Hermes Vietnamese surface over [profiles](./profiles.md). Every chat shows a fixed Agents control beside context usage, estimated cost, and Advisor. It identifies the lead Agent and lets you invite several collaborating Agents into the exact session or project without switching the lead profile, gateway, or model.
 
-Create new agents from the roster —
-Name / Title / Description plus an Advanced disclosure with the full
-capabilities surface (model, SOUL, skills, toolsets, MCP servers) — group
-them into sections, and open group chats where several bots deliberate.
-Group chats appear as standalone Discord-style rows in the roster — stacked
-member avatars, member count, a preview of the latest room line, and the
-"needs you" badge — interleaved with the bot rows in the same pin+recency
-ordering. Clicking a group row opens the room as a tab that takes over the
-**main chat window** (older desktop builds fall back to opening it inside the
-bots side panel).
+The dropdown searches names, roles, models, descriptions, and available capability metadata. It also shows which Agents participate at session scope, project scope, or both. Inviting does not make a model call; use an Agent's `@handle` when you are ready to give it work.
 
-Bots message each other: type `@researcher have a look at this` in any chat
-and the active bot hands the message off and reports back, and bots reach
-each other's Bot Chats directly (`hermes -p <bot> chat`). The backend teaches
-each bot's canonical **Bot Chat** session the messaging protocol
-automatically (config `agent.bot_mode_protocol`, default on) — including
-when a teammate bot opens it headlessly from the CLI — so bot-to-bot
-replies and handoffs work without touching your SOUL.md, and your regular
-sessions stay untouched.
+**Manage Agents** opens a stable full-page workspace for creating, editing, copying, deleting, grouping, and configuring Agents and their routines. The old left-side profile pane is removed, so closing a layout tab cannot hide the only management entry. Existing canonical chats, group sessions, routines, profile IDs, and protocol values remain compatible.
 
-Bot Mode's sessions — each bot's canonical Bot Chat and every group-chat
-member session — are always hidden from the global Sessions sidebar. They
-live in the Bots pane (roster rows, room views, and each bot's session
-browser) instead of interleaving with your own conversations.
+The creation flow includes Name, Title, Description, model, SOUL.md, skills, tools, MCP, appearance, clone source, and credential-sharing choices. Sharing provider accounts or API keys also shares their permissions, quotas, and possible charges; turning sharing off creates a separate snapshot that may need another sign-in.
 
-Bots you don't use can be tucked away: right-click a bot row → **Hide
-Bot**. Hidden bots leave the roster but keep working — @mentions still
-resolve and group-chat membership is untouched. An eye toggle appears in
-the Bots header whenever at least one bot is hidden; click it to reveal
-hidden bots dimmed in place (right-click → **Unhide Bot** brings one back),
-and the eye shows a dot when a hidden bot has unread activity. Hidden
-state is stored in the bot's profile, so it follows the bot across
-machines.
-
-Don't want it? Flip it off in **Settings → Plugins → Bots** — the roster,
-routines pane, and composer middleware unregister live, no restart needed.
-
-Full guide — creating agents (including the multi-machine **Create on**
-picker), the roster across connections, bot-to-bot mentions, and how group
-chats decide who replies: [Bot Mode: A Roster of Agents](./bot-mode.md).
+Agents can coordinate through `@mentions`, persistent group chats, and routines. Cross-machine Agents remain source-qualified and run on the backend that owns their profile. Full guide: [Agents](./bot-mode.md).
 
 ### Keyboard & navigation
 
@@ -241,7 +197,7 @@ chats decide who replies: [Bot Mode: A Roster of Agents](./bot-mode.md).
 - **Session-list overhaul** — a reworked session list with archiving and general session hygiene to keep the list manageable as it grows.
 - **Search sessions by id** — find a specific session directly by its id.
 - **Concurrent multi-profile sessions** — run sessions across multiple [profiles](./profiles.md) at the same time, and reference a session in another profile with cross-profile `@session` links.
-- **Export / import a profile** — share a whole setup as a single file. **⌘K → Export profile…** (or right-click a profile square in the rail) writes a `.tar.gz` with skills, memory, persona, crons, plugins, and settings; API keys are stripped. Exporting from the desktop also bundles your appearance and interface — skin, light/dark mode, custom themes, the profile's rail color, and your window layout — so an imported profile arrives looking the way the sender had it. Import via **⌘K → Import profile…** or the button beside the rail's **+**; it applies the overlay and drops you into the new profile. The same archive works with `/export` / `/import` in chat and `hermes profile export` / `import` from a shell. See [Export and import a profile file](./profile-distributions.md#export-and-import-a-profile-file).
+- **Export / import a profile** — share a whole setup as a single file. **⌘K → Export profile…** (or the profile menu in the rail) writes a `.tar.gz` with skills, memory, persona, crons, plugins, and settings; API keys are stripped. Exporting from the desktop also bundles your appearance and interface — skin, light/dark mode, custom themes, the profile's rail color, and your window layout — so an imported profile arrives looking the way the sender had it. Import via **⌘K → Import profile…** or the button beside the rail's **+**; it applies the overlay and drops you into the new profile. The same archive works with `/export` / `/import` in chat and `hermes profile export` / `import` from a shell. See [Export and import a profile file](./profile-distributions.md#export-and-import-a-profile-file).
 
 ## Updating
 

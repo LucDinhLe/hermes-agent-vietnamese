@@ -14,11 +14,12 @@ import './store/translucency'
 import '@/debug/dev-only'
 
 import { QueryClientProvider } from '@tanstack/react-query'
-import { StrictMode } from 'react'
+import { type ReactNode, StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router'
 
 import App from './app'
+import { useActiveBackendOwner } from './app/hooks/use-backend-owner'
 import { RootErrorBoundary } from './components/error-boundary'
 import { HapticsProvider } from './components/haptics-provider'
 import { RootTooltipProvider } from './components/ui/tooltip'
@@ -27,6 +28,12 @@ import { installClipboardShim } from './lib/clipboard'
 import { queryClient } from './lib/query-client'
 import { installRendererAnimationPauseState } from './lib/renderer-loop-pause'
 import { ThemeProvider } from './themes/context'
+
+function BackendScopedI18nProvider({ children }: { children: ReactNode }) {
+  const backendOwner = useActiveBackendOwner()
+
+  return <I18nProvider backendOwner={backendOwner}>{children}</I18nProvider>
+}
 
 installClipboardShim()
 
@@ -60,7 +67,7 @@ if (winParam === 'overlay') {
     <StrictMode>
       <RootErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <I18nProvider>
+          <BackendScopedI18nProvider>
             <ThemeProvider>
               <HapticsProvider>
                 {/* ONE tooltip provider for the whole app. Every `Tip` used to
@@ -84,7 +91,7 @@ if (winParam === 'overlay') {
                 </RootTooltipProvider>
               </HapticsProvider>
             </ThemeProvider>
-          </I18nProvider>
+          </BackendScopedI18nProvider>
         </QueryClientProvider>
       </RootErrorBoundary>
     </StrictMode>

@@ -14,7 +14,9 @@ const source = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
 // Locate the /new reroute guard block.
 const guardStart = source.indexOf('const slashNew =')
 assert.notEqual(guardStart, -1, '/new guard block is missing')
-const guardBlock = source.slice(guardStart, guardStart + 600)
+const guardEnd = source.indexOf("if (!/(^|\\s)@[a-z0-9]", guardStart)
+assert.notEqual(guardEnd, -1, '/new guard block end is missing')
+const guardBlock = source.slice(guardStart, guardEnd)
 
 test('regression: /new guard reads the canonical id from meta.chat, not meta.chat_pin', () => {
   assert.match(guardBlock, /const pinnedId = meta\?\.chat \|\| null/)

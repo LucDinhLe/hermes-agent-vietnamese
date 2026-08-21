@@ -10,16 +10,24 @@ vi.mock('@/app/gateway/hooks/use-gateway-request', () => ({
   useGatewayRequest: () => ({ requestGateway: requestGatewayMock })
 }))
 
+vi.mock('@/store/gateway', () => ({
+  $gateway: { get: () => null },
+  requestGatewayForAgent: (_connectionId: string, _profile: string, method: string, params?: Record<string, unknown>) =>
+    requestGatewayMock(method, params)
+}))
+
 const { setSessionTileDelegate } = await import('@/store/session-states')
 const { useSessionTileActions } = await import('./session-tile-actions')
 
 const RUNTIME_SESSION_ID = 'rt-tile-current'
 const STORED_SESSION_ID = 'stored-tile-db'
 const RECOVERED_SESSION_ID = 'rt-tile-recovered'
+const OWNER = { connectionId: 'source-a', profile: 'default' }
 
 function renderTileActions() {
   return renderHook(() =>
     useSessionTileActions({
+      owner: OWNER,
       runtimeId: RUNTIME_SESSION_ID,
       scope: MAIN_COMPOSER_SCOPE,
       storedSessionId: STORED_SESSION_ID

@@ -1,37 +1,41 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-// Newer desktop builds export the WHOLE core Capabilities surface (SkillsView,
-// hermes-agent#87317). The bot editor's Advanced section must render it pinned
-// to the bot's profile — in Edit Profile directly, and in New Agent behind a
-// Capabilities tab that materializes the profile first. Feature-detected so
-// the plugin still loads (and keeps its checklist UI) on older desktops.
+import { loadHermesBotsPlugin } from './plugin-behavior-fixture.mjs'
 
-const source = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
+function atom(value) {
+  return { get: () => value, set: next => { value = next } }
+}
 
-test('resolves SkillsView as an optional SDK namespace export', () => {
-  assert.match(source, /import \* as sdk from '@hermes\/plugin-sdk'/)
-  assert.match(source, /const SkillsView = typeof sdk === 'undefined' \? undefined : sdk\.SkillsView/)
+test('embedded capabilities are available only on an exact single-source owner', async () => {
+  const api = (await loadHermesBotsPlugin()).default.__testing
+  const owner = { connectionId: 'local', profile: 'researcher' }
+  const connectionId = atom(owner.connectionId)
+  const profile = atom(owner.profile)
+  const SkillsView = () => null
+  const legacy = { state: { connectionId, profile } }
+
+  assert.equal(api.agentEmbeddedCapabilitiesAvailable(SkillsView, owner, legacy), true)
+  assert.equal(api.agentEmbeddedCapabilitiesAvailable(undefined, owner, legacy), false)
+  assert.equal(api.agentEmbeddedCapabilitiesAvailable(SkillsView, owner, legacy, true), false)
+
+  connectionId.set('remote-b')
+  assert.equal(api.agentEmbeddedCapabilitiesAvailable(SkillsView, owner, legacy), false)
 })
 
-test('Edit Profile renders the pinned Capabilities surface when the export exists', () => {
-  assert.match(source, /if \(SkillsView\) \{/)
-  assert.match(source, /jsx\(SkillsView, \{ embedded: true, fixedProfile: bot \}\)/)
-})
+test('multi-source SDK enables embedded widgets only when immutable capability scoping is advertised', async () => {
+  const api = (await loadHermesBotsPlugin()).default.__testing
+  const owner = { connectionId: 'remote-a', profile: 'default' }
+  const runtime = {
+    connections: async () => ({ connections: [{ id: 'remote-a' }, { id: 'remote-b' }] }),
+    state: {
+      connectionId: { get: () => owner.connectionId },
+      profile: { get: () => owner.profile }
+    }
+  }
 
-test('New Agent gains a Capabilities tab that materializes the profile first', () => {
-  // Tab list swaps to General + Capabilities on newer builds…
-  assert.match(source, /\['capabilities', 'Capabilities'\]/)
-  // …and opening it creates the profile through the same lazy door MCP setup uses.
-  assert.match(source, /id === 'capabilities'/)
-  assert.match(source, /ensureAgentCreated\(\)\s*\n?\s*\.then\(created => created && setCreatedForCaps\(created\)\)/)
-  assert.match(source, /jsx\(SkillsView, \{ embedded: true, fixedProfile: createdForCaps \}\)/)
-})
-
-test('older-build fallback keeps the checklist UI intact', () => {
-  // The staged CheckList sections and the hub search section must survive for
-  // desktops without the SkillsView export.
-  assert.match(source, /jsx\(CheckList, \{ items: visibleSkills/)
-  assert.match(source, /jsx\(HubSkillsSection, \{/)
+  assert.equal(api.agentEmbeddedCapabilitiesAvailable(() => null, owner, runtime), false)
+  runtime.capabilityConnectionScoped = true
+  assert.equal(api.agentEmbeddedCapabilitiesAvailable(() => null, owner, runtime), true)
+  assert.equal(api.agentMcpSetupAvailable(false), true, 'the routed legacy capability setup remains available')
 })

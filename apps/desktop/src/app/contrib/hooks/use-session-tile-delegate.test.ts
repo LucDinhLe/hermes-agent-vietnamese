@@ -3,17 +3,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type * as HermesModule from '@/hermes'
 import { setSessions } from '@/store/session'
-import { sessionTileDelegate } from '@/store/session-states'
+import { recordSessionRuntimeOwner, sessionTileDelegate } from '@/store/session-states'
 import type { SessionInfo } from '@/types/hermes'
 
 import { useSessionTileDelegate } from './use-session-tile-delegate'
+
+const requestGatewayForAgentMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/hermes', async importActual => ({
   ...(await importActual<typeof HermesModule>()),
   getLatestSessionMessages: vi.fn(async () => ({ messages: [], session_id: '' }))
 }))
 
+vi.mock('@/store/gateway', () => ({ requestGatewayForAgent: requestGatewayForAgentMock }))
+
 const { getLatestSessionMessages } = await import('@/hermes')
+const DEFAULT_OWNER = { connectionId: 'source-a', profile: 'default' }
 
 const row = (over: Partial<SessionInfo>): SessionInfo =>
   ({
@@ -41,6 +46,11 @@ function renderTile(
     updateSessionState?: ReturnType<typeof vi.fn>
   }
 ) {
+  requestGatewayForAgentMock.mockImplementation(
+    (_connectionId: string, _profile: string, method: string, params?: Record<string, unknown>) =>
+      (requestGateway as (method: string, params?: Record<string, unknown>) => Promise<unknown>)(method, params)
+  )
+
   renderHook(() =>
     useSessionTileDelegate({
       archiveSession: vi.fn(async () => undefined),
@@ -58,6 +68,7 @@ function renderTile(
 describe('useSessionTileDelegate resumeTile', () => {
   beforeEach(() => {
     setSessions([])
+    requestGatewayForAgentMock.mockReset()
     vi.mocked(getLatestSessionMessages).mockClear()
   })
 
@@ -77,10 +88,11 @@ describe('useSessionTileDelegate resumeTile', () => {
     )
 
     renderTile(requestGateway)
-    const runtimeId = await sessionTileDelegate()!.resumeTile('stored-x')
+    const owner = { connectionId: 'source-a', profile: 'ai-engineer' }
+    const runtimeId = await sessionTileDelegate()!.resumeTile('stored-x', owner)
 
     expect(runtimeId).toBe('runtime-1')
-    expect(getLatestSessionMessages).toHaveBeenCalledWith('stored-x', 'ai-engineer')
+    expect(getLatestSessionMessages).toHaveBeenCalledWith('stored-x', 'ai-engineer', 'source-a')
     expect(requestGateway).toHaveBeenCalledWith('session.resume', {
       session_id: 'stored-x',
       cols: 96,
@@ -97,7 +109,7 @@ describe('useSessionTileDelegate resumeTile', () => {
     )
 
     renderTile(requestGateway)
-    await sessionTileDelegate()!.resumeTile('stored-y')
+    await sessionTileDelegate()!.resumeTile('stored-y', DEFAULT_OWNER)
 
     expect(requestGateway).toHaveBeenCalledWith('session.resume', {
       session_id: 'stored-y',
@@ -113,8 +125,9 @@ describe('useSessionTileDelegate resumeTile', () => {
     const sessionStateByRuntimeIdRef = { current: new Map([['runtime-a', stateA]]) }
     const requestGateway = vi.fn(async () => ({}) as never)
 
+    recordSessionRuntimeOwner('runtime-a', DEFAULT_OWNER)
     renderTile(requestGateway, { runtimeIdByStoredSessionIdRef, sessionStateByRuntimeIdRef })
-    const runtimeId = await sessionTileDelegate()!.resumeTile('stored-a')
+    const runtimeId = await sessionTileDelegate()!.resumeTile('stored-a', DEFAULT_OWNER)
 
     expect(runtimeId).toBe('runtime-a')
     expect(requestGateway).not.toHaveBeenCalled()
@@ -135,7 +148,7 @@ describe('useSessionTileDelegate resumeTile', () => {
     )
 
     renderTile(requestGateway, { runtimeIdByStoredSessionIdRef, sessionStateByRuntimeIdRef })
-    const runtimeId = await sessionTileDelegate()!.resumeTile('stored-b')
+    const runtimeId = await sessionTileDelegate()!.resumeTile('stored-b', DEFAULT_OWNER)
 
     expect(runtimeId).toBe('runtime-fresh')
     expect(requestGateway).toHaveBeenCalledWith('session.resume', {
@@ -164,7 +177,7 @@ describe('useSessionTileDelegate resumeTile', () => {
     expect(runtimeIdByStoredSessionIdRef.current.size).toBe(0)
 
     // The next resume goes cold instead of reusing the dead binding.
-    const runtimeId = await sessionTileDelegate()!.resumeTile('stored-c')
+    const runtimeId = await sessionTileDelegate()!.resumeTile('stored-c', DEFAULT_OWNER)
     expect(runtimeId).toBe('runtime-fresh')
   })
 })
@@ -186,7 +199,7 @@ describe('useSessionTileDelegate interruptSession', () => {
     const requestGateway = vi.fn(async () => ({}) as never)
 
     renderTile(requestGateway)
-    await sessionTileDelegate()!.interruptSession('runtime-tile-1')
+    await sessionTileDelegate()!.interruptSession('runtime-tile-1', DEFAULT_OWNER)
 
     expect(requestGateway).toHaveBeenCalledWith('session.interrupt', { session_id: 'runtime-tile-1' })
     // Same 3s cooldown the primary chat's Stop sets: busy reads false while the

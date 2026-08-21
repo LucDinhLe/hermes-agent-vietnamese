@@ -173,6 +173,18 @@ describe('navigateToWorkspacePage', () => {
     expect(fronted()).toBe(true)
   })
 
+  it('fronts a contributed page when its route is selected again', () => {
+    const dispose = contributeRoute()
+
+    try {
+      navigateToWorkspacePage(vi.fn(), CONTRIBUTED_ROUTE)
+
+      expect(fronted()).toBe(true)
+    } finally {
+      dispose()
+    }
+  })
+
   it.each([`${SKILLS_ROUTE}?tab=skills`, `${SKILLS_ROUTE}?tab=toolsets`, `${SKILLS_ROUTE}?tab=mcp&server=ctx7`])(
     'fronts for the palette target %s',
     to => {

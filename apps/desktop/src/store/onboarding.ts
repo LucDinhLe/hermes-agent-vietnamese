@@ -14,6 +14,12 @@ import {
 } from '@/hermes'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { evaluateRuntimeReadiness, type RuntimeReadinessResult } from '@/lib/runtime-readiness'
+import {
+  activeBackendOwner,
+  type BackendOwner,
+  backendOwnerKey,
+  sameBackendOwner
+} from '@/store/backend-owner'
 import { setMainModelAssignment } from '@/store/cron-model-impact'
 import { notify, notifyError } from '@/store/notifications'
 import type { ModelOptionProvider, OAuthProvider, OAuthStartResponse } from '@/types/hermes'
@@ -161,6 +167,8 @@ export const $desktopOnboarding = atom<DesktopOnboardingState>(INITIAL)
 
 let pollTimer: number | null = null
 let providersRefreshPromise: null | Promise<void> = null
+let providersRefreshOwnerKey = ''
+let manualOnboardingOwner: BackendOwner | null = null
 
 const errMessage = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -176,6 +184,35 @@ function clearPoll() {
     window.clearInterval(pollTimer)
     pollTimer = null
   }
+}
+
+function currentOnboardingOwner(): BackendOwner | null {
+  return manualOnboardingOwner
+}
+
+export function onboardingTerminalActionAvailable(owner = currentOnboardingOwner()): boolean {
+  return !owner || owner.connectionId === 'local'
+}
+
+function onboardingOwnerCurrent(owner: BackendOwner | null): boolean {
+  const current =
+    !owner || (sameBackendOwner(owner, manualOnboardingOwner) && sameBackendOwner(owner, activeBackendOwner()))
+
+  // Only retire the flow if this is still the owner that launched it. A late A
+  // response must not close a newer B flow, but A must not remain spinning once
+  // the active backend/profile has moved away.
+  if (!current && owner && sameBackendOwner(owner, manualOnboardingOwner)) {
+    clearPoll()
+    pendingProviderOAuthId = null
+    manualOnboardingOwner = null
+    patch({ flow: { status: 'idle' }, localEndpoint: false, manual: false, providers: null, requested: false })
+  }
+
+  return current
+}
+
+function clearManualOwner(): void {
+  manualOnboardingOwner = null
 }
 
 async function checkRuntime(ctx: OnboardingContext, requestedProvider?: string): Promise<RuntimeReadinessResult> {
@@ -236,12 +273,17 @@ function notifyGatewayTools(tools: string[] | undefined) {
 // we had before, which works but is surprising. The confirm step is
 // opportunistic polish, not a hard requirement for onboarding.
 async function fetchProviderDefaultModel(
-  preferredSlugs: string[]
+  preferredSlugs: string[],
+  owner: BackendOwner | null
 ): Promise<null | { providerSlug: string; defaultModel: string }> {
   let options
 
   try {
-    options = await getGlobalModelOptions({ includeUnconfigured: true, explicitOnly: false })
+    options = await getGlobalModelOptions(
+      { includeUnconfigured: true, explicitOnly: false },
+      owner?.profile,
+      owner?.connectionId
+    )
   } catch {
     return null
   }
@@ -273,7 +315,7 @@ async function fetchProviderDefaultModel(
   let defaultModel = String(models[0])
 
   try {
-    const recommended = await getRecommendedDefaultModel(String(matched.slug))
+    const recommended = await getRecommendedDefaultModel(String(matched.slug), owner?.profile, owner?.connectionId)
 
     if (recommended.model && models.map(String).includes(recommended.model)) {
       defaultModel = recommended.model
@@ -308,21 +350,42 @@ async function completeWithModelConfirm(
   // When true, a failing runtime check no longer blocks progression — the
   // user is allowed through onboarding regardless. Used by the API-key path,
   // where we intentionally don't validate the key (it blocked too many users).
-  ignoreRuntimeGate = false
+  ignoreRuntimeGate = false,
+  owner = currentOnboardingOwner()
 ) {
+  if (!onboardingOwnerCurrent(owner)) {
+    return
+  }
+
   await ctx.requestGateway('reload.env').catch(() => undefined)
 
-  const defaults = await fetchProviderDefaultModel(preferredSlugs)
+  if (!onboardingOwnerCurrent(owner)) {
+    return
+  }
+
+  const defaults = await fetchProviderDefaultModel(preferredSlugs, owner)
+
+  if (!onboardingOwnerCurrent(owner)) {
+    return
+  }
 
   if (defaults) {
     // Persist the chosen provider/model before the runtime gate so a stale
     // config provider (e.g. anthropic from a prior failed setup) cannot make
     // setup.runtime_check validate the wrong backend after a fresh OAuth login.
     try {
-      const res = await setMainModelAssignment({
-        provider: defaults.providerSlug,
-        model: defaults.defaultModel
-      })
+      const res = await setMainModelAssignment(
+        {
+          provider: defaults.providerSlug,
+          model: defaults.defaultModel
+        },
+        owner?.profile,
+        owner?.connectionId
+      )
+
+      if (!onboardingOwnerCurrent(owner)) {
+        return
+      }
 
       notifyGatewayTools(res.gateway_tools)
     } catch (error) {
@@ -333,6 +396,10 @@ async function completeWithModelConfirm(
   }
 
   const runtime = await checkRuntime(ctx, preferredSlugs[0])
+
+  if (!onboardingOwnerCurrent(owner)) {
+    return
+  }
 
   if (!runtime.ready && !ignoreRuntimeGate) {
     onFail(runtime.reason)
@@ -367,24 +434,38 @@ function providerResolutionFailure(reason: null | string) {
 }
 
 async function refreshProviders() {
-  if (providersRefreshPromise) {
+  const owner = currentOnboardingOwner()
+  const ownerKey = owner ? backendOwnerKey(owner) : '__ambient__'
+
+  if (providersRefreshPromise && providersRefreshOwnerKey === ownerKey) {
     await providersRefreshPromise
 
     return
   }
 
-  providersRefreshPromise = (async () => {
+  const request = (async () => {
     try {
-      const { providers } = await listOAuthProviders()
-      patch({ mode: providers.length > 0 ? 'oauth' : 'apikey', providers })
+      const { providers } = await listOAuthProviders(owner?.profile, owner?.connectionId)
+
+      if (onboardingOwnerCurrent(owner)) {
+        patch({ mode: providers.length > 0 ? 'oauth' : 'apikey', providers })
+      }
     } catch {
-      patch({ mode: 'apikey', providers: [] })
+      if (onboardingOwnerCurrent(owner)) {
+        patch({ mode: 'apikey', providers: [] })
+      }
     } finally {
-      providersRefreshPromise = null
+      if (providersRefreshOwnerKey === ownerKey) {
+        providersRefreshPromise = null
+        providersRefreshOwnerKey = ''
+      }
     }
   })()
 
-  await providersRefreshPromise
+  providersRefreshPromise = request
+  providersRefreshOwnerKey = ownerKey
+
+  await request
 }
 
 export function requestDesktopOnboarding(reason = DEFAULT_ONBOARDING_REASON) {
@@ -430,7 +511,11 @@ export function consumePendingCredentialWarning(): null | string {
 // onboarding flow (OAuth rows, API-key form, model-confirm) instead of
 // duplicating provider UI. Sets manual=true so the overlay shows the picker
 // even though configured===true, and refreshes the provider list.
-export function startManualOnboarding(reason: null | string = DEFAULT_MANUAL_ONBOARDING_REASON) {
+export function startManualOnboarding(
+  reason: null | string = DEFAULT_MANUAL_ONBOARDING_REASON,
+  owner: BackendOwner | null = activeBackendOwner()
+) {
+  manualOnboardingOwner = owner
   patch({
     manual: true,
     requested: true,
@@ -449,7 +534,11 @@ export function startManualOnboarding(reason: null | string = DEFAULT_MANUAL_ONB
 // configure the endpoint instead of dead-ending on the OAuth provider list
 // (`custom` is not an OAuth provider, so the generic manual flow would just
 // re-show the picker — the original "booted back to the first screen" loop).
-export function startManualLocalEndpoint(reason: null | string = null) {
+export function startManualLocalEndpoint(
+  reason: null | string = null,
+  owner: BackendOwner | null = activeBackendOwner()
+) {
+  manualOnboardingOwner = owner
   pendingProviderOAuthId = null
   patch({
     manual: true,
@@ -469,9 +558,13 @@ export function startManualLocalEndpoint(reason: null | string = null) {
 // overlay render and never needs to persist or re-render anything itself.
 let pendingProviderOAuthId: null | string = null
 
-export function startManualProviderOAuth(providerId: string, reason: null | string = null) {
+export function startManualProviderOAuth(
+  providerId: string,
+  reason: null | string = null,
+  owner: BackendOwner | null = activeBackendOwner()
+) {
   pendingProviderOAuthId = providerId
-  startManualOnboarding(reason)
+  startManualOnboarding(reason, owner)
 }
 
 // Read the pending provider id without clearing it. The overlay only clears it
@@ -491,12 +584,14 @@ export function clearPendingProviderOAuth() {
 // first-run flow has no close affordance because the app can't run yet.
 export function closeManualOnboarding() {
   pendingProviderOAuthId = null
+  clearManualOwner()
 
   patch({ manual: false, requested: false, localEndpoint: false, flow: { status: 'idle' } })
 }
 
 export function completeDesktopOnboarding() {
   clearPoll()
+  clearManualOwner()
   writeCachedConfigured(true)
   // A real provider is now connected, so any earlier "choose later" skip is
   // moot — clear it so the flag never lingers in a configured install.
@@ -522,6 +617,7 @@ export function completeDesktopOnboarding() {
 // which marks the app actually configured.
 export function dismissFirstRunOnboarding() {
   clearPoll()
+  clearManualOwner()
   writeCachedSkipped(true)
   patch({ firstRunSkipped: true, requested: false, manual: false, localEndpoint: false, flow: { status: 'idle' } })
 }
@@ -604,6 +700,11 @@ async function openSignInUrl(url: string) {
 
 export async function startProviderOAuth(provider: OAuthProvider, ctx: OnboardingContext) {
   clearPoll()
+  const owner = currentOnboardingOwner()
+
+  if (!onboardingOwnerCurrent(owner)) {
+    return
+  }
 
   if (provider.flow === 'external') {
     // The official CLI may already be signed in. In that case, selecting the
@@ -611,19 +712,28 @@ export async function startProviderOAuth(provider: OAuthProvider, ctx: Onboardin
     // and persist its default model immediately, then show model confirmation.
     if (provider.status?.logged_in) {
       setFlow({ status: 'success', provider })
-      await completeWithModelConfirm(ctx, provider.name, [provider.id], reason =>
-        setFlow({
-          status: 'error',
-          provider,
-          message: providerResolutionFailure(reason)
-        })
+      await completeWithModelConfirm(
+        ctx,
+        provider.name,
+        [provider.id],
+        reason =>
+          setFlow({
+            status: 'error',
+            provider,
+            message: providerResolutionFailure(reason)
+          }),
+        false,
+        owner
       )
 
       return
     }
 
     setFlow({ status: 'external_pending', provider, copied: false })
-    runInTerminal(provider.cli_command)
+
+    if (onboardingTerminalActionAvailable(owner)) {
+      runInTerminal(provider.cli_command)
+    }
 
     return
   }
@@ -631,9 +741,22 @@ export async function startProviderOAuth(provider: OAuthProvider, ctx: Onboardin
   setFlow({ status: 'starting', provider })
 
   try {
-    const start = await startOAuthLogin(provider.id)
+    const start = await startOAuthLogin(provider.id, owner?.profile, owner?.connectionId)
+
+    if (!onboardingOwnerCurrent(owner)) {
+      void cancelOAuthSession(start.session_id, owner?.profile, owner?.connectionId).catch(() => undefined)
+
+      return
+    }
+
     const browserUrl = start.flow === 'device_code' ? start.verification_url : start.auth_url
     await openSignInUrl(browserUrl)
+
+    if (!onboardingOwnerCurrent(owner)) {
+      void cancelOAuthSession(start.session_id, owner?.profile, owner?.connectionId).catch(() => undefined)
+
+      return
+    }
 
     if (start.flow === 'pkce') {
       setFlow({ status: 'awaiting_user', provider, start, code: '' })
@@ -642,34 +765,66 @@ export async function startProviderOAuth(provider: OAuthProvider, ctx: Onboardin
     }
 
     setFlow({ status: 'polling', provider, start, copied: false })
-    pollTimer = window.setInterval(() => void pollSession(provider, start, ctx), POLL_MS)
+    pollTimer = window.setInterval(() => void pollSession(provider, start, ctx, owner), POLL_MS)
   } catch (error) {
-    setFlow({ status: 'error', provider, message: `Could not start sign-in: ${errMessage(error)}` })
+    if (onboardingOwnerCurrent(owner)) {
+      setFlow({ status: 'error', provider, message: `Could not start sign-in: ${errMessage(error)}` })
+    }
   }
 }
 
 // Poll a session-backed device-code flow until it resolves.
-async function pollSession(provider: OAuthProvider, start: DeviceStart, ctx: OnboardingContext) {
+async function pollSession(
+  provider: OAuthProvider,
+  start: DeviceStart,
+  ctx: OnboardingContext,
+  owner: BackendOwner | null
+) {
+  if (!onboardingOwnerCurrent(owner)) {
+    clearPoll()
+
+    return
+  }
+
   try {
-    const { error_message, status } = await pollOAuthSession(provider.id, start.session_id)
+    const { error_message, status } = await pollOAuthSession(
+      provider.id,
+      start.session_id,
+      owner?.profile,
+      owner?.connectionId
+    )
+
+    if (!onboardingOwnerCurrent(owner)) {
+      clearPoll()
+
+      return
+    }
 
     if (status === 'approved') {
       clearPoll()
       setFlow({ status: 'success', provider })
-      await completeWithModelConfirm(ctx, provider.name, [provider.id], reason =>
-        setFlow({
-          status: 'error',
-          provider,
-          message: providerResolutionFailure(reason)
-        })
+      await completeWithModelConfirm(
+        ctx,
+        provider.name,
+        [provider.id],
+        reason =>
+          setFlow({
+            status: 'error',
+            provider,
+            message: providerResolutionFailure(reason)
+          }),
+        false,
+        owner
       )
     } else if (status !== 'pending') {
       clearPoll()
       setFlow({ status: 'error', provider, start, message: error_message || `Sign-in ${status}.` })
     }
   } catch (error) {
-    clearPoll()
-    setFlow({ status: 'error', provider, start, message: `Polling failed: ${errMessage(error)}` })
+    if (onboardingOwnerCurrent(owner)) {
+      clearPoll()
+      setFlow({ status: 'error', provider, start, message: `Polling failed: ${errMessage(error)}` })
+    }
   }
 }
 
@@ -689,25 +844,49 @@ export async function submitOnboardingCode(ctx: OnboardingContext) {
   }
 
   const { provider, start, code } = flow
+  const owner = currentOnboardingOwner()
+
+  if (!onboardingOwnerCurrent(owner)) {
+    return
+  }
+
   setFlow({ status: 'submitting', provider, start })
 
   try {
-    const resp = await submitOAuthCode(provider.id, start.session_id, code.trim())
+    const resp = await submitOAuthCode(
+      provider.id,
+      start.session_id,
+      code.trim(),
+      owner?.profile,
+      owner?.connectionId
+    )
+
+    if (!onboardingOwnerCurrent(owner)) {
+      return
+    }
 
     if (resp.ok && resp.status === 'approved') {
       setFlow({ status: 'success', provider })
-      await completeWithModelConfirm(ctx, provider.name, [provider.id], reason =>
-        setFlow({
-          status: 'error',
-          provider,
-          message: providerResolutionFailure(reason)
-        })
+      await completeWithModelConfirm(
+        ctx,
+        provider.name,
+        [provider.id],
+        reason =>
+          setFlow({
+            status: 'error',
+            provider,
+            message: providerResolutionFailure(reason)
+          }),
+        false,
+        owner
       )
     } else {
       setFlow({ status: 'error', provider, start, message: resp.message || 'Token exchange failed.' })
     }
   } catch (error) {
-    setFlow({ status: 'error', provider, start, message: errMessage(error) })
+    if (onboardingOwnerCurrent(owner)) {
+      setFlow({ status: 'error', provider, start, message: errMessage(error) })
+    }
   }
 }
 
@@ -716,7 +895,8 @@ export function cancelOnboardingFlow() {
   const sessionId = sessionIdFor($desktopOnboarding.get().flow)
 
   if (sessionId) {
-    cancelOAuthSession(sessionId).catch(() => undefined)
+    const owner = currentOnboardingOwner()
+    cancelOAuthSession(sessionId, owner?.profile, owner?.connectionId).catch(() => undefined)
   }
 
   setFlow({ status: 'idle' })
@@ -770,7 +950,7 @@ export async function copyExternalCommand() {
 export function runExternalSigninCommand() {
   const { flow } = $desktopOnboarding.get()
 
-  if (flow.status === 'external_pending') {
+  if (flow.status === 'external_pending' && onboardingTerminalActionAvailable()) {
     runInTerminal(flow.provider.cli_command)
   }
 }
@@ -804,6 +984,12 @@ export async function saveOnboardingApiKey(
   // providers (their key IS `value`).
   endpointApiKey?: string
 ) {
+  const owner = currentOnboardingOwner()
+
+  if (!onboardingOwnerCurrent(owner)) {
+    return { ok: false, message: 'The active backend changed. Open provider setup again.' }
+  }
+
   const trimmed = value.trim()
 
   if (!trimmed) {
@@ -824,7 +1010,12 @@ export async function saveOnboardingApiKey(
   // provider probes, self-hosted endpoints). We now save the value as-is and
   // let the user proceed; an actually-bad key surfaces later at chat time.
   try {
-    await setEnvVar(envKey, trimmed)
+    await setEnvVar(envKey, trimmed, owner?.profile, owner?.connectionId)
+
+    if (!onboardingOwnerCurrent(owner)) {
+      return { ok: false, message: 'The active backend changed. Open provider setup again.' }
+    }
+
     // For API-key flows we don't have a definitive provider id (the
     // user picked which API key they're entering, but the corresponding
     // backend slug — e.g. OPENROUTER_API_KEY → "openrouter" — is the
@@ -833,7 +1024,7 @@ export async function saveOnboardingApiKey(
     // provider returned by /api/model/options if none match.
     const slugCandidates = [envKey.replace(/_API_KEY$/, '').toLowerCase(), label.toLowerCase()]
     // ignoreRuntimeGate=true: never block onboarding on the runtime check.
-    await completeWithModelConfirm(ctx, label, slugCandidates, () => undefined, true)
+    await completeWithModelConfirm(ctx, label, slugCandidates, () => undefined, true, owner)
 
     return { ok: true }
   } catch (error) {
@@ -860,6 +1051,7 @@ export async function saveOnboardingApiKey(
 // wipe the base_url we just wrote. We have a concrete model already, so we
 // verify the runtime directly and finish.
 export async function saveOnboardingLocalEndpoint(baseUrl: string, apiKey: string, ctx: OnboardingContext) {
+  const owner = currentOnboardingOwner()
   const url = baseUrl.trim()
   const key = apiKey.trim()
 
@@ -873,7 +1065,17 @@ export async function saveOnboardingLocalEndpoint(baseUrl: string, apiKey: strin
   let model = ''
 
   try {
-    const probe = await validateProviderCredential('OPENAI_BASE_URL', url, key)
+    const probe = await validateProviderCredential(
+      'OPENAI_BASE_URL',
+      url,
+      key,
+      owner?.profile,
+      owner?.connectionId
+    )
+
+    if (!onboardingOwnerCurrent(owner)) {
+      return { ok: false, message: 'The active backend changed. Open provider setup again.' }
+    }
 
     if (!probe.ok && probe.reachable) {
       return { ok: false, message: probe.message || 'Could not reach that endpoint.' }
@@ -896,8 +1098,21 @@ export async function saveOnboardingLocalEndpoint(baseUrl: string, apiKey: strin
   }
 
   try {
-    await setMainModelAssignment({ provider: 'custom', model, base_url: url, api_key: key })
+    await setMainModelAssignment(
+      { provider: 'custom', model, base_url: url, api_key: key },
+      owner?.profile,
+      owner?.connectionId
+    )
+
+    if (!onboardingOwnerCurrent(owner)) {
+      return { ok: false, message: 'The active backend changed. Open provider setup again.' }
+    }
+
     await ctx.requestGateway('reload.env').catch(() => undefined)
+
+    if (!onboardingOwnerCurrent(owner)) {
+      return { ok: false, message: 'The active backend changed. Open provider setup again.' }
+    }
 
     const runtime = await checkRuntime(ctx)
 
@@ -930,19 +1145,38 @@ export async function setOnboardingModel(model: string) {
 
   // Optimistic update so the dropdown feels instant; revert on failure.
   const previous = flow.currentModel
+  const owner = currentOnboardingOwner()
+
+  if (!onboardingOwnerCurrent(owner)) {
+    return
+  }
+
   setFlow({ ...flow, currentModel: model, saving: true })
 
   try {
-    await setMainModelAssignment({
-      provider: flow.providerSlug,
-      model
-    })
+    await setMainModelAssignment(
+      {
+        provider: flow.providerSlug,
+        model
+      },
+      owner?.profile,
+      owner?.connectionId
+    )
+
+    if (!onboardingOwnerCurrent(owner)) {
+      return
+    }
+
     const current = $desktopOnboarding.get().flow
 
     if (current.status === 'confirming_model') {
       setFlow({ ...current, currentModel: model, saving: false })
     }
   } catch (error) {
+    if (!onboardingOwnerCurrent(owner)) {
+      return
+    }
+
     notifyError(error, 'Could not change model')
     const current = $desktopOnboarding.get().flow
 

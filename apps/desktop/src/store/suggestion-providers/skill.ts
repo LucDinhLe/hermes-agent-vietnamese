@@ -6,6 +6,8 @@ import { type ComposerSuggestion, registerDraftProvider } from '@/store/composer
 import { $activeSessionId, $currentCwd, $messages } from '@/store/session'
 import { $sessionStates } from '@/store/session-states'
 
+import { type BackendOwner, backendOwnerKey, sessionBackendOwner } from '../backend-owner'
+
 /**
  * Skill-match draft provider: the draft names a skill the user has, so offer
  * to load it with the message. Highest value/annoyance ratio of the ranked
@@ -27,13 +29,22 @@ interface SkillIndexEntry {
   pattern: RegExp
 }
 
-let index: SkillIndexEntry[] | null = null
-let indexAt = 0
+interface SkillIndexCache {
+  at: number
+  index: SkillIndexEntry[]
+}
+
+const indexes = new Map<string, SkillIndexCache>()
 
 /** Drop the cached skill index (skill_manage created/deleted a skill). */
-export function invalidateSkillSuggestionIndex(): void {
-  index = null
-  indexAt = 0
+export function invalidateSkillSuggestionIndex(owner?: BackendOwner | null): void {
+  if (owner) {
+    indexes.delete(backendOwnerKey(owner))
+
+    return
+  }
+
+  indexes.clear()
 }
 
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -74,20 +85,24 @@ export function collidesWithWorkspace(name: string, cwd: string): boolean {
   return new RegExp(`(?<![\\p{L}\\p{N}])${escape(name.toLowerCase())}(?![\\p{L}\\p{N}])`, 'u').test(cwd.toLowerCase())
 }
 
-async function loadIndex(): Promise<SkillIndexEntry[]> {
-  if (index && Date.now() - indexAt < SKILLS_TTL_MS) {
-    return index
+async function loadIndex(owner: BackendOwner): Promise<SkillIndexEntry[]> {
+  const key = backendOwnerKey(owner)
+  const cached = indexes.get(key)
+
+  if (cached && Date.now() - cached.at < SKILLS_TTL_MS) {
+    return cached.index
   }
 
-  const skills = await getSkills()
+  const skills = await getSkills(owner.profile, owner.connectionId)
 
-  index = skills
+  const index = skills
     .filter(skill => skill.enabled && skill.name.length >= MIN_NAME_LENGTH)
     .map(skill => ({
       name: skill.name,
       pattern: skillPattern(skill.name)
     }))
-  indexAt = Date.now()
+
+  indexes.set(key, { at: Date.now(), index })
 
   return index
 }
@@ -221,7 +236,13 @@ registerDraftProvider('skill', async ({ sessionId, text }) => {
 
   const haystack = text.toLowerCase()
   const cwd = $currentCwd.get()
-  const skills = await loadIndex()
+  const owner = sessionBackendOwner(sessionId)
+
+  if (!owner) {
+    return []
+  }
+
+  const skills = await loadIndex(owner)
   const matched = skills.filter(skill => skillHit(skill.pattern, haystack) && !collidesWithWorkspace(skill.name, cwd))
 
   if (matched.length === 0) {

@@ -13,10 +13,12 @@ import {
 } from '@/components/ui/dialog'
 import { saveMemoryProviderConfig } from '@/hermes'
 import { ExternalLink, Loader2, Save, SlidersHorizontal } from '@/lib/icons'
+import type { BackendOwner } from '@/store/backend-owner'
 import { notify, notifyError } from '@/store/notifications'
 import { $activeGatewayProfile } from '@/store/profile'
 import type { MemoryProviderConfig, MemoryProviderField } from '@/types/hermes'
 
+import { useBackendOwnerGuard } from '../../hooks/use-backend-owner-guard'
 import { ListRow } from '../primitives'
 
 import { FieldControl, FieldTitle } from './field-control'
@@ -45,6 +47,7 @@ function groupFields(fields: MemoryProviderField[]): [string, MemoryProviderFiel
 }
 
 export function ProviderConfigModal({
+  backendOwner = null,
   config,
   profile = null,
   provider,
@@ -52,6 +55,7 @@ export function ProviderConfigModal({
   onOpenChange,
   onSaved
 }: {
+  backendOwner?: BackendOwner | null
   config: MemoryProviderConfig
   profile?: null | string
   provider: string
@@ -63,6 +67,7 @@ export function ProviderConfigModal({
   const [values, setValues] = useState<Record<string, string>>({})
   const [seeded, setSeeded] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
+  const isCurrentOwner = useBackendOwnerGuard(backendOwner)
 
   // Reseed on open so edits never start from a stale prior-session snapshot.
   useEffect(() => {
@@ -80,14 +85,28 @@ export function ProviderConfigModal({
     setSaving(true)
 
     try {
-      await saveMemoryProviderConfig(provider, edited, profile)
+      await saveMemoryProviderConfig(
+        provider,
+        edited,
+        backendOwner?.profile ?? profile ?? undefined,
+        backendOwner?.connectionId
+      )
+
+      if (!isCurrentOwner()) {
+        return
+      }
+
       notify({ kind: 'success', title: `${config.label} saved`, message: 'Memory provider configuration updated.' })
       await onSaved()
       onOpenChange(false)
     } catch (err) {
-      notifyError(err, `Failed to save ${config.label} settings`)
+      if (isCurrentOwner()) {
+        notifyError(err, `Failed to save ${config.label} settings`)
+      }
     } finally {
-      setSaving(false)
+      if (isCurrentOwner()) {
+        setSaving(false)
+      }
     }
   }
 

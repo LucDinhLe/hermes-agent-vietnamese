@@ -27,10 +27,15 @@ function loadTracker(toastsEnabled) {
       let value = {}
       return { get: () => value, set: next => { value = next } }
     })(),
-    displayName: bot => bot.name
+    displayName: bot => bot.name,
+    agentText: (key, label) => {
+      if (key === 'activity.newMessage') return `🤖 New message for ${label}`
+      if (key === 'activity.newActivity') return `${label} has new activity`
+      if (key === 'activity.openChat') return 'Open the chat to see it.'
+      return key
+    }
   }
-  const section = source
-    .slice(start, end)
+  const section = `const COLLABORATION_SCHEMA = 1\n${source.slice(start, end)}`
     .concat('\nglobalThis.__t = { trackInboundActivity, $activityToasts, setActivityToasts };\n')
   vm.runInNewContext(section, context, { filename: 't.js' })
   if (toastsEnabled) {

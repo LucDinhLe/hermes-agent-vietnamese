@@ -2,6 +2,12 @@
   "tag": "vi-v0.20.0-25",
   "rollbackTag": "vi-v0.20.0-14",
   "releaseClass": "community-pilot",
+  "featuredCandidate": {
+    "tag": "vi-v0.31.0-1",
+    "productVersion": "v31.0",
+    "releaseClass": "community-prerelease",
+    "published": true
+  },
   "windowsX64": {
     "filename": "Hermes-Vietnamese-Windows-x64-Setup.exe",
     "size": 332776297,

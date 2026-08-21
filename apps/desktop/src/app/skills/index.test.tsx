@@ -24,16 +24,20 @@ const getSkillContent = vi.fn()
 // observable.
 vi.mock('@/hermes', async importOriginal => ({
   ...(await importOriginal<typeof HermesApi>()),
-  getSkills: (profile?: null | string) => getSkills(profile),
-  getToolsets: (profile?: null | string) => getToolsets(profile),
-  setSkillEnabled: (name: string, enabled: boolean, profile?: null | string) => setSkillEnabled(name, enabled, profile),
-  setToolsetEnabled: (name: string, enabled: boolean, profile?: null | string) =>
-    setToolsetEnabled(name, enabled, profile),
-  getToolsetConfig: (name: string, profile?: null | string) => getToolsetConfig(name, profile),
+  getSkills: (profile?: null | string, connectionId?: null | string) => getSkills(profile, connectionId),
+  getToolsets: (profile?: null | string, connectionId?: null | string) => getToolsets(profile, connectionId),
+  setSkillEnabled: (name: string, enabled: boolean, profile?: null | string, connectionId?: null | string) =>
+    setSkillEnabled(name, enabled, profile, connectionId),
+  setToolsetEnabled: (name: string, enabled: boolean, profile?: null | string, connectionId?: null | string) =>
+    setToolsetEnabled(name, enabled, profile, connectionId),
+  getToolsetConfig: (name: string, profile?: null | string, connectionId?: null | string) =>
+    getToolsetConfig(name, profile, connectionId),
   selectToolsetProvider: (toolset: string, provider: string) => selectToolsetProvider(toolset, provider),
-  getUsageAnalytics: (days: number, profile?: null | string) => getUsageAnalytics(days, profile),
-  getProfiles: () => getProfiles(),
-  getSkillContent: (name: string, profile?: null | string) => getSkillContent(name, profile)
+  getUsageAnalytics: (days: number, profile?: null | string, connectionId?: null | string) =>
+    getUsageAnalytics(days, profile, connectionId),
+  getProfiles: (connectionId?: null | string) => getProfiles(connectionId),
+  getSkillContent: (name: string, profile?: null | string, connectionId?: null | string) =>
+    getSkillContent(name, profile, connectionId)
 }))
 
 // Notifications hit nanostores/timers we don't care about here.
@@ -171,7 +175,35 @@ describe('SkillsView toolset management', () => {
     })
 
     // Toolsets refetch scoped to the picked profile.
-    await waitFor(() => expect(getToolsets).toHaveBeenCalledWith('researcher'))
+    await waitFor(() => expect(getToolsets).toHaveBeenCalledWith('researcher', null))
+  })
+
+  it('isolates same-profile capability caches and writes by backend source', async () => {
+    getToolsets.mockImplementation(async (_profile: null | string, connectionId: null | string) => [
+      toolset({ label: connectionId === 'source-b' ? 'Source B Tools' : 'Source A Tools' })
+    ])
+
+    const { SkillsView } = await import('./index')
+    const view = (connectionId: string) => (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/skills?tab=toolsets']}>
+          <SkillsView fixedConnectionId={connectionId} fixedProfile="default" />
+        </MemoryRouter>
+      </QueryClientProvider>
+    )
+    const rendered = render(view('source-a'))
+
+    await screen.findByRole('switch', { name: 'Turn Source A Tools toolset off' })
+
+    rendered.rerender(view('source-b'))
+
+    const sourceBSwitch = await screen.findByRole('switch', { name: 'Turn Source B Tools toolset off' })
+    expect(screen.queryByRole('switch', { name: 'Turn Source A Tools toolset off' })).toBeNull()
+    expect(getToolsets).toHaveBeenCalledWith('default', 'source-a')
+    expect(getToolsets).toHaveBeenCalledWith('default', 'source-b')
+
+    fireEvent.click(sourceBSwitch)
+    await waitFor(() => expect(setToolsetEnabled).toHaveBeenCalledWith('web', false, 'default', 'source-b'))
   })
 
   it('scopes the Skills tab (and skill toggles) to the profile chosen in the selector', async () => {
@@ -217,14 +249,14 @@ describe('SkillsView toolset management', () => {
     })
 
     // Skills refetch scoped to the picked profile...
-    await waitFor(() => expect(getSkills).toHaveBeenCalledWith('researcher'))
+    await waitFor(() => expect(getSkills).toHaveBeenCalledWith('researcher', null))
 
     // ...and a toggle routes its write to that profile as well.
     const sw = await screen.findByRole('switch', { name: 'web-research' })
     await act(async () => {
       fireEvent.click(sw)
     })
-    await waitFor(() => expect(setSkillEnabled).toHaveBeenCalledWith('web-research', false, 'researcher'))
+    await waitFor(() => expect(setSkillEnabled).toHaveBeenCalledWith('web-research', false, 'researcher', null))
   })
 
   it('shows the FULL skill in the detail pane — frontmatter metadata + body', async () => {

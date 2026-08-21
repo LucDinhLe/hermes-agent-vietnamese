@@ -135,8 +135,9 @@ import {
   modeRemovesUserData,
   resolveRemovableAppPath,
   selectUninstallPython,
-  shouldRemoveAppBundle,
-  uninstallArgsForMode
+    shouldRemoveAppBundle,
+    uninstallArgsForMode,
+    userDataPathForUninstallMode
 } from './desktop-uninstall'
 import { describeDevCdpDecision, resolveDevCdpPort } from './dev-cdp'
 import { installEmbedReferer } from './embed-referer'
@@ -10581,6 +10582,31 @@ async function prepareProfileDeleteRequest(request) {
   return decision.profile
 }
 
+// Exact registry-local deletion cannot use the legacy deletion decision
+// blindly: on migrated desktops the legacy primary may be remote. Stop only
+// the backend that actually serves the registry's local profile, then route
+// the DELETE through a different local profile so the target is not respawned.
+async function prepareRegistryLocalProfileDeleteRequest(request) {
+  const profile = profileNameFromDeleteRequest(request)
+
+  if (!profile || profile === 'default' || !PROFILE_NAME_RE.test(profile)) {
+    return null
+  }
+
+  const localRoute = resolveRegistryLocalRoute(profile, {
+    globalRemote: globalRemoteActive(),
+    profileRemoteOverride: Boolean(profileHasRemoteOverride(profile))
+  })
+
+  if (localRoute.delegate) {
+    return prepareProfileDeleteRequest(request)
+  }
+
+  await poolStopper.stop(localRoute.poolKey)
+
+  return profile
+}
+
 async function prepareProfileRenameRequest(request) {
   return prepareProfileRenameLifecycle(request, {
     isValidProfileName: profile => PROFILE_NAME_RE.test(profile),
@@ -13715,11 +13741,18 @@ async function handleHermesApiRequest(request) {
   // profile's. Resolve the backend through the registry (same pool the job
   // list and WS traffic use) instead of the legacy profile route; a shared
   // remote/cloud host serves every profile via ?profile=, so scope the path.
-  // '' / 'local' fall through to the byte-identical v1 route below (#87882).
+  // An absent id falls through to the byte-identical v1 route below. Explicit
+  // `local` stays registry-routed so it cannot inherit a remote legacy primary.
   const registryConnectionId = apiRequestRegistryConnectionId(request)
 
   if (registryConnectionId) {
-    const connection: any = await ensureRegistryBackend(registryConnectionId, request?.profile)
+    const tornDownLocalProfile =
+      registryConnectionId === 'local' ? await prepareRegistryLocalProfileDeleteRequest(request) : null
+
+    const connection: any = await ensureRegistryBackend(
+      registryConnectionId,
+      tornDownLocalProfile ? 'default' : request?.profile
+    )
 
     // A shared remote host serves every profile via ?profile=; an SSH-scoped
     // backend instead runs AS one remote profile, so an explicit self-profile
@@ -15366,7 +15399,7 @@ async function runDesktopUninstall(mode) {
     agentRoot: runtime.agentRoot,
     uninstallArgs,
     appPath: removeBundle,
-    userDataPath: app.getPath('userData'),
+    userDataPath: userDataPathForUninstallMode(mode, app.getPath('userData')),
     hermesHome: HERMES_HOME
   }
 

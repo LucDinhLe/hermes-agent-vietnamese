@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import vm from 'node:vm'
 
+import { loadHermesBotsPlugin } from './plugin-behavior-fixture.mjs'
+
 // Cross-connection Bot Mode: the New Agent "Create on" picker targets another
 // registered connection's backend, and group chats seat members from other
 // machines by routing their turns through host.requestProfile route
@@ -146,14 +148,26 @@ test('room lines and turn prompts badge cross-connection speakers with their dev
   assert.match(prompt, /@dixie \[on Mac Mini\]/)
 })
 
-test('source contract: New Agent has a Create on picker that routes creation to the target backend', () => {
-  assert.match(pluginSource, /'Create on'/)
-  assert.match(pluginSource, /const \[targetConnection, setTargetConnection\] = useState\(''\)/)
-  // Creation and configuration go through the target door, not bare host.request.
-  assert.match(pluginSource, /await requestForTarget\('profiles\.create', \{/)
-  assert.match(pluginSource, /await requestForTarget\('profiles\.configure', \{ name: slug/)
-  // The picker only renders on multi-connection registries.
-  assert.match(pluginSource, /connections\.length > 1/)
+test('New Agent creation and configuration stay on the selected target backend', async () => {
+  const api = (await loadHermesBotsPlugin()).default.__testing
+  const calls = []
+  const runtime = {
+    request: async (method, params) => calls.push(['active-a', method, params]),
+    requestProfile: async (route, method, params) => calls.push([route.connectionId, method, params])
+  }
+  const draft = api.createAgentDraftProvenance({
+    slug: 'researcher',
+    remoteTarget: true,
+    targetConnectionId: 'gateway-b',
+    targetMode: 'remote'
+  })
+
+  await api.requestAgentDraft(runtime, draft, 'profiles.create', { name: draft.slug })
+  await api.requestAgentDraft(runtime, draft, 'profiles.configure', { name: draft.slug, disabled_skills: [] })
+  assert.deepEqual(calls.map(call => call.slice(0, 2)), [
+    ['gateway-b', 'profiles.create'],
+    ['gateway-b', 'profiles.configure']
+  ])
 })
 
 test('source contract: group chat turns route through requestForBot on the member source', () => {

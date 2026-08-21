@@ -135,7 +135,15 @@ export function backfillOlderTranscriptPage(request: BackfillRequest): Promise<b
     let page
 
     try {
-      page = await getOlderSessionMessages(storedSessionId, tail.profile, tail.nextOffset)
+      page = tail.connectionId
+        ? await getOlderSessionMessages(
+            storedSessionId,
+            tail.profile,
+            tail.nextOffset,
+            undefined,
+            tail.connectionId
+          )
+        : await getOlderSessionMessages(storedSessionId, tail.profile, tail.nextOffset)
     } catch {
       // Non-fatal: the action stays available and the next click retries.
       return false

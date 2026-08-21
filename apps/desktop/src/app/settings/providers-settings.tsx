@@ -20,9 +20,12 @@ import { useI18n } from '@/i18n'
 import { Check, ChevronDown, ChevronRight, KeyRound, Loader2, Terminal, Trash2 } from '@/lib/icons'
 import { normalize } from '@/lib/text'
 import { cn } from '@/lib/utils'
+import type { BackendOwner } from '@/store/backend-owner'
 import { notify, notifyError } from '@/store/notifications'
 import { $desktopOnboarding, startManualLocalEndpoint, startManualProviderOAuth } from '@/store/onboarding'
 import type { EnvVarInfo, OAuthProvider } from '@/types/hermes'
+
+import { useBackendOwnerGuard } from '../hooks/use-backend-owner-guard'
 
 import { isKeyVar, ProviderKeyRows } from './credential-key-ui'
 import { CustomEndpointsSettings } from './custom-endpoints-settings'
@@ -33,6 +36,13 @@ import { SettingsContent, SettingsSkeleton } from './primitives'
 // The embedded terminal (and thus the "run disconnect command" path) only
 // exists in the Electron desktop shell, not the web dashboard.
 const canRunInTerminal = () => typeof window !== 'undefined' && Boolean(window.hermesDesktop?.terminal)
+
+export function providerTerminalActionAvailable(
+  owner: BackendOwner | null,
+  terminalAvailable = canRunInTerminal()
+): boolean {
+  return terminalAvailable && (!owner || owner.connectionId === 'local')
+}
 
 // Parallel group headers ("Connected", "Other providers") so the expanded list
 // reads as its own section instead of bleeding into the connected group.
@@ -124,12 +134,14 @@ function buildProviderKeyGroups(vars: Record<string, EnvVarInfo>): ProviderKeyGr
 // provider's real sign-in flow; the key affordances open the API-key
 // catalog below.
 function OAuthPicker({
+  backendOwner,
   disconnecting,
   onDisconnect,
   onTerminalDisconnect,
   onWantApiKey,
   providers
 }: {
+  backendOwner: BackendOwner | null
   disconnecting: null | string
   onDisconnect: (provider: OAuthProvider) => void
   onTerminalDisconnect: (provider: OAuthProvider) => void
@@ -145,7 +157,7 @@ function OAuthPicker({
     return null
   }
 
-  const select = (p: OAuthProvider) => startManualProviderOAuth(p.id)
+  const select = (p: OAuthProvider) => startManualProviderOAuth(p.id, null, backendOwner)
 
   const featured = ordered.find(p => p.id === FEATURED_ID && !p.status?.logged_in) ?? null
   const rest = featured ? ordered.filter(p => p.id !== FEATURED_ID) : ordered
@@ -182,6 +194,7 @@ function OAuthPicker({
           <GroupLabel>{p.connected}</GroupLabel>
           {connected.map(p => (
             <ConnectedProviderRow
+              backendOwner={backendOwner}
               disconnecting={disconnecting === p.id}
               key={p.id}
               onDisconnect={onDisconnect}
@@ -218,12 +231,14 @@ function OAuthPicker({
 }
 
 function ConnectedProviderRow({
+  backendOwner,
   disconnecting,
   onDisconnect,
   onSelect,
   onTerminalDisconnect,
   provider
 }: {
+  backendOwner: BackendOwner | null
   disconnecting: boolean
   onDisconnect: (provider: OAuthProvider) => void
   onSelect: (provider: OAuthProvider) => void
@@ -236,9 +251,12 @@ function ConnectedProviderRow({
   const Trail = provider.flow === 'external' ? Terminal : ChevronRight
   // Hermes can clear this provider's creds via the API.
   const canDisconnect = provider.disconnectable ?? provider.flow !== 'external'
+
   // External (CLI-managed) provider Hermes can't clear via the API, but ships a
   // command we can run in the embedded terminal (Electron shell only).
-  const terminalDisconnect = !canDisconnect && Boolean(provider.disconnect_command) && canRunInTerminal()
+  const terminalDisconnect =
+    !canDisconnect && Boolean(provider.disconnect_command) && providerTerminalActionAvailable(backendOwner)
+
   // Only fall back to a static "remove it elsewhere" hint when we offer no button.
   const showHint = !canDisconnect && !terminalDisconnect
 
@@ -332,6 +350,7 @@ function LocalEndpointRow({ onOpen }: { onOpen: (reason: null | string) => void 
 }
 
 export function ProvidersSettings({
+  backendOwner = null,
   onClose,
   onConfigSaved,
   onMainModelChanged,
@@ -339,7 +358,8 @@ export function ProvidersSettings({
   view
 }: ProvidersSettingsProps) {
   const { t } = useI18n()
-  const { rowProps, vars } = useEnvCredentials()
+  const { rowProps, vars } = useEnvCredentials(backendOwner)
+  const isCurrentOwner = useBackendOwnerGuard(backendOwner)
   const [oauthProviders, setOauthProviders] = useState<OAuthProvider[]>([])
   const [openProvider, setOpenProvider] = useState<null | string>(null)
   const [disconnecting, setDisconnecting] = useState<null | string>(null)
@@ -352,12 +372,16 @@ export function ProvidersSettings({
 
   const refreshOAuthProviders = useCallback(async () => {
     // OAuth providers are best-effort — a failure here just hides the panel.
-    const { providers } = await listOAuthProviders()
-    setOauthProviders(providers)
-  }, [])
+    const { providers } = await listOAuthProviders(backendOwner?.profile, backendOwner?.connectionId)
+
+    if (isCurrentOwner()) {
+      setOauthProviders(providers)
+    }
+  }, [backendOwner?.connectionId, backendOwner?.profile, isCurrentOwner])
 
   useEffect(() => {
     let cancelled = false
+    setOauthProviders([])
 
     void (async () => {
       if (onboardingActive) {
@@ -365,9 +389,9 @@ export function ProvidersSettings({
       }
 
       try {
-        const { providers } = await listOAuthProviders()
+        const { providers } = await listOAuthProviders(backendOwner?.profile, backendOwner?.connectionId)
 
-        if (!cancelled) {
+        if (!cancelled && isCurrentOwner()) {
           setOauthProviders(providers)
         }
       } catch {
@@ -376,7 +400,7 @@ export function ProvidersSettings({
     })()
 
     return () => void (cancelled = true)
-  }, [onboardingActive])
+  }, [backendOwner?.connectionId, backendOwner?.profile, isCurrentOwner, onboardingActive])
 
   // External (CLI-managed) providers can't be cleared via the API by design —
   // Hermes never deletes creds another tool owns behind a silent API call.
@@ -385,7 +409,7 @@ export function ProvidersSettings({
   function handleTerminalDisconnect(provider: OAuthProvider) {
     const command = provider.disconnect_command
 
-    if (!command) {
+    if (!command || !providerTerminalActionAvailable(backendOwner)) {
       return
     }
 
@@ -415,7 +439,12 @@ export function ProvidersSettings({
     setDisconnecting(provider.id)
 
     try {
-      await disconnectOAuthProvider(provider.id)
+      await disconnectOAuthProvider(provider.id, backendOwner?.profile, backendOwner?.connectionId)
+
+      if (!isCurrentOwner()) {
+        return
+      }
+
       notify({
         durationMs: 3_000,
         kind: 'success',
@@ -424,9 +453,13 @@ export function ProvidersSettings({
       })
       await refreshOAuthProviders().catch(() => undefined)
     } catch (err) {
-      notifyError(err, t.settings.providers.failedRemove(name))
+      if (isCurrentOwner()) {
+        notifyError(err, t.settings.providers.failedRemove(name))
+      }
     } finally {
-      setDisconnecting(null)
+      if (isCurrentOwner()) {
+        setDisconnecting(null)
+      }
     }
   }
 
@@ -454,7 +487,7 @@ export function ProvidersSettings({
 
     return (
       <SettingsContent>
-        <LocalEndpointRow onOpen={startManualLocalEndpoint} />
+        <LocalEndpointRow onOpen={reason => startManualLocalEndpoint(reason, backendOwner)} />
         {keyGroups.length > 0 ? (
           <div className="grid gap-3">
             <SearchField
@@ -491,12 +524,19 @@ export function ProvidersSettings({
   }
 
   if (view === 'custom-endpoints') {
-    return <CustomEndpointsSettings onConfigSaved={onConfigSaved} onMainModelChanged={onMainModelChanged} />
+    return (
+      <CustomEndpointsSettings
+        backendOwner={backendOwner}
+        onConfigSaved={onConfigSaved}
+        onMainModelChanged={onMainModelChanged}
+      />
+    )
   }
 
   return (
     <SettingsContent>
       <OAuthPicker
+        backendOwner={backendOwner}
         disconnecting={disconnecting}
         onDisconnect={provider => void handleDisconnect(provider)}
         onTerminalDisconnect={handleTerminalDisconnect}
@@ -518,6 +558,7 @@ interface ProviderKeyGroup {
 }
 
 interface ProvidersSettingsProps {
+  backendOwner?: BackendOwner | null
   onClose: () => void
   onConfigSaved?: () => void
   onMainModelChanged?: (provider: string, model: string) => void

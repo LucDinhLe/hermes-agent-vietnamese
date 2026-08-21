@@ -47,6 +47,11 @@ function renderBotRow(input = 'alpha') {
     botGroups: () => [],
     botHandle: value => value,
     botRosterMeta: (_bot, metaByName) => metaByName?.[_bot.name] ?? null,
+    captureAgentProfileAction: value => (value.remoteSource ? null : value),
+    invokeAgentProfileAction: (_bot, action) => {
+      action()
+      return true
+    },
     cn: (...values) => values.filter(Boolean).join(' '),
     createCanonicalChat: async () => null,
     displayName: bot => bot.name,
@@ -62,9 +67,10 @@ function renderBotRow(input = 'alpha') {
     ACTIVE_WINDOW_S: 90,
     A2A_PREFIX_RE: /^$/,
     useEffect: () => undefined,
+    useAgentText: () => key => key,
     useState: initial => [typeof initial === 'function' ? initial() : initial, () => undefined],
     host: {
-      state: { gateway: atom('open'), profile: atom('default') },
+      state: { connectionId: atom('local'), gateway: atom('open'), profile: atom('default') },
       ensureAgent: async (connectionId, profile) => {
         ensured.push([connectionId, profile])
         liveConnectionId = connectionId
@@ -92,7 +98,11 @@ function renderBotRow(input = 'alpha') {
 
   vm.runInNewContext(`${prepareSource}\n${botRowSource}\nglobalThis.BotRow = BotRow`, context)
 
-  const tree = context.BotRow({ bot, onEdit: context.onEdit })
+  const tree = context.BotRow({
+    bot,
+    rosterOwner: { connectionId: 'local', profile: 'default' },
+    onEdit: context.onEdit
+  })
   const row = tree.type === 'button' ? tree : tree.props.children[0].props.children
 
   return { ensured, opened, row, warmed }
@@ -173,6 +183,11 @@ test('behavior: remote default does not open this-device chat when the source di
     botGroups: () => [],
     botHandle: value => value,
     botRosterMeta: () => null,
+    captureAgentProfileAction: value => (value.remoteSource ? null : value),
+    invokeAgentProfileAction: (_bot, action) => {
+      action()
+      return true
+    },
     cn: (...values) => values.filter(Boolean).join(' '),
     createCanonicalChat: async () => null,
     displayName: bot => bot.connectionLabel || bot.name,
@@ -187,9 +202,10 @@ test('behavior: remote default does not open this-device chat when the source di
     ACTIVE_WINDOW_S: 90,
     A2A_PREFIX_RE: /^$/,
     useEffect: () => undefined,
+    useAgentText: () => key => key,
     useState: initial => [typeof initial === 'function' ? initial() : initial, () => undefined],
     host: {
-      state: { gateway: atom('open'), profile: atom('default') },
+      state: { connectionId: atom('local'), gateway: atom('open'), profile: atom('default') },
       ensureAgent: async (connectionId, profile) => ensured.push([connectionId, profile]),
       activeConnectionId: () => 'local',
       warmAgent: () => undefined,
@@ -210,7 +226,11 @@ test('behavior: remote default does not open this-device chat when the source di
   }
 
   vm.runInNewContext(`${prepareSource}\n${botRowSource}\nglobalThis.BotRow = BotRow`, context)
-  const tree = context.BotRow({ bot, onEdit: context.onEdit })
+  const tree = context.BotRow({
+    bot,
+    rosterOwner: { connectionId: 'local', profile: 'default' },
+    onEdit: context.onEdit
+  })
   const row = tree.type === 'button' ? tree : tree.props.children[0].props.children
 
   await row.props.onClick()

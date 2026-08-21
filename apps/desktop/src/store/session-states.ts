@@ -29,6 +29,7 @@ import {
   noteActiveTreeGroup,
   revealTreePane
 } from '@/components/pane-shell/tree/store'
+import type { HermesConnection } from '@/global'
 import { stableArray } from '@/lib/stable-array'
 import { readJson, writeJson } from '@/lib/storage'
 import type { SessionInfo } from '@/types/hermes'
@@ -37,6 +38,7 @@ import { $activeGatewayProfile, normalizeProfileKey } from './profile'
 import { clearAllProviderWaits, clearSessionProviderWait } from './provider-wait'
 import {
   $activeSessionId,
+  $connection,
   $lastReadAtBySessionId,
   $selectedStoredSessionId,
   $sessions,
@@ -63,16 +65,84 @@ export const $sessionStates = atom<Record<string, ClientSessionState>>({})
 // connected gateways can both expose a 'default' profile, so the gateway
 // keep-set (pruneSecondaryGateways) must key live work by the composite
 // (connectionId, profile) scope, not the bare profile name. Recorded at
-// event fan-in (use-gateway-boot); local/primary events carry no connectionId
-// and record nothing, so single-source behavior is untouched.
+// event fan-in (use-gateway-boot). Secondary frames carry connectionId and
+// populate both ledgers; primary frames use their boot descriptor to populate
+// only the identity ledger, so they do not affect secondary pruning.
 // ---------------------------------------------------------------------------
 
 const sessionScopeByRuntimeId = new Map<string, string>()
+const sessionConnectionByRuntimeId = new Map<string, string>()
+const sessionProfileByRuntimeId = new Map<string, string>()
+
+function recordSessionEventProfile(event: { profile?: string; session_id?: string }): void {
+  const profile = event.profile?.trim()
+
+  if (event.session_id && profile) {
+    sessionProfileByRuntimeId.set(event.session_id, profile)
+  }
+}
 
 export function recordSessionEventScope(event: { connectionId?: string; profile?: string; session_id?: string }): void {
+  recordSessionEventProfile(event)
+
   if (event.session_id && event.connectionId) {
-    sessionScopeByRuntimeId.set(event.session_id, registryBackendScopeKey(event.connectionId, event.profile))
+    const connectionId = event.connectionId.trim()
+
+    if (!connectionId) {
+      return
+    }
+
+    sessionScopeByRuntimeId.set(event.session_id, registryBackendScopeKey(connectionId, event.profile))
+    sessionConnectionByRuntimeId.set(event.session_id, connectionId)
   }
+}
+
+/** Bind an event from the window-owned primary socket to its real registry
+ * source without adding it to the secondary-gateway keep-set. Primary socket
+ * frames do not carry connectionId, even when that primary is a registered
+ * remote connection, so the boot descriptor is the authoritative source. */
+export function recordPrimarySessionEventSource(
+  event: { profile?: string; session_id?: string },
+  connection: HermesConnection | null | undefined
+): void {
+  recordSessionEventProfile(event)
+
+  if (!event.session_id || !connection) {
+    return
+  }
+
+  const connectionId = connection.connectionId?.trim() || (connection.mode === 'local' ? 'local' : '')
+
+  if (connectionId) {
+    sessionConnectionByRuntimeId.set(event.session_id, connectionId)
+  }
+}
+
+/** Registry source that owns one live runtime session. Null means the source
+ * is not known yet (a draft, a cold legacy tile, or a legacy remote descriptor
+ * without a registry id); callers may then use an explicit compatibility
+ * fallback. */
+export function sessionConnectionId(runtimeId: null | string | undefined): string | null {
+  return runtimeId ? (sessionConnectionByRuntimeId.get(runtimeId) ?? null) : null
+}
+
+/** Profile carried by the runtime event stream. Unlike the active profile or
+ * session-list cache, this remains exact for a background split tile while the
+ * foreground switches sources and replaces its session list. */
+export function sessionEventProfile(runtimeId: null | string | undefined): string | null {
+  return runtimeId ? (sessionProfileByRuntimeId.get(runtimeId) ?? null) : null
+}
+
+/** Stamp a runtime created/resumed through an owner-routed request immediately;
+ * the first event will confirm the same identity later. Never replace a known
+ * source: a late foreground change is not evidence of runtime ownership. */
+export function recordSessionRuntimeOwner(runtimeId: string, owner: SessionTileOwner): void {
+  if (!runtimeId) {
+    return
+  }
+
+  sessionConnectionByRuntimeId.set(runtimeId, sessionConnectionByRuntimeId.get(runtimeId) ?? owner.connectionId)
+  sessionProfileByRuntimeId.set(runtimeId, sessionProfileByRuntimeId.get(runtimeId) ?? normalizeProfileKey(owner.profile))
 }
 
 /** Composite scopes of registry-sourced sessions that are live (busy or
@@ -345,6 +415,8 @@ export function dropSessionState(runtimeId: string) {
   clearSessionProviderWait(runtimeId)
   clearSessionWorkProgress(runtimeId)
   sessionScopeByRuntimeId.delete(runtimeId)
+  sessionConnectionByRuntimeId.delete(runtimeId)
+  sessionProfileByRuntimeId.delete(runtimeId)
 
   const current = $sessionStates.get()
   setSessionStalled(current[runtimeId]?.storedSessionId, false)
@@ -372,6 +444,8 @@ export function clearAllSessionStates() {
   clearAllProviderWaits()
   clearAllWorkProgress()
   sessionScopeByRuntimeId.clear()
+  sessionConnectionByRuntimeId.clear()
+  sessionProfileByRuntimeId.clear()
   $stalledSessionIds.set([])
   $sessionStates.set({})
 }
@@ -480,8 +554,16 @@ export type SplitDir = 'bottom' | 'left' | 'right' | 'top'
 export type TileDock = 'center' | SplitDir
 
 export interface SessionTile {
+  /** Composite renderer identity. Older in-memory test fixtures may omit it;
+   * persisted v3 records and every newly opened tile always carry it. */
+  tileId?: string
   /** Stored session id — the durable identity (runtime ids are ephemeral). */
   storedSessionId: string
+  /** Registry source + profile that own this session. These two fields are
+   * durable and immutable once known: the foreground may switch to another
+   * source exposing the same profile name while this tile stays live. */
+  connectionId?: string
+  profile?: string
   /** Dock against `anchor` on adoption (default right; center = stack). */
   dir?: TileDock
   /** Pane to dock against (a drop's target zone) — default the workspace.
@@ -497,29 +579,113 @@ export interface SessionTile {
   error?: string
 }
 
-// Tiles are persisted PER PROFILE: a session belongs to one profile, and the
-// single live gateway is scoped to one profile at a time, so a tile only makes
-// sense while its profile is active. Switching profiles swaps the visible set
-// (and drops runtime bindings so each tile re-resumes against the now-current
-// gateway — which also settles the "tile resumes against the wrong backend" and
-// "stale runtime after respawn" bugs by construction).
-const TILES_KEY = 'hermes.desktop.sessionTiles.v2'
-const LEGACY_TILES_KEY = 'hermes.desktop.sessionTiles.v1'
+/** Concrete durable owner of a session tile. Kept structural (rather than
+ * importing backend-owner.ts) because that module reads the runtime ledgers in
+ * this store. */
+export interface SessionTileOwner {
+  connectionId: string
+  profile: string
+}
+
+export function sessionTileIdentity(owner: SessionTileOwner, storedSessionId: string): string {
+  return encodeURIComponent(JSON.stringify([owner.connectionId, normalizeProfileKey(owner.profile), storedSessionId]))
+}
+
+export function parseSessionTileIdentity(tileId: string): null | { owner: SessionTileOwner; storedSessionId: string } {
+  try {
+    const decoded = JSON.parse(decodeURIComponent(tileId)) as unknown
+
+    if (
+      !Array.isArray(decoded) ||
+      decoded.length !== 3 ||
+      decoded.some(value => typeof value !== 'string' || !value.trim())
+    ) {
+      return null
+    }
+
+    const [connectionId, profile, storedSessionId] = decoded
+
+    return {
+      owner: { connectionId, profile: normalizeProfileKey(profile) },
+      storedSessionId
+    }
+  } catch {
+    return null
+  }
+}
+
+export function sessionTileKey(tile: SessionTile): string {
+  const owner = sessionTileOwner(tile)
+
+  return tile.tileId || (owner ? sessionTileIdentity(owner, tile.storedSessionId) : tile.storedSessionId)
+}
+
+export function sessionTilePaneId(tile: SessionTile): string {
+  return `${TILE_PANE_PREFIX}${sessionTileKey(tile)}`
+}
+
+export function sessionTileOwner(tile: null | SessionTile | undefined): SessionTileOwner | null {
+  const connectionId = tile?.connectionId?.trim()
+  const profile = tile?.profile?.trim()
+
+  return connectionId && profile ? { connectionId, profile: normalizeProfileKey(profile) } : null
+}
+
+function activeSessionTileOwner(): SessionTileOwner | null {
+  const connection = $connection.get()
+  const profile = normalizeProfileKey($activeGatewayProfile.get())
+  const descriptorProfile = connection?.profile?.trim()
+
+  // Profile activation publishes before the primary/shared descriptor swap in
+  // a few legacy paths. During that gap `$connection` still names the source
+  // we are leaving; treating the mixed pair as coherent would permanently bind
+  // a profile-only v2 payload to the wrong registry source.
+  if (descriptorProfile && normalizeProfileKey(descriptorProfile) !== profile) {
+    return null
+  }
+
+  const connectionId = connection?.connectionId?.trim() || (connection?.mode === 'local' ? 'local' : '')
+
+  return connectionId ? { connectionId, profile } : null
+}
+
+// v3 persists the concrete source on every tile. v2 is intentionally retained:
+// its profile-only ownership is unknowable until a real connection descriptor
+// arrives at boot, and keeping the old payload makes the migration reversible
+// for a downgrade. The v3 envelope records which ONE source adopted each v2
+// profile, so a later same-profile source can never adopt it again.
+const TILES_KEY = 'hermes.desktop.sessionTiles.v3'
+const LEGACY_V2_TILES_KEY = 'hermes.desktop.sessionTiles.v2'
+const LEGACY_V1_TILES_KEY = 'hermes.desktop.sessionTiles.v1'
 const TILE_PANE_PREFIX = 'session-tile:'
 
 /** Persisted placement — `dir` + strip slot (`before`) + dock `anchor` so a
  *  restart / profile swap re-adopts tiles in the same order, not all stacked
  *  right of workspace. */
-type StoredTile = Pick<SessionTile, 'anchor' | 'before' | 'dir' | 'storedSessionId'>
+type StoredTile = Pick<
+  SessionTile,
+  'anchor' | 'before' | 'connectionId' | 'dir' | 'profile' | 'storedSessionId' | 'tileId'
+>
+
+type LegacyStoredTile = Pick<SessionTile, 'anchor' | 'before' | 'dir' | 'storedSessionId'>
+
+interface StoredTilesV3 {
+  legacyV2OwnerByProfile: Record<string, SessionTileOwner>
+  tilesByProfile: Record<string, StoredTile[]>
+  version: 3
+}
 
 const toStored = (t: SessionTile): StoredTile => ({
   anchor: t.anchor,
   before: t.before,
+  connectionId: t.connectionId,
   dir: t.dir,
-  storedSessionId: t.storedSessionId
+  profile: t.profile,
+  storedSessionId: t.storedSessionId,
+  tileId: sessionTileKey(t)
 })
 
-function parseTileList(value: unknown): StoredTile[] {
+function parseLegacyTileList(value: unknown): LegacyStoredTile[] {
   return Array.isArray(value)
     ? value
         .filter((t): t is SessionTile => Boolean(t && typeof (t as SessionTile).storedSessionId === 'string'))
@@ -536,13 +702,99 @@ function parseTileList(value: unknown): StoredTile[] {
     : []
 }
 
-function loadTilesByProfile(): Record<string, StoredTile[]> {
-  const byProfile: Record<string, StoredTile[]> = {}
+function parseStoredTileList(value: unknown): StoredTile[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.flatMap(candidate => {
+    if (!candidate || typeof candidate !== 'object') {
+      return []
+    }
+
+    const raw = candidate as Partial<SessionTile>
+    const connectionId = raw.connectionId?.trim()
+    const profile = raw.profile?.trim()
+
+    if (!connectionId || !profile || typeof raw.storedSessionId !== 'string') {
+      return []
+    }
+
+    const owner = { connectionId, profile: normalizeProfileKey(profile) }
+
+    return [
+      {
+        anchor: typeof raw.anchor === 'string' ? raw.anchor : undefined,
+        before: typeof raw.before === 'string' || raw.before === null ? raw.before : undefined,
+        connectionId,
+        dir: raw.dir,
+        profile: owner.profile,
+        storedSessionId: raw.storedSessionId,
+        tileId: sessionTileIdentity(owner, raw.storedSessionId)
+      }
+    ]
+  })
+}
+
+function parseLegacyOwners(value: unknown): Record<string, SessionTileOwner> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return {}
+  }
+
+  const result: Record<string, SessionTileOwner> = {}
+
+  for (const [rawProfile, rawOwner] of Object.entries(value as Record<string, unknown>)) {
+    if (!rawOwner || typeof rawOwner !== 'object' || Array.isArray(rawOwner)) {
+      continue
+    }
+
+    const owner = rawOwner as Partial<SessionTileOwner>
+    const connectionId = owner.connectionId?.trim()
+    const profile = owner.profile?.trim()
+
+    if (connectionId && profile) {
+      result[normalizeProfileKey(rawProfile)] = { connectionId, profile: normalizeProfileKey(profile) }
+    }
+  }
+
+  return result
+}
+
+function loadTilesV3(): StoredTilesV3 {
+  const tilesByProfile: Record<string, StoredTile[]> = {}
   const parsed = readJson<unknown>(TILES_KEY)
 
   if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const envelope = parsed as Partial<StoredTilesV3>
+    const rawTiles = envelope.version === 3 ? envelope.tilesByProfile : undefined
+
+    if (rawTiles && typeof rawTiles === 'object' && !Array.isArray(rawTiles)) {
+      for (const [profile, list] of Object.entries(rawTiles)) {
+        const tiles = parseStoredTileList(list)
+
+        if (tiles.length > 0) {
+          tilesByProfile[normalizeProfileKey(profile)] = tiles
+        }
+      }
+    }
+
+    return {
+      legacyV2OwnerByProfile: parseLegacyOwners(envelope.legacyV2OwnerByProfile),
+      tilesByProfile,
+      version: 3
+    }
+  }
+
+  return { legacyV2OwnerByProfile: {}, tilesByProfile, version: 3 }
+}
+
+function loadLegacyTilesByProfile(): Record<string, LegacyStoredTile[]> {
+  const byProfile: Record<string, LegacyStoredTile[]> = {}
+  const parsed = readJson<unknown>(LEGACY_V2_TILES_KEY)
+
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
     for (const [profile, list] of Object.entries(parsed as Record<string, unknown>)) {
-      const tiles = parseTileList(list)
+      const tiles = parseLegacyTileList(list)
 
       if (tiles.length > 0) {
         byProfile[normalizeProfileKey(profile)] = tiles
@@ -550,20 +802,21 @@ function loadTilesByProfile(): Record<string, StoredTile[]> {
     }
   }
 
-  // Migrate a v1 flat list into the default profile, then retire the key.
-  const legacy = parseTileList(readJson<unknown>(LEGACY_TILES_KEY))
+  // v1 was a flat default-profile list. Keep both legacy keys untouched so a
+  // downgrade can still read them; v3's binding marker prevents re-adoption.
+  const legacyV1 = parseLegacyTileList(readJson<unknown>(LEGACY_V1_TILES_KEY))
 
-  if (legacy.length > 0) {
+  if (legacyV1.length > 0) {
     const key = normalizeProfileKey('default')
-    byProfile[key] = [...(byProfile[key] ?? []), ...legacy]
+    byProfile[key] = [...(byProfile[key] ?? []), ...legacyV1]
   }
-
-  writeJson(LEGACY_TILES_KEY, null)
 
   return byProfile
 }
 
-const tilesByProfile = loadTilesByProfile()
+const storedTilesV3 = loadTilesV3()
+const tilesByProfile = storedTilesV3.tilesByProfile
+const legacyTilesByProfile = loadLegacyTilesByProfile()
 // Keyed by the GATEWAY profile: the rail's profile switch is a soft swap
 // ($activeGatewayProfile moves, no reload) — $activeProfile mirrors the
 // window's primary backend and never changes on a rail switch, so keying on
@@ -576,6 +829,27 @@ const profileKey = () => normalizeProfileKey($activeGatewayProfile.get())
 // tiles, and no repopulation on a profile switch.
 export const $sessionTiles = atom<SessionTile[]>(isSecondaryWindow() ? [] : [...(tilesByProfile[profileKey()] ?? [])])
 
+export function sessionTileForStoredId(
+  storedSessionId: string,
+  owner?: null | SessionTileOwner
+): SessionTile | null {
+  const matches = $sessionTiles
+    .get()
+    .filter(tile => tile.storedSessionId === storedSessionId && (!owner || sameTileOwner(sessionTileOwner(tile), owner)))
+
+  // A bare id is backward-compatible only while it is unambiguous. If two
+  // sources legally expose the same id, guessing would target one at random.
+  return matches.length === 1 ? matches[0] : null
+}
+
+export function sessionTileForKey(tileId: string): SessionTile | null {
+  return $sessionTiles.get().find(tile => sessionTileKey(tile) === tileId) ?? null
+}
+
+function resolveSessionTile(ref: string, owner?: null | SessionTileOwner): SessionTile | null {
+  return sessionTileForKey(ref) ?? sessionTileForStoredId(ref, owner)
+}
+
 function persistTiles() {
   // Shares the origin's storage; a secondary window holds no tiles, so a write
   // back would only wipe the primary's set.
@@ -583,7 +857,63 @@ function persistTiles() {
     return
   }
 
-  writeJson(TILES_KEY, Object.keys(tilesByProfile).length === 0 ? null : tilesByProfile)
+  writeJson(TILES_KEY, storedTilesV3)
+}
+
+function sameTileOwner(left: null | SessionTileOwner, right: null | SessionTileOwner): boolean {
+  return Boolean(left && right && left.connectionId === right.connectionId && left.profile === right.profile)
+}
+
+/** Bind a profile-only v2 payload exactly once, after boot publishes a concrete
+ * connection. A missing descriptor or a later different source is a hard
+ * no-op: guessing here would resurrect A's sessions on same-profile B. */
+function adoptLegacyTilesForActiveOwner(): void {
+  if (isSecondaryWindow()) {
+    return
+  }
+
+  const owner = activeSessionTileOwner()
+
+  if (!owner) {
+    return
+  }
+
+  const key = owner.profile
+  const legacy = legacyTilesByProfile[key]
+
+  if (!legacy?.length) {
+    return
+  }
+
+  const bound = storedTilesV3.legacyV2OwnerByProfile[key]
+
+  if (bound && !sameTileOwner(bound, owner)) {
+    return
+  }
+
+  if (!bound) {
+    storedTilesV3.legacyV2OwnerByProfile[key] = owner
+    const existing = tilesByProfile[key] ?? []
+    const existingIds = new Set(existing.map(sessionTileKey))
+    const adopted = legacy
+      .map(tile => ({
+        ...tile,
+        connectionId: owner.connectionId,
+        profile: owner.profile,
+        tileId: sessionTileIdentity(owner, tile.storedSessionId)
+      }))
+      .filter(tile => !existingIds.has(tile.tileId))
+
+    if (adopted.length > 0) {
+      tilesByProfile[key] = [...existing, ...adopted]
+    }
+
+    persistTiles()
+  }
+
+  if (profileKey() === key) {
+    $sessionTiles.set([...(tilesByProfile[key] ?? [])])
+  }
 }
 
 function saveTiles(tiles: SessionTile[]) {
@@ -605,12 +935,35 @@ function saveTiles(tiles: SessionTile[]) {
 // never carries tiles, so it stays out of this entirely.
 if (!isSecondaryWindow()) {
   $activeGatewayProfile.subscribe(() => {
+    adoptLegacyTilesForActiveOwner()
     $sessionTiles.set([...(tilesByProfile[profileKey()] ?? [])])
   })
+  $connection.subscribe(() => adoptLegacyTilesForActiveOwner())
 }
 
-export function patchSessionTile(storedSessionId: string, patch: Partial<SessionTile>) {
-  saveTiles($sessionTiles.get().map(t => (t.storedSessionId === storedSessionId ? { ...t, ...patch } : t)))
+export function patchSessionTile(ref: string, patch: Partial<SessionTile>, owner?: null | SessionTileOwner) {
+  const target = resolveSessionTile(ref, owner)
+
+  if (!target) {
+    return
+  }
+
+  const targetKey = sessionTileKey(target)
+
+  saveTiles(
+    $sessionTiles.get().map(t => {
+      if (sessionTileKey(t) !== targetKey) {
+        return t
+      }
+
+      // Runtime discovery may fill an unknown legacy owner, but it can never
+      // overwrite a durable one after the foreground switches sources.
+      const owner = sessionTileOwner(t)
+      const next = { ...t, ...patch }
+
+      return owner ? { ...next, connectionId: owner.connectionId, profile: owner.profile } : next
+    })
+  )
 }
 
 /** Drop live runtime bindings so every tile re-resumes — used on gateway
@@ -625,7 +978,13 @@ export function resetTileRuntimeBindings() {
   const tiles = $sessionTiles.get()
 
   if (tiles.some(t => t.runtimeId)) {
-    $sessionTiles.set(tiles.map(toStored))
+    $sessionTiles.set(
+      tiles.map(tile => {
+        const { runtimeId: _runtimeId, ...stored } = tile
+
+        return stored
+      })
+    )
   }
 }
 
@@ -655,16 +1014,16 @@ export function unbindTileRuntime(runtimeId: string) {
 
 export interface SessionTileDelegate {
   /** Archive a stored session (the sidebar's archive, incl. tile cleanup). */
-  archiveSession(storedSessionId: string): Promise<void>
+  archiveSession(storedSessionId: string, owner: SessionTileOwner): Promise<void>
   /** Branch a stored session into a new chat (the sidebar's branch). */
-  branchSession(storedSessionId: string): Promise<void>
+  branchSession(storedSessionId: string, owner: SessionTileOwner): Promise<void>
   /** Delete a stored session (the sidebar's delete, incl. tile cleanup). */
-  deleteSession(storedSessionId: string): Promise<void>
+  deleteSession(storedSessionId: string, owner: SessionTileOwner): Promise<void>
   /** Run a slash command against a tile's session (app-level effects — e.g.
    *  branch/handoff — act on the main surface, as they should). */
-  executeSlash(rawCommand: string, sessionId: string): Promise<void>
+  executeSlash(rawCommand: string, sessionId: string, owner: SessionTileOwner): Promise<void>
   /** Interrupt a tile's running turn. */
-  interruptSession(runtimeId: string): Promise<void>
+  interruptSession(runtimeId: string, owner: SessionTileOwner): Promise<void>
   /** Drop the wiring cache's stored→runtime bindings. Called on gateway
    *  reconnect: a respawned backend re-mints runtime ids, so every binding
    *  recorded before the reconnect is suspect — without this, `resumeTile`'s
@@ -673,18 +1032,20 @@ export interface SessionTileDelegate {
   invalidateRuntimeBindings?(): void
   /** Bind a live runtime id for a stored session (resume without touching
    *  the main view). Returns the runtime id, or throws. */
-  resumeTile(storedSessionId: string): Promise<string>
+  resumeTile(storedSessionId: string, owner: SessionTileOwner): Promise<string>
   /** Submit a prompt to a tile's live session. */
-  submitToSession(runtimeId: string, text: string): Promise<void>
+  submitToSession(runtimeId: string, text: string, owner: SessionTileOwner): Promise<void>
   /** THE session-state write path — routes through the wiring cache so the
    *  cache, the primary view (when active), and every tile mirror agree. */
   updateSession(runtimeId: string, updater: (state: ClientSessionState) => ClientSessionState): ClientSessionState
 }
 
 let delegate: SessionTileDelegate | null = null
+export const $sessionTileDelegateEpoch = atom(0)
 
 export function setSessionTileDelegate(next: SessionTileDelegate) {
   delegate = next
+  $sessionTileDelegateEpoch.set($sessionTileDelegateEpoch.get() + 1)
 }
 
 export function sessionTileDelegate(): SessionTileDelegate | null {
@@ -698,7 +1059,7 @@ export function sessionTileDelegate(): SessionTileDelegate | null {
  *  naming an absent pane falls back to append anyway (see insertAtGroup). Tiles
  *  not yet adopted sort after placed ones, stably. Returns `null` when nothing
  *  moves so callers can skip a needless persist. */
-export function orderTilesByTree<T extends { storedSessionId: string }>(
+export function orderTilesByTree<T extends SessionTile>(
   tree: LayoutNode | null,
   tiles: readonly T[]
 ): null | T[] {
@@ -726,9 +1087,7 @@ export function orderTilesByTree<T extends { storedSessionId: string }>(
 
   const rank = new Map(order.map((id, i) => [id, i]))
 
-  const next = [...tiles].sort(
-    (a, b) => (rank.get(a.storedSessionId) ?? Infinity) - (rank.get(b.storedSessionId) ?? Infinity)
-  )
+  const next = [...tiles].sort((a, b) => (rank.get(sessionTileKey(a)) ?? Infinity) - (rank.get(sessionTileKey(b)) ?? Infinity))
 
   return next.some((t, i) => t !== tiles[i]) ? next : null
 }
@@ -755,7 +1114,8 @@ export function openSessionTile(
   storedSessionId: string,
   dir: TileDock = 'right',
   anchor?: string,
-  before?: null | string
+  before?: null | string,
+  owner: SessionTileOwner | null = activeSessionTileOwner()
 ) {
   const tiles = $sessionTiles.get()
 
@@ -764,17 +1124,41 @@ export function openSessionTile(
   // setSelectedStoredSessionId cleared unread, so tile-opened sessions kept
   // their green dot even while the user was reading them. Acks the persisted
   // watermark/marker too so a later list refresh doesn't repaint it.
-  markSessionRead(storedSessionId)
-  ackStoredSessionId(storedSessionId)
+  if (owner && sameTileOwner(owner, activeSessionTileOwner())) {
+    markSessionRead(storedSessionId)
+    ackStoredSessionId(storedSessionId)
+  }
 
-  if (storedSessionId === $selectedStoredSessionId.get()) {
+  if (
+    storedSessionId === $selectedStoredSessionId.get() &&
+    (!owner || sameTileOwner(owner, activeSessionTileOwner()))
+  ) {
     return
   }
 
   const dock = anchor ?? focusedSessionTabAnchor() ?? undefined
+  const tileId = owner ? sessionTileIdentity(owner, storedSessionId) : ''
 
-  if (!tiles.some(t => t.storedSessionId === storedSessionId)) {
-    saveTiles([...tiles, { anchor: dock, before, dir, storedSessionId }])
+  if (!tileId || !tiles.some(t => sessionTileKey(t) === tileId)) {
+    // A new tile without a concrete source would be free to resume on whatever
+    // gateway becomes ambient later. Fail closed; callers can retry once boot
+    // has published the connection descriptor.
+    if (!owner) {
+      return
+    }
+
+    saveTiles([
+      ...tiles,
+      {
+        anchor: dock,
+        before,
+        connectionId: owner.connectionId,
+        dir,
+        profile: normalizeProfileKey(owner.profile),
+        storedSessionId,
+        tileId
+      }
+    ])
     // Adoption is async via the registry — order sync runs after the move path
     // below; a brand-new tile's strip slot is already in `before`.
 
@@ -787,8 +1171,8 @@ export function openSessionTile(
   const target = tree ? findGroupOfPane(tree, dock ?? 'workspace')?.id : null
 
   if (target) {
-    moveTreePane(`${TILE_PANE_PREFIX}${storedSessionId}`, { before: before ?? null, groupId: target, pos: dir })
-    patchSessionTile(storedSessionId, { anchor: dock, before: before ?? undefined, dir })
+    moveTreePane(`${TILE_PANE_PREFIX}${tileId}`, { before: before ?? null, groupId: target, pos: dir })
+    patchSessionTile(tileId, { anchor: dock, before: before ?? undefined, dir })
     syncTileStripOrder()
   }
 }
@@ -813,10 +1197,11 @@ export function nextSessionTileForWorkspace(): null | string {
 
   for (const paneId of ordered) {
     if (paneId.startsWith(TILE_PANE_PREFIX)) {
-      const storedSessionId = paneId.slice(TILE_PANE_PREFIX.length)
+      const tileId = paneId.slice(TILE_PANE_PREFIX.length)
+      const tile = tiles.find(candidate => sessionTileKey(candidate) === tileId)
 
-      if (tiles.some(t => t.storedSessionId === storedSessionId)) {
-        return storedSessionId
+      if (tile) {
+        return sessionTileKey(tile)
       }
     }
   }
@@ -832,9 +1217,14 @@ export function nextSessionTileForWorkspace(): null | string {
  *  Callers that own the router need the `'main'` vs `'tile'` distinction: a
  *  `'main'` hit only reaches the screen if the workspace pane is actually
  *  showing the chat, whereas a tile renders in its own pane regardless. */
-export function focusOpenSession(storedSessionId: string): 'main' | 'tile' | null {
-  if ($sessionTiles.get().some(t => t.storedSessionId === storedSessionId)) {
-    const paneId = `${TILE_PANE_PREFIX}${storedSessionId}`
+export function focusOpenSession(
+  storedSessionId: string,
+  owner: SessionTileOwner | null = activeSessionTileOwner()
+): 'main' | 'tile' | null {
+  const tile = resolveSessionTile(storedSessionId, owner)
+
+  if (tile) {
+    const paneId = sessionTilePaneId(tile)
     revealTreePane(paneId) // un-dismiss + adopt + front in its group
     const tree = $layoutTree.get()
     const group = tree ? findGroupOfPane(tree, paneId) : null
@@ -874,10 +1264,16 @@ export function focusedSessionNeedsRoute(focused: 'main' | 'tile' | null, worksp
  *  unknown rather than empty, so it's left alone. */
 export function blankDraftTile(
   tiles: readonly SessionTile[],
-  states: Record<string, ClientSessionState>
+  states: Record<string, ClientSessionState>,
+  owner?: null | SessionTileOwner
 ): null | SessionTile {
   return (
-    tiles.findLast(({ runtimeId }) => {
+    tiles.findLast(tile => {
+      if (owner && !sameTileOwner(sessionTileOwner(tile), owner)) {
+        return false
+      }
+
+      const { runtimeId } = tile
       const state = runtimeId ? states[runtimeId] : undefined
 
       return Boolean(state && !state.busy && state.messages.length === 0)
@@ -890,15 +1286,20 @@ export function blankDraftTile(
  *  is DISCARDED rather than closed: it never held a conversation, so ⌘⇧T
  *  resurrecting it would just restore an empty tab. */
 export function reuseBlankDraftTile(storedSessionId: string): boolean {
-  const tile = blankDraftTile($sessionTiles.get(), $sessionStates.get())
+  const owner = activeSessionTileOwner()
+  const tile = blankDraftTile($sessionTiles.get(), $sessionStates.get(), owner)
 
   if (!tile || tile.storedSessionId === storedSessionId) {
     return false
   }
 
-  discardSessionTile(tile.storedSessionId)
-  openSessionTile(storedSessionId, tile.dir, tile.anchor, tile.before)
-  revealTreePane(`${TILE_PANE_PREFIX}${storedSessionId}`)
+  discardSessionTile(sessionTileKey(tile))
+  openSessionTile(storedSessionId, tile.dir, tile.anchor, tile.before, owner)
+  const replacement = sessionTileForStoredId(storedSessionId, owner)
+
+  if (replacement) {
+    revealTreePane(sessionTilePaneId(replacement))
+  }
 
   return true
 }
@@ -909,14 +1310,20 @@ export function reuseBlankDraftTile(storedSessionId: string): boolean {
 const closedTilesByProfile: Record<string, SessionTile[]> = {}
 const closedStack = (): SessionTile[] => (closedTilesByProfile[profileKey()] ??= [])
 
-export function closeSessionTile(storedSessionId: string) {
-  const tile = $sessionTiles.get().find(t => t.storedSessionId === storedSessionId)
+export function closeSessionTile(ref: string, owner?: null | SessionTileOwner) {
+  const tile = resolveSessionTile(ref, owner)
 
-  if (tile) {
-    closedStack().push({ anchor: tile.anchor, before: tile.before, dir: tile.dir, storedSessionId })
+  if (!tile) {
+    return
   }
 
-  saveTiles($sessionTiles.get().filter(t => t.storedSessionId !== storedSessionId))
+  const tileId = sessionTileKey(tile)
+
+  if (tile) {
+    closedStack().push(toStored(tile))
+  }
+
+  saveTiles($sessionTiles.get().filter(t => sessionTileKey(t) !== tileId))
 
   // A settled session may never publish again, so the publish-time eviction
   // in publishSessionState can't reach it — drop its cached state here. A
@@ -935,14 +1342,20 @@ export function closeSessionTile(storedSessionId: string) {
  *  backend (resume 404s). Unlike close, it leaves no ⌘⇧T undo (resurrecting it
  *  would just 404 again) and evicts any cached state. This is what clears the
  *  "Session not found" resume spam from stale/cross-profile persisted tiles. */
-export function discardSessionTile(storedSessionId: string) {
-  const runtimeId = $sessionTiles.get().find(t => t.storedSessionId === storedSessionId)?.runtimeId
+export function discardSessionTile(ref: string, owner?: null | SessionTileOwner) {
+  const tile = resolveSessionTile(ref, owner)
+
+  if (!tile) {
+    return
+  }
+
+  const runtimeId = tile.runtimeId
 
   if (runtimeId) {
     dropSessionState(runtimeId)
   }
 
-  saveTiles($sessionTiles.get().filter(t => t.storedSessionId !== storedSessionId))
+  saveTiles($sessionTiles.get().filter(t => sessionTileKey(t) !== sessionTileKey(tile)))
 }
 
 /** ⌘⇧T — reopen the most recently closed tab where it was, then focus it.
@@ -955,13 +1368,18 @@ export function reopenLastClosedTile(): void {
   for (let tile = stack.pop(); tile; tile = stack.pop()) {
     const { storedSessionId } = tile
 
-    if (storedSessionId === $selectedStoredSessionId.get()) {
+    const tileOwner = sessionTileOwner(tile)
+
+    if (
+      storedSessionId === $selectedStoredSessionId.get() &&
+      (!tileOwner || sameTileOwner(tileOwner, activeSessionTileOwner()))
+    ) {
       continue
     }
 
-    if (!$sessionTiles.get().some(t => t.storedSessionId === storedSessionId)) {
-      openSessionTile(storedSessionId, tile.dir, tile.anchor, tile.before)
-      focusOpenSession(storedSessionId)
+    if (!sessionTileForStoredId(storedSessionId, sessionTileOwner(tile))) {
+      openSessionTile(storedSessionId, tile.dir, tile.anchor, tile.before, sessionTileOwner(tile))
+      focusOpenSession(storedSessionId, sessionTileOwner(tile))
 
       return
     }
@@ -981,21 +1399,31 @@ export function reopenLastClosedTile(): void {
 /** Stored id of the focused session (the interacted zone's tile, else the
  *  primary's selection). Null on a fresh draft. */
 export const $focusedStoredSessionId = computed(
-  [$activeTreeGroup, $layoutTree, $selectedStoredSessionId],
-  (groupId, tree, selected) => {
+  [$activeTreeGroup, $layoutTree, $selectedStoredSessionId, $sessionTiles],
+  (groupId, tree, selected, tiles) => {
     const active = groupId && tree ? findGroup(tree, groupId)?.active : undefined
 
-    return active?.startsWith(TILE_PANE_PREFIX) ? active.slice(TILE_PANE_PREFIX.length) : selected
+    if (active?.startsWith(TILE_PANE_PREFIX)) {
+      const tileId = active.slice(TILE_PANE_PREFIX.length)
+
+      return tiles.find(tile => sessionTileKey(tile) === tileId)?.storedSessionId ?? null
+    }
+
+    return selected
   }
 )
 
 /** Live runtime id of the focused session (a tile's bound runtime, else the
  *  primary's active session). */
 export const $focusedRuntimeId = computed(
-  [$focusedStoredSessionId, $selectedStoredSessionId, $activeSessionId, $sessionTiles],
-  (focused, selected, primaryRuntime, tiles) => {
-    if (focused && focused !== selected) {
-      return tiles.find(t => t.storedSessionId === focused)?.runtimeId ?? null
+  [$activeTreeGroup, $layoutTree, $activeSessionId, $sessionTiles],
+  (groupId, tree, primaryRuntime, tiles) => {
+    const active = groupId && tree ? findGroup(tree, groupId)?.active : undefined
+
+    if (active?.startsWith(TILE_PANE_PREFIX)) {
+      const tileId = active.slice(TILE_PANE_PREFIX.length)
+
+      return tiles.find(tile => sessionTileKey(tile) === tileId)?.runtimeId ?? null
     }
 
     return primaryRuntime
@@ -1012,7 +1440,19 @@ export const $focusedSessionState = computed([$focusedRuntimeId, $sessionStates]
  *  `focusOpenSession` owns the move and homing would yank every stacked tile
  *  behind the workspace (A+B "disappear" when switching to C). */
 export const selectionHomesToWorkspace = (selected: null | string, tiles: readonly SessionTile[]): boolean =>
-  !(selected && tiles.some(t => t.storedSessionId === selected))
+  !(
+    selected &&
+    tiles.some(tile => {
+      if (tile.storedSessionId !== selected) {
+        return false
+      }
+
+      const owner = activeSessionTileOwner()
+      const tileOwner = sessionTileOwner(tile)
+
+      return !owner || !tileOwner || sameTileOwner(tileOwner, owner)
+    })
+  )
 
 // Bringing a finished session to the front clears its green dot. Keyed on the
 // FOCUSED session, not the selected one: a tile is never $selectedStoredSessionId,
@@ -1023,6 +1463,20 @@ export const selectionHomesToWorkspace = (selected: null | string, tiles: readon
 // doesn't repaint the dot the user just cleared by looking at it.
 $focusedStoredSessionId.listen(focused => {
   if (focused) {
+    const groupId = $activeTreeGroup.get()
+    const tree = $layoutTree.get()
+    const active = groupId && tree ? findGroup(tree, groupId)?.active : undefined
+    const tile = active?.startsWith(TILE_PANE_PREFIX)
+      ? sessionTileForKey(active.slice(TILE_PANE_PREFIX.length))
+      : null
+
+    // Unread persistence is legacy profile+id scoped. Until that store gains a
+    // source dimension, a background A tile must fail closed instead of
+    // clearing B's same-profile/same-id marker through ambient row lookup.
+    if (tile && !sameTileOwner(sessionTileOwner(tile), activeSessionTileOwner())) {
+      return
+    }
+
     markSessionRead(focused)
     ackStoredSessionId(focused)
   }

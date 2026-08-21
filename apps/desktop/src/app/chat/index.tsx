@@ -26,11 +26,14 @@ import { modelOptionsQueryKey, requestModelOptions } from '@/lib/model-options'
 import { cn } from '@/lib/utils'
 import { migrateSessionDraft } from '@/store/composer'
 import { migrateQueuedPrompts, parkQueuedPrompts } from '@/store/composer-queue'
+import { activeBackendOwner, type BackendOwner, sameBackendOwner } from '@/store/backend-owner'
 import { $pinnedSessionIds } from '@/store/layout'
 import { $petActive } from '@/store/pet'
 import { $petOverlayActive } from '@/store/pet-overlay'
-import { $activeGatewayProfile, $gatewaySwapTarget, $profiles } from '@/store/profile'
+import { $activeGatewayProfile, $gatewaySwapTarget, $profiles, $profileScope, ALL_PROFILES } from '@/store/profile'
+import { $projectTree, $projectTreeOwner, projectIdForCwd } from '@/store/projects'
 import {
+  $connection,
   $contextSuggestions,
   $freshDraftReady,
   $gatewayState,
@@ -43,7 +46,12 @@ import {
   sessionPinId,
   shouldMigrateComposerScope
 } from '@/store/session'
-import { sessionTileDelegate } from '@/store/session-states'
+import {
+  sessionConnectionId,
+  sessionEventProfile,
+  sessionTileDelegate,
+  sessionTileIdentity
+} from '@/store/session-states'
 import { $transcriptTailBySessionId } from '@/store/transcript-tail'
 import { isAuxiliaryWindow, isWatchWindow } from '@/store/windows'
 import type { ModelOptionsResponse } from '@/types/hermes'
@@ -76,8 +84,12 @@ import {
 import { advanceTranscriptWindow, type TranscriptWindowState } from './transcript-window'
 
 interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
+  /** Durable source for a background tile. Foreground surfaces omit it. */
+  backendOwner?: BackendOwner
   gateway: HermesGateway | null
+  gatewayReady?: boolean
   modelMenuContent?: React.ReactNode
+  paneId?: string
   onToggleSelectedPin: () => void
   onDeleteSelectedSession: () => void
   onCancel: () => Promise<void> | void
@@ -322,9 +334,12 @@ function ChatRuntimeBoundary({
 // on idle ticks unrelated to the chat; with stable callback props (hoisted to
 // useCallback at the call sites) memo() lets the whole chat shell skip those.
 export const ChatView = memo(function ChatView({
+  backendOwner,
   className,
   gateway,
+  gatewayReady,
   modelMenuContent,
+  paneId,
   onToggleSelectedPin,
   onDeleteSelectedSession,
   onCancel,
@@ -361,10 +376,12 @@ export const ChatView = memo(function ChatView({
   const storedId = useStore(view.$storedId)
   // Dock anchor for a session drop onto this surface: the workspace pane for the
   // primary, this tile's pane id for a tile. Read by the session-drop bridge.
-  const sessionAnchor = isPrimary ? 'workspace' : `session-tile:${storedId ?? ''}`
+  const sessionAnchor = isPrimary ? 'workspace' : (paneId ?? `session-tile:${storedId ?? ''}`)
   const awaitingResponse = useStore(view.$awaitingResponse)
   const busy = useStore(view.$busy)
   const activeGatewayProfile = useStore($activeGatewayProfile)
+  const activeConnection = useStore($connection)
+  const profileScope = useStore($profileScope)
   const contextSuggestions = useStore($contextSuggestions)
   // Per-session (SessionView) reads — a tile IS its session, so these come
   // from the view slice, not the global atoms (which track the primary only).
@@ -380,7 +397,7 @@ export const ChatView = memo(function ChatView({
   const freshDraftReady = useStore($freshDraftReady)
   const gatewayState = useStore($gatewayState)
   const gatewaySwapTarget = useStore($gatewaySwapTarget)
-  const gatewayOpen = gatewayState === 'open'
+  const gatewayOpen = gatewayReady ?? gatewayState === 'open'
   const introPersonality = useStore($introPersonality)
   const introSeed = useStore($introSeed)
   // PERF: ChatView must not subscribe to the view's $messages — the atom is
@@ -393,6 +410,44 @@ export const ChatView = memo(function ChatView({
   const lastVisibleIsUser = useStore(view.$lastVisibleIsUser)
   const selectedSessionId = useStore(view.$storedId)
   const sessions = useStore($sessions)
+  // Project membership arrives asynchronously from projects.tree. Subscribe
+  // here (rather than letting projectIdForCwd read its atom invisibly) so a
+  // chat header adopts the stable project id as soon as that tree hydrates.
+  // Until then project-scoped invites stay disabled: a raw cwd is not a stable
+  // project identity and must never become a persistence key.
+  const projectTree = useStore($projectTree)
+  const projectTreeOwner = useStore($projectTreeOwner)
+
+  const storedSession = selectedSessionId && (!backendOwner || sameBackendOwner(activeBackendOwner(), backendOwner))
+    ? sessions.find(session => sessionMatchesStoredId(session, selectedSessionId))
+    : null
+
+  const leadProfile =
+    (backendOwner?.profile ?? sessionEventProfile(activeSessionId) ?? storedSession?.profile ?? activeGatewayProfile).trim() ||
+    'default'
+
+  const leadConnectionId = backendOwner?.connectionId ?? sessionConnectionId(activeSessionId)
+
+  const activeConnectionId =
+    activeConnection?.connectionId?.trim() || (activeConnection?.mode === 'local' ? 'local' : '')
+
+  // projects.tree is scoped to the active (source, profile), while a split tile
+  // may render a background session from another backend. Only expose a
+  // project persistence key when the tree and the session share that exact
+  // owner; an empty key disables project invites instead of cross-writing an
+  // identically named project on the wrong source.
+  const projectTreeMatchesLead = Boolean(
+    profileScope !== ALL_PROFILES &&
+    projectTreeOwner?.scope === 'profile' &&
+    leadConnectionId &&
+      activeConnectionId &&
+      leadConnectionId === activeConnectionId &&
+      leadConnectionId === projectTreeOwner.connectionId &&
+      leadProfile === projectTreeOwner.profile &&
+      leadProfile === activeGatewayProfile
+  )
+
+  const projectKey = projectTreeMatchesLead && projectTree.length ? (projectIdForCwd(currentCwd) ?? '') : ''
   const resumeExhaustedSessionId = useStore($resumeExhaustedSessionId)
 
   // Durable composer/queue scope (lineage root) so auto-compression tip rotation
@@ -406,8 +461,12 @@ export const ChatView = memo(function ChatView({
       ? primaryRouteSelectedSessionId(location.pathname, selectedSessionId)
       : selectedSessionId
 
-    return resolveComposerSessionKey(effectiveSelectedSessionId, sessions)
-  }, [isPrimary, location.pathname, selectedSessionId, sessions])
+    const resolved = resolveComposerSessionKey(effectiveSelectedSessionId, sessions)
+
+    return !isPrimary && backendOwner && selectedSessionId
+      ? sessionTileIdentity(backendOwner, resolved || selectedSessionId)
+      : resolved
+  }, [backendOwner, isPrimary, location.pathname, selectedSessionId, sessions])
 
   // When the tip row arrives after compression, migrate any tip-keyed stash onto
   // the durable lineage key before the composer remounts onto that key.
@@ -417,13 +476,13 @@ export const ChatView = memo(function ChatView({
   // migrating on bare inequality would re-home A's queued prompts onto B and
   // auto-drain them into the wrong chat.
   useEffect(() => {
-    if (!shouldMigrateComposerScope(selectedSessionId, queueSessionKey, sessions)) {
+    if (!isPrimary || !shouldMigrateComposerScope(selectedSessionId, queueSessionKey, sessions)) {
       return
     }
 
     migrateSessionDraft(selectedSessionId, queueSessionKey)
     migrateQueuedPrompts(selectedSessionId, queueSessionKey)
-  }, [queueSessionKey, selectedSessionId, sessions])
+  }, [isPrimary, queueSessionKey, selectedSessionId, sessions])
 
   // Transcript-side stops (the streaming message's hover Stop, the runtime's
   // cancel) are explicit halts, same as the composer's Stop button: park any
@@ -481,8 +540,14 @@ export const ChatView = memo(function ChatView({
   const threadKey = selectedSessionId || activeSessionId || (isRoutedSessionView ? location.pathname : 'new')
 
   const modelOptionsQuery = useQuery<ModelOptionsResponse>({
-    queryKey: modelOptionsQueryKey(activeGatewayProfile, activeSessionId),
-    queryFn: () => requestModelOptions({ gateway: gateway || undefined, sessionId: activeSessionId }),
+    queryKey: modelOptionsQueryKey(leadProfile, activeSessionId, leadConnectionId),
+    queryFn: () =>
+      requestModelOptions({
+        connectionId: leadConnectionId,
+        gateway: gateway || undefined,
+        profile: leadProfile,
+        sessionId: activeSessionId
+      }),
     enabled: gatewayOpen
   })
 
@@ -504,7 +569,11 @@ export const ChatView = memo(function ChatView({
       tools: {
         enabled: true,
         label: t.composer.attachLabel,
-        suggestions: contextSuggestions
+        // The global suggestion cache is populated for the foreground
+        // session/cwd. A tile has its own owner and cwd; exposing the ambient
+        // list can insert B's paths into A. Fail closed until a tile-scoped
+        // suggestion provider is available.
+        suggestions: isPrimary ? contextSuggestions : []
       },
       voice: {
         enabled: true,
@@ -516,6 +585,7 @@ export const ChatView = memo(function ChatView({
       currentModel,
       currentProvider,
       gatewayOpen,
+      isPrimary,
       modelMenuContent,
       quickModels,
       t.composer.attachLabel
@@ -569,6 +639,8 @@ export const ChatView = memo(function ChatView({
         className
       )}
       data-chat-surface=""
+      data-backend-connection={backendOwner?.connectionId || leadConnectionId || activeConnectionId || undefined}
+      data-backend-profile={leadProfile}
       data-composer-target={composerScope.target}
       data-session-anchor={sessionAnchor}
     >
@@ -590,9 +662,14 @@ export const ChatView = memo(function ChatView({
         enabled={advisorEnabled}
         gateway={gateway}
         gatewayOpen={gatewayOpen}
+        leadConnectionId={leadConnectionId}
+        leadProfile={leadProfile}
         model={currentModel}
+        projectKey={projectKey}
+        projectResolutionKnown={projectTreeMatchesLead}
         provider={currentProvider}
         sessionId={activeSessionId}
+        storedSessionId={selectedSessionId}
         usage={currentUsage}
       />
 

@@ -68,6 +68,41 @@ afterEach(() => {
 })
 
 describe('PluginsSettings', () => {
+  it('labels required bundled features and explains why their switch stays on', async () => {
+    let localizedDescription = 'Create and manage collaborative Agent profiles.'
+
+    $pluginRecords.set({
+      'hermes-bots': {
+        description: () => localizedDescription,
+        id: 'hermes-bots',
+        kind: 'bundled',
+        name: 'Agents',
+        required: true,
+        status: 'loaded'
+      }
+    })
+
+    renderSettings()
+
+    const toggle = screen.getByRole('switch', { name: /Agents:/ })
+
+    expect(toggle.hasAttribute('disabled') || toggle.getAttribute('aria-disabled') === 'true').toBe(true)
+    expect(screen.getByText('required')).toBeTruthy()
+    expect(screen.getByText('Create and manage collaborative Agent profiles.')).toBeTruthy()
+
+    localizedDescription = 'Tạo và quản lý hồ sơ Agent cộng tác.'
+    $pluginRecords.set({ ...$pluginRecords.get() })
+    expect(await screen.findByText('Tạo và quản lý hồ sơ Agent cộng tác.')).toBeTruthy()
+
+    const trigger = toggle.closest<HTMLElement>('[data-slot="tooltip-trigger"]')
+
+    expect(trigger).toBeTruthy()
+    fireEvent.pointerMove(trigger!, { pointerType: 'mouse' })
+    expect((await screen.findByRole('tooltip')).textContent).toContain(
+      'This bundled Hermes feature is required and stays enabled.'
+    )
+  })
+
   it('renders and searches plugin rows returned without a canonical key', () => {
     renderSettings()
 

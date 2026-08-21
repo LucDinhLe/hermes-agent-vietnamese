@@ -2,41 +2,34 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-// Bot Mode layout contract:
-//  - the Bots pane center-stacks into the sessions zone (SESSIONS | BOTS tab
-//    strip), never splits below it, and carries the ENFORCED dock invariant
-//    so every boot re-homes a stacked install — no heal token, no
-//    user-placed exemption (the retired one-shot heal left users who had
-//    dragged panes stuck stacked forever);
-//  - the Cronjobs (routines) pane only exists while the Bots pane is on
-//    screen — registered/unregistered through the contribution disposer,
-//    driven by the feature-detected host.paneVisibility SDK export, with the
-//    always-registered fallback kept for older desktops.
+import { loadHermesBotsPlugin } from './plugin-behavior-fixture.mjs'
 
+// v31 removes the dismissible Bots/Routines panes. Agents live in each
+// session header and the stable management route is always reachable from
+// that dropdown and the command palette.
 const source = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
 
-test('the Bots pane center-docks into the sessions zone as an enforced invariant', () => {
-  assert.match(source, /dock: \{ pane: 'sessions', pos: 'center', enforce: true \}/)
-  // The old workaround split must not come back.
-  assert.doesNotMatch(source, /pane: 'sessions', pos: 'bottom'/)
-  // Neither may the retired one-shot heal token.
-  assert.doesNotMatch(source, /heal: 'sessions-tab-v1'/)
+test('the plugin no longer registers a Bots or Routines pane', () => {
+  assert.doesNotMatch(source, /id: 'pane'/)
+  assert.doesNotMatch(source, /id: 'routines'/)
+  assert.doesNotMatch(source, /registerRoutinesPane|paneVisibility|dock:\s*\{/)
+  assert.doesNotMatch(source, /dismissedPanes/)
 })
 
-test('routines registration is a reusable disposer-returning function', () => {
-  assert.match(source, /const registerRoutinesPane = \(\) =>\s*\n\s*ctx\.register\(\{\s*\n\s*id: 'routines'/)
-})
+test('Agents register a fixed session-header control and stable management route', async () => {
+  const api = (await loadHermesBotsPlugin()).default.__testing
+  const contributions = []
+  const result = api.registerAgentSurfaces(
+    { register: contribution => contributions.push(contribution) },
+    { SESSION_AGENTS_AREA: 'session-agents', ROUTES_AREA: 'routes' }
+  )
 
-test('routines pane rides Bots visibility via feature-detected host.paneVisibility', () => {
-  assert.match(source, /typeof host\.paneVisibility === 'function'/)
-  assert.match(source, /host\.paneVisibility\(`\$\{ID\}:pane`\)/)
-  // Transitions register/unregister through the tracked disposer.
-  assert.match(source, /unregisterRoutines \?\?= registerRoutinesPane\(\)/)
-  assert.match(source, /unregisterRoutines\(\)\s*\n\s*unregisterRoutines = null/)
-  // The visibility listener must not survive plugin disable.
-  assert.match(source, /ctx\.onDispose\(stopRoutinesSync\)/)
-})
-
-test('older desktops without the SDK export keep the always-registered pane', () => {
-  assert.match(source, /\} else \{\s*\n\s*registerRoutinesPane\(\)\s*\n\s*\}/)
+  assert.deepEqual(result, ['session-control', 'management-page'])
+  assert.equal(contributions[0].id, 'session-control')
+  assert.equal(contributions[0].area, 'session-agents')
+  assert.equal(typeof contributions[0].data.render, 'function')
+  assert.equal(contributions[1].id, 'management-page')
+  assert.equal(contributions[1].area, 'routes')
+  assert.equal(contributions[1].data.path, '/agent-profiles')
+  assert.equal(typeof contributions[1].render, 'function')
 })

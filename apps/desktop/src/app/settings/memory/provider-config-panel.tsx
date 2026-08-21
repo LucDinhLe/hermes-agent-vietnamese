@@ -5,9 +5,11 @@ import { Button } from '@/components/ui/button'
 import { DisclosureCaret } from '@/components/ui/disclosure-caret'
 import { getMemoryProviderConfig, saveMemoryProviderConfig } from '@/hermes'
 import { SlidersHorizontal } from '@/lib/icons'
+import type { BackendOwner } from '@/store/backend-owner'
 import { notifyError } from '@/store/notifications'
 import type { MemoryProviderConfig, MemoryProviderField } from '@/types/hermes'
 
+import { useBackendOwnerGuard } from '../../hooks/use-backend-owner-guard'
 import { ListRow, Pill } from '../primitives'
 
 import { FieldControl, FieldTitle } from './field-control'
@@ -20,27 +22,45 @@ function seedValues(config: MemoryProviderConfig): Record<string, string> {
   )
 }
 
-export function ProviderConfigPanel({ profile = null, provider }: { profile?: null | string; provider: string }) {
+export function ProviderConfigPanel({
+  backendOwner = null,
+  profile = null,
+  provider
+}: {
+  backendOwner?: BackendOwner | null
+  profile?: null | string
+  provider: string
+}) {
   const [config, setConfig] = useState<MemoryProviderConfig | null>(null)
   const [loadError, setLoadError] = useState<null | string>(null)
   const [values, setValues] = useState<Record<string, string>>({})
   const [saved, setSaved] = useState<Record<string, string>>({})
   const [expanded, setExpanded] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const isCurrentOwner = useBackendOwnerGuard(backendOwner)
+  const apiProfile = backendOwner?.profile ?? profile ?? undefined
+  const connectionId = backendOwner?.connectionId
 
   const refresh = useCallback(async () => {
     try {
-      const next = await getMemoryProviderConfig(provider, profile)
+      const next = await getMemoryProviderConfig(provider, apiProfile, connectionId)
+
+      if (!isCurrentOwner()) {
+        return
+      }
+
       const seed = seedValues(next)
       setConfig(next)
       setValues(seed)
       setSaved(seed)
       setLoadError(null)
     } catch (err) {
-      setConfig(null)
-      setLoadError(err instanceof Error ? err.message : 'Memory provider settings failed to load')
+      if (isCurrentOwner()) {
+        setConfig(null)
+        setLoadError(err instanceof Error ? err.message : 'Memory provider settings failed to load')
+      }
     }
-  }, [profile, provider])
+  }, [apiProfile, connectionId, isCurrentOwner, provider])
 
   useEffect(() => {
     setConfig(null)
@@ -56,7 +76,11 @@ export function ProviderConfigPanel({ profile = null, provider }: { profile?: nu
       }
 
       try {
-        await saveMemoryProviderConfig(provider, { [field.key]: value }, profile)
+        await saveMemoryProviderConfig(provider, { [field.key]: value }, apiProfile, connectionId)
+
+        if (!isCurrentOwner()) {
+          return
+        }
 
         if (field.kind === 'secret') {
           setValues(current => ({ ...current, [field.key]: '' }))
@@ -71,10 +95,12 @@ export function ProviderConfigPanel({ profile = null, provider }: { profile?: nu
           setSaved(current => ({ ...current, [field.key]: value }))
         }
       } catch (err) {
-        notifyError(err, `Failed to save ${field.label}`)
+        if (isCurrentOwner()) {
+          notifyError(err, `Failed to save ${field.label}`)
+        }
       }
     },
-    [profile, provider, saved]
+    [apiProfile, connectionId, isCurrentOwner, provider, saved]
   )
 
   // Providers without a declared config surface (e.g. builtin) render nothing.
@@ -151,11 +177,12 @@ export function ProviderConfigPanel({ profile = null, provider }: { profile?: nu
 
       {hasFullConfig && (
         <ProviderConfigModal
+          backendOwner={backendOwner}
           config={config}
           onOpenChange={setShowModal}
           onSaved={refresh}
           open={showModal}
-          profile={profile}
+          profile={apiProfile}
           provider={provider}
         />
       )}

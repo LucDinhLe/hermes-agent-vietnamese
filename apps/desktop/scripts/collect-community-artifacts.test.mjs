@@ -95,17 +95,19 @@ test('maps electron-builder Linux architecture names for every package format', 
   }
 })
 
-test('combined checksums are deterministic and exclude checksum files', () => {
+test('combined checksums include per-target manifests and exclude only themselves', () => {
   const { outputDir } = fixture()
   fs.mkdirSync(outputDir)
   writeArtifact(outputDir, 'b.bin', 'beta')
   writeArtifact(outputDir, 'a.bin', 'alpha')
-  writeArtifact(outputDir, 'SHA256SUMS-old.txt', 'ignore me')
+  writeArtifact(outputDir, 'SHA256SUMS-win32-x64.txt', 'target manifest')
 
   const outputPath = writeChecksums(outputDir)
   const lines = fs.readFileSync(outputPath, 'utf8').trim().split('\n')
 
-  assert.equal(lines.length, 2)
-  assert.match(lines[0], /  a\.bin$/)
-  assert.match(lines[1], /  b\.bin$/)
+  assert.deepEqual(
+    lines.map(line => line.split('  ')[1]),
+    ['SHA256SUMS-win32-x64.txt', 'a.bin', 'b.bin']
+  )
+  assert.equal(lines.some(line => line.endsWith('  SHA256SUMS.txt')), false)
 })

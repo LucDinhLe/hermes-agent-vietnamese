@@ -325,6 +325,8 @@ export const ar = defineLocale({
       reveal: 'إظهار في مدير الملفات',
       enable: 'تفعيل',
       disable: 'تعطيل',
+      required: 'مطلوبة',
+      requiredDescription: 'هذه ميزة مضمّنة مطلوبة في Hermes وتبقى مفعّلة.',
       failed: 'فشل',
       empty: 'لا توجد إضافات سطح مكتب مثبتة بعد.',
       kinds: { bundled: 'مضمّنة', disk: 'على القرص', runtime: 'وقت التشغيل' }
@@ -620,6 +622,8 @@ export const ar = defineLocale({
       version: value => `الإصدار ${value}`,
       versionUnavailable: 'الإصدار غير متاح',
       projectInfo: 'معلومات المشروع',
+      technicalVersion: 'الإصدار التقني',
+      upstreamVersion: 'إصدار Hermes Agent الأصلي',
       upstreamPublisher: 'المشروع والناشر الأصليان',
       upstreamPublisherValue: 'Hermes Agent · Nous Research',
       communityMaintainer: 'نسخة المجتمع الفيتنامية',
@@ -629,7 +633,7 @@ export const ar = defineLocale({
       communityUpdateChannel: 'قناة Hermes Vietnamese · GitHub Releases',
       bundleOutOfSync: 'إصدار التطبيق قديم',
       bundleOutOfSyncDesc:
-        'تم تحديث وقت تشغيل Hermes، لكن تطبيق سطح المكتب نفسه لا يزال إصدارًا قديمًا — لن تظهر ميزات الواجهة الجديدة (مثل Bot Mode) حتى يتم تحديث التطبيق. شغّل التحديث أدناه لإعادة بناء التطبيق. إذا لم يختفِ هذا التحذير، فأعد التثبيت من أحدث مثبّت لسطح المكتب.',
+        'تم تحديث وقت تشغيل Hermes، لكن تطبيق سطح المكتب نفسه لا يزال إصدارًا قديمًا — لن تظهر ميزات الواجهة الجديدة (مثل Agents) حتى يتم تحديث التطبيق. شغّل التحديث أدناه لإعادة بناء التطبيق. إذا لم يختفِ هذا التحذير، فأعد التثبيت من أحدث مثبّت لسطح المكتب.',
       bundleOutOfSyncAction: 'الحصول على المثبّت',
       updates: 'التحديثات',
       checkNow: 'التحقق الآن',
@@ -2393,6 +2397,10 @@ export const ar = defineLocale({
       loadingResponse: 'جار تحميل الرد...',
       resumeWhenBackgroundDone: count =>
         count === 1 ? 'سيُستأنف عند انتهاء المهمة الخلفية' : `سيُستأنف عند انتهاء ${count} مهام خلفية`,
+      agentMessaging: name => `جارٍ إرسال رسالة إلى ${name}…`,
+      agentMessaged: name => `تم إرسال رسالة إلى ${name}`,
+      agentMessageFrom: name => `رسالة من ${name}`,
+      showAgentMessage: 'عرض الرسالة',
       thinking: 'يفكر...',
       thought: 'فكّر',
       thoughtBriefly: 'فكّر قليلاً',

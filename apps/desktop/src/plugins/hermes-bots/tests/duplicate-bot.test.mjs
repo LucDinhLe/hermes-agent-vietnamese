@@ -4,6 +4,7 @@ import test from 'node:test'
 import vm from 'node:vm'
 
 const pluginSource = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
+const LOCAL_OWNER = { connectionId: 'local', profile: 'default' }
 
 function load() {
   const values = new Map()
@@ -19,7 +20,11 @@ function load() {
     COMPOSER_AREAS: { middleware: 'middleware' },
     document: { getElementById: () => null, createElement: () => ({}), head: { appendChild: () => undefined } },
     host: {
-      state: { profile: { listen: () => undefined } },
+      state: {
+        connectionId: { get: () => 'local', listen: () => undefined },
+        profile: { get: () => 'default', listen: () => undefined },
+        gateway: { listen: () => undefined }
+      },
       request: async (method, params) => {
         calls.push({ method, params })
         return { ok: true }
@@ -33,8 +38,16 @@ function load() {
     .replace(/^import .* from 'react'\r?\n/m, '')
     .replace(/^import .* from 'react\/jsx-runtime'\r?\n/m, '')
     .replace('export default {', 'globalThis.plugin = {')
-    .concat('\nglobalThis.__dup = { duplicateBot, $botMeta };\n')
+    .concat('\nglobalThis.__dup = { duplicateBot, $botMeta, $botMetaOwner };\n')
   vm.runInNewContext(source, context, { filename: 'plugin.js' })
+  context.__dup.$botMetaOwner.set(LOCAL_OWNER)
+  const duplicateBot = context.__dup.duplicateBot
+  context.__dup.duplicateBot = (bot, roster, sourceMeta) =>
+    duplicateBot(
+      { ...bot, actionOwner: LOCAL_OWNER },
+      roster,
+      sourceMeta || context.__dup.$botMeta.get()[bot.name]
+    )
   return { context, calls }
 }
 

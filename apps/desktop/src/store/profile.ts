@@ -256,7 +256,27 @@ export function prewarmProfileBackend(name: string): void {
   openGatewayForProfile(key).catch(() => undefined)
 }
 
-let gatewaySwitch: Promise<void> | null = null
+// A real promise tail, not a one-shot mutex. Callers can enqueue while an
+// earlier activation is still settling; every activation then runs in request
+// order and the final request is the final published gateway identity.
+let gatewaySwitchTail: Promise<void> = Promise.resolve()
+let pendingGatewaySwitches = 0
+
+function enqueueGatewaySwitch(target: string, activate: () => Promise<void>): Promise<void> {
+  pendingGatewaySwitches += 1
+  $gatewaySwapTarget.set(target)
+
+  const operation = gatewaySwitchTail.catch(() => undefined).then(activate)
+  gatewaySwitchTail = operation.catch(() => undefined)
+
+  return operation.finally(() => {
+    pendingGatewaySwitches -= 1
+
+    if (pendingGatewaySwitches === 0) {
+      $gatewaySwapTarget.set(null)
+    }
+  })
+}
 
 // Keep the renderer's $connection (mode / baseUrl / profile) in lockstep with
 // the profile the live gateway is now on. $connection seeds from the PRIMARY
@@ -295,31 +315,29 @@ export async function ensureGatewayProfile(profile: string | null | undefined): 
     // (e.g. the user just picked a profile in the switcher) is still in flight,
     // let it settle first so a new chat doesn't race session.create against a
     // half-open socket and land on the wrong backend.
-    if (gatewaySwitch) {
-      await gatewaySwitch.catch(() => undefined)
-    }
+    await gatewaySwitchTail.catch(() => undefined)
 
     return
   }
 
   const target = normalizeProfileKey(profile)
 
-  if (normalizeProfileKey($activeGatewayProfile.get()) === target && $gateway.get()) {
+  if (
+    pendingGatewaySwitches === 0 &&
+    normalizeProfileKey($activeGatewayProfile.get()) === target &&
+    $gateway.get()
+  ) {
     return
   }
 
-  // Serialize concurrent activations so two rapid session switches don't race
-  // the active pointer.
-  if (gatewaySwitch) {
-    await gatewaySwitch.catch(() => undefined)
-
+  // Serialize every activation on the shared promise tail. Unlike awaiting a
+  // single captured promise before assigning a new one, this also orders B and
+  // C when both arrive while A is still in flight.
+  await enqueueGatewaySwitch(target, async () => {
     if (normalizeProfileKey($activeGatewayProfile.get()) === target && $gateway.get()) {
       return
     }
-  }
 
-  $gatewaySwapTarget.set(target)
-  gatewaySwitch = (async () => {
     // ensureGatewayForProfile opens (or reuses) the target's socket and points
     // the active gateway at it — without closing the profile you came from.
     await ensureGatewayForProfile(target)
@@ -327,14 +345,7 @@ export async function ensureGatewayProfile(profile: string | null | undefined): 
     // The active backend just changed; resync $connection so remote-aware
     // paths (image.attach_bytes vs image.attach, /api/fs/*, /api/media) follow.
     await syncConnectionToActiveProfile(target)
-  })()
-
-  try {
-    await gatewaySwitch
-  } finally {
-    gatewaySwitch = null
-    $gatewaySwapTarget.set(null)
-  }
+  })
 }
 
 // Registry-aware sibling of syncConnectionToActiveProfile: a connection-scoped
@@ -376,31 +387,20 @@ export async function ensureGatewayAgent(connectionId: null | string, profile: s
     return ensureGatewayProfile(target)
   }
 
-  // Serialize against any in-flight profile/agent switch (shared mutex).
-  if (gatewaySwitch) {
-    await gatewaySwitch.catch(() => undefined)
-  }
-
-  $gatewaySwapTarget.set(target)
-  gatewaySwitch = (async () => {
+  // Serialize against every queued profile/agent switch, including siblings
+  // that arrived while an earlier activation was still in flight.
+  await enqueueGatewaySwitch(target, async () => {
     const activated = await ensureGatewayForAgent(connection, target)
 
     if (!activated) {
-      return
+      throw new Error(`Could not activate Agent ${target} on source ${connection}. The source may be unavailable.`)
     }
 
     $activeGatewayProfile.set(target)
     // The active backend just changed; resync $connection so remote-aware
     // paths (image.attach_bytes vs image.attach, /api/fs/*, /api/media) follow.
     await syncConnectionToActiveAgent(connection, target)
-  })()
-
-  try {
-    await gatewaySwitch
-  } finally {
-    gatewaySwitch = null
-    $gatewaySwapTarget.set(null)
-  }
+  })
 }
 
 // ── Sidebar profile scope (the "workspace switcher" model) ─────────────────

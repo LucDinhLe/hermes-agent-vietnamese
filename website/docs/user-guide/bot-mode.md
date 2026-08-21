@@ -1,152 +1,130 @@
 ---
-title: "Bot Mode"
-description: "Turn your Hermes profiles into a roster of named Bots — each with its own chat, role, model, memory, skills, and avatar. Bots run routines, share group chats, and message each other."
+title: "Agents"
+description: "Create and manage named Hermes Agents, invite several collaborators into a session or project, run routines, and coordinate group chats."
 ---
 
-# Bot Mode
+# Agents
 
-**Bot Mode** turns your [Hermes profiles](./profiles.md) into a roster of named **Bots**. Each Bot has its own role, model, memory, skills, and avatar; Bots run recurring routines, deliberate together in group chats, and message each other directly. Build a specialist Bot once and it is there forever, one click away.
+Hermes Vietnamese turns [profiles](./profiles.md) into named **Agents**. Each Agent can have its own role, model, memory, skills, tools, MCP servers, appearance, sessions, and routines.
 
-Bot Mode ships **built into the [desktop app](./desktop.md)** and is **on by default** — no install needed. It appears as a **Bots** tab next to Sessions in the left sidebar, with a **Routines** tile docked beside the conversation while the Bots tab is active.
+Agents are a required desktop feature. Their internal profile IDs, storage, sessions, routines, and command-line behavior stay compatible with earlier releases.
 
-:::tip A Bot is a profile
-There is no new primitive to learn: a Bot **is** a Hermes profile — isolated config, memory, skills, credentials, and chat history under `~/.hermes/profiles/<name>/`. Bot Mode is a UI over that primitive, so everything you do in it is visible from the CLI too: `hermes -p <bot> chat` opens the same agent, and Bot routines appear in `hermes cron list`. No core patches, no background daemons, no extra storage.
+:::tip An Agent is a profile
+An Agent uses the existing Hermes profile primitive under `~/.hermes/profiles/<name>/`. The desktop adds a roster and collaboration workflow over that data. `hermes -p <agent> chat`, `hermes profile list`, and `hermes cron list` continue to use the same profiles and jobs.
 :::
 
-## The Bots pane
+## The fixed Agents control
 
-The roster shows one row per agent profile: avatar, latest-message preview, and timestamp.
+Every chat has an **Agents** control in the session header, next to context usage, estimated cost, and Advisor.
 
-- **Click a Bot** to land in its chat — every Bot has a canonical, persistent **Bot Chat** conversation that is created (and pinned) the moment the Bot is born.
-- **Sessions** (from a Bot's context menu) browses and filters that profile's 200 most recent stored conversations, without changing the primary click-to-chat flow.
-- **Active now** — a presence strip above the roster shows every Bot currently working: the gateway-busy profile plus any Bot that wrote within the last 90 seconds. Each chip opens that Bot's chat. The strip never reorders the roster and disappears when the fleet is idle.
-- **Search** filters the roster as you type.
-- **Hide a Bot** — right-click a row → **Hide Bot** to take a Bot you don't use out of the roster and the Active-now strip. Hiding is display-only: @mentions still resolve, group-chat memberships are untouched, and routines keep running. Once at least one Bot is hidden, an **eye toggle** appears in the pane header — click it to reveal hidden Bots dimmed in place, then right-click → **Unhide Bot** to bring one back. Hidden Bots never toast, but they accumulate unread activity silently and the eye badges a dot so you know something happened. Hidden state is saved in the Bot's profile metadata, so it follows the Bot to every desktop connected to that backend.
+Open it to:
 
-:::note The canonical Bot Chat is a forever-chat
-Typing `/new` (or `/reset`) inside a Bot's canonical chat would fork the relationship into a scratch session — the one thing Bot Mode promises never happens. The composer reroutes it to `/compact` instead: fresh working context, same conversation. Regular sessions on the same profile keep full `/new` freedom.
-:::
+- see the **lead Agent** for the conversation;
+- see every collaborating Agent and whether it belongs to this session, this project, or both;
+- search by name, role, model, description, or available capability metadata;
+- invite more than one Agent to the current session or project;
+- remove an Agent from one scope without deleting its profile;
+- open **Manage Agents**.
 
-## Creating a Bot
+Inviting an Agent is additive. It does not switch the active gateway, replace the lead Agent, change the model, or make a model call. Use the Agent's `@handle` in the composer when you are ready to assign work. Any future lead-change action is separate and explicitly labelled.
 
-Hit **New Agent** in the roster. The quick path is three fields — **Name**, **Title**, **Description** — and the Bot exists in seconds, introducing itself as the first message of its new Bot Chat.
+The old left-side profile pane is retired. Closing a layout pane can no longer remove the only path back to Agent management.
 
-An **Advanced** disclosure opens the full capabilities surface:
+## Manage Agents
 
-- **Clone from an existing profile** — start from another Bot's config, skills, SOUL, and memory, or pick **Fresh profile** for a clean start.
-- **Create empty** — skip the bundled skills entirely for a minimal profile.
-- **Model & provider pin** — give the Bot its own model. Any provider/model pair Hermes knows about works, and different Bots can run on different models side by side. Leave it unset to inherit from the launch profile.
-- **Custom SOUL.md** — the Bot's persona and standing instructions.
-- **Per-skill, per-toolset, and per-MCP-server enablement** — tick exactly the capabilities this specialist needs.
-- **Shared keys** — by default the new Bot shares one OAuth/token pool with the main profile, so credential refreshes cannot invalidate each other. (Older gateways copy credentials instead — still functional, just forked.)
+**Manage Agents** opens a stable full-page workspace. It includes Agent profiles, groups, sessions, capabilities, and routines.
 
-### Choosing which machine it lives on ("Create on")
+From an Agent's menu you can:
 
-With more than one connection registered in [Settings → Connections](./multi-connection-desktop.md), the New Agent dialog grows a **Create on** picker. Pick a device and the profile is created on **that** machine's backend — your window never switches gateways. The new Bot then appears in the roster as a Connections Bot (with an `@name-device` handle when the name exists on several machines), and chatting with it routes to its own machine.
+- open its persistent chat or recent sessions;
+- edit its title, description, model, SOUL.md, skills, tools, and MCP servers;
+- change its generated, uploaded, geometric, or pet appearance;
+- copy the profile;
+- hide or reveal it in management views;
+- add it to groups;
+- delete a non-default profile after confirmation.
 
-With a single connection (the common case) the picker is hidden and the Bot is created on the machine you're connected to — exactly the old behavior.
+Hidden Agents remain callable by `@mention`, keep their group memberships, and continue running routines.
 
-Remote-creation notes:
+## Creating an Agent
 
-- **Clone source** is a profile of the *target* machine (its `default`) — a remote box doesn't have your local profiles to clone.
-- The live Capabilities tab binds to your active gateway, so a remote-target draft uses the staged Skills/Tools/MCP checklists instead; both read the target machine's catalog.
-- Cancelling the dialog discards the draft profile on whichever machine it was created.
+Choose **New Agent** from the management page or command palette. The quick setup asks for **Name**, **Title**, and **Description**. **Advanced** exposes:
 
-**Edit Profile** (right-click a Bot) reopens the same surface on the live profile any time: avatar, title, description, model pin, skills, toolsets, MCP servers, and the full SOUL.md.
+- **Clone from profile**, or a fresh profile with bundled skills;
+- model and provider selection;
+- SOUL.md instructions;
+- skills, tools, toolsets, and MCP servers;
+- **Create empty** for a minimal profile;
+- provider-account and API-key sharing.
 
-**Duplicate** (right-click) makes a full clone of a Bot — config, skills, SOUL.md, memory, and its look. **Delete Profile** permanently removes one, behind the same destructive confirmation the desktop's profile menu uses; the default profile cannot be deleted.
+### Provider accounts, API keys, permissions, and cost
 
-## Avatars
+Credential sharing keeps its existing default for upgrade compatibility.
 
-Every Bot gets a face:
+When sharing is enabled, the new Agent can use the main profile's OAuth sessions, subscriptions, and API keys. Its requests use those accounts' permissions and count toward the corresponding quotas or charges. Shared refresh tokens continue to refresh from the same pool.
 
-- **Geometric faces** — 7 shapes × 10 colors, with blinking eyes that scan while the Bot works.
-- **An uploaded image** — any picture you like.
-- **An AI-generated portrait** — when an image backend is configured, generated in place (this rides the standard `image.generate` RPC and works over both local and remote gateways).
-- **A pixel pet** — a companion from the [petdex gallery](./features/pets.md) that bounces beside the avatar while the Bot is busy. Run `hermes pets` in a terminal to explore the gallery.
+When sharing is disabled, Hermes creates a separate credential snapshot. That copy may need sign-in again and can drift from the main profile. Turning sharing off does not guarantee that every credential is absent; review the target profile before giving it sensitive work.
 
-A Bot's look, title, and description are stored in the profile's metadata on the backend, so the same Bot appears the same way on every desktop connected to that backend.
+### Create on another machine
+
+With several entries in [Settings → Connections](./multi-connection-desktop.md), **Create on** selects the backend that owns the new profile. The window does not silently switch gateways. Remote Agents keep source-qualified identities and may use handles such as `@research-mac-mini` when the same profile name exists on several machines.
+
+## Persistent chats and sessions
+
+Each Agent retains its existing canonical conversation. Earlier versions persisted the internal title `Bot Chat`; Hermes Vietnamese keeps that value for compatibility while presenting Agent terminology in the interface.
+
+Typing `/new` or `/reset` inside that canonical conversation compacts the working context instead of breaking the relationship into a replacement chat. Ordinary sessions on the same profile keep their regular `/new` behavior.
+
+Agent-owned canonical chats and group-member plumbing sessions remain hidden from the global Sessions list when the backend supports hidden sessions. Use the Agent's management view to browse its recent conversations.
 
 ## Routines
 
-The **Routines** pane attaches recurring tasks to the Bot that does them — "summarize my inbox every morning" lives next to the Bot responsible for it. The pane docks beside the chat only while the Bots tab is active and steps aside when you switch back to Sessions (older desktop builds keep it always visible). A structured schedule picker builds the schedule (frequency first, then only the detail that matters), with an Advanced field exposing the raw Hermes schedule string.
+The **Routines** tab attaches recurring work to the Agent that performs it. The schedule editor supports one-time, interval, daily, weekday, weekly, monthly, and advanced Hermes schedules.
 
-Routines are plain [Hermes cron jobs](./features/cron.md) namespaced `[bot:<name>] <routine>` — they also show up in `hermes cron list` and the core Cron page. Runs land in the Bot's own chat history, so the result is right where you would talk to that Bot anyway.
+Routines remain ordinary Hermes cron jobs with compatible markers such as `[bot:<name>]`. They are visible through `hermes cron list` and the core Cron page. Existing jobs are not renamed or migrated.
 
 ## Groups and group chats
 
-Right-click a local Bot → **Manage groups** to add or remove it from any number of group chats. Pick existing groups independently or create one inline. Local membership is stored in the Bot's backend-synced profile metadata, so it follows that profile across desktops; older profiles with one legacy group continue to work. Connections Bots join through the New Group Chat picker and remain source-qualified in that room's local Desktop state.
+Agents can belong to several groups. Create a room with two to six local or connected Agents, then open its standalone group row.
 
-Groups are standalone rows in the same activity-ordered roster as Bot DMs. A Bot keeps one DM row even when it belongs to several groups, while every group gets its own room row with member count, latest-message preview, timestamp, and needs-you state.
+- A message can trigger up to three serial rounds.
+- `@mentions` select specific members; without mentions, members decide whether they have something useful to add.
+- Agents may pass instead of replying.
+- `@user` marks a decision that needs you.
+- Hard message and round caps prevent runaway rooms.
+- Every member retains its existing persistent `Group: <name>` session.
+- Cross-machine members work on their own backends and remain source-qualified.
 
-**Open chat** on any group row (2–6 Bots) opens a shared room where the whole group coordinates:
+Group membership, logs, watermarks, session references, and legacy single-group metadata remain backward compatible.
 
-- Your message triggers up to **three serial rounds** of member turns. @-mentioned Bots respond (everyone responds when nobody is mentioned); each Bot replies briefly or passes, and the room settles when a full round stays silent.
-- Bots pull each other in with `@name`, and escalate real judgment calls to you with `@user` — the group row shows a **needs you** badge when that happens.
-- Hard caps (10 messages per send, 3 rounds) keep rooms from spinning.
-- Each member keeps its own persistent `Group: <name>` session, so room context survives like any other conversation.
-- **Not every Bot replies to every message.** Speaking is each member's own choice — a Bot replies only when it has something new to add and passes otherwise, and @-mentioning specific members scopes the round to them. Expect the members you addressed (or whoever has something to say) to speak, and the rest to stay quiet.
-- **Rooms can span machines.** The New Group Chat picker seats Bots from any registered connection; each member's turns run on its own machine, in its own `Group: <name>` session there. Cross-machine members carry a device badge (`dixie · Mac Mini`) in the room and in other members' transcripts, and the disambiguated `@name-device` handle works in room mentions — so same-named agents on two machines never blur together.
+## Agent-to-Agent messaging
 
-## Bot-to-bot messaging
+Type `@researcher review this plan` in a chat to hand work to another Agent. Unknown handles and email addresses pass through untouched.
 
-Bots message each other with attribution, and you can hand work off from any chat:
+Local delivery continues to use the compatible canonical chat protocol. Cross-machine delivery uses the Connections registry without foregrounding the remote gateway. Replies return with the sender's attribution.
 
-- **@mentions** — type `@researcher have a look at this` in any chat and the active Bot hands the message off, waits for the reply, and reports back. Mention names are validated against the live roster, so an email address or an unknown `@` passes through untouched.
-- **@mentions across machines** — mentioning a Bot that lives on another registered connection (use its `@name-device` handle when names collide) delivers over the Connections registry in the background: the active Bot stays on this device, the desktop routes the message to the recipient's machine, and the reply is relayed back attributed to that agent. Your window's gateway never switches.
-- **Direct messages** — a Bot reaches a teammate's Bot Chat through the standard CLI: `hermes -p <bot> chat --in ~ -c "Bot Chat" --create-if-missing -Q -q "Message from 🤖 <sender> (@<sender>): ..."`. The receiving Bot sees the message the next time it runs and knows how to reply, because the messaging protocol is part of its Bot Chat system prompt.
+The stored protocol still recognizes legacy values including `Bot Chat`, `Message from 🤖`, and `agent.bot_mode_protocol`. Those are wire and data contracts, not current interface labels.
 
-The backend teaches each Bot's canonical Bot Chat session the messaging protocol automatically at prompt-build time — including when a teammate opens it headlessly from the CLI. Only the canonical Bot Chat gets the protocol section; your regular sessions and your SOUL.md stay untouched. This is controlled by `agent.bot_mode_protocol` in `config.yaml` (default: on):
+### Headless cross-machine messages
 
-```yaml
-agent:
-  bot_mode_protocol: true   # inject the bot-to-bot messaging protocol into canonical Bot Chats
-```
-
-:::note
-Bot-to-bot delivery is per-invocation: the receiving Bot picks the message up when it next runs. Live interrupt of a Bot mid-conversation is future work.
-:::
-
-### Bot-initiated DMs across machines (`hermes peer`)
-
-Bots on one machine can message Bots on **another machine's gateway** without any desktop in the loop. Register the other gateway as a *peer* (its API server URL + `API_SERVER_KEY`):
+Register another gateway as a peer to send directly without a desktop window:
 
 ```bash
 hermes peer add spark --url http://spark.lan:8377 --key <API_SERVER_KEY>
 hermes peer list
 hermes peer dm spark "Message from 🤖 dixie (@dixie): disk status?"
-hermes peer dm spark/researcher "..."   # named profile on a multiplexed peer
+hermes peer dm spark/researcher "..."
 ```
 
-`hermes peer dm` delivers into the remote agent's canonical Bot Chat over the peer's existing API server, runs one agent turn there, and prints the reply on stdout — the exact cross-machine twin of the local `hermes -p <bot> chat` command.
-
-Once a peer is registered, the messaging protocol taught to every Bot Chat (`agent.bot_mode_protocol`) automatically includes the peer roster and the `hermes peer dm` pattern — so **your bots learn on their own** that teammates exist on other machines and how to reach them. Registering or removing a peer refreshes each Bot Chat's protocol on its next message (capability epoch).
-
-Requirements: the peer machine runs the `api_server` gateway platform with a strong `API_SERVER_KEY`; reachability is your network's business (LAN, Tailscale, VPN). The key is a credential and lives in `~/.hermes/.env` as `HERMES_PEER_<NAME>_KEY`; peer names/URLs live in `config.yaml` under `bot_peers`.
-
-## Bots across machines
-
-When you register several backends in **Settings → Connections** — the local runtime, remote gateways, SSH hosts, Hermes Cloud instances — the roster shows the Bots from **every** connected source, persistently: SSH sources are inventoried without spawning anything on the remote box, and machines that are momentarily unreachable keep their last-known rows instead of vanishing. When the same profile name exists on several sources, handles disambiguate as `@name-device` (for example `@research-homelab`). A Bot's chats, sessions, memory, and routines live on the machine that owns the profile.
-
-Clicking a Connections Bot does **not** hop your window onto that machine — stay in your chat and `@mention` it, seat it in a group chat, or create new agents on it directly with the **Create on** picker. Cloud and local agents share one roster this way: register your Hermes Cloud instance and your desktop (say, over Tailscale or SSH) and their Bots can message each other and sit in the same rooms, with each agent's work running on its own machine.
-
-See [Connecting Desktop to Many Hermes Instances](./multi-connection-desktop.md) for the full multi-connection guide.
-
-## Turning it off
-
-Bot Mode is a bundled desktop plugin. Flip it off in **Settings → Plugins → Bots** — the roster, the Routines pane, and the composer middleware unregister live, no restart needed. Your profiles, sessions, and cron jobs are untouched either way; Bot Mode never owns your data, it only renders it.
-
-There is also a preference to hide the canonical Bot Chats from the regular sidebar session list, so they only appear inside the Bots pane. (This uses the core hidden-session flag; on older gateways the chats simply stay visible.)
+The peer key is a credential. Store it securely and restrict network access to trusted LAN, VPN, or Tailscale paths.
 
 ## CLI parity
 
-Because Bots are profiles, everything has a terminal equivalent:
-
-| In Bot Mode | From a shell |
+| In the Agents interface | From a shell |
 | --- | --- |
-| Chat with a Bot | `hermes -p <bot> chat` |
-| A Bot's files, skills, memory | `~/.hermes/profiles/<bot>/` |
-| Routines | `hermes cron list` (jobs named `[bot:<name>] …`) |
-| Create / inspect profiles | `hermes profile create`, `hermes profile list` |
+| Chat with an Agent | `hermes -p <agent> chat` |
+| Agent files, skills, and memory | `~/.hermes/profiles/<agent>/` |
+| Routines | `hermes cron list` |
+| Create or inspect profiles | `hermes profile create`, `hermes profile list` |
 
-See [Profiles](./profiles.md) for the underlying primitive and [Profile Commands](../reference/profile-commands.md) for the full CLI reference.
+See [Profiles](./profiles.md), [Profile Commands](../reference/profile-commands.md), and [Connecting Desktop to Many Hermes Instances](./multi-connection-desktop.md).

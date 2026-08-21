@@ -11,6 +11,7 @@ function loadApplyAdvancedConfig(request) {
   const context = {
     host: { request },
     ensureMessagingProtocol: soul => soul,
+    invalidateAgentDescription: () => undefined,
     $lastRoster: { get: () => [] }
   }
   const section = source

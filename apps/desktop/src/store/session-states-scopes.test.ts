@@ -7,7 +7,10 @@ import {
   dropSessionState,
   liveSessionScopes,
   publishSessionState,
-  recordSessionEventScope
+  recordPrimarySessionEventSource,
+  recordSessionEventScope,
+  sessionConnectionId,
+  sessionEventProfile
 } from '@/store/session-states'
 
 /**
@@ -34,6 +37,8 @@ describe('liveSessionScopes', () => {
     publishSessionState('rt-1', state({ busy: true }))
 
     expect(liveSessionScopes()).toEqual(new Set(['conn:homelab::default']))
+    expect(sessionConnectionId('rt-1')).toBe('homelab')
+    expect(sessionEventProfile('rt-1')).toBe('default')
   })
 
   it('keeps an explicit local registry session on its composite scope', () => {
@@ -52,6 +57,7 @@ describe('liveSessionScopes', () => {
     publishSessionState('rt-1', state({ busy: false, needsInput: false }))
 
     expect(liveSessionScopes()).toEqual(new Set())
+    expect(sessionConnectionId('rt-1')).toBe('homelab')
   })
 
   it('ignores untagged (local/primary) events — no connectionId, no scope', () => {
@@ -59,6 +65,25 @@ describe('liveSessionScopes', () => {
     publishSessionState('rt-1', state({ busy: true }))
 
     expect(liveSessionScopes()).toEqual(new Set())
+    expect(sessionConnectionId('rt-1')).toBeNull()
+  })
+
+  it('binds primary events to a registered remote descriptor without adding a keep scope', () => {
+    recordPrimarySessionEventSource(
+      { session_id: 'rt-primary-remote' },
+      { connectionId: 'cloud-main', mode: 'remote' } as never
+    )
+    publishSessionState('rt-primary-remote', state({ busy: true }))
+
+    expect(sessionConnectionId('rt-primary-remote')).toBe('cloud-main')
+    expect(liveSessionScopes()).toEqual(new Set())
+  })
+
+  it('binds primary local events to the explicit local source', () => {
+    recordPrimarySessionEventSource({ profile: 'writer', session_id: 'rt-primary-local' }, { mode: 'local' } as never)
+
+    expect(sessionConnectionId('rt-primary-local')).toBe('local')
+    expect(sessionEventProfile('rt-primary-local')).toBe('writer')
   })
 
   it("keeps two sources' same-named 'default' profiles distinct", () => {
@@ -77,5 +102,7 @@ describe('liveSessionScopes', () => {
     publishSessionState('rt-1', state({ busy: true }))
 
     expect(liveSessionScopes()).toEqual(new Set())
+    expect(sessionConnectionId('rt-1')).toBeNull()
+    expect(sessionEventProfile('rt-1')).toBeNull()
   })
 })

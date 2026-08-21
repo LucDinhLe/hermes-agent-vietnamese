@@ -13,6 +13,7 @@
  * dialogs and the backend share the filesystem for local and pooled backends.
  */
 
+import { retireAgentPanes } from '@/components/pane-shell/tree/legacy-agent-pane-migration'
 import { isLayoutNode, normalize } from '@/components/pane-shell/tree/model'
 import { $layoutTree, markActivePreset, persistTree } from '@/components/pane-shell/tree/store'
 import { exportProfileArchive, importProfileArchive } from '@/hermes'
@@ -124,7 +125,10 @@ export function applyDesktopOverlay(profile: string, overlay: null | ProfileDesk
   //    the same canonicalizer the boot load uses; a null result means the
   //    tree was junk, so the current layout stays.
   if (overlay.layoutTree != null && isLayoutNode(overlay.layoutTree)) {
-    const tree = normalize(overlay.layoutTree)
+    // v31 retired the left-side Bots/Routines panes. Imported profile bundles
+    // can outlive the startup localStorage migration, so sanitize every
+    // externally supplied layout before it becomes the live persisted tree.
+    const tree = retireAgentPanes(normalize(overlay.layoutTree))
 
     if (tree) {
       $layoutTree.set(tree)

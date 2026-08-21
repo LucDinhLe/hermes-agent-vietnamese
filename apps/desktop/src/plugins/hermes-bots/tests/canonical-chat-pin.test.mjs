@@ -12,6 +12,7 @@ import vm from 'node:vm'
 // and what never happens to a live pin.
 
 const source = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
+const LOCAL_OWNER = { connectionId: 'local', profile: 'default' }
 
 function loadOpenPath({ openSession, request }) {
   const start = source.indexOf('const canonicalCreations = new Map()')
@@ -26,6 +27,8 @@ function loadOpenPath({ openSession, request }) {
         return request(method, params)
       }
     },
+    normalizeRosterOwner: (connectionId, profile) => ({ connectionId, profile }),
+    rosterOwnerStillActive: () => true,
     saveBotMeta: (name, patch) => saved.push({ name, patch: JSON.parse(JSON.stringify(patch)) }),
     $hideBotChats: { get: () => false },
     window: { setTimeout: callback => callback() }
@@ -37,7 +40,13 @@ function loadOpenPath({ openSession, request }) {
   assert.notEqual(start, -1, 'canonical chat section is missing')
   assert.notEqual(end, -1, 'canonical chat section delimiter is missing')
   vm.runInNewContext(section, context, { filename: 'canonical-pin.js' })
-  return { ...context.__open, saved, requests }
+  return {
+    ...context.__open,
+    openBotCanonicalChat: (name, pinned, history) =>
+      context.__open.openBotCanonicalChat(name, pinned, history, LOCAL_OWNER),
+    saved,
+    requests
+  }
 }
 
 test('regression: a live pinned canonical chat is opened as-is, never replaced', async () => {

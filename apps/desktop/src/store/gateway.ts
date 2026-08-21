@@ -521,7 +521,9 @@ async function routeGatewayForProfile(
 export async function requestGatewayForProfile<T>(
   profile: string,
   method: string,
-  params: Record<string, unknown> = {}
+  params: Record<string, unknown> = {},
+  timeoutMs?: number,
+  signal?: AbortSignal
 ): Promise<T> {
   const route = await routeGatewayForProfile(profile, true)
 
@@ -532,7 +534,7 @@ export async function requestGatewayForProfile<T>(
 
     const routedParams = route.scopeProfile ? { ...params, profile: route.key } : params
 
-    return await route.gateway.request<T>(method, routedParams)
+    return await route.gateway.request<T>(method, routedParams, timeoutMs, signal)
   } finally {
     route.release()
   }
@@ -548,13 +550,15 @@ export async function requestGatewayForAgent<T>(
   connectionId: null | string,
   profile: string,
   method: string,
-  params: Record<string, unknown> = {}
+  params: Record<string, unknown> = {},
+  timeoutMs?: number,
+  signal?: AbortSignal
 ): Promise<T> {
   const key = normKey(profile)
   const scope = registryBackendScopeKey(connectionId, key)
 
   if (scope === key) {
-    return requestGatewayForProfile<T>(key, method, params)
+    return requestGatewayForProfile<T>(key, method, params, timeoutMs, signal)
   }
 
   if (!window.hermesDesktop?.getConnectionFor) {
@@ -580,7 +584,7 @@ export async function requestGatewayForAgent<T>(
       await openSecondary(entry)
     }
 
-    return await entry.gateway.request<T>(method, params)
+    return await entry.gateway.request<T>(method, params, timeoutMs, signal)
   } finally {
     entry.activeRequests = Math.max(0, entry.activeRequests - 1)
 
@@ -672,6 +676,7 @@ export async function ensureGatewayForAgent(connectionId: null | string, profile
     entry.wantOpen &&
     g.secondaries.get(scope) === entry &&
     Boolean(entry.connection) &&
+    isOpen(entry.gateway) &&
     applyActive(scope, activationEpoch)
 
   if (activated && entry.connection) {

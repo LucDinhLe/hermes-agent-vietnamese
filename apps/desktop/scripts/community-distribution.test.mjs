@@ -4,6 +4,8 @@ import { resolve } from 'node:path'
 
 import { test } from 'vitest'
 
+import { resolveVietnameseReleaseCandidate } from '../../../scripts/vietnamese-release.mjs'
+
 const repoRoot = resolve(import.meta.dirname, '..', '..', '..')
 const communityRepo = 'LucDinhLe/hermes-agent-vietnamese'
 const upstreamRepo = 'NousResearch/hermes-agent'
@@ -41,10 +43,15 @@ test('upstream contributor bookkeeping stays disabled in community forks', () =>
 test('packaged upgrades retain the installed identity and disclose the MIT license', () => {
   const pkg = JSON.parse(readFileSync(resolve(repoRoot, 'apps/desktop/package.json'), 'utf8'))
   const metadata = JSON.parse(readFileSync(resolve(repoRoot, 'apps/desktop/product-metadata.json'), 'utf8'))
+  const candidate = resolveVietnameseReleaseCandidate(`vi-v${metadata.technicalVersion}-1`)
   const main = readFileSync(resolve(repoRoot, 'apps/desktop/electron/main.ts'), 'utf8')
   const exeIdentity = readFileSync(resolve(repoRoot, 'apps/desktop/scripts/set-exe-identity.mjs'), 'utf8')
 
   assert.equal(metadata.displayName, 'Hermes Vietnamese')
+  assert.equal(metadata.productVersion, candidate.productVersion)
+  assert.match(metadata.upstream.version, /^\d+\.\d+\.\d+$/)
+  assert.notEqual(metadata.upstream.version, metadata.technicalVersion)
+  assert.equal(pkg.version, metadata.technicalVersion)
   assert.equal(pkg.productName, metadata.technicalIdentity.packageProductName)
   assert.equal(pkg.build.appId, metadata.technicalIdentity.appId)
   assert.equal(pkg.build.productName, metadata.technicalIdentity.packageProductName)

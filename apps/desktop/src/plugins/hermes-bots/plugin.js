@@ -68,6 +68,10 @@ const { McpTab, ToolsetConfigPanel } = sdk
 // Keep optional exports feature-detected; test harnesses may strip the SDK namespace.
 const SkillsView = typeof sdk === 'undefined' ? undefined : sdk.SkillsView
 const Streamdown = typeof sdk === 'undefined' ? undefined : sdk.Streamdown
+const DropdownMenuCheckboxItem = typeof sdk === 'undefined' ? undefined : sdk.DropdownMenuCheckboxItem
+const DropdownMenuSearch = typeof sdk === 'undefined' ? undefined : sdk.DropdownMenuSearch
+const usePluginTranslate =
+  typeof sdk === 'undefined' || typeof sdk.usePluginI18n !== 'function' ? () => agentText : sdk.usePluginI18n
 // Budgeted render loop (fps cap + observability pause + dormancy + teardown).
 // Feature-detected: older desktops fall back to the hand-rolled clock below.
 const createBudgetedLoop = typeof sdk === 'undefined' ? undefined : sdk.createBudgetedLoop
@@ -75,13 +79,913 @@ const createBudgetedLoop = typeof sdk === 'undefined' ? undefined : sdk.createBu
 const ID = 'hermes-bots'
 const ROSTER_KEY = [ID, 'roster']
 const ROUTINES_KEY = [ID, 'routines']
+const AGENT_MANAGEMENT_PATH = '/agent-profiles'
+const COLLABORATION_KEY = 'collaboration-memberships-v1'
+const COLLABORATION_PROJECT_BINDINGS_KEY = 'collaboration-project-bindings-v1'
+const COLLABORATION_SESSION_BINDINGS_KEY = 'collaboration-session-bindings-v1'
+const COLLABORATION_SCHEMA = 1
 const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/
+
+const AGENT_LOCALES = {
+  en: {
+    common: {
+      back: 'Back',
+      cancel: 'Cancel',
+      save: 'Save',
+      saving: 'Saving…',
+      retry: 'Retry',
+      retryNow: 'Retry now',
+      delete: 'Delete',
+      deleting: 'Deleting…',
+      deleted: 'Deleted',
+      working: 'Working…',
+      search: 'Search',
+      searching: 'Searching…',
+      sessions: 'Sessions',
+      editProfile: 'Edit Agent profile',
+      duplicate: 'Duplicate',
+      newAgent: 'New Agent',
+      newGroupChat: 'New Group Chat'
+    },
+    session: {
+      title: 'Agents',
+      trigger: count => (count ? `Agents · ${count} collaborating` : 'Invite collaborating Agents'),
+      lead: 'Lead Agent',
+      leadHelp: 'Inviting a collaborator does not change the lead Agent.',
+      collaborators: 'Collaborating Agents',
+      invited: 'Invited',
+      waiting: 'waiting for a task',
+      active: 'active',
+      ready: 'ready',
+      scope: 'Add to',
+      scopeSession: 'This session',
+      scopeProject: 'This project',
+      sessionUnavailable: 'Send the first message before inviting an Agent to this session.',
+      projectUnavailable: 'Choose a project folder before inviting an Agent to this project.',
+      search: 'Search by Agent, role, model, or capability…',
+      noMatch: 'No Agents match this search.',
+      noCandidates: 'No other Agents are available.',
+      invite: name => `Invite ${name}`,
+      joined: 'Participating',
+      remove: name => `Remove ${name}`,
+      removed: name => `${name} left this scope`,
+      added: name => `${name} was invited as a collaborator`,
+      workHint: handle => `Use @${handle} in the composer to give this Agent work. Inviting alone makes no model call.`,
+      manage: 'Manage Agents',
+      unavailable: 'Unavailable on this connection',
+      capabilities: 'Capabilities not described yet',
+      skills: count => `${count} skills`
+    },
+    activity: {
+      newMessage: label => `🤖 New message for ${label}`,
+      newActivity: label => `${label} has new activity`,
+      openChat: 'Open the chat to see it.'
+    },
+    profile: {
+      copySuffix: '(copy)',
+      noDuplicateName: 'No free name for the duplicate.',
+      duplicateStarted: name => `Duplicating ${name}…`,
+      duplicateCreated: (name, source) => `Created ${name} — full copy of ${source}`,
+      duplicateFailed: 'Duplicate failed',
+      deleteFailed: name => `Could not delete profile ${name}`,
+      deleted: name => `Deleted profile ${name}`,
+      draftDiscarded: name => `Draft Agent "${name}" discarded`,
+      draftCleanupFailed: name => `Could not clean up draft profile "${name}"`,
+      sourceChanged: 'The active Agent source changed. Reopen this action from the intended source.',
+      openChatFailed: name => `Could not open ${name}'s chat — try again`,
+      sessionOpenFailed: 'Could not open session',
+      unsupportedSessionOpen: 'This Hermes Vietnamese version cannot open stored sessions',
+      conversation: 'Conversation',
+      intro: 'Hey, tell me about yourself!',
+      continuousTitle: 'This Agent chat never resets',
+      continuousMessage:
+        'Agent chats are one continuous conversation, so Hermes will compact it instead. For a temporary session with this Agent, open a separate session.'
+    },
+    remote: {
+      stayHere: handle => `Stay in this chat and @${handle} to message this Agent. The gateway stays on this device.`,
+      couldNotReach: label => `Could not reach ${label}`,
+      sourceFallback: 'the remote source',
+      livesOn: label => `Lives on ${label}`,
+      messaged: handle => `Messaged @${handle}. This Agent will relay the reply when it arrives.`,
+      noReply: (handle, label) => `No reply from @${handle} yet — check its Agent chat on ${label}.`,
+      deliveryFailed: handle => `Could not reach @${handle}.`,
+      updateRequired: 'Update Hermes Vietnamese to chat with Agents on other connections.',
+      stillOn: (current, target) => `Still on ${current}, not ${target}`,
+      sourceUnavailable: (profile, source) => `Agent ${profile} is unavailable on ${source}.`,
+      noSession: 'No remote Agent session is available'
+    },
+    mcp: {
+      addFailed: 'Could not add server',
+      noTarget: 'No target profile',
+      setFailed: key => `Failed to set ${key}`,
+      configured: name => `${name} configured`,
+      testFailed: 'Server test failed after setup',
+      oauthStartFailed: 'Could not start OAuth',
+      completeSignIn: 'Complete sign-in in your browser…',
+      authenticated: name => `${name} authenticated`,
+      oauthFailed: 'OAuth failed',
+      needsSetup: keys => `needs setup (${keys}) — restart the gateway to enable in-app setup`,
+      setUpDone: 'set up ✓',
+      saveAndTest: 'Save & test',
+      authorizing: 'Authorizing…',
+      setupFailed: 'Setup failed',
+      signIn: 'Sign in…',
+      setUp: 'Set up…',
+      none: 'No MCP servers configured or in the catalog.',
+      catalog: 'catalog',
+      catalogInstalled: 'catalog · installed',
+      createHelp:
+        'Configured servers copy from the main profile; catalog entries are the bundled MCP menu. Entries needing API keys go through setup first, and credentials follow the account-sharing choice.'
+    },
+    avatar: {
+      shapeTab: 'Agent',
+      generateTab: 'Generate',
+      uploadTab: 'Upload',
+      petTab: 'Pet',
+      removeImage: 'Remove image — use a shape',
+      describe: 'Describe your avatar…',
+      generating: 'Generating…',
+      generate: 'Generate',
+      blankHint: 'Leave blank to generate from the Agent name and description.',
+      noModel:
+        'No image model is available. If you just enabled one or updated Hermes, restart the gateway from the menu.',
+      checking: 'Checking the image backend…',
+      chooseImage: 'Choose an image…',
+      tooLarge: 'Image too large (max 15 MB).',
+      generationFailed: 'Avatar generation failed',
+      backendFailed: 'generation failed'
+    },
+    pet: {
+      none: 'No pets in the petdex gallery. Run `hermes pets` to explore.',
+      pick: 'Pick a pet as this Agent’s profile picture.',
+      search: count => `Search ${count} pets…`,
+      remove: 'Remove — return to a shape avatar',
+      noMatch: 'No pets match.',
+      loadFailed: 'Could not load that pet — try another.',
+      more: (shown, total) => `Scroll for more (${shown} of ${total})`
+    },
+    roster: {
+      noConversations: 'No conversations yet — say hi',
+      pinned: 'Pinned',
+      hidden: 'Hidden from the Agent list',
+      unread: 'unread',
+      activeRecently: 'Active in the last 90 seconds',
+      lastFrom: handle => `Last message came from @${handle} (Agent to Agent)`,
+      unpinned: name => `${name} unpinned`,
+      pinnedTop: name => `${name} pinned to the top`,
+      unpin: 'Unpin',
+      pinTop: 'Pin to top',
+      visibleAgain: name => `${name} is back in the Agent list`,
+      hiddenNotice: name => `${name} hidden — use the eye button in the Agents header to show hidden Agents`,
+      unhide: 'Unhide Agent',
+      hide: 'Hide Agent',
+      groups: names => `Groups: ${names}…`,
+      manageGroups: 'Manage groups…',
+      newChat: 'New chat with this Agent',
+      title: 'Agents',
+      toastsOn: 'Activity notifications on — select to silence',
+      toastsOff: 'Activity notifications off — select to enable',
+      hideHiddenAgain: 'Hide hidden Agents again',
+      showHidden: count => `Show ${count} hidden Agent${count === 1 ? '' : 's'}`,
+      hideHidden: 'Hide hidden Agents',
+      showHiddenAria: 'Show hidden Agents',
+      hiddenUnread: 'a hidden Agent has unread activity',
+      newMenu: 'New…',
+      newAria: 'New Agent or group chat',
+      searchAria: 'Search Agents',
+      searchPlaceholder: 'Search Agents…',
+      stale: 'Agent list refresh failed — showing the last good list.',
+      waitingReconnect: ' Waiting for the gateway to reconnect…',
+      unavailable: error => `Agent list unavailable: ${error}. If your gateway predates profiles.list, update Hermes and restart the gateway.`,
+      gatewayError: 'gateway error',
+      waitingGateway: 'Waiting for the gateway connection… Remote gateways can take a few seconds; retries are automatic.',
+      none: 'No Agents yet',
+      noneHelp: 'Create your first teammate.',
+      noMatch: query => `No Agents match “${query}”`,
+      allHidden: 'All Agents are hidden — use the eye button above to show them.',
+      deleteTitle: 'Delete Agent and profile?',
+      deleteDescriptionStart: 'This will permanently delete the Agent ',
+      deleteDescriptionMiddle: ' and its associated Hermes profile at ',
+      deleteDescriptionEnd: '. This cannot be undone.'
+    },
+    model: {
+      gatewayDefault: 'gateway default',
+      provider: 'Provider',
+      model: 'Model',
+      providerCustom: 'Provider (Custom)',
+      modelCustom: 'Model (Custom)',
+      backToDropdowns: '← Back to dropdowns',
+      inherit: 'Inherit (launch profile)',
+      manual: '✏️ Enter manually…',
+      providerPlaceholder: 'omnirouter / 9router / nous …',
+      modelPlaceholder: 'antigravity/gemini-3.6-flash-high',
+      providerExample: 'e.g. omnirouter, inferx, 9router',
+      modelExample: 'e.g. antigravity/gemini-3.6-flash-high',
+      exampleName: 'e.g. model name',
+      inherited: 'inherited from launch profile'
+    },
+    advanced: {
+      newerGateway: 'Full configuration needs a newer gateway. Restart it after updating Hermes.',
+      capabilitiesNow: 'Capabilities (applies immediately — skills, tools, MCP)',
+      soulProtocol: 'SOUL.md (persona + Agent-messaging protocol)',
+      skillsEnabled: (enabled, total) => `Skills (${enabled}/${total} enabled)`,
+      filterSkills: 'Filter skills…',
+      toolsetsEnabled: (enabled, total) => `Toolsets (${enabled}/${total} enabled — clearing all restores the default)`,
+      mcpServers: 'MCP servers',
+      catalogSource: source => `Catalog from ${source} — unchecked skills are disabled after creation.`,
+      defaultTools: 'Leaving all or none checked keeps the default toolset behavior.',
+      catalogNeedsGateway: 'The capability catalog needs a newer gateway. Restart it after updating Hermes.',
+      emptySkills: '“Create empty” is selected — no bundled skills will be installed.'
+    },
+    hub: {
+      installed: label => `Skill "${label}" installed`,
+      installFailed: label => `Installing "${label}" failed`,
+      title: 'Skills Hub',
+      hide: 'hide the hub browser',
+      browse: 'browse the full hub ▾',
+      frameTitle: 'Hermes Skills Hub',
+      installing: label => `Installing "${label}"…`,
+      addHint: 'Select “+ Add to this Agent” on any skill. It installs and appears above; drag the corner to resize.',
+      searchPlaceholder: 'Search the hub (community + well-known sources)…',
+      searchingHint: 'Searching community and well-known sources — this can take about 10 seconds…',
+      noMatch: 'No Hub skills matched.',
+      added: '✓ added',
+      installTitle: name => `Install "${name}" and add it to the list above`
+    },
+    edit: {
+      title: 'Edit Agent profile',
+      description: (name, profile) => `Appearance and role for ${name} (${profile}).`,
+      nameTitle: 'Title',
+      descriptionLabel: 'Description',
+      descriptionPlaceholder: 'What should this Agent help with?',
+      advanced: 'Advanced — model, skills, toolsets, SOUL.md',
+      localLookFailed: 'Saved the appearance locally; remote persistence failed',
+      descriptionFailed: 'Saved the appearance locally; description update failed',
+      sectionsFailed: names => `Some sections failed: ${names}`,
+      advancedFailed: 'Advanced configuration failed',
+      updated: name => `${name} updated`
+    },
+    create: {
+      title: 'New Agent',
+      description: 'A named teammate with its own memory, skills, and chat. It can message your other Agents.',
+      name: 'Name',
+      namePlaceholder: 'inbox-triage',
+      duplicateLocal: name => `An Agent named "${name}" already exists.`,
+      duplicateRemote: (name, target) => `An Agent named "${name}" already exists on ${target}.`,
+      createOn: 'Create on',
+      current: label => `${label} (current)`,
+      remoteHelp: target => `The Agent is created on ${target} and appears in the list as a Connections Agent. Chat routes to that machine.`,
+      titleLabel: 'Title',
+      titlePlaceholder: 'Inbox Triage',
+      descriptionLabel: 'Description',
+      descriptionPlaceholder: 'What should this Agent help with?',
+      advanced: 'Advanced',
+      general: 'General',
+      capabilities: 'Capabilities',
+      skills: 'Skills',
+      tools: 'Tools',
+      mcp: 'MCP',
+      profileNotReady: 'Could not create the profile yet',
+      clone: 'Clone from profile',
+      cloneOn: target => `Clone from profile (on ${target})`,
+      fresh: 'Fresh profile (bundled skills)',
+      soul: 'SOUL.md (optional — replaces the generated persona)',
+      soulHint: 'Leave blank to generate it from the name, title, description, and Agent-messaging roster.',
+      shareAuth: 'Share provider accounts; copy API keys from the main profile',
+      shareAuthHelp:
+        'When enabled, OAuth and account tokens use one shared store, while static .env API keys are copied into this Agent at creation. Requests use the same provider permissions and count toward the same subscriptions, quotas, and charges. Turning this off copies an isolated OAuth snapshot instead; API keys are still copied. The snapshot may require a separate sign-in, and later token refreshes can diverge or invalidate the other copy.',
+      empty: 'Create empty (skip bundled skills)',
+      nameTakenCaps: 'That name is taken — choose another before configuring capabilities.',
+      nameFirstCaps: 'Name the Agent first. Opening this tab creates a draft profile, which is discarded if you cancel.',
+      createFailed: 'Could not create the Agent.',
+      sharedAuthUnavailable:
+        'These provider accounts cannot safely use one shared refresh-token pool. Turn account sharing off to create an isolated snapshot, or sign in and create this Agent from the main Hermes profile without a private credential pool.',
+      sharedAuthUnsupported:
+        'This Agent source cannot confirm safe account sharing yet. Update Hermes on that source, or turn account sharing off to create an isolated snapshot.',
+      created: name => `Agent "${name}" created`,
+      createdOn: (name, target) => `Agent "${name}" created on ${target}`,
+      creating: 'Creating…',
+      action: 'Create Agent'
+    },
+    routines: {
+      tab: 'Routines',
+      untitled: 'Untitled routine',
+      filterHint: 'Routines exist in this profile, but none belong to this Agent. Create a routine here or review all scheduled tasks in Cron.',
+      nameNul: 'Routine name cannot contain NUL (U+0000).',
+      instructionNul: 'Routine instruction cannot contain NUL (U+0000).',
+      once: value => `Once (${value})`,
+      daily: 'Daily',
+      hourly: 'Hourly',
+      everyDays: days => `Every ${days} days`,
+      everyHours: hours => `Every ${hours}h`,
+      everyMinutes: minutes => `Every ${minutes}m`,
+      updateFailed: 'Routine update failed',
+      delete: 'Delete routine',
+      next: value => `next ${value}`,
+      paused: 'paused',
+      legacyPaused: 'Paused for security. Delete and recreate this legacy routine before running it again.',
+      frequencyOnce: 'Once, in…',
+      frequencyHourly: 'Every hour',
+      frequencyDaily: 'Every day',
+      frequencyWeekdays: 'Weekdays',
+      frequencyWeekly: 'Every week',
+      frequencyMonthly: 'Every month',
+      frequencyInterval: 'Interval',
+      frequencyAdvanced: 'Advanced…',
+      monday: 'Monday',
+      tuesday: 'Tuesday',
+      wednesday: 'Wednesday',
+      thursday: 'Thursday',
+      friday: 'Friday',
+      saturday: 'Saturday',
+      sunday: 'Sunday',
+      am: 'AM',
+      pm: 'PM',
+      minuteUnit: 'minute(s)',
+      hourUnit: 'hour(s)',
+      dayUnit: 'day(s)',
+      totalRuns: count => `, ${count} time(s) total`,
+      summaryOnce: (count, unit) => `Runs once, ${count} ${unit} from now`,
+      summaryHourly: 'Runs at the top of every hour',
+      summaryDaily: time => `Runs every day at ${time}`,
+      summaryWeekdays: time => `Runs Monday–Friday at ${time}`,
+      summaryWeekly: (day, time) => `Runs every ${day} at ${time}`,
+      summaryMonthly: (day, time) => `Runs on day ${day} of each month at ${time}`,
+      summaryInterval: (count, unit) => `Runs every ${count} ${unit}`,
+      summaryRaw: 'Raw schedule — every Nm/Nh/Nd or 5-field cron',
+      rawPlaceholder: 'every 1d · every 2h · 0 9 * * * (cron)',
+      minutesFromNow: 'minutes from now',
+      hoursFromNow: 'hours from now',
+      daysFromNow: 'days from now',
+      minutes: 'minutes',
+      hours: 'hours',
+      days: 'days',
+      dayOfMonth: 'Day of month',
+      stopAfter: 'Stop after',
+      runsForever: 'runs (blank = forever)',
+      scheduled: title => `Routine "${title}" scheduled`,
+      newTitle: 'New Routine',
+      newDescription: name => `A recurring task ${name} runs on a schedule. Results stay in this Agent’s chat history.`,
+      name: 'Name',
+      namePlaceholder: 'Name this routine',
+      instruction: 'Instruction',
+      instructionPlaceholder: 'What should this routine do each time it runs?',
+      when: 'When to run',
+      continuity: 'Continuity: each run sees the previous run’s output so it can deduplicate or continue where it stopped',
+      scheduling: 'Scheduling…',
+      create: 'Create Routine',
+      stale: 'Could not refresh routines. Showing the last list we had.',
+      loadFailed: 'Could not load routines. The list may still be there.',
+      createForAgent: 'Create a routine for this Agent'
+    },
+    sessions: {
+      untitled: 'Untitled session',
+      noMessages: 'No messages yet',
+      heading: name => `${name} sessions`,
+      filterAria: 'Filter sessions',
+      filterPlaceholder: 'Filter sessions…',
+      recent: count => `Showing the ${count} most recent sessions.`,
+      loadFailed: 'Could not load sessions for this profile.',
+      noRecentMatch: count => `No matching sessions in the ${count} most recent.`,
+      noMatch: 'No sessions match that filter.',
+      none: 'No stored sessions yet.',
+      activeNow: 'Active now',
+      openChat: name => `Open ${name}'s chat`
+    },
+    groups: {
+      manage: 'Manage groups',
+      manageDescription: 'An Agent can join multiple group chats. Memberships sync to every machine.',
+      added: (name, group) => `${name} added to “${group}”`,
+      removed: (name, group) => `${name} removed from “${group}”`,
+      newPlaceholder: 'New group…',
+      namePlaceholder: 'Group name (for example, Research)',
+      createJoin: 'Create & join',
+      removeAll: 'Remove from all groups',
+      created: (name, count) => `“${name}” created with ${count} Agents`,
+      newChat: 'New Group Chat',
+      pickDescription: count => `Pick 2–${count} Agents. Local memberships sync through each Agent profile; cross-machine members remain scoped to this room.`,
+      searchAria: 'Search Agents to add',
+      searchPlaceholder: 'Search Agents to add…',
+      removeSelection: 'Remove from selection',
+      inGroups: names => `in ${names}`,
+      noMatch: query => `No Agents match “${query}”`,
+      noAgents: 'No Agents yet — create an Agent first.',
+      nameAria: 'Group name',
+      pickMinimum: 'Pick at least 2 Agents',
+      createAction: count => `Create Group${count ? ` (${count})` : ''}`,
+      chatHeading: group => `${group} — group chat`,
+      memberCount: count => `${count} Agents`,
+      disbandTitle: group => `Disband the ${group} group chat`,
+      you: 'You',
+      hideHandle: 'Hide full handle',
+      showHandle: 'Show full handle',
+      empty: 'Say something — every Agent in this group hears the room.',
+      thinking: name => `${name} is thinking…`,
+      working: 'The room is working…',
+      messageAria: group => `Message ${group}`,
+      messagePlaceholder: group => `Message ${group}… (@name to direct, @everyone for all)`,
+      send: 'Send',
+      disbandConfirm: 'Disband group chat?',
+      disbandDescription: (group, count) => `This removes the ${group} grouping from its ${count} Agents and clears the shared room log. The Agents and their existing group sessions are kept.`,
+      disband: 'Disband',
+      disbanding: 'Disbanding…',
+      disbanded: 'Disbanded',
+      disbandedToast: group => `Disbanded “${group}”`,
+      noMessages: 'No messages yet — say hi to the room',
+      needsInputTitle: 'An Agent in this room needs your input',
+      needsYou: 'needs you'
+    },
+    palette: {
+      manage: 'Agents: Manage',
+      newAgent: 'Agents: New Agent…'
+    },
+    manifest: {
+      description: 'Create and manage Agent profiles, capabilities, groups, and routines.'
+    },
+    management: {
+      title: 'Manage Agents',
+      description: 'Create, edit, copy, delete, group, and configure Agent capabilities and routines.',
+      agents: 'Agents',
+      routines: 'Routines'
+    }
+  },
+  vi: {
+    common: {
+      back: 'Quay lại',
+      cancel: 'Hủy',
+      save: 'Lưu',
+      saving: 'Đang lưu…',
+      retry: 'Thử lại',
+      retryNow: 'Thử lại ngay',
+      delete: 'Xóa',
+      deleting: 'Đang xóa…',
+      deleted: 'Đã xóa',
+      working: 'Đang xử lý…',
+      search: 'Tìm kiếm',
+      searching: 'Đang tìm…',
+      sessions: 'Các phiên',
+      editProfile: 'Sửa hồ sơ Agent',
+      duplicate: 'Sao chép',
+      newAgent: 'Agent mới',
+      newGroupChat: 'Nhóm trò chuyện mới'
+    },
+    session: {
+      title: 'Agents',
+      trigger: count => (count ? `Agents · ${count} cộng tác` : 'Mời Agent cộng tác'),
+      lead: 'Agent chủ trì',
+      leadHelp: 'Mời Agent cộng tác không thay đổi Agent chủ trì.',
+      collaborators: 'Agents đang tham gia',
+      invited: 'Đã mời',
+      waiting: 'chờ giao việc',
+      active: 'đang hoạt động',
+      ready: 'sẵn sàng',
+      scope: 'Thêm vào',
+      scopeSession: 'Phiên này',
+      scopeProject: 'Dự án này',
+      sessionUnavailable: 'Hãy gửi tin nhắn đầu tiên trước khi mời Agent vào phiên này.',
+      projectUnavailable: 'Hãy chọn thư mục dự án trước khi mời Agent vào dự án.',
+      search: 'Tìm theo Agent, vai trò, model hoặc năng lực…',
+      noMatch: 'Không có Agent phù hợp với tìm kiếm.',
+      noCandidates: 'Chưa có Agent khác để mời.',
+      invite: name => `Mời ${name}`,
+      joined: 'Đang tham gia',
+      remove: name => `Xóa ${name} khỏi phạm vi này`,
+      removed: name => `${name} đã rời phạm vi này`,
+      added: name => `Đã mời ${name} làm Agent cộng tác`,
+      workHint: handle => `Dùng @${handle} trong ô soạn thảo để giao việc. Việc mời không tự gọi model.`,
+      manage: 'Quản lý Agents',
+      unavailable: 'Không kết nối được từ nguồn này',
+      capabilities: 'Chưa có mô tả năng lực',
+      skills: count => `${count} kỹ năng`
+    },
+    activity: {
+      newMessage: label => `🤖 Tin nhắn mới cho ${label}`,
+      newActivity: label => `${label} có hoạt động mới`,
+      openChat: 'Mở cuộc trò chuyện để xem.'
+    },
+    profile: {
+      copySuffix: '(bản sao)',
+      noDuplicateName: 'Không còn tên trống cho bản sao.',
+      duplicateStarted: name => `Đang sao chép ${name}…`,
+      duplicateCreated: (name, source) => `Đã tạo ${name} — bản sao đầy đủ của ${source}`,
+      duplicateFailed: 'Sao chép thất bại',
+      deleteFailed: name => `Không thể xóa hồ sơ ${name}`,
+      deleted: name => `Đã xóa hồ sơ ${name}`,
+      draftDiscarded: name => `Đã hủy Agent nháp "${name}"`,
+      draftCleanupFailed: name => `Không thể dọn hồ sơ nháp "${name}"`,
+      sourceChanged: 'Nguồn Agent đang hoạt động đã thay đổi. Hãy mở lại thao tác từ đúng nguồn.',
+      openChatFailed: name => `Không thể mở cuộc trò chuyện của ${name} — hãy thử lại`,
+      sessionOpenFailed: 'Không thể mở phiên',
+      unsupportedSessionOpen: 'Phiên bản Hermes Vietnamese này chưa thể mở phiên đã lưu',
+      conversation: 'Cuộc trò chuyện',
+      intro: 'Hãy giới thiệu về bạn nhé!',
+      continuousTitle: 'Cuộc trò chuyện Agent này không đặt lại',
+      continuousMessage:
+        'Cuộc trò chuyện Agent là một mạch liên tục, nên Hermes sẽ thu gọn ngữ cảnh thay vì đặt lại. Muốn trao đổi tạm thời với Agent này, hãy mở một phiên riêng.'
+    },
+    remote: {
+      stayHere: handle => `Hãy ở lại cuộc trò chuyện này và dùng @${handle} để nhắn cho Agent. Gateway vẫn ở thiết bị hiện tại.`,
+      couldNotReach: label => `Không thể kết nối tới ${label}`,
+      sourceFallback: 'nguồn từ xa',
+      livesOn: label => `Hoạt động trên ${label}`,
+      messaged: handle => `Đã nhắn @${handle}. Agent này sẽ chuyển tiếp câu trả lời khi nhận được.`,
+      noReply: (handle, label) => `@${handle} chưa trả lời — hãy kiểm tra cuộc trò chuyện Agent trên ${label}.`,
+      deliveryFailed: handle => `Không thể kết nối tới @${handle}.`,
+      updateRequired: 'Hãy cập nhật Hermes Vietnamese để trò chuyện với Agents trên kết nối khác.',
+      stillOn: (current, target) => `Vẫn đang ở ${current}, chưa chuyển tới ${target}`,
+      sourceUnavailable: (profile, source) => `Agent ${profile} hiện không khả dụng trên ${source}.`,
+      noSession: 'Chưa có phiên Agent từ xa'
+    },
+    mcp: {
+      addFailed: 'Không thể thêm máy chủ',
+      noTarget: 'Chưa có hồ sơ đích',
+      setFailed: key => `Không thể đặt ${key}`,
+      configured: name => `Đã cấu hình ${name}`,
+      testFailed: 'Kiểm tra máy chủ thất bại sau khi thiết lập',
+      oauthStartFailed: 'Không thể bắt đầu OAuth',
+      completeSignIn: 'Hoàn tất đăng nhập trong trình duyệt…',
+      authenticated: name => `Đã xác thực ${name}`,
+      oauthFailed: 'OAuth thất bại',
+      needsSetup: keys => `cần thiết lập (${keys}) — khởi động lại gateway để bật thiết lập trong ứng dụng`,
+      setUpDone: 'đã thiết lập ✓',
+      saveAndTest: 'Lưu và kiểm tra',
+      authorizing: 'Đang xác thực…',
+      setupFailed: 'Thiết lập thất bại',
+      signIn: 'Đăng nhập…',
+      setUp: 'Thiết lập…',
+      none: 'Chưa có máy chủ MCP nào được cấu hình hoặc có trong danh mục.',
+      catalog: 'danh mục',
+      catalogInstalled: 'danh mục · đã cài',
+      createHelp:
+        'Máy chủ đã cấu hình được sao chép từ hồ sơ chính; các mục trong danh mục là menu MCP đi kèm. Mục cần API key sẽ qua bước thiết lập trước, và thông tin xác thực tuân theo lựa chọn chia sẻ tài khoản.'
+    },
+    avatar: {
+      shapeTab: 'Agent',
+      generateTab: 'Tạo ảnh',
+      uploadTab: 'Tải lên',
+      petTab: 'Thú cưng',
+      removeImage: 'Bỏ ảnh — dùng hình dạng',
+      describe: 'Mô tả ảnh đại diện…',
+      generating: 'Đang tạo…',
+      generate: 'Tạo ảnh',
+      blankHint: 'Để trống để tạo từ tên và mô tả của Agent.',
+      noModel: 'Chưa có model tạo ảnh. Nếu vừa bật model hoặc cập nhật Hermes, hãy khởi động lại gateway từ menu.',
+      checking: 'Đang kiểm tra dịch vụ tạo ảnh…',
+      chooseImage: 'Chọn ảnh…',
+      tooLarge: 'Ảnh quá lớn (tối đa 15 MB).',
+      generationFailed: 'Tạo ảnh đại diện thất bại',
+      backendFailed: 'tạo ảnh thất bại'
+    },
+    pet: {
+      none: 'Chưa có thú cưng trong bộ sưu tập petdex. Chạy `hermes pets` để khám phá.',
+      pick: 'Chọn một thú cưng làm ảnh hồ sơ của Agent.',
+      search: count => `Tìm trong ${count} thú cưng…`,
+      remove: 'Bỏ — quay lại ảnh theo hình dạng',
+      noMatch: 'Không có thú cưng phù hợp.',
+      loadFailed: 'Không thể tải thú cưng này — hãy thử con khác.',
+      more: (shown, total) => `Cuộn để xem thêm (${shown}/${total})`
+    },
+    roster: {
+      noConversations: 'Chưa có cuộc trò chuyện — hãy chào Agent',
+      pinned: 'Đã ghim',
+      hidden: 'Đã ẩn khỏi danh sách Agents',
+      unread: 'chưa đọc',
+      activeRecently: 'Hoạt động trong 90 giây vừa qua',
+      lastFrom: handle => `Tin nhắn gần nhất từ @${handle} (Agent với Agent)`,
+      unpinned: name => `Đã bỏ ghim ${name}`,
+      pinnedTop: name => `Đã ghim ${name} lên đầu`,
+      unpin: 'Bỏ ghim',
+      pinTop: 'Ghim lên đầu',
+      visibleAgain: name => `${name} đã trở lại danh sách Agents`,
+      hiddenNotice: name => `Đã ẩn ${name} — dùng nút hình mắt trong tiêu đề Agents để hiện các Agent đang ẩn`,
+      unhide: 'Bỏ ẩn Agent',
+      hide: 'Ẩn Agent',
+      groups: names => `Nhóm: ${names}…`,
+      manageGroups: 'Quản lý nhóm…',
+      newChat: 'Cuộc trò chuyện mới với Agent này',
+      title: 'Agents',
+      toastsOn: 'Đang bật thông báo hoạt động — chọn để tắt',
+      toastsOff: 'Đang tắt thông báo hoạt động — chọn để bật',
+      hideHiddenAgain: 'Ẩn lại các Agent đang ẩn',
+      showHidden: count => `Hiện ${count} Agent đang ẩn`,
+      hideHidden: 'Ẩn các Agent đang ẩn',
+      showHiddenAria: 'Hiện các Agent đang ẩn',
+      hiddenUnread: 'một Agent đang ẩn có hoạt động chưa đọc',
+      newMenu: 'Mới…',
+      newAria: 'Tạo Agent hoặc nhóm trò chuyện',
+      searchAria: 'Tìm Agents',
+      searchPlaceholder: 'Tìm Agents…',
+      stale: 'Làm mới danh sách Agents thất bại — đang hiện dữ liệu tốt gần nhất.',
+      waitingReconnect: ' Đang chờ gateway kết nối lại…',
+      unavailable: error => `Không có danh sách Agents: ${error}. Nếu gateway chưa hỗ trợ profiles.list, hãy cập nhật Hermes và khởi động lại gateway.`,
+      gatewayError: 'lỗi gateway',
+      waitingGateway: 'Đang chờ kết nối gateway… Gateway từ xa có thể mất vài giây; ứng dụng sẽ tự thử lại.',
+      none: 'Chưa có Agent',
+      noneHelp: 'Hãy tạo Agent cộng tác đầu tiên.',
+      noMatch: query => `Không có Agent khớp “${query}”`,
+      allHidden: 'Tất cả Agent đang bị ẩn — dùng nút hình mắt phía trên để hiện lại.',
+      deleteTitle: 'Xóa Agent và hồ sơ?',
+      deleteDescriptionStart: 'Thao tác này sẽ xóa vĩnh viễn Agent ',
+      deleteDescriptionMiddle: ' cùng hồ sơ Hermes tại ',
+      deleteDescriptionEnd: '. Không thể hoàn tác.'
+    },
+    model: {
+      gatewayDefault: 'mặc định của gateway',
+      provider: 'Nhà cung cấp',
+      model: 'Model',
+      providerCustom: 'Nhà cung cấp (tùy chỉnh)',
+      modelCustom: 'Model (tùy chỉnh)',
+      backToDropdowns: '← Quay lại danh sách chọn',
+      inherit: 'Kế thừa (hồ sơ khởi chạy)',
+      manual: '✏️ Nhập thủ công…',
+      providerPlaceholder: 'omnirouter / 9router / nous …',
+      modelPlaceholder: 'antigravity/gemini-3.6-flash-high',
+      providerExample: 'ví dụ: omnirouter, inferx, 9router',
+      modelExample: 'ví dụ: antigravity/gemini-3.6-flash-high',
+      exampleName: 'ví dụ: tên model',
+      inherited: 'kế thừa từ hồ sơ khởi chạy'
+    },
+    advanced: {
+      newerGateway: 'Cấu hình đầy đủ cần gateway mới hơn. Hãy khởi động lại gateway sau khi cập nhật Hermes.',
+      capabilitiesNow: 'Năng lực (áp dụng ngay — kỹ năng, công cụ, MCP)',
+      soulProtocol: 'SOUL.md (tính cách + giao thức nhắn tin giữa Agents)',
+      skillsEnabled: (enabled, total) => `Kỹ năng (${enabled}/${total} đang bật)`,
+      filterSkills: 'Lọc kỹ năng…',
+      toolsetsEnabled: (enabled, total) => `Bộ công cụ (${enabled}/${total} đang bật — bỏ chọn tất cả để về mặc định)`,
+      mcpServers: 'Máy chủ MCP',
+      catalogSource: source => `Danh mục từ ${source} — kỹ năng bỏ chọn sẽ bị tắt sau khi tạo.`,
+      defaultTools: 'Chọn tất cả hoặc không chọn mục nào sẽ giữ hành vi bộ công cụ mặc định.',
+      catalogNeedsGateway: 'Danh mục năng lực cần gateway mới hơn. Hãy khởi động lại gateway sau khi cập nhật Hermes.',
+      emptySkills: 'Đã chọn “Tạo trống” — kỹ năng đi kèm sẽ không được cài.'
+    },
+    hub: {
+      installed: label => `Đã cài kỹ năng "${label}"`,
+      installFailed: label => `Cài "${label}" thất bại`,
+      title: 'Kho kỹ năng',
+      hide: 'ẩn trình duyệt kho',
+      browse: 'duyệt toàn bộ kho ▾',
+      frameTitle: 'Kho kỹ năng Hermes',
+      installing: label => `Đang cài "${label}"…`,
+      addHint: 'Chọn “+ Thêm vào Agent này” trên một kỹ năng. Kỹ năng sẽ được cài và xuất hiện phía trên; kéo góc để đổi kích thước.',
+      searchPlaceholder: 'Tìm trong kho (cộng đồng + nguồn phổ biến)…',
+      searchingHint: 'Đang tìm trong cộng đồng và các nguồn phổ biến — có thể mất khoảng 10 giây…',
+      noMatch: 'Không có kỹ năng phù hợp trong kho.',
+      added: '✓ đã thêm',
+      installTitle: name => `Cài "${name}" và thêm vào danh sách phía trên`
+    },
+    edit: {
+      title: 'Sửa hồ sơ Agent',
+      description: (name, profile) => `Diện mạo và vai trò của ${name} (${profile}).`,
+      nameTitle: 'Chức danh',
+      descriptionLabel: 'Mô tả',
+      descriptionPlaceholder: 'Agent này nên hỗ trợ việc gì?',
+      advanced: 'Nâng cao — model, kỹ năng, bộ công cụ, SOUL.md',
+      localLookFailed: 'Đã lưu diện mạo trên máy; đồng bộ từ xa thất bại',
+      descriptionFailed: 'Đã lưu diện mạo trên máy; cập nhật mô tả thất bại',
+      sectionsFailed: names => `Một số phần thất bại: ${names}`,
+      advancedFailed: 'Cấu hình nâng cao thất bại',
+      updated: name => `Đã cập nhật ${name}`
+    },
+    create: {
+      title: 'Agent mới',
+      description: 'Một cộng sự có tên riêng, bộ nhớ, kỹ năng và cuộc trò chuyện riêng. Agent này có thể nhắn cho các Agent khác.',
+      name: 'Tên',
+      namePlaceholder: 'inbox-triage',
+      duplicateLocal: name => `Đã có Agent tên "${name}".`,
+      duplicateRemote: (name, target) => `Đã có Agent tên "${name}" trên ${target}.`,
+      createOn: 'Tạo trên',
+      current: label => `${label} (hiện tại)`,
+      remoteHelp: target => `Agent được tạo trên ${target} và xuất hiện trong danh sách như một Agent qua Kết nối. Cuộc trò chuyện được chuyển tới máy đó.`,
+      titleLabel: 'Chức danh',
+      titlePlaceholder: 'Sàng lọc hộp thư',
+      descriptionLabel: 'Mô tả',
+      descriptionPlaceholder: 'Agent này nên hỗ trợ việc gì?',
+      advanced: 'Nâng cao',
+      general: 'Chung',
+      capabilities: 'Năng lực',
+      skills: 'Kỹ năng',
+      tools: 'Công cụ',
+      mcp: 'MCP',
+      profileNotReady: 'Chưa thể tạo hồ sơ',
+      clone: 'Sao chép từ hồ sơ',
+      cloneOn: target => `Sao chép từ hồ sơ (trên ${target})`,
+      fresh: 'Hồ sơ mới (có kỹ năng đi kèm)',
+      soul: 'SOUL.md (không bắt buộc — thay thế tính cách được tạo tự động)',
+      soulHint: 'Để trống để tạo từ tên, chức danh, mô tả và danh sách nhắn tin giữa Agents.',
+      shareAuth: 'Dùng chung tài khoản nhà cung cấp; sao chép khóa API từ hồ sơ chính',
+      shareAuthHelp:
+        'Khi bật, token OAuth và tài khoản dùng một kho chung; khóa API tĩnh trong .env được sao chép vào Agent lúc tạo. Yêu cầu dùng cùng quyền nhà cung cấp và được tính vào cùng gói đăng ký, hạn mức, chi phí. Khi tắt, phần OAuth được sao chép thành bản tách biệt; khóa API vẫn được sao chép. Bản tách biệt có thể cần đăng nhập riêng, và lần làm mới token sau đó có thể làm hai bản lệch nhau hoặc vô hiệu hóa bản còn lại.',
+      empty: 'Tạo trống (bỏ qua kỹ năng đi kèm)',
+      nameTakenCaps: 'Tên này đã được dùng — hãy chọn tên khác trước khi cấu hình năng lực.',
+      nameFirstCaps: 'Hãy đặt tên Agent trước. Khi mở thẻ này, một hồ sơ nháp sẽ được tạo và bị hủy nếu bạn bấm Hủy.',
+      createFailed: 'Không thể tạo Agent.',
+      sharedAuthUnavailable:
+        'Các tài khoản nhà cung cấp này chưa thể dùng chung an toàn một kho token làm mới. Hãy tắt chia sẻ tài khoản để tạo bản tách biệt, hoặc đăng nhập và tạo Agent này từ hồ sơ Hermes chính không có kho thông tin xác thực riêng.',
+      sharedAuthUnsupported:
+        'Nguồn Agent này chưa thể xác nhận việc chia sẻ tài khoản an toàn. Hãy cập nhật Hermes trên nguồn đó, hoặc tắt chia sẻ tài khoản để tạo bản tách biệt.',
+      created: name => `Đã tạo Agent "${name}"`,
+      createdOn: (name, target) => `Đã tạo Agent "${name}" trên ${target}`,
+      creating: 'Đang tạo…',
+      action: 'Tạo Agent'
+    },
+    routines: {
+      tab: 'Tác vụ định kỳ',
+      untitled: 'Tác vụ chưa đặt tên',
+      filterHint: 'Hồ sơ này có tác vụ định kỳ nhưng chưa có tác vụ nào thuộc Agent hiện tại. Hãy tạo tác vụ tại đây hoặc xem toàn bộ lịch trong Cron.',
+      nameNul: 'Tên tác vụ không được chứa NUL (U+0000).',
+      instructionNul: 'Chỉ dẫn tác vụ không được chứa NUL (U+0000).',
+      once: value => `Một lần (${value})`,
+      daily: 'Hằng ngày',
+      hourly: 'Hằng giờ',
+      everyDays: days => `Mỗi ${days} ngày`,
+      everyHours: hours => `Mỗi ${hours} giờ`,
+      everyMinutes: minutes => `Mỗi ${minutes} phút`,
+      updateFailed: 'Cập nhật tác vụ thất bại',
+      delete: 'Xóa tác vụ',
+      next: value => `lần tới ${value}`,
+      paused: 'đã tạm dừng',
+      legacyPaused: 'Đã tạm dừng để bảo đảm an toàn. Hãy xóa và tạo lại tác vụ cũ này trước khi chạy lại.',
+      frequencyOnce: 'Một lần, sau…',
+      frequencyHourly: 'Mỗi giờ',
+      frequencyDaily: 'Mỗi ngày',
+      frequencyWeekdays: 'Ngày làm việc',
+      frequencyWeekly: 'Mỗi tuần',
+      frequencyMonthly: 'Mỗi tháng',
+      frequencyInterval: 'Khoảng lặp',
+      frequencyAdvanced: 'Nâng cao…',
+      monday: 'Thứ Hai',
+      tuesday: 'Thứ Ba',
+      wednesday: 'Thứ Tư',
+      thursday: 'Thứ Năm',
+      friday: 'Thứ Sáu',
+      saturday: 'Thứ Bảy',
+      sunday: 'Chủ Nhật',
+      am: 'SA',
+      pm: 'CH',
+      minuteUnit: 'phút',
+      hourUnit: 'giờ',
+      dayUnit: 'ngày',
+      totalRuns: count => `, tổng cộng ${count} lần`,
+      summaryOnce: (count, unit) => `Chạy một lần sau ${count} ${unit}`,
+      summaryHourly: 'Chạy vào đầu mỗi giờ',
+      summaryDaily: time => `Chạy mỗi ngày lúc ${time}`,
+      summaryWeekdays: time => `Chạy từ Thứ Hai đến Thứ Sáu lúc ${time}`,
+      summaryWeekly: (day, time) => `Chạy vào ${day} hằng tuần lúc ${time}`,
+      summaryMonthly: (day, time) => `Chạy vào ngày ${day} hằng tháng lúc ${time}`,
+      summaryInterval: (count, unit) => `Chạy mỗi ${count} ${unit}`,
+      summaryRaw: 'Lịch thô — every Nm/Nh/Nd hoặc cron 5 trường',
+      rawPlaceholder: 'every 1d · every 2h · 0 9 * * * (cron)',
+      minutesFromNow: 'phút kể từ bây giờ',
+      hoursFromNow: 'giờ kể từ bây giờ',
+      daysFromNow: 'ngày kể từ bây giờ',
+      minutes: 'phút',
+      hours: 'giờ',
+      days: 'ngày',
+      dayOfMonth: 'Ngày trong tháng',
+      stopAfter: 'Dừng sau',
+      runsForever: 'lần chạy (để trống = không giới hạn)',
+      scheduled: title => `Đã lên lịch tác vụ "${title}"`,
+      newTitle: 'Tác vụ định kỳ mới',
+      newDescription: name => `Một tác vụ lặp lại do ${name} thực hiện theo lịch. Kết quả nằm trong lịch sử trò chuyện của Agent này.`,
+      name: 'Tên',
+      namePlaceholder: 'Đặt tên tác vụ',
+      instruction: 'Chỉ dẫn',
+      instructionPlaceholder: 'Tác vụ này nên làm gì trong mỗi lần chạy?',
+      when: 'Thời điểm chạy',
+      continuity: 'Liên tục: mỗi lần chạy thấy kết quả lần trước để tránh lặp hoặc tiếp tục phần còn dở',
+      scheduling: 'Đang lên lịch…',
+      create: 'Tạo tác vụ',
+      stale: 'Không thể làm mới tác vụ. Đang hiện danh sách gần nhất.',
+      loadFailed: 'Không thể tải tác vụ. Danh sách có thể vẫn còn.',
+      createForAgent: 'Tạo tác vụ cho Agent này'
+    },
+    sessions: {
+      untitled: 'Phiên chưa đặt tên',
+      noMessages: 'Chưa có tin nhắn',
+      heading: name => `Các phiên của ${name}`,
+      filterAria: 'Lọc phiên',
+      filterPlaceholder: 'Lọc phiên…',
+      recent: count => `Đang hiện ${count} phiên gần nhất.`,
+      loadFailed: 'Không thể tải các phiên của hồ sơ này.',
+      noRecentMatch: count => `Không có phiên phù hợp trong ${count} phiên gần nhất.`,
+      noMatch: 'Không có phiên phù hợp với bộ lọc.',
+      none: 'Chưa có phiên nào được lưu.',
+      activeNow: 'Đang hoạt động',
+      openChat: name => `Mở cuộc trò chuyện của ${name}`
+    },
+    groups: {
+      manage: 'Quản lý nhóm',
+      manageDescription: 'Một Agent có thể tham gia nhiều nhóm trò chuyện. Thành viên được đồng bộ giữa các máy.',
+      added: (name, group) => `Đã thêm ${name} vào “${group}”`,
+      removed: (name, group) => `Đã xóa ${name} khỏi “${group}”`,
+      newPlaceholder: 'Nhóm mới…',
+      namePlaceholder: 'Tên nhóm (ví dụ: Nghiên cứu)',
+      createJoin: 'Tạo và tham gia',
+      removeAll: 'Rời khỏi mọi nhóm',
+      created: (name, count) => `Đã tạo “${name}” với ${count} Agent`,
+      newChat: 'Nhóm trò chuyện mới',
+      pickDescription: count => `Chọn 2–${count} Agent. Thành viên cục bộ đồng bộ qua từng hồ sơ Agent; thành viên ở máy khác chỉ thuộc phòng này.`,
+      searchAria: 'Tìm Agent để thêm',
+      searchPlaceholder: 'Tìm Agent để thêm…',
+      removeSelection: 'Bỏ khỏi lựa chọn',
+      inGroups: names => `trong ${names}`,
+      noMatch: query => `Không có Agent khớp “${query}”`,
+      noAgents: 'Chưa có Agent — hãy tạo Agent trước.',
+      nameAria: 'Tên nhóm',
+      pickMinimum: 'Chọn ít nhất 2 Agent',
+      createAction: count => `Tạo nhóm${count ? ` (${count})` : ''}`,
+      chatHeading: group => `${group} — nhóm trò chuyện`,
+      memberCount: count => `${count} Agent`,
+      disbandTitle: group => `Giải tán nhóm trò chuyện ${group}`,
+      you: 'Bạn',
+      hideHandle: 'Ẩn định danh đầy đủ',
+      showHandle: 'Hiện định danh đầy đủ',
+      empty: 'Hãy nhắn gì đó — mọi Agent trong nhóm đều nghe được.',
+      thinking: name => `${name} đang suy nghĩ…`,
+      working: 'Nhóm đang làm việc…',
+      messageAria: group => `Nhắn cho ${group}`,
+      messagePlaceholder: group => `Nhắn cho ${group}… (@tên để chỉ định, @everyone cho tất cả)`,
+      send: 'Gửi',
+      disbandConfirm: 'Giải tán nhóm trò chuyện?',
+      disbandDescription: (group, count) => `Thao tác này xóa nhóm ${group} khỏi ${count} Agent và xóa nhật ký phòng chung. Các Agent và phiên nhóm hiện có vẫn được giữ.`,
+      disband: 'Giải tán',
+      disbanding: 'Đang giải tán…',
+      disbanded: 'Đã giải tán',
+      disbandedToast: group => `Đã giải tán “${group}”`,
+      noMessages: 'Chưa có tin nhắn — hãy chào cả nhóm',
+      needsInputTitle: 'Một Agent trong phòng cần bạn hỗ trợ',
+      needsYou: 'cần bạn'
+    },
+    palette: {
+      manage: 'Agents: Quản lý',
+      newAgent: 'Agents: Agent mới…'
+    },
+    manifest: {
+      description: 'Tạo và quản lý hồ sơ Agent, năng lực, nhóm và tác vụ định kỳ.'
+    },
+    management: {
+      title: 'Quản lý Agents',
+      description: 'Xem, tạo, sửa, sao chép, xóa, lập nhóm và cấu hình năng lực cùng tác vụ định kỳ.',
+      agents: 'Agents',
+      routines: 'Tác vụ định kỳ'
+    }
+  }
+}
+
+function englishAgentText(key, args) {
+  let value = AGENT_LOCALES.en
+
+  for (const part of key.split('.')) {
+    value = value?.[part]
+  }
+
+  return typeof value === 'function' ? value(...args) : typeof value === 'string' ? value : key
+}
+
+function agentText(key, ...args) {
+  try {
+    const value = pluginCtx?.i18n?.t?.(key, ...args)
+
+    return value && value !== key ? value : englishAgentText(key, args)
+  } catch {
+    return englishAgentText(key, args)
+  }
+}
+
+function useAgentText() {
+  const translate = usePluginTranslate(ID)
+
+  return (key, ...args) => {
+    try {
+      const value = translate(key, ...args)
+
+      return value && value !== key ? value : englishAgentText(key, args)
+    } catch {
+      return englishAgentText(key, args)
+    }
+  }
+}
+
+function registerAgentLocales(ctx) {
+  if (typeof ctx?.i18n?.register !== 'function') {
+    return false
+  }
+
+  ctx.i18n.register(AGENT_LOCALES)
+
+  return true
+}
+
+function agentManifestDescription(text = agentText) {
+  return text('manifest.description')
+}
 
 /** Captured in register() so components can reach plugin storage. */
 let pluginCtx = null
 
 /** Live roster snapshot for imperative handlers (context menus). */
 const $lastRoster = atom([])
+const $lastRosterOwner = atom(null)
 
 /** Bots with chat activity the user hasn't seen yet (name -> true).
  *  Fed by the roster poll's activity watermark, so it catches EVERY
@@ -97,6 +1001,299 @@ let watermarksSeeded = false
  *  (cron runs, bot-to-bot chatter) turns the toasts into a firehose, and the
  *  unread badge already carries the signal. Persisted via ctx.storage. */
 const $activityToasts = atom(false)
+
+/** Additive v31 participation metadata. Legacy profiles/sessions/groups and
+ *  Bot Mode storage remain untouched; malformed or absent data normalizes to
+ *  an empty collaborator set. */
+const $collaborationMemberships = atom({ schemaVersion: COLLABORATION_SCHEMA, projects: {}, sessions: {} })
+const $collaborationProjectBindings = atom({})
+const $collaborationSessionBindings = atom({})
+
+/** Palette requests survive route navigation and open the creation dialog
+ *  once the stable management page mounts. */
+const $newAgentRequest = atom(0)
+const DEFAULT_SHARE_AUTH = true
+
+function agentCreateAuthPayload(shareAuth = DEFAULT_SHARE_AUTH) {
+  return { share_auth: Boolean(shareAuth) }
+}
+
+function agentSharedAuthCreateResultAccepted(result, shareAuth) {
+  if (!shareAuth) {
+    return true
+  }
+
+  const payload = result?.result && typeof result.result === 'object' ? result.result : result
+
+  return payload?.mirrored?.auth === 'shared'
+}
+
+function normalizeAgentConnections(value) {
+  if (Array.isArray(value)) {
+    return value
+  }
+
+  return Array.isArray(value?.connections) ? value.connections : []
+}
+
+function agentSourceUnavailableMessage(text, profile, source) {
+  return text(
+    'remote.sourceUnavailable',
+    String(profile || 'default').trim() || 'default',
+    String(source || text('remote.sourceFallback')).trim() || text('remote.sourceFallback')
+  )
+}
+
+/** Immutable identity of the backend on which a lazily materialized create
+ * draft lives. Form state is allowed to repaint after an RPC starts; cleanup
+ * must never re-read that mutable state and accidentally delete a same-named
+ * real profile on another source. */
+function createAgentDraftProvenance({
+  slug,
+  remoteTarget = false,
+  targetConnectionId = '',
+  activeConnectionId = '',
+  activeProfile = 'default',
+  targetMode = null
+}) {
+  const profile = remoteTarget ? 'default' : String(activeProfile || 'default').trim() || 'default'
+  const connectionId = String(remoteTarget ? targetConnectionId : activeConnectionId || 'local').trim() || 'local'
+  const mode = targetMode === 'local' || targetMode === 'remote' ? targetMode : connectionId === 'local' ? 'local' : 'remote'
+  const route = Object.freeze({ connectionId, mode, profile, targetProfile: profile })
+
+  return Object.freeze({
+    slug: String(slug || '').trim(),
+    connectionId,
+    remoteTarget: Boolean(remoteTarget),
+    route
+  })
+}
+
+/** Route one create-draft operation through its captured owner. The active
+ * request door is a legacy-only fallback for single-source SDKs; modern
+ * multi-source drafts always carry a descriptor. */
+function requestAgentDraft(runtime, draft, method, params = {}) {
+  if (draft?.route && typeof runtime?.requestProfile === 'function') {
+    return runtime.requestProfile(draft.route, method, params)
+  }
+
+  const owner = normalizeRosterOwner(draft?.connectionId, draft?.route?.profile)
+
+  if (
+    !draft?.remoteTarget &&
+    owner &&
+    rosterOwnerStillActive(owner, runtime) &&
+    typeof runtime?.request === 'function'
+  ) {
+    return runtime.request(method, params)
+  }
+
+  return Promise.reject(
+    new Error(
+      agentSourceUnavailableMessage(
+        agentText,
+        draft?.slug || draft?.route?.profile,
+        draft?.route?.connectionId
+      )
+    )
+  )
+}
+
+/** Read the capability from the exact backend captured by a create draft.
+ *  Failure is conservative: appending the legacy section is harmless, while
+ *  consulting another active source would couple two same-named profiles. */
+async function agentDraftProtocolInjected(runtime, draft) {
+  try {
+    const result = await requestAgentDraft(runtime, draft, 'profiles.list', {})
+    return Boolean(result?.bot_mode_protocol)
+  } catch {
+    return false
+  }
+}
+
+async function applyAgentDraftAppearance(runtime, draft, appearance) {
+  const { image, ...look } = appearance || {}
+  const writes = [
+    requestAgentDraft(runtime, draft, 'profiles.configure', {
+      name: draft?.slug,
+      ui_meta: { 'hermes-bots': look }
+    })
+  ]
+
+  if (image) {
+    writes.push(
+      requestAgentDraft(runtime, draft, 'profiles.set_asset', {
+        name: draft?.slug,
+        asset: 'avatar',
+        data: image
+      })
+    )
+  }
+
+  return Promise.allSettled(writes)
+}
+
+function agentDraftFinalizePlan(draft, currentOwner) {
+  const origin = normalizeRosterOwner(draft?.connectionId, draft?.route?.profile)
+  const current = normalizeRosterOwner(currentOwner?.connectionId, currentOwner?.profile)
+  const ownerStillActive = sameRosterOwner(origin, current)
+
+  return {
+    connectionId: String(draft?.connectionId || '').trim(),
+    openCanonical: Boolean(draft?.slug && !draft?.remoteTarget && ownerStillActive),
+    remotePresentation: Boolean(draft?.remoteTarget || !ownerStillActive),
+    slug: String(draft?.slug || '').trim()
+  }
+}
+
+/** Small lifecycle used by CreateAgentDialog and behavior tests. It locks the
+ * materialization inputs as soon as creation starts, shares one in-flight
+ * create, and turns Cancel into a generation edge. If create resolves after
+ * that edge, cleanup runs against the original immutable route exactly once. */
+function createAgentDraftLifecycle({ cleanup, onChange } = {}) {
+  let generation = 0
+  let created = null
+  let pending = null
+  let flight = null
+
+  const emit = value => {
+    if (typeof onChange === 'function') {
+      onChange(value)
+    }
+  }
+  const clean = async draft => {
+    if (draft && typeof cleanup === 'function') {
+      await cleanup(draft)
+    }
+  }
+
+  return {
+    current: () => created || pending,
+    created: () => created,
+    ensure(draft, create, afterCreate, validateCreate) {
+      if (created) {
+        return Promise.resolve(created.slug)
+      }
+      if (flight) {
+        return flight
+      }
+
+      const epoch = generation
+      pending = draft
+      emit(draft)
+
+      const task = (async () => {
+        let materialized = false
+
+        try {
+          const createResult = await Promise.resolve().then(() => create(draft))
+          materialized = true
+
+          if (typeof validateCreate === 'function') {
+            await validateCreate(createResult, draft)
+          }
+
+          if (epoch !== generation) {
+            await clean(draft)
+            return null
+          }
+
+          pending = null
+          created = draft
+          emit(draft)
+
+          if (typeof afterCreate === 'function') {
+            await afterCreate(draft, () => epoch === generation)
+          }
+
+          if (epoch !== generation) {
+            await clean(draft)
+            return null
+          }
+
+          return draft.slug
+        } catch (error) {
+          if (materialized) {
+            await clean(draft)
+          }
+
+          if (epoch !== generation) {
+            return null
+          }
+
+          pending = null
+          created = null
+          emit(null)
+          throw error
+        } finally {
+          if (flight === task) {
+            flight = null
+          }
+        }
+      })()
+
+      flight = task
+      return task
+    },
+    cancel() {
+      generation += 1
+      const settled = flight ? null : created
+      pending = null
+      created = null
+      flight = null
+      emit(null)
+
+      return settled ? clean(settled) : Promise.resolve()
+    },
+    finalize() {
+      generation += 1
+      pending = null
+      created = null
+      flight = null
+      emit(null)
+    }
+  }
+}
+
+function agentCreationFieldsLocked(draft) {
+  return Boolean(draft?.slug)
+}
+
+function agentMcpSetupAvailable(remoteTarget) {
+  return !Boolean(remoteTarget)
+}
+
+function sessionAgentStatusPresentation(kind, surface, text = agentText) {
+  if (kind === 'lead') {
+    const active = Boolean(surface?.runtimeSessionId && surface?.busy)
+    const status = text(active ? 'session.active' : 'session.ready')
+
+    return { active, aria: status, text: status }
+  }
+
+  const invited = text('session.invited')
+  const waiting = text('session.waiting')
+  const status = `${invited} · ${waiting}`
+
+  return { active: false, aria: status, text: status }
+}
+
+function queueNewAgentRequest(request = $newAgentRequest) {
+  const next = Math.max(0, Number(request.get()) || 0) + 1
+  request.set(next)
+
+  return next
+}
+
+function consumeNewAgentRequest(request = $newAgentRequest) {
+  if (!(Number(request.get()) > 0)) {
+    return false
+  }
+
+  request.set(0)
+
+  return true
+}
 
 /** Flip the activity-toast pref and persist it. */
 function setActivityToasts(enabled) {
@@ -148,15 +1345,15 @@ function trackInboundActivity(roster) {
 
       host.notify({
         kind: 'info',
-        title: inbound ? `\uD83E\uDD16 New message for ${label}` : `${label} has new activity`,
-        message: preview.slice(0, 140) || 'Open the chat to see it.'
+        title: inbound ? agentText('activity.newMessage', label) : agentText('activity.newActivity', label),
+        message: preview.slice(0, 140) || agentText('activity.openChat')
       })
     }
   }
 }
 
-/** Last good cron list, same idea as the roster snapshot. */
-const $lastJobs = atom([])
+/** Last good cron lists keyed by exact source/profile owner. */
+const $lastJobs = atom({})
 
 // Bot Mode sessions are ALWAYS hidden from the global Sessions sidebar:
 // canonical Bot Chats are plugin-owned forever-chats and group-chat member
@@ -203,17 +1400,70 @@ function handleSessionsGatewayTransition() {
 /** Per-bot appearance + display meta, persisted via ctx.storage:
  *  { [botName]: { shape, color, title } } */
 const $botMeta = atom({})
+/** Exact active roster owner for the legacy name-keyed metadata above.
+ *  The map predates Connections and therefore has no source in its keys.
+ *  It may only be used while this owner is the explicit local source. */
+const $botMetaOwner = atom(null)
 
-async function saveBotMeta(name, patch) {
-  const prevMeta = $botMeta.get()[name] || {}
-  const next = { ...$botMeta.get(), [name]: { ...prevMeta, ...patch } }
-  $botMeta.set(next)
+async function saveBotMeta(name, patch, sourceMeta = null, expectedOwner = null) {
+  const writeOwner = expectedOwner ? currentBotMetaOwner() : null
 
-  // Local plugin storage: instant, and the fallback for older gateways.
-  try {
-    Promise.resolve(pluginCtx?.storage?.set?.('bot-meta', next)).catch(() => undefined)
-  } catch {
-    /* storage unavailable — look persists for this window only */
+  if (!expectedOwner || !sameRosterOwner(writeOwner, expectedOwner)) {
+    return { serverPersisted: false, serverOutcome: 'failed' }
+  }
+
+  const localFallback = isExactLocalRosterOwner(writeOwner)
+  const cacheOwner = $botMetaOwner.get()
+  let prevMeta =
+    sourceMeta && typeof sourceMeta === 'object' && !Array.isArray(sourceMeta)
+      ? sourceMeta
+      : localFallback && sameRosterOwner(cacheOwner, writeOwner)
+        ? $botMeta.get()[name] || {}
+        : null
+
+  // A non-local active source must never use the legacy bare-name cache as
+  // its merge base. Fetch that source's own namespace when the caller did
+  // not already capture it from the rich roster row. If provenance is
+  // unknown/offline, fail closed instead of overwriting a same-named Agent
+  // with another source's title/pin/groups.
+  if (!prevMeta && writeOwner && !localFallback) {
+    try {
+      const listed = await host.request('profiles.list', {})
+      const profile = listed?.profiles?.find(value => value?.name === name)
+      const serverMeta = profile?.ui_meta?.['hermes-bots']
+      prevMeta = serverMeta && typeof serverMeta === 'object' ? serverMeta : {}
+
+      if (!rosterOwnerStillActive(writeOwner)) {
+        return { serverPersisted: false, serverOutcome: 'failed' }
+      }
+    } catch {
+      return { serverPersisted: false, serverOutcome: 'failed' }
+    }
+  }
+
+  if (!writeOwner) {
+    return { serverPersisted: false, serverOutcome: 'failed' }
+  }
+
+  prevMeta ||= {}
+  const entry = { ...prevMeta, ...patch }
+
+  // Only the explicit local source may update the legacy name-keyed cache.
+  // Remote sources render directly from their row-level server ui_meta.
+  if (localFallback) {
+    const current = sameRosterOwner(cacheOwner, writeOwner) || isExactLocalRosterOwner(cacheOwner)
+      ? $botMeta.get()
+      : {}
+    const next = { ...current, [name]: entry }
+    $botMetaOwner.set(writeOwner)
+    $botMeta.set(next)
+
+    // Local plugin storage: instant, and the fallback for older gateways.
+    try {
+      Promise.resolve(pluginCtx?.storage?.set?.('bot-meta', next)).catch(() => undefined)
+    } catch {
+      /* storage unavailable — look persists for this window only */
+    }
   }
 
   // Server-side (source of truth when supported): profile.yaml ui_meta,
@@ -226,7 +1476,7 @@ async function saveBotMeta(name, patch) {
   // the list call — so pfps follow the profile across machines too.
   let serverRequest = null
   try {
-    const { image, pet, ...rest } = next[name] || {}
+    const { image, pet, ...rest } = entry
     serverRequest = Promise.resolve(host.request('profiles.configure', { name, ui_meta: { 'hermes-bots': rest } }))
   } catch {
     /* older/unavailable gateway — the local fallback remains saved */
@@ -268,8 +1518,13 @@ async function saveBotMeta(name, patch) {
         serverOutcome = 'failed'
       }
     } catch {
-      /* older/unavailable gateway — the local fallback remains saved */
+      // Only local has a durable fallback. A remote write that could not be
+      // confirmed must surface as failed instead of pretending its look was
+      // saved in another source's cache.
+      serverOutcome = localFallback ? 'unsupported' : 'failed'
     }
+  } else if (!localFallback) {
+    serverOutcome = 'failed'
   }
 
   return { serverPersisted: serverOutcome === 'persisted', serverOutcome }
@@ -292,8 +1547,8 @@ const $showHiddenBots = atom(false)
 /** Hidden flag for a roster row. Thin remote-source rows never read local
  *  meta (botRosterMeta returns null for them), so hide is by NAME on the
  *  active source; remote rows of the same name stay visible. */
-function isBotHidden(bot, metaByName) {
-  return Boolean(botRosterMeta(bot, metaByName)?.hidden)
+function isBotHidden(bot, metaByName, rosterOwner = null) {
+  return Boolean(botRosterMeta(bot, metaByName, rosterOwner)?.hidden)
 }
 
 /** Hiding the selected bot re-homes the selection (the Routines pane
@@ -422,23 +1677,59 @@ const avatarFetchInflight = new Set()
 
 const avatarPushInflight = new Set()
 
+function avatarInflightKey(owner, name) {
+  const normalized = normalizeRosterOwner(owner?.connectionId, owner?.profile)
+  const profile = String(name || '').trim()
+
+  return normalized && profile ? `${normalized.connectionId}::${profile}` : ''
+}
+
+/** Persist a rendered avatar only while the source that produced it is still
+ *  the active exact owner. Rasterization is asynchronous; without this final
+ *  guard an A image can be uploaded to B's same-named profile after a switch. */
+async function persistAvatarForOwner(name, data, owner, runtime = host) {
+  const normalized = normalizeRosterOwner(owner?.connectionId, owner?.profile)
+  const profile = String(name || '').trim()
+
+  if (!normalized || !profile || !data || !rosterOwnerStillActive(normalized, runtime)) {
+    return false
+  }
+
+  await runtime.request('profiles.set_asset', { name: profile, asset: 'avatar', data })
+  return true
+}
+
 /** Backfill: local meta has art the server lacks -> profiles.set_asset.
  *  Server-side avatars power the inter-agent notice pfp (core #85855) and
  *  cross-machine roster art, so local-only images are a bug, not a state. */
-function pushLocalAvatars(roster) {
+function pushLocalAvatars(roster, rosterOwner, runtime = host, render = rasterizeSvgToPng) {
+  const owner = normalizeRosterOwner(rosterOwner?.connectionId, rosterOwner?.profile)
+
+  if (
+    !isExactLocalRosterOwner(owner) ||
+    !sameRosterOwner(owner, $botMetaOwner.get()) ||
+    !rosterOwnerStillActive(owner, runtime)
+  ) {
+    return
+  }
+
   for (const bot of roster) {
-    if (bot.has_avatar || avatarPushInflight.has(bot.name)) {
+    const key = avatarInflightKey(owner, bot.name)
+
+    if (!key || bot.has_avatar || avatarPushInflight.has(key)) {
       continue
     }
 
     const image = $botMeta.get()[bot.name]?.image
 
     if (image && typeof image === 'string' && image.startsWith('data:')) {
-      avatarPushInflight.add(bot.name)
-      host
-        .request('profiles.set_asset', { name: bot.name, asset: 'avatar', data: image })
-        .then(() => queryClient.invalidateQueries({ queryKey: ['hermes-bots', 'roster'] }))
-        .catch(() => avatarPushInflight.delete(bot.name))
+      avatarPushInflight.add(key)
+      persistAvatarForOwner(bot.name, image, owner, runtime)
+        .then(saved => {
+          if (!saved) throw new Error('source changed')
+          return queryClient.invalidateQueries({ queryKey: ROSTER_KEY })
+        })
+        .catch(() => avatarPushInflight.delete(key))
       continue
     }
 
@@ -451,16 +1742,14 @@ function pushLocalAvatars(roster) {
       continue
     }
 
-    avatarPushInflight.add(bot.name)
-    rasterizeSvgToPng(svg, 160)
-      .then(png =>
-        png
-          ? host
-              .request('profiles.set_asset', { name: bot.name, asset: 'avatar', data: png })
-              .then(() => queryClient.invalidateQueries({ queryKey: ['hermes-bots', 'roster'] }))
-          : Promise.reject(new Error('rasterize failed'))
-      )
-      .catch(() => avatarPushInflight.delete(bot.name))
+    avatarPushInflight.add(key)
+    render(svg, 160)
+      .then(png => persistAvatarForOwner(bot.name, png, owner, runtime))
+      .then(saved => {
+        if (!saved) throw new Error('source changed')
+        return queryClient.invalidateQueries({ queryKey: ROSTER_KEY })
+      })
+      .catch(() => avatarPushInflight.delete(key))
   }
 }
 
@@ -515,11 +1804,19 @@ function isBackfilledFacePng(dataUrl) {
   }
 }
 
-function pullServerAvatars(roster) {
-  pushLocalAvatars(roster)
+function pullServerAvatars(roster, rosterOwner, runtime = host) {
+  const owner = normalizeRosterOwner(rosterOwner?.connectionId, rosterOwner?.profile)
+
+  if (!isExactLocalRosterOwner(owner) || !rosterOwnerStillActive(owner, runtime)) {
+    return
+  }
+
+  pushLocalAvatars(roster, owner, runtime)
 
   for (const bot of roster) {
-    if (!bot.has_avatar || avatarFetchInflight.has(bot.name)) {
+    const key = avatarInflightKey(owner, bot.name)
+
+    if (!key || !bot.has_avatar || avatarFetchInflight.has(key)) {
       continue
     }
 
@@ -527,11 +1824,16 @@ function pullServerAvatars(roster) {
       continue
     }
 
-    avatarFetchInflight.add(bot.name)
-    host
+    avatarFetchInflight.add(key)
+    runtime
       .request('profiles.get_asset', { name: bot.name, asset: 'avatar' })
       .then(res => {
-        if (res?.found && res.data) {
+        if (
+          res?.found &&
+          res.data &&
+          rosterOwnerStillActive(owner, runtime) &&
+          sameRosterOwner(owner, $botMetaOwner.get())
+        ) {
           const current = $botMeta.get()
           const mine = current[bot.name] || {}
           // A 160px raster of the vector face is only for inter-agent
@@ -549,7 +1851,7 @@ function pullServerAvatars(roster) {
         }
       })
       .catch(() => undefined)
-      .finally(() => avatarFetchInflight.delete(bot.name))
+      .finally(() => avatarFetchInflight.delete(key))
   }
 }
 
@@ -559,8 +1861,16 @@ function pullServerAvatars(roster) {
  *  naive replace would wipe a just-saved image avatar on the next roster
  *  paint. When server bot metadata exists, an omitted chat is authoritative
  *  deletion; local still fills all gaps for older gateways with no metadata. */
-function mergeServerMeta(roster) {
-  const local = $botMeta.get()
+function mergeServerMeta(roster, rosterOwner = null) {
+  const owner = normalizeRosterOwner(rosterOwner?.connectionId, rosterOwner?.profile)
+
+  // Remote active sources render their source-qualified row ui_meta and must
+  // never be folded into the legacy bare-name local cache.
+  if (!isExactLocalRosterOwner(owner)) {
+    return
+  }
+
+  const local = isExactLocalRosterOwner($botMetaOwner.get()) ? $botMeta.get() : {}
   let changed = false
   const next = { ...local }
 
@@ -604,6 +1914,10 @@ function mergeServerMeta(roster) {
     }
   }
 
+  if (!sameRosterOwner($botMetaOwner.get(), owner)) {
+    $botMetaOwner.set(owner)
+  }
+
   if (changed) {
     $botMeta.set(next)
 
@@ -619,7 +1933,13 @@ function mergeServerMeta(roster) {
 
 /** Clone a bot: profile (config/skills/SOUL/memory via clone_from) + look.
  *  Name is "<base>-2", "-3", … — first free slot against the live roster. */
-async function duplicateBot(bot, roster) {
+async function duplicateBot(bot, roster, sourceMeta = null) {
+  const expectedOwner = normalizeRosterOwner(bot?.actionOwner?.connectionId, bot?.actionOwner?.profile)
+
+  if (!expectedOwner || !rosterOwnerStillActive(expectedOwner)) {
+    throw new Error(agentText('profile.sourceChanged'))
+  }
+
   const base = bot.name
   let name = null
   for (let n = 2; n < 100; n++) {
@@ -635,7 +1955,7 @@ async function duplicateBot(bot, roster) {
   }
 
   if (!name) {
-    throw new Error('No free name for the duplicate.')
+    throw new Error(agentText('profile.noDuplicateName'))
   }
 
   await host.request('profiles.create', {
@@ -644,16 +1964,27 @@ async function duplicateBot(bot, roster) {
     description: bot.description || ''
   })
 
+  if (!rosterOwnerStillActive(expectedOwner)) {
+    // The duplicate already exists on the captured origin, but no later
+    // name-only write may cross into a newly active same-name source.
+    throw new Error(agentText('profile.sourceChanged'))
+  }
+
   // Same look: avatar shape/color/image and a "(copy)" title so the two
   // are tellable apart in the roster until the user renames. Do not copy
   // chat or created. Those belong to the original bot.
-  const meta = $botMeta.get()[base]
+  const meta = sourceMeta || botRosterMeta(bot, $botMeta.get(), expectedOwner)
   if (meta) {
     const { chat, created, ...look } = meta
-    saveBotMeta(name, {
-      ...look,
-      title: meta.title ? `${meta.title} (copy)` : ''
-    })
+    await saveBotMeta(
+      name,
+      {
+        ...look,
+        title: meta.title ? `${meta.title} ${agentText('profile.copySuffix')}` : ''
+      },
+      null,
+      expectedOwner
+    )
   }
 
   return name
@@ -671,35 +2002,57 @@ async function duplicateBot(bot, roster) {
  * renderer's socket reconnect respawns it mid-delete, resurrecting the
  * directory (hermes-agent#52279). That is the "can't delete a bot" error. */
 async function deleteBot(bot) {
+  const expectedOwner = normalizeRosterOwner(bot?.actionOwner?.connectionId, bot?.actionOwner?.profile)
+
+  if (!expectedOwner || !rosterOwnerStillActive(expectedOwner)) {
+    throw new Error(agentText('profile.sourceChanged'))
+  }
+
   if (typeof host.deleteProfile === 'function') {
-    await host.deleteProfile(bot.name)
+    const deleteRoute = agentProfileDeleteRoute(expectedOwner, host)
+
+    if (!deleteRoute) {
+      throw new Error(agentText('remote.sourceUnavailable', bot.name, expectedOwner.connectionId))
+    }
+
+    await host.deleteProfile(bot.name, deleteRoute.connectionId)
   } else {
+    if (expectedOwner.connectionId !== 'local') {
+      throw new Error(agentText('remote.sourceUnavailable', bot.name, expectedOwner.connectionId))
+    }
+
     // Older desktop without the SDK verb — best effort via the CLI.
     const result = await host.request('cli.exec', {
       argv: ['profile', 'delete', bot.name, '--yes']
     })
 
     if (result?.blocked || result?.code !== 0) {
-      throw new Error(result?.hint || result?.output || `Could not delete profile ${bot.name}.`)
+      throw new Error(result?.hint || result?.output || agentText('profile.deleteFailed', bot.name))
     }
   }
 
-  const meta = { ...$botMeta.get() }
-  delete meta[bot.name]
-  $botMeta.set(meta)
+  if (!rosterOwnerStillActive(expectedOwner)) {
+    throw new Error(agentText('profile.sourceChanged'))
+  }
 
-  try {
-    await Promise.resolve(pluginCtx?.storage?.set?.('bot-meta', meta))
-  } catch {
-    /* profile is deleted; stale local appearance is harmless if storage fails */
+  if (agentDeleteClearsLegacyMeta(expectedOwner, $botMetaOwner.get())) {
+    const meta = { ...$botMeta.get() }
+    delete meta[bot.name]
+    $botMeta.set(meta)
+
+    try {
+      await Promise.resolve(pluginCtx?.storage?.set?.('bot-meta', meta))
+    } catch {
+      /* profile is deleted; stale local appearance is harmless if storage fails */
+    }
   }
 
   const unread = { ...$botUnread.get() }
   delete unread[bot.name]
   $botUnread.set(unread)
   rosterWatermarks.delete(bot.name)
-  avatarFetchInflight.delete(bot.name)
-  avatarPushInflight.delete(bot.name)
+  avatarFetchInflight.delete(avatarInflightKey(expectedOwner, bot.name))
+  avatarPushInflight.delete(avatarInflightKey(expectedOwner, bot.name))
 
   if ($selectedBot.get() === bot.name) {
     $selectedBot.set('default')
@@ -1528,11 +2881,26 @@ function BotFace({ shape, color, image, size = 36, name = 'agent', mood = 'idle'
 // and the row falls back to the "run hermes mcp / Settings" hint. profile is
 // the target bot's profile name (its config is what we write).
 
-async function mcpRpc(method, params) {
+async function mcpRpc(method, params, { runtime = host, owner = null, route = null } = {}) {
   // Returns { ok, result } or { ok:false, unsupported:true } when the gateway
   // doesn't know the method (older backend) vs a real error.
   try {
-    const res = await host.request(method, params)
+    const normalized = normalizeRosterOwner(owner?.connectionId, owner?.profile)
+    let res
+
+    if (route && typeof runtime?.requestProfile === 'function') {
+      res = await runtime.requestProfile(route, method, params)
+    } else {
+      if (!normalized || !rosterOwnerStillActive(normalized, runtime)) {
+        return {
+          ok: false,
+          sourceChanged: true,
+          error: agentSourceUnavailableMessage(agentText, params?.profile, normalized?.connectionId)
+        }
+      }
+      res = await runtime.request(method, params)
+    }
+
     return { ok: true, result: res }
   } catch (err) {
     const msg = String((err && err.message) || err || '')
@@ -1543,18 +2911,46 @@ async function mcpRpc(method, params) {
   }
 }
 
-// Probe whether the new lifecycle RPCs exist on this gateway (cached per session).
-let _mcpRpcSupported = null
-async function mcpSetupSupported() {
-  if (_mcpRpcSupported !== null) {
-    return _mcpRpcSupported
+function createMcpRequester(runtime = host, owner = currentBotMetaOwner(runtime)) {
+  const normalized = normalizeRosterOwner(owner?.connectionId, owner?.profile)
+  const route =
+    normalized && typeof runtime?.requestProfile === 'function'
+      ? Object.freeze({
+          connectionId: normalized.connectionId,
+          mode: normalized.connectionId === 'local' ? 'local' : 'remote',
+          profile: normalized.profile,
+          targetProfile: normalized.profile
+        })
+      : null
+
+  return (method, params = {}) => mcpRpc(method, params, { runtime, owner: normalized, route })
+}
+
+// Probe lifecycle RPCs once per exact source/profile owner. A global boolean
+// lets an old A gateway hide setup on a capable B gateway (and vice versa).
+const mcpRpcSupport = new Map()
+async function mcpSetupSupported(request, owner) {
+  const normalized = normalizeRosterOwner(owner?.connectionId, owner?.profile)
+  const key = normalized ? `${normalized.connectionId}::${normalized.profile}` : ''
+
+  if (!key || typeof request !== 'function') {
+    return false
   }
-  const r = await mcpRpc('mcp.servers.list', {})
-  _mcpRpcSupported = !(r.ok === false && r.unsupported)
-  return _mcpRpcSupported
+
+  if (mcpRpcSupport.has(key)) {
+    return Promise.resolve(mcpRpcSupport.get(key))
+  }
+
+  const pending = Promise.resolve(request('mcp.servers.list', {})).then(r => !(r.ok === false && r.unsupported))
+  mcpRpcSupport.set(key, pending)
+  const supported = await pending
+  mcpRpcSupport.set(key, supported)
+
+  return supported
 }
 
 function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
+  const copy = useAgentText()
   // entry: { name, requires:[env keys], auth?, fromCatalog, installed }
   // profile may be null at first (New Agent: the profile isn't created yet).
   // ensureProfile() lazily creates it on the first setup action and returns the
@@ -1565,6 +2961,14 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
   const [message, setMessage] = useState('')
   const pollRef = useRef(null)
   const profileRef = useRef(profile || null)
+  const ownerRef = useRef(currentBotMetaOwner())
+  const requesterRef = useRef(null)
+
+  if (!requesterRef.current) {
+    requesterRef.current = createMcpRequester(host, ownerRef.current)
+  }
+
+  const rpc = requesterRef.current
 
   useEffect(() => {
     if (profile) {
@@ -1589,7 +2993,7 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
 
   useEffect(() => {
     let alive = true
-    mcpSetupSupported().then(ok => {
+    mcpSetupSupported(rpc, ownerRef.current).then(ok => {
       if (alive) setSupported(ok)
     })
     return () => {
@@ -1614,10 +3018,10 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
       return
     }
     if (entry.fromCatalog && !entry.installed) {
-      const add = await mcpRpc('mcp.servers.add', { profile, name: entry.name, preset: entry.name })
+      const add = await rpc('mcp.servers.add', { profile, name: entry.name, preset: entry.name })
       if (!add.ok) {
         setPhase('error')
-        setMessage(add.error || 'Could not add server')
+        setMessage(add.error || copy('mcp.addFailed'))
         return
       }
     }
@@ -1629,7 +3033,7 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
     const profile = profileRef.current
     if (!profile) {
       setPhase('error')
-      setMessage('No target profile')
+      setMessage(copy('mcp.noTarget'))
       return
     }
     for (const k of requires) {
@@ -1637,22 +3041,22 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
       if (!val) {
         continue
       }
-      const r = await mcpRpc('mcp.servers.set_api_key', { profile, name: entry.name, env_var: k, value: val })
+      const r = await rpc('mcp.servers.set_api_key', { profile, name: entry.name, env_var: k, value: val })
       if (!r.ok) {
         setPhase('error')
-        setMessage(r.error || ('Failed to set ' + k))
+        setMessage(r.error || copy('mcp.setFailed', k))
         return
       }
     }
     // Verify via test.
-    const t = await mcpRpc('mcp.servers.test', { profile, name: entry.name })
+    const t = await rpc('mcp.servers.test', { profile, name: entry.name })
     if (t.ok && t.result && (t.result.ok || (t.result.result && t.result.result.ok))) {
       setPhase('done')
-      host.notify({ kind: 'success', message: entry.name + ' configured' })
+      host.notify({ kind: 'success', message: copy('mcp.configured', entry.name) })
       onDone && onDone()
     } else {
       setPhase('error')
-      setMessage((t.result && (t.result.error || (t.result.result && t.result.result.error))) || 'Server test failed after setup')
+      setMessage((t.result && (t.result.error || (t.result.result && t.result.result.error))) || copy('mcp.testFailed'))
     }
   }
 
@@ -1672,20 +3076,20 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
       return
     }
     if (entry.fromCatalog && !entry.installed) {
-      const add = await mcpRpc('mcp.servers.add', { profile, name: entry.name, preset: entry.name })
+      const add = await rpc('mcp.servers.add', { profile, name: entry.name, preset: entry.name })
       if (!add.ok) {
         setPhase('error')
-        setMessage(add.error || 'Could not add server')
+        setMessage(add.error || copy('mcp.addFailed'))
         return
       }
     }
-    const start = await mcpRpc('mcp.servers.oauth.start', { profile, name: entry.name })
+    const start = await rpc('mcp.servers.oauth.start', { profile, name: entry.name })
     const payload = start.result && (start.result.result || start.result)
     const authUrl = payload && (payload.auth_url || payload.verification_url)
     const sessionId = payload && payload.session_id
     if (!start.ok || !authUrl || !sessionId) {
       setPhase('error')
-      setMessage((start.error) || 'Could not start OAuth')
+      setMessage((start.error) || copy('mcp.oauthStartFailed'))
       return
     }
     // Open the auth URL in the native browser, same as provider OAuth.
@@ -1701,22 +3105,27 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
       /* fall through to poll; user can open the URL from the toast */
     }
     setPhase('oauth')
-    setMessage('Complete sign-in in your browser...')
+    setMessage(copy('mcp.completeSignIn'))
     pollRef.current = setInterval(async () => {
-      const poll = await mcpRpc('mcp.servers.oauth.poll', { profile, name: entry.name, session_id: sessionId })
+      const poll = await rpc('mcp.servers.oauth.poll', { profile, name: entry.name, session_id: sessionId })
       const pd = poll.result && (poll.result.result || poll.result)
       const status = pd && pd.status
-      if (status === 'approved') {
+      if (poll.sourceChanged) {
+        clearInterval(pollRef.current)
+        pollRef.current = null
+        setPhase('error')
+        setMessage(poll.error || copy('mcp.oauthFailed'))
+      } else if (status === 'approved') {
         clearInterval(pollRef.current)
         pollRef.current = null
         setPhase('done')
-        host.notify({ kind: 'success', message: entry.name + ' authenticated' })
+        host.notify({ kind: 'success', message: copy('mcp.authenticated', entry.name) })
         onDone && onDone()
       } else if (status === 'error') {
         clearInterval(pollRef.current)
         pollRef.current = null
         setPhase('error')
-        setMessage((pd && pd.error_message) || 'OAuth failed')
+        setMessage((pd && pd.error_message) || copy('mcp.oauthFailed'))
       }
     }, 2000)
   }
@@ -1724,11 +3133,11 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
   if (supported === false) {
     return jsx('span', {
       className: 'ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)',
-      children: 'needs setup (' + requires.join(', ') + ') \u2014 restart the gateway to enable in-app setup'
+      children: copy('mcp.needsSetup', requires.join(', '))
     })
   }
   if (phase === 'done') {
-    return jsx('span', { className: 'ml-1.5 text-[0.65rem] text-(--ui-success,#22c55e)', children: 'set up \u2713' })
+    return jsx('span', { className: 'ml-1.5 text-[0.65rem] text-(--ui-success,#22c55e)', children: copy('mcp.setUpDone') })
   }
   if (phase === 'keys') {
     return jsxs('div', {
@@ -1747,30 +3156,30 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
         jsxs('div', {
           className: 'flex gap-1',
           children: [
-            jsx(Button, { size: 'xs', variant: 'secondary', onClick: () => void submitKeys(), children: 'Save & test' }),
-            jsx(Button, { size: 'xs', variant: 'ghost', onClick: () => setPhase('idle'), children: 'Cancel' })
+            jsx(Button, { size: 'xs', variant: 'secondary', onClick: () => void submitKeys(), children: copy('mcp.saveAndTest') }),
+            jsx(Button, { size: 'xs', variant: 'ghost', onClick: () => setPhase('idle'), children: copy('common.cancel') })
           ]
         })
       ]
     })
   }
   if (phase === 'oauth') {
-    return jsx('span', { className: 'ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)', children: message || 'Authorizing\u2026' })
+    return jsx('span', { className: 'ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)', children: message || copy('mcp.authorizing') })
   }
   if (phase === 'busy') {
-    return jsx('span', { className: 'ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)', children: 'Working\u2026' })
+    return jsx('span', { className: 'ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)', children: copy('common.working') })
   }
   if (phase === 'error') {
     return jsxs('span', {
       className: 'ml-1.5 text-[0.65rem] text-(--ui-danger,#ef4444)',
-      children: [(message || 'Setup failed') + ' ', jsx('button', { className: 'underline', onClick: () => setPhase('idle'), children: 'retry' })]
+      children: [(message || copy('mcp.setupFailed')) + ' ', jsx('button', { className: 'underline', onClick: () => setPhase('idle'), children: copy('common.retry') })]
     })
   }
   // idle
   return jsx('button', {
     className: 'ml-1.5 text-[0.65rem] text-(--ui-accent,#4f9cf9) underline',
     onClick: () => void (isOAuth ? beginOAuth() : beginKeys()),
-    children: isOAuth ? 'Sign in\u2026' : 'Set up\u2026'
+    children: isOAuth ? copy('mcp.signIn') : copy('mcp.setUp')
   })
 }
 
@@ -1830,7 +3239,7 @@ function pickImageFromDevice() {
       }
 
       if (file.size > 15_000_000) {
-        host.notify({ kind: 'error', message: 'Image too large (max 15MB).' })
+        host.notify({ kind: 'error', message: agentText('avatar.tooLarge') })
         return resolve(null)
       }
 
@@ -1876,7 +3285,7 @@ async function generateAvatarImage(bot, title, description) {
   })
 
   if (!res?.success) {
-    throw new Error(res?.error || 'generation failed')
+    throw new Error(res?.error || agentText('avatar.backendFailed'))
   }
 
   // image_data (data URL) works over local AND remote gateways; the raw
@@ -1889,6 +3298,7 @@ async function generateAvatarImage(bot, title, description) {
  *  `grid-cols-7` are NOT in the app's precompiled CSS, which collapsed
  *  this into a single vertical column. */
 function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generateSeed }) {
+  const copy = useAgentText()
   const pickerName = generateSeed?.name || 'agent'
   const imagen = useValue($imagenAvailable)
   const [tab, setTab] = useState('bot')
@@ -1935,7 +3345,7 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
             })
 
             if (!res?.success) {
-              throw new Error(res?.error || 'generation failed')
+              throw new Error(res?.error || agentText('avatar.backendFailed'))
             }
 
             return res.image_data || res.image
@@ -1946,7 +3356,7 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
         onImage(await normalizeAvatarImage(img))
       }
     } catch (err) {
-      host.notifyError(err, 'Avatar generation failed')
+      host.notifyError(err, agentText('avatar.generationFailed'))
     } finally {
       setGenBusy(false)
     }
@@ -1975,7 +3385,12 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
       // Tab pills: Bot | Generate | Upload | Pet
       jsxs('div', {
         className: 'flex items-center gap-1',
-        children: [tabButton('bot', 'Bot'), tabButton('generate', 'Generate'), tabButton('upload', 'Upload'), tabButton('pet', 'Pet')]
+        children: [
+          tabButton('bot', copy('avatar.shapeTab')),
+          tabButton('generate', copy('avatar.generateTab')),
+          tabButton('upload', copy('avatar.uploadTab')),
+          tabButton('pet', copy('avatar.petTab'))
+        ]
       }),
 
       image && tab !== 'generate'
@@ -1984,7 +3399,7 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
             variant: 'ghost',
             size: 'sm',
             onClick: () => onImage(null),
-            children: 'Remove image — use shape'
+            children: copy('avatar.removeImage')
           })
         : null,
 
@@ -2053,7 +3468,7 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
               children: [
                 jsx(Textarea, {
                   className: 'min-h-16 text-xs',
-                  placeholder: 'Describe your avatar…',
+                  placeholder: copy('avatar.describe'),
                   value: describe,
                   onChange: event => setDescribe(event.target.value)
                 }),
@@ -2067,14 +3482,14 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
                     genBusy
                       ? jsx(GlyphSpinner, { spinner: 'breathe', className: 'mr-1 text-[0.8rem]' })
                       : jsx(Codicon, { name: 'sparkle', className: 'mr-1 text-[0.8rem]' }),
-                    genBusy ? 'Generating…' : 'Generate'
+                    genBusy ? copy('avatar.generating') : copy('avatar.generate')
                   ]
                 }),
                 describe.trim()
                   ? null
                   : jsx('div', {
                       className: 'text-center text-[0.65rem] text-(--ui-text-quaternary)',
-                      children: 'Leave blank to generate from the agent\u2019s name and description.'
+                      children: copy('avatar.blankHint')
                     })
               ]
             })
@@ -2082,8 +3497,8 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
               className: 'px-2 py-3 text-center text-xs leading-5 text-(--ui-text-tertiary)',
               children:
                 imagen === false
-                  ? 'No image model available. If you just enabled one (or updated Hermes), restart the gateway: Ctrl+K → "Restart gateway".'
-                  : 'Checking image backend…'
+                  ? copy('avatar.noModel')
+                  : copy('avatar.checking')
             })
         : null,
 
@@ -2093,7 +3508,7 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
             variant: 'secondary',
             className: 'w-full justify-center',
             onClick: upload,
-            children: [jsx(Codicon, { name: 'device-camera', className: 'mr-1 text-[0.8rem]' }), 'Choose an image…']
+            children: [jsx(Codicon, { name: 'device-camera', className: 'mr-1 text-[0.8rem]' }), copy('avatar.chooseImage')]
           })
         : null,
 
@@ -2190,6 +3605,7 @@ function PetThumb({ spriteUrl, size = 40 }) {
 }
 
 function PetTab({ image, onImage }) {
+  const copy = useAgentText()
   // Selection is dialog-local: committed by the dialog's Save like any
   // uploaded/generated image (a direct meta write here gets clobbered by
   // Save's own image state).
@@ -2215,7 +3631,7 @@ function PetTab({ image, onImage }) {
   if (!pets.length) {
     return jsx('div', {
       className: 'px-2 py-3 text-center text-xs text-(--ui-text-tertiary)',
-      children: 'No pets in the petdex gallery. Run `hermes pets` to explore.'
+      children: copy('pet.none')
     })
   }
 
@@ -2243,11 +3659,11 @@ function PetTab({ image, onImage }) {
     children: [
       jsx('div', {
         className: 'text-center text-[0.65rem] text-(--ui-text-quaternary)',
-        children: 'Pick a pet as this agent’s profile picture.'
+        children: copy('pet.pick')
       }),
       jsx(Input, {
         className: 'h-7 text-xs',
-        placeholder: `Search ${pets.length} pets…`,
+        placeholder: copy('pet.search', pets.length),
         value: query,
         onChange: event => {
           setQuery(event.target.value)
@@ -2264,13 +3680,13 @@ function PetTab({ image, onImage }) {
               setSelectedSlug(null)
               onImage(null)
             },
-            children: 'Remove — back to shape avatar'
+            children: copy('pet.remove')
           })
         : null,
       filtered.length === 0
         ? jsx('div', {
             className: 'py-3 text-center text-xs text-(--ui-text-quaternary)',
-            children: 'No pets match.'
+            children: copy('pet.noMatch')
           })
         : jsxs('div', {
             onScroll,
@@ -2301,7 +3717,7 @@ function PetTab({ image, onImage }) {
                             onImage(icon)
                           } else {
                             setSelectedSlug(null)
-                            host.notify({ kind: 'error', message: 'Could not load that pet — try another.' })
+                            host.notify({ kind: 'error', message: copy('pet.loadFailed') })
                           }
                         })
                       },
@@ -2320,7 +3736,7 @@ function PetTab({ image, onImage }) {
               limit < ranked.length
                 ? jsx('div', {
                     className: 'py-2 text-center text-[0.65rem] text-(--ui-text-quaternary)',
-                    children: `Scroll for more (${limit} of ${ranked.length})`
+                    children: copy('pet.more', limit, ranked.length)
                   })
                 : null
             ]
@@ -2330,11 +3746,6 @@ function PetTab({ image, onImage }) {
 }
 
 // ── data ─────────────────────────────────────────────────────────────────────
-
-/** True once profiles.list reports the backend injects the bot-to-bot
- *  protocol into the system prompt itself (hermes-agent bot_mode_probe).
- *  Gates every SOUL.md protocol append below. */
-let serverInjectsProtocol = false
 
 /** Pins to resolve precisely on the next roster poll: {profile: chatId}.
  *  The backend answers "what about THIS conversation" per entry
@@ -2351,24 +3762,269 @@ function preferredSessionIds(allMeta) {
   return pins
 }
 
+function rosterActivity(bot, metaByName, rosterOwner = null) {
+  const created =
+    botRosterMeta(bot, metaByName, rosterOwner)?.created || bot?.ui_meta?.['hermes-bots']?.created || 0
+  const lastMessage = (bot?.last_session?.last_active || 0) * 1000
+
+  return Math.max(created, lastMessage)
+}
+
+function rosterPinned(bot, metaByName, rosterOwner = null) {
+  return Boolean(
+    botRosterMeta(bot, metaByName, rosterOwner)?.pinned || bot?.ui_meta?.['hermes-bots']?.pinned
+  )
+}
+
+function sortRosterSnapshot(profiles, metaByName, rosterOwner = null) {
+  return profiles.slice().sort((left, right) => {
+    const leftPinned = rosterPinned(left, metaByName, rosterOwner) ? 1 : 0
+    const rightPinned = rosterPinned(right, metaByName, rosterOwner) ? 1 : 0
+
+    if (leftPinned !== rightPinned) {
+      return rightPinned - leftPinned
+    }
+
+    return rosterActivity(right, metaByName, rosterOwner) - rosterActivity(left, metaByName, rosterOwner)
+  })
+}
+
+function normalizeRosterOwner(connectionId, profile) {
+  const source = String(connectionId || '').trim()
+  const ownerProfile = String(profile || '').trim()
+
+  return source && ownerProfile ? { connectionId: source, profile: ownerProfile } : null
+}
+
+function agentCapabilityCatalogScopeKey(rosterOwner, source) {
+  const owner = normalizeRosterOwner(rosterOwner?.connectionId, rosterOwner?.profile)
+  const catalogSource = String(source || '').trim()
+
+  return owner && catalogSource
+    ? `${owner.connectionId}::${owner.profile}::${catalogSource}`
+    : ''
+}
+
+function agentCapabilityCatalogRequestCurrent(request, current) {
+  return Boolean(
+    request &&
+      current &&
+      request.scopeKey &&
+      request.scopeKey === current.scopeKey &&
+      request.generation === current.generation
+  )
+}
+
+async function loadAgentCapabilityCatalog(request, token, source, describeName, isCurrent) {
+  const [profile, catalog] = await Promise.all([
+    request('profiles.describe', { name: describeName }),
+    request('mcp.catalog', {}).catch(() => null)
+  ])
+
+  if (!isCurrent(token)) {
+    return null
+  }
+
+  // Full MCP menu = the profile's configured servers + the bundled catalog
+  // (installable). Configured entries win on name clash.
+  const configured = profile.mcp_servers || []
+  const have = new Set(configured.map(server => server.name))
+  const installable = ((catalog && catalog.servers) || []).filter(server => !have.has(server.name))
+
+  return {
+    scopeKey: token.scopeKey,
+    source,
+    skills: profile.skills || [],
+    toolsets: profile.toolsets || [],
+    mcp: [
+      ...configured,
+      ...installable.map(server => ({
+        name: server.name,
+        enabled: false,
+        fromCatalog: true,
+        installed: server.installed,
+        auth: server.auth,
+        requires: server.requires || [],
+        description: server.description || ''
+      }))
+    ]
+  }
+}
+
+function sameRosterOwner(left, right) {
+  const a = normalizeRosterOwner(left?.connectionId, left?.profile)
+  const b = normalizeRosterOwner(right?.connectionId, right?.profile)
+
+  return Boolean(a && b && a.connectionId === b.connectionId && a.profile === b.profile)
+}
+
+function isExactLocalRosterOwner(owner) {
+  const normalized = normalizeRosterOwner(owner?.connectionId, owner?.profile)
+
+  return Boolean(normalized && normalized.connectionId === 'local')
+}
+
+function currentBotMetaOwner(runtime = host) {
+  const connectionId = String(
+    runtime?.state?.connectionId?.get?.() || runtime?.activeConnectionId?.() || ''
+  ).trim()
+  const profile = String(runtime?.state?.profile?.get?.() || 'default').trim() || 'default'
+
+  return normalizeRosterOwner(connectionId, profile)
+}
+
+function rosterOwnerStillActive(owner, runtime = host) {
+  return sameRosterOwner(owner, currentBotMetaOwner(runtime))
+}
+
+/** Capture one source/profile request door for a multi-await operation. Modern
+ *  SDKs route every call to that descriptor; old SDKs may use the ambient
+ *  gateway only while the captured owner remains exact. */
+function createRosterOwnerRequester(runtime = host, rosterOwner = currentBotMetaOwner(runtime)) {
+  const owner = normalizeRosterOwner(rosterOwner?.connectionId, rosterOwner?.profile)
+  const route =
+    owner && typeof runtime?.requestProfile === 'function'
+      ? Object.freeze({
+          connectionId: owner.connectionId,
+          mode: owner.connectionId === 'local' ? 'local' : 'remote',
+          profile: owner.profile,
+          targetProfile: owner.profile
+        })
+      : null
+
+  return async (method, params = {}) => {
+    if (route) {
+      return runtime.requestProfile(route, method, params)
+    }
+
+    if (!owner || !rosterOwnerStillActive(owner, runtime)) {
+      throw new Error(agentSourceUnavailableMessage(agentText, params?.profile || owner?.profile, owner?.connectionId))
+    }
+
+    return runtime.request(method, params)
+  }
+}
+
+function collaborationRosterOwnerForSurface(owner, surface) {
+  const source = String(surface?.leadConnectionId || '').trim()
+  const profile = String(surface?.leadProfile || '').trim()
+
+  if (!owner || !source || !profile || owner.connectionId !== source || owner.profile !== profile) {
+    return null
+  }
+
+  return owner
+}
+
+function isCollaborationLeadRosterBot(bot, surface, rosterOwner = null) {
+  const profile = String(surface?.leadProfile || '').trim()
+  const source = String(surface?.leadConnectionId || '').trim()
+  const botProfile = String(bot?.name || '').trim()
+  const botSource = String(bot?.connectionId || '').trim()
+
+  if (!profile || !source || botProfile !== profile) {
+    return false
+  }
+
+  if (botSource) {
+    return botSource === source
+  }
+
+  const owner = normalizeRosterOwner(rosterOwner?.connectionId, rosterOwner?.profile)
+
+  return Boolean(!bot?.remoteSource && owner && owner.connectionId === source && owner.profile === profile)
+}
+
+// Every session header can mount an Agents selector, so roster reconciliation
+// must not depend on the management route being open. React Query shares the
+// same data object across consumers. Keeping the state inside a tiny executable
+// coordinator makes the once-per-snapshot contract behavior-testable without
+// copying or parsing this single-file plugin.
+function createRosterSnapshotCoordinator(effects) {
+  let coordinatedRosterData = null
+  let coordinatedRosterMeta = null
+  let coordinatedRosterSource = ''
+  let coordinatedRosterProfile = ''
+
+  return function coordinate(data, sourceId, metaByName, profile = 'default') {
+    if (!data || !Array.isArray(data.profiles)) {
+      return false
+    }
+
+    const source = String(sourceId || '').trim()
+    const ownerProfile = String(profile || '').trim()
+
+    if (
+      data === coordinatedRosterData &&
+      metaByName === coordinatedRosterMeta &&
+      source === coordinatedRosterSource &&
+      ownerProfile === coordinatedRosterProfile
+    ) {
+      return false
+    }
+
+    coordinatedRosterData = data
+    coordinatedRosterMeta = metaByName
+    coordinatedRosterSource = source
+    coordinatedRosterProfile = ownerProfile
+
+    const owner = normalizeRosterOwner(source, ownerProfile)
+    const roster = sortRosterSnapshot(data.profiles, metaByName, owner)
+    const activeSourceRoster = roster.filter(bot => !bot.remoteSource)
+
+    effects.setLastRoster(roster, owner)
+    effects.mergeMeta(activeSourceRoster, owner)
+    effects.pullAvatars(activeSourceRoster, owner)
+    effects.trackActivity(activeSourceRoster, owner)
+    // This capability belongs to the captured query result. Never let a slow
+    // roster response from source A toggle protocol writes for source B.
+    effects.backfillProtocol(activeSourceRoster, owner, Boolean(data.bot_mode_protocol))
+
+    return true
+  }
+}
+
+const coordinateRosterSnapshot = createRosterSnapshotCoordinator({
+  setLastRoster: (roster, owner) => {
+    $lastRoster.set(roster)
+    $lastRosterOwner.set(owner)
+  },
+  mergeMeta: mergeServerMeta,
+  pullAvatars: (roster, owner) => {
+    if (isExactLocalRosterOwner(owner)) {
+      pullServerAvatars(roster, owner)
+    }
+  },
+  trackActivity: (roster, owner) => {
+    if (isExactLocalRosterOwner(owner)) {
+      trackInboundActivity(roster)
+    }
+  },
+  backfillProtocol: (roster, owner, protocolInjected) =>
+    backfillMessagingProtocol(roster, owner, { protocolInjected })
+})
+
 function useRoster() {
   const activeConnectionId = useValue(host.state.connectionId)
+  const activeProfile = useValue(host.state.profile)
+  const profileKey = String(activeProfile || 'default').trim() || 'default'
+  const queryOwner = normalizeRosterOwner(activeConnectionId, profileKey)
+  const allMeta = useValue($botMeta)
+  const botMetaOwner = useValue($botMetaOwner)
 
-  return useQuery({
-    queryKey: [...ROSTER_KEY, activeConnectionId],
+  const result = useQuery({
+    queryKey: [...ROSTER_KEY, activeConnectionId, profileKey],
     queryFn: async () => {
       // Rich rows (last_session, ui_meta, has_avatar) come from the ACTIVE
       // gateway's profiles.list — unchanged single-source behavior.
-      const pins = preferredSessionIds($botMeta.get())
+      const pins =
+        isExactLocalRosterOwner(queryOwner) && sameRosterOwner(queryOwner, botMetaOwner)
+          ? preferredSessionIds($botMeta.get())
+          : {}
       const local = await host.request(
         'profiles.list',
         Object.keys(pins).length ? { preferred_session_ids: pins } : {}
       )
-      // Newer backends inject the teammate-messaging protocol into every
-      // session's system prompt (agent.bot_mode_protocol) — SOUL.md must not
-      // carry a second copy. Older gateways lack the flag: keep appending.
-      serverInjectsProtocol = Boolean(local?.bot_mode_protocol)
-
       // Multi-source desktops (hermes-agent #86875) also expose the union
       // agent roster across every registered connection. Merge agents from
       // OTHER sources in as additional rows. Feature-detected + best-effort:
@@ -2377,13 +4033,16 @@ function useRoster() {
       if (typeof host.agents === 'function') {
         try {
           const union = await host.agents()
-          return mergeMultiSourceRoster(local, union, activeConnectionId, $lastRoster.get())
+          return {
+            ...mergeMultiSourceRoster(local, union, activeConnectionId, $lastRoster.get()),
+            rosterOwner: queryOwner
+          }
         } catch {
           /* older build or roster failure — single-source list stands */
         }
       }
 
-      return local
+      return { ...local, rosterOwner: queryOwner }
     },
     refetchInterval: 5000,
     staleTime: 5000,
@@ -2392,6 +4051,17 @@ function useRoster() {
     retry: true,
     retryDelay: attempt => Math.min(15000, 1000 * 2 ** attempt)
   })
+
+  useEffect(() => {
+    coordinateRosterSnapshot(
+      result.data,
+      result.data?.rosterOwner?.connectionId,
+      allMeta,
+      result.data?.rosterOwner?.profile
+    )
+  }, [allMeta, botMetaOwner, result.data])
+
+  return { ...result, rosterOwner: result.data?.rosterOwner || null }
 }
 
 /** Merge the union agent roster (host.agents) over the active gateway's
@@ -2653,52 +4323,196 @@ function resolveRosterMentions(text, roster, active = {}) {
   return mentioned
 }
 
+function rosterSnapshotMatchesOwner(snapshot, owner) {
+  return Boolean(
+    snapshot &&
+      owner &&
+      snapshot.rosterOwner?.connectionId === owner.connectionId &&
+      snapshot.rosterOwner?.profile === owner.profile
+  )
+}
+
+function cachedRosterSnapshot(
+  client = queryClient,
+  connectionId = host.state.connectionId?.get?.(),
+  profile = host.state.profile?.get?.()
+) {
+  if (!client || typeof client.getQueryData !== 'function') {
+    return null
+  }
+
+  const owner = normalizeRosterOwner(connectionId, profile)
+
+  if (owner) {
+    const exact = client.getQueryData([...ROSTER_KEY, owner.connectionId, owner.profile])
+
+    if (exact) {
+      return exact
+    }
+  }
+
+  const connectionScoped = client.getQueryData([...ROSTER_KEY, connectionId])
+  const legacy = client.getQueryData(ROSTER_KEY)
+
+  if (owner) {
+    return rosterSnapshotMatchesOwner(connectionScoped, owner)
+      ? connectionScoped
+      : rosterSnapshotMatchesOwner(legacy, owner)
+        ? legacy
+        : null
+  }
+
+  return connectionScoped ?? legacy ?? null
+}
+
+function rosterMentionCompletionsFromCache(
+  query,
+  client = queryClient,
+  connectionId = host.state.connectionId?.get?.(),
+  active = {},
+  metaByName = $botMeta.get()
+) {
+  const cached = cachedRosterSnapshot(client, connectionId, active?.name)
+  const profiles = Array.isArray(cached?.profiles) ? cached.profiles : []
+
+  if (!profiles.length) {
+    return []
+  }
+
+  const needle = String(query || '').toLowerCase()
+  const items = []
+
+  for (const profile of profiles) {
+    if (!profile?.name || isActiveRosterBot(profile, active)) {
+      continue
+    }
+
+    const handle = botHandle(profile.name, profile)
+
+    if (needle && !handle.toLowerCase().startsWith(needle)) {
+      continue
+    }
+
+    const display = displayName(profile, botRosterMeta(profile, metaByName, cached?.rosterOwner))
+    const source = profile.connectionLabel ? ` · ${profile.connectionLabel}` : ''
+
+    items.push({
+      insert: `@${handle}`,
+      display: `@${handle}`,
+      meta: `Agent · ${display}${source}`
+    })
+  }
+
+  return items.slice(0, 8)
+}
+
+function rosterMentionsFromCache(
+  text,
+  active,
+  client = queryClient,
+  connectionId = host.state.connectionId?.get?.()
+) {
+  const cached = cachedRosterSnapshot(client, connectionId, active?.name)
+  const profiles = Array.isArray(cached?.profiles) ? cached.profiles : null
+
+  return profiles ? resolveRosterMentions(text, profiles, active) : null
+}
+
 const REMOTE_DM_TIMEOUT_MS = 180000
 const REMOTE_DM_POLL_MS = 2000
+const remoteCanonicalChats = new Map()
 
 /** The remote bot's canonical Bot Chat: pinned stored-id from its profile's
  *  ui_meta first, then resume-by-title, then create. Mirrors
  *  ensureGroupChatSession so DMs land in the ONE forever-chat instead of
  *  minting a fresh "Bot Chat" per mention. */
-async function ensureRemoteCanonicalChat(route, profile) {
-  let pinned = null
+function ensureRemoteCanonicalChat(route, profile, runtime = host) {
+  const connectionId = String(route?.connectionId || '').trim()
+  const targetProfile = String(profile || '').trim() || 'default'
+  const key = connectionId ? `${connectionId}::${targetProfile}` : ''
 
-  try {
-    const listed = await host.requestProfile(route, 'profiles.list', {})
-    const owner = listed?.profiles?.find(p => p.name === profile)
-    pinned = owner?.ui_meta?.['hermes-bots']?.chat || null
-  } catch {
-    /* older remote gateway — title lookup below still works */
+  if (!key || typeof runtime?.requestProfile !== 'function') {
+    return Promise.reject(
+      new Error(agentSourceUnavailableMessage(agentText, targetProfile, connectionId))
+    )
   }
 
-  for (const target of [pinned, 'Bot Chat']) {
-    if (!target) {
-      continue
-    }
+  const inflight = remoteCanonicalChats.get(key)
+
+  if (inflight) {
+    return inflight
+  }
+
+  const task = (async () => {
+    let pinned = null
+    let ownerMeta = {}
+    let metaAuthoritative = false
 
     try {
-      const res = await host.requestProfile(route, 'session.resume', {
-        session_id: target,
-        profile,
-        omit_messages: true
-      })
-
-      if (res?.session_id) {
-        return { runtime: res.session_id, stored: res.session_key || pinned }
-      }
+      const listed = await runtime.requestProfile(route, 'profiles.list', {})
+      const owner = listed?.profiles?.find(value => value?.name === targetProfile)
+      const server = owner?.ui_meta?.['hermes-bots']
+      metaAuthoritative = Boolean(owner)
+      ownerMeta = server && typeof server === 'object' ? server : {}
+      pinned = ownerMeta.chat || null
     } catch {
-      /* fall through */
+      /* older remote gateway — title lookup below still works */
     }
-  }
 
-  const created = await host.requestProfile(route, 'session.create', {
-    profile,
-    title: 'Bot Chat',
-    // Bot Mode sessions are always hidden from the global sidebar.
-    hidden: true
-  })
+    const pin = async stored => {
+      if (!stored || stored === pinned || !metaAuthoritative) {
+        return
+      }
 
-  return { runtime: created?.session_id || null, stored: created?.stored_session_id || null }
+      try {
+        await runtime.requestProfile(route, 'profiles.configure', {
+          name: targetProfile,
+          ui_meta: { 'hermes-bots': { ...ownerMeta, chat: stored } }
+        })
+        pinned = stored
+        ownerMeta = { ...ownerMeta, chat: stored }
+      } catch {
+        // Older gateways may resume/create sessions but reject ui_meta.
+        // Delivery remains available; title resume is the next-call fallback.
+      }
+    }
+
+    for (const target of [pinned, 'Bot Chat']) {
+      if (!target) {
+        continue
+      }
+
+      try {
+        const res = await runtime.requestProfile(route, 'session.resume', {
+          session_id: target,
+          profile: targetProfile,
+          omit_messages: true
+        })
+
+        if (res?.session_id) {
+          const stored = res.session_key || pinned || null
+          await pin(stored)
+          return { runtime: res.session_id, stored }
+        }
+      } catch {
+        /* fall through */
+      }
+    }
+
+    const created = await runtime.requestProfile(route, 'session.create', {
+      profile: targetProfile,
+      title: 'Bot Chat',
+      // Bot Mode sessions are always hidden from the global sidebar.
+      hidden: true
+    })
+    const stored = created?.stored_session_id || null
+    await pin(stored)
+
+    return { runtime: created?.session_id || null, stored }
+  })().finally(() => remoteCanonicalChats.delete(key))
+
+  remoteCanonicalChats.set(key, task)
+  return task
 }
 
 /** Bounded reply poll on the recipient's session — same shape as a group
@@ -2772,7 +4586,7 @@ async function deliverRemoteRosterMentions(bots, userText, sender) {
       const { runtime, stored } = await ensureRemoteCanonicalChat(route, profile)
 
       if (!runtime) {
-        throw new Error('No remote session')
+        throw new Error(agentText('remote.noSession'))
       }
 
       // Baseline before our submit, so the poll can spot the NEW reply.
@@ -2794,7 +4608,7 @@ async function deliverRemoteRosterMentions(bots, userText, sender) {
       host.notify?.({
         kind: 'info',
         title: displayName(bot),
-        message: `Messaged @${botHandle(profile, bot)} on ${label} — will relay the reply here.`
+        message: agentText('remote.messaged', botHandle(profile, bot))
       })
 
       const reply = await pollRemoteDmReply(route, profile, stored || runtime, before)
@@ -2809,11 +4623,11 @@ async function deliverRemoteRosterMentions(bots, userText, sender) {
         host.notify?.({
           kind: 'info',
           title: displayName(bot),
-          message: `No reply from @${botHandle(profile, bot)} yet — check its Bot Chat on ${label}.`
+          message: agentText('remote.noReply', botHandle(profile, bot), label)
         })
       }
     } catch (error) {
-      host.notifyError?.(error, `Could not reach ${label}`)
+      host.notifyError?.(error, agentText('remote.couldNotReach', label))
     }
   }
 }
@@ -2835,28 +4649,37 @@ function botRosterKey(bot) {
 
 /** Route descriptor for a bot on another connection, or null for the local /
  *  active source (or when the desktop can't route). */
-function botConnectionRoute(bot) {
+function botConnectionRoute(bot, runtime = host) {
   const id = String(bot?.connectionId || '').trim()
 
-  if (!bot?.remoteSource || !id || id === 'local' || typeof host.requestProfile !== 'function') {
+  if (!bot?.remoteSource || !id || typeof runtime?.requestProfile !== 'function') {
     return null
   }
 
   const profile = String(bot?.name || '').trim() || 'default'
 
-  return { connectionId: id, mode: 'remote', profile, targetProfile: profile }
+  return { connectionId: id, mode: id === 'local' ? 'local' : 'remote', profile, targetProfile: profile }
 }
 
 /** Gateway RPC on the bot's OWN source: requestProfile for remote rows,
  *  the active gateway for local ones. Never activates/foregrounds. */
-async function requestForBot(bot, method, params = {}) {
-  const route = botConnectionRoute(bot)
+async function requestForBot(bot, method, params = {}, runtime = host) {
+  const route = botConnectionRoute(bot, runtime)
 
   if (route) {
-    return host.requestProfile(route, method, params)
+    return runtime.requestProfile(route, method, params)
   }
 
-  return host.request(method, params)
+  // A durable remote member without a source id (legacy/corrupt room) is not
+  // safe to replay through whichever gateway happens to be active. Fail
+  // closed: same-named profiles commonly exist on several sources.
+  if (bot?.remoteSource) {
+    throw new Error(
+      agentSourceUnavailableMessage(agentText, bot?.name, bot?.connectionLabel || bot?.connectionId)
+    )
+  }
+
+  return runtime.request(method, params)
 }
 
 /** Stable per-member identity inside a group room. Local members keep their
@@ -2867,12 +4690,44 @@ function groupMemberKey(member) {
   return member?.remoteSource ? botRosterKey(member) : member?.name
 }
 
-// Bot metadata is scoped to the active gateway until the server exposes a
-// union of rich profile rows. Never paint that metadata onto a thin row from
-// another source: two `default` agents must not borrow each other's title,
-// pin, avatar, group, unread state, or canonical-chat pointer.
-function botRosterMeta(bot, metaByName) {
-  return bot?.remoteSource ? null : metaByName?.[bot?.name]
+// Row-level server metadata is source-qualified and therefore always safe.
+// The legacy local cache is keyed by bare profile name, so it may only fill
+// gaps for an explicitly local row while both the roster snapshot and cache
+// belong to the exact same local owner. This prevents remote A's `researcher`
+// from painting its title/pin/hidden/groups onto local or remote B.
+function botRosterMeta(
+  bot,
+  metaByName,
+  rosterOwner = null,
+  metaOwner = null
+) {
+  const server = bot?.ui_meta?.['hermes-bots']
+  const serverMeta = server && typeof server === 'object' && !Array.isArray(server) ? server : null
+
+  // An unowned row may only use its own source-qualified server metadata.
+  // Bare-name cache fallback requires an explicit local roster owner below.
+  if (!rosterOwner) {
+    return serverMeta
+  }
+
+  const owner = normalizeRosterOwner(rosterOwner?.connectionId, rosterOwner?.profile)
+  const resolvedMetaOwner = metaOwner || $botMetaOwner.get()
+  const cachedOwner = normalizeRosterOwner(resolvedMetaOwner?.connectionId, resolvedMetaOwner?.profile)
+  const botSource = String(bot?.connectionId || '').trim()
+  const explicitLocalRow = Boolean(
+    !bot?.remoteSource &&
+      owner?.connectionId === 'local' &&
+      (!botSource || botSource === 'local') &&
+      (!bot?.connectionKind || bot.connectionKind === 'local')
+  )
+  const localMeta =
+    explicitLocalRow && sameRosterOwner(owner, cachedOwner) ? metaByName?.[bot?.name] || null : null
+
+  if (serverMeta) {
+    return localMeta ? { ...localMeta, ...serverMeta } : serverMeta
+  }
+
+  return localMeta
 }
 
 function showsHandle(name, meta, bot) {
@@ -2894,16 +4749,31 @@ function showsHandle(name, meta, bot) {
 //   - recovery: if the pinned id vanishes from the DB (compaction rewrote
 //     the lineage), re-pin the newest session carrying the canonical title.
 
-// In-flight creations, keyed by bot name — double-clicking a row must not
-// mint two canonical chats.
+// In-flight creations are source-qualified: same-named profiles on A and B
+// must never share a promise or session id.
 const canonicalCreations = new Map()
+
+function canonicalCreationKey(name, owner) {
+  const normalized = normalizeRosterOwner(owner?.connectionId, owner?.profile)
+
+  return normalized && name ? `${normalized.connectionId}::${normalized.profile}::${name}` : ''
+}
 
 /** Create the bot's ONE forever chat: a real session opened with a kickoff
  *  message (the gateway prunes zero-message sessions, so the chat is born
  *  with the bot introducing itself). Pins the stored id in bot meta and
  *  returns it. */
-function createCanonicalChat(name) {
-  const inflight = canonicalCreations.get(name)
+function createCanonicalChat(name, capturedOwner = null) {
+  const owner = capturedOwner
+    ? normalizeRosterOwner(capturedOwner?.connectionId, capturedOwner?.profile)
+    : null
+
+  if (!owner || !rosterOwnerStillActive(owner)) {
+    return Promise.resolve(null)
+  }
+
+  const creationKey = canonicalCreationKey(name, owner)
+  const inflight = canonicalCreations.get(creationKey)
 
   if (inflight) {
     return inflight
@@ -2922,8 +4792,12 @@ function createCanonicalChat(name) {
     const sid = res?.stored_session_id
     const runtime = res?.session_id
 
+    if (owner && !rosterOwnerStillActive(owner)) {
+      return null
+    }
+
     if (sid) {
-      saveBotMeta(name, { chat: sid })
+      await saveBotMeta(name, { chat: sid }, null, owner)
     }
 
     // Mount the session view FIRST, then send the kickoff — submitting into
@@ -2932,6 +4806,9 @@ function createCanonicalChat(name) {
 
     if (sid && typeof host.openSession === 'function') {
       try {
+        if (owner && !rosterOwnerStillActive(owner)) {
+          return null
+        }
         await host.openSession(sid, { profile: name })
         opened = true
       } catch {
@@ -2943,8 +4820,16 @@ function createCanonicalChat(name) {
     if (runtime) {
       await new Promise(resolve => window.setTimeout(resolve, 400))
 
+      if (owner && !rosterOwnerStillActive(owner)) {
+        return null
+      }
+
       try {
-        await host.request('prompt.submit', { session_id: runtime, text: 'Hey, tell me about yourself!' })
+        await host.request('prompt.submit', { session_id: runtime, text: agentText('profile.intro') })
+
+        if (owner && !rosterOwnerStillActive(owner)) {
+          return null
+        }
 
         if (!opened && sid && typeof host.openSession === 'function') {
           await host.openSession(sid, { profile: name })
@@ -2956,9 +4841,9 @@ function createCanonicalChat(name) {
     }
 
     return sid || null
-  })().finally(() => canonicalCreations.delete(name))
+  })().finally(() => canonicalCreations.delete(creationKey))
 
-  canonicalCreations.set(name, run)
+  canonicalCreations.set(creationKey, run)
 
   return run
 }
@@ -2976,20 +4861,34 @@ function createCanonicalChat(name) {
  *    session.list window, which misjudged real hidden pins as gone;
  *  - transient lookup failures keep the pin: try the stored id as-is, and
  *    only a rejected open enters recovery. */
-async function openBotCanonicalChat(name, pinned, history) {
+async function openBotCanonicalChat(name, pinned, history, capturedOwner = null) {
+  const owner = capturedOwner
+    ? normalizeRosterOwner(capturedOwner?.connectionId, capturedOwner?.profile)
+    : null
+
+  if (!owner || !rosterOwnerStillActive(owner)) {
+    return null
+  }
+
   if (!pinned) {
     // Grandfather: adopt the conversation the row already previews.
     const adoptId = history?.id
     if (adoptId && typeof host.openSession === 'function') {
       try {
         await host.openSession(adoptId, { profile: name })
-        saveBotMeta(name, { chat: adoptId })
+        if (owner && !rosterOwnerStillActive(owner)) {
+          return null
+        }
+        await saveBotMeta(name, { chat: adoptId }, null, owner)
         return adoptId
       } catch {
+        if (owner && !rosterOwnerStillActive(owner)) {
+          return null
+        }
         // Adoption raced a vanishing session — fall through to creation.
       }
     }
-    return createCanonicalChat(name)
+    return createCanonicalChat(name, owner)
   }
 
   // Precise verification. An older gateway ignores the unknown param and
@@ -3011,28 +4910,38 @@ async function openBotCanonicalChat(name, pinned, history) {
     lookupFailed = true
   }
 
+  if (owner && !rosterOwnerStillActive(owner)) {
+    return null
+  }
+
   if (lookupFailed) {
     // Transient gateway state (or an older backend): the pin is innocent
     // until proven guilty — try it as-is, and only a rejected open clears.
     try {
       await host.openSession(pinned, { profile: name })
-      return pinned
+      return !owner || rosterOwnerStillActive(owner) ? pinned : null
     } catch {
-      saveBotMeta(name, { chat: null })
-      return createCanonicalChat(name)
+      if (owner && !rosterOwnerStillActive(owner)) {
+        return null
+      }
+      await saveBotMeta(name, { chat: null }, null, owner)
+      return createCanonicalChat(name, owner)
     }
   }
 
   if (preferred) {
     try {
       await host.openSession(preferred.resolved_id || preferred.id, { profile: name })
-      return pinned
+      return !owner || rosterOwnerStillActive(owner) ? pinned : null
     } catch (error) {
+      if (owner && !rosterOwnerStillActive(owner)) {
+        return null
+      }
       // The precise lookup JUST confirmed this session exists, so a failed
       // open is transient (reconnect, backend restart). Clearing the pin or
       // minting a replacement here would fork the bot's forever-chat on
       // every hiccup — report and keep everything as it is.
-      host.notifyError?.(error, `Could not open ${name}'s chat — try again`)
+      host.notifyError?.(error, agentText('profile.openChatFailed', name))
       return pinned
     }
   }
@@ -3043,14 +4952,20 @@ async function openBotCanonicalChat(name, pinned, history) {
   if (recoveryId && typeof host.openSession === 'function') {
     try {
       await host.openSession(recoveryId, { profile: name })
-      saveBotMeta(name, { chat: recoveryId })
+      if (owner && !rosterOwnerStillActive(owner)) {
+        return null
+      }
+      await saveBotMeta(name, { chat: recoveryId }, null, owner)
       return recoveryId
     } catch {
+      if (owner && !rosterOwnerStillActive(owner)) {
+        return null
+      }
       // Fall through to a fresh chat.
     }
   }
-  saveBotMeta(name, { chat: null })
-  return createCanonicalChat(name)
+  await saveBotMeta(name, { chat: null }, null, owner)
+  return createCanonicalChat(name, owner)
 }
 
 async function prepareBotSource(bot, pinnedChat) {
@@ -3059,20 +4974,30 @@ async function prepareBotSource(bot, pinnedChat) {
   }
 
   if (typeof host.ensureAgent !== 'function') {
-    throw new Error('Update Hermes Vietnamese to chat with agents on other connections.')
+    throw new Error(agentText('remote.updateRequired'))
   }
 
-  await host.ensureAgent(bot.connectionId, bot.name)
-
-  if (!bot.remoteSource) {
-    return pinnedChat
+  try {
+    await host.ensureAgent(bot.connectionId, bot.name)
+  } catch {
+    throw new Error(
+      agentSourceUnavailableMessage(agentText, bot.name, bot.connectionLabel || bot.connectionId)
+    )
   }
 
   const liveId = String(typeof host.activeConnectionId === 'function' ? host.activeConnectionId() || '' : '').trim()
   const targetId = String(bot.connectionId || '').trim()
 
-  if (targetId && targetId !== 'local' && liveId !== targetId) {
-    throw new Error(`Still on ${liveId || 'this device'}, not ${bot.connectionLabel || targetId}`)
+  // Older SDKs could resolve ensureAgent even when the requested registry
+  // source never became active. Validate every explicit source, including
+  // `local`: otherwise a failed local activation while remote B is active
+  // lets the following name-only request mutate B's same-named profile.
+  if (targetId && liveId !== targetId) {
+    throw new Error(agentText('remote.stillOn', liveId || agentText('remote.sourceFallback'), bot.connectionLabel || targetId))
+  }
+
+  if (!bot.remoteSource) {
+    return pinnedChat
   }
 
   // Thin rows deliberately omit metadata from the active source. Once their
@@ -3117,7 +5042,7 @@ function displayName(bot, meta) {
 /** Filter by the two stable identities rendered in every roster row: the
  * customizable display name and the profile's @handle. Keep the current
  * activity order — search narrows the roster, it never re-ranks it. */
-function filterBots(roster, metaByName, query) {
+function filterBots(roster, metaByName, query, rosterOwner = null) {
   const needle = query.trim().toLowerCase().replace(/^@/, '')
 
   if (!needle) {
@@ -3125,7 +5050,7 @@ function filterBots(roster, metaByName, query) {
   }
 
   return roster.filter(bot => {
-    const display = displayName(bot, botRosterMeta(bot, metaByName)).toLowerCase()
+    const display = displayName(bot, botRosterMeta(bot, metaByName, rosterOwner)).toLowerCase()
     const profile = (bot.name || '').toLowerCase()
     const handle = botHandle(bot.name, bot).toLowerCase()
     // Multi-source rows also match on their device name ("homelab" finds
@@ -3135,6 +5060,1079 @@ function filterBots(roster, metaByName, query) {
       display.includes(needle) || profile.includes(needle) || handle.includes(needle) || sourceLabel.includes(needle)
     )
   })
+}
+
+function emptyCollaborationMemberships(schemaVersion = COLLABORATION_SCHEMA) {
+  return { schemaVersion, projects: {}, sessions: {} }
+}
+
+function hasFutureCollaborationSchema(value) {
+  const version = Number(value?.schemaVersion)
+
+  return Number.isInteger(version) && version > COLLABORATION_SCHEMA
+}
+
+function normalizeCollaborationMember(value) {
+  const profile = String(value?.profile || '').trim()
+  const connectionId = String(value?.connectionId || '').trim()
+
+  if (!profile || !NAME_RE.test(profile) || !connectionId) {
+    return null
+  }
+
+  return {
+    connectionId,
+    profile,
+    invitedAt: Number.isFinite(value?.invitedAt) ? value.invitedAt : 0,
+    role: String(value?.role || 'collaborator').trim() || 'collaborator'
+  }
+}
+
+function collaborationMemberKey(value) {
+  const member = normalizeCollaborationMember(value)
+
+  return member ? `${member.connectionId}::${member.profile}` : ''
+}
+
+function normalizeCollaborationMemberships(value) {
+  const requestedVersion = Number(value?.schemaVersion)
+  const schemaVersion =
+    Number.isInteger(requestedVersion) && requestedVersion >= COLLABORATION_SCHEMA
+      ? requestedVersion
+      : COLLABORATION_SCHEMA
+  const future = hasFutureCollaborationSchema(value)
+  // A future writer may add root/member fields this build does not
+  // understand. Preserve them losslessly while sanitising the known buckets,
+  // then make every mutation below fail closed for that schema.
+  const normalized = future && value && typeof value === 'object' && !Array.isArray(value)
+    ? { ...value, schemaVersion, projects: {}, sessions: {} }
+    : emptyCollaborationMemberships(schemaVersion)
+
+  for (const scope of ['projects', 'sessions']) {
+    const records = value?.[scope]
+
+    if (!records || typeof records !== 'object' || Array.isArray(records)) {
+      continue
+    }
+
+    for (const [key, members] of Object.entries(records)) {
+      if (!key || !Array.isArray(members)) {
+        continue
+      }
+
+      const seen = new Set()
+      const clean = []
+
+      for (const value of members) {
+        const member = normalizeCollaborationMember(value)
+        const identity = collaborationMemberKey(member)
+
+        if (!member || !identity || seen.has(identity)) {
+          continue
+        }
+
+        seen.add(identity)
+        clean.push(future && value && typeof value === 'object' ? { ...value, ...member } : member)
+      }
+
+      if (clean.length) {
+        normalized[scope][key] = clean
+      }
+    }
+  }
+
+  return normalized
+}
+
+function mergeCollaborationMemberships(storedValue, liveValue) {
+  const stored = normalizeCollaborationMemberships(storedValue)
+  const live = normalizeCollaborationMemberships(liveValue)
+
+  // Unknown future semantics are authoritative and immutable to this build.
+  if (hasFutureCollaborationSchema(stored)) {
+    return stored
+  }
+  if (hasFutureCollaborationSchema(live)) {
+    return live
+  }
+
+  const merged = emptyCollaborationMemberships(Math.max(stored.schemaVersion, live.schemaVersion))
+
+  for (const scope of ['projects', 'sessions']) {
+    for (const key of new Set([...Object.keys(stored[scope]), ...Object.keys(live[scope])])) {
+      const members = new Map()
+
+      for (const member of [...(stored[scope][key] || []), ...(live[scope][key] || [])]) {
+        members.set(collaborationMemberKey(member), member)
+      }
+
+      if (members.size) {
+        merged[scope][key] = [...members.values()]
+      }
+    }
+  }
+
+  return normalizeCollaborationMemberships(merged)
+}
+
+function collaborationSourceId() {
+  return String(host.state.connectionId?.get?.() || host.activeConnectionId?.() || 'local').trim() || 'local'
+}
+
+function normalizeProjectPath(path) {
+  return String(path || '').trim().replace(/\\/g, '/').replace(/\/+$/, '')
+}
+
+function collaborationProjectBindingKeyForSession(surface, sessionId) {
+  const source = String(surface?.leadConnectionId || '').trim()
+  const profile = String(surface?.leadProfile || '').trim()
+  const session = String(sessionId || '').trim()
+
+  if (!source || !profile || !NAME_RE.test(profile) || !session) {
+    return ''
+  }
+
+  return JSON.stringify([source, profile, session])
+}
+
+function collaborationProjectBindingKey(surface) {
+  return collaborationProjectBindingKeyForSession(surface, surface?.storedSessionId)
+}
+
+function collaborationProjectBindingKeys(
+  surface,
+  sessionBindings = $collaborationSessionBindings.get()
+) {
+  return [
+    collaborationProjectBindingKeyForSession(surface, surface?.storedSessionId),
+    collaborationProjectBindingKeyForSession(surface, surface?.runtimeSessionId),
+    ...collaborationBoundSessionIds(sessionBindings, surface)
+      .map(value => collaborationProjectBindingKeyForSession(surface, value))
+  ].filter((key, index, keys) => key && keys.indexOf(key) === index)
+}
+
+function normalizeCollaborationProjectBindings(value) {
+  const normalized = {}
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return normalized
+  }
+
+  for (const [key, projectValue] of Object.entries(value)) {
+    let identity
+
+    try {
+      identity = JSON.parse(key)
+    } catch {
+      continue
+    }
+
+    const project = normalizeProjectPath(projectValue)
+
+    if (
+      !Array.isArray(identity) ||
+      identity.length !== 3 ||
+      identity.some(part => typeof part !== 'string' || !part.trim()) ||
+      !NAME_RE.test(identity[1]) ||
+      !project
+    ) {
+      continue
+    }
+
+    normalized[JSON.stringify(identity.map(part => part.trim()))] = project
+  }
+
+  return normalized
+}
+
+function updateCollaborationProjectBinding(
+  bindings,
+  surface,
+  sessionBindings = $collaborationSessionBindings.get()
+) {
+  const current = normalizeCollaborationProjectBindings(bindings)
+  const keys = collaborationProjectBindingKeys(surface, sessionBindings)
+  const project = normalizeProjectPath(surface?.projectKey)
+
+  if (!keys.length) {
+    return { bindings: current, changed: false }
+  }
+
+  if (!project) {
+    if (surface?.projectResolutionKnown !== true) {
+      const remembered = keys.map(key => current[key]).find(Boolean)
+
+      if (!remembered || keys.every(key => current[key] === remembered)) {
+        return { bindings: current, changed: false }
+      }
+
+      const next = { ...current }
+      for (const key of keys) {
+        next[key] = remembered
+      }
+
+      return { bindings: next, changed: true }
+    }
+
+    if (!keys.some(key => current[key])) {
+      return { bindings: current, changed: false }
+    }
+
+    const next = { ...current }
+    for (const key of keys) {
+      delete next[key]
+    }
+
+    return { bindings: next, changed: true }
+  }
+
+  if (keys.every(key => current[key] === project)) {
+    return { bindings: current, changed: false }
+  }
+
+  const next = { ...current }
+  for (const key of keys) {
+    next[key] = project
+  }
+
+  return { bindings: next, changed: true }
+}
+
+function resolveCollaborationSurface(
+  surface,
+  bindings,
+  sessionBindings = $collaborationSessionBindings.get()
+) {
+  const exactProject = normalizeProjectPath(surface?.projectKey)
+  const keys = collaborationProjectBindingKeys(surface, sessionBindings)
+  const normalizedBindings = normalizeCollaborationProjectBindings(bindings)
+  const boundProject =
+    surface?.projectResolutionKnown === true || !keys.length
+      ? ''
+      : keys.map(key => normalizedBindings[key]).find(Boolean) || ''
+  const projectKey = exactProject || boundProject
+
+  return projectKey === String(surface?.projectKey || '') ? surface : { ...surface, projectKey }
+}
+
+function saveCollaborationProjectBindings(next) {
+  const normalized = normalizeCollaborationProjectBindings(next)
+  $collaborationProjectBindings.set(normalized)
+
+  try {
+    pluginCtx?.storage?.set?.(COLLABORATION_PROJECT_BINDINGS_KEY, normalized)
+  } catch {
+    /* persistence unavailable — the exact foreground surface still works */
+  }
+
+  return normalized
+}
+
+function rememberCollaborationProject(surface, options = {}) {
+  const current = options.bindings || $collaborationProjectBindings.get()
+  const result = updateCollaborationProjectBinding(
+    current,
+    surface,
+    options.sessionBindings || $collaborationSessionBindings.get()
+  )
+
+  if (!result.changed) {
+    return false
+  }
+
+  const save = typeof options.save === 'function' ? options.save : saveCollaborationProjectBindings
+  save(result.bindings)
+
+  return true
+}
+
+function collaborationSessionBindingKey(surface) {
+  const source = String(surface?.leadConnectionId || '').trim()
+  const profile = String(surface?.leadProfile || '').trim()
+  const runtime = String(surface?.runtimeSessionId || '').trim()
+
+  return source && profile && NAME_RE.test(profile) && runtime
+    ? JSON.stringify([source, profile, runtime])
+    : ''
+}
+
+function normalizeCollaborationSessionBindings(value) {
+  const normalized = {}
+
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return normalized
+  }
+
+  for (const [key, storedValue] of Object.entries(value)) {
+    let identity
+
+    try {
+      identity = JSON.parse(key)
+    } catch {
+      continue
+    }
+
+    const storedIds = [...new Set((Array.isArray(storedValue) ? storedValue : [storedValue])
+      .map(item => String(item || '').trim())
+      .filter(Boolean))].slice(0, 8)
+
+    if (
+      !Array.isArray(identity) ||
+      identity.length !== 3 ||
+      identity.some(part => typeof part !== 'string' || !part.trim()) ||
+      !NAME_RE.test(identity[1]) ||
+      !storedIds.length
+    ) {
+      continue
+    }
+
+    normalized[JSON.stringify(identity.map(part => part.trim()))] = storedIds
+  }
+
+  return normalized
+}
+
+function mergeCollaborationSessionBindings(storedValue, liveValue) {
+  const stored = normalizeCollaborationSessionBindings(storedValue)
+  const live = normalizeCollaborationSessionBindings(liveValue)
+  const merged = { ...stored }
+
+  for (const [key, liveIds] of Object.entries(live)) {
+    merged[key] = [...new Set([...liveIds, ...(stored[key] || [])])].slice(0, 8)
+  }
+
+  return merged
+}
+
+function collaborationBoundSessionIds(bindings, surface) {
+  const key = collaborationSessionBindingKey(surface)
+
+  return key ? normalizeCollaborationSessionBindings(bindings)[key] || [] : []
+}
+
+function updateCollaborationSessionBinding(bindings, surface) {
+  const current = normalizeCollaborationSessionBindings(bindings)
+  const key = collaborationSessionBindingKey(surface)
+  const stored = String(surface?.storedSessionId || '').trim()
+  const prior = key ? current[key] || [] : []
+
+  if (!key || !stored || prior[0] === stored) {
+    return { bindings: current, changed: false }
+  }
+
+  return {
+    bindings: { ...current, [key]: [stored, ...prior.filter(value => value !== stored)].slice(0, 8) },
+    changed: true
+  }
+}
+
+function saveCollaborationSessionBindings(next) {
+  const normalized = normalizeCollaborationSessionBindings(next)
+  $collaborationSessionBindings.set(normalized)
+
+  try {
+    pluginCtx?.storage?.set?.(COLLABORATION_SESSION_BINDINGS_KEY, normalized)
+  } catch {
+    /* persistence unavailable — the live runtime bridge still works */
+  }
+
+  return normalized
+}
+
+function rememberCollaborationSession(surface, options = {}) {
+  const current = options.bindings || $collaborationSessionBindings.get()
+  const result = updateCollaborationSessionBinding(current, surface)
+
+  if (!result.changed) {
+    return false
+  }
+
+  const save = typeof options.save === 'function' ? options.save : saveCollaborationSessionBindings
+  save(result.bindings)
+
+  return true
+}
+
+function collaborationScopeKey(scope, surface, sourceId = surface?.leadConnectionId) {
+  const leadSource = String(surface?.leadConnectionId || '').trim()
+  const source = String(sourceId || '').trim()
+  const lead = String(surface?.leadProfile || 'default').trim() || 'default'
+
+  // Persistence is source-qualified. During cold/draft surfaces the lead may
+  // not have a connection identity yet; borrowing the globally active source
+  // would silently attach membership to a different conversation.
+  if (!leadSource || !source || source !== leadSource) {
+    return ''
+  }
+
+  if (scope === 'session') {
+    const id = String(surface?.storedSessionId || surface?.runtimeSessionId || '').trim()
+
+    return id ? `session:${source}:${lead}:${id}` : ''
+  }
+
+  const project = normalizeProjectPath(surface?.projectKey)
+
+  return project ? `project:${source}:${lead}:${project}` : ''
+}
+
+function collaborationStoredSessionScopeKey(surface, storedSessionId, sourceId = surface?.leadConnectionId) {
+  const leadSource = String(surface?.leadConnectionId || '').trim()
+  const source = String(sourceId || '').trim()
+  const lead = String(surface?.leadProfile || 'default').trim() || 'default'
+  const stored = String(storedSessionId || '').trim()
+
+  return leadSource && source === leadSource && stored
+    ? `session:${source}:${lead}:${stored}`
+    : ''
+}
+
+function collaborationRuntimeSessionScopeKey(surface, sourceId = surface?.leadConnectionId) {
+  const leadSource = String(surface?.leadConnectionId || '').trim()
+  const source = String(sourceId || '').trim()
+  const lead = String(surface?.leadProfile || 'default').trim() || 'default'
+  const runtimeId = String(surface?.runtimeSessionId || '').trim()
+
+  return leadSource && source === leadSource && runtimeId
+    ? `session:${source}:${lead}:${runtimeId}`
+    : ''
+}
+
+function legacyCollaborationProjectScopeKey(surface, sourceId = surface?.leadConnectionId) {
+  const leadSource = String(surface?.leadConnectionId || '').trim()
+  const source = String(sourceId || '').trim()
+  const project = normalizeProjectPath(surface?.projectKey)
+
+  return leadSource && source === leadSource && project ? `project:${source}:${project}` : ''
+}
+
+function collaborationScopeAvailability(surface) {
+  const sourceId = String(surface?.leadConnectionId || '').trim()
+
+  return {
+    sourceAvailable: Boolean(sourceId),
+    sourceId,
+    session: Boolean(collaborationScopeKey('session', surface, sourceId)),
+    project: Boolean(collaborationScopeKey('project', surface, sourceId))
+  }
+}
+
+function collaborationScopeMessageKey(scope, availability) {
+  if (!availability?.sourceAvailable) {
+    return 'session.unavailable'
+  }
+
+  if (availability?.[scope]) {
+    return ''
+  }
+
+  return scope === 'session' ? 'session.sessionUnavailable' : 'session.projectUnavailable'
+}
+
+function collaborationMemberForBot(bot, rosterOwner = null) {
+  const profile = String(bot?.name || bot?.profile || '').trim()
+  const explicitConnectionId = String(bot?.connectionId || '').trim()
+  const connectionId =
+    explicitConnectionId || (!bot?.remoteSource ? String(rosterOwner?.connectionId || '').trim() : '')
+
+  // A remote Agent without a source identity cannot be persisted safely:
+  // normalizing a blank source to `local` would collide with a local profile
+  // of the same name and make scoped removal target the wrong participant.
+  if (!profile || !connectionId) {
+    return null
+  }
+
+  return normalizeCollaborationMember({
+    connectionId,
+    profile,
+    invitedAt: Date.now(),
+    role: 'collaborator'
+  })
+}
+
+function collaborationMembersForSurface(
+  store,
+  surface,
+  sourceId = surface?.leadConnectionId,
+  sessionBindings = $collaborationSessionBindings.get()
+) {
+  const normalized = normalizeCollaborationMemberships(store)
+  const merged = new Map()
+
+  for (const scope of ['project', 'session']) {
+    for (const member of collaborationMembersInScope(normalized, surface, scope, sourceId, sessionBindings)) {
+      const identity = collaborationMemberKey(member)
+      const current = merged.get(identity)
+
+      merged.set(identity, {
+        ...member,
+        scopes: current ? [...current.scopes, scope] : [scope]
+      })
+    }
+  }
+
+  const leadIdentity = collaborationMemberKey({
+    connectionId: surface?.leadConnectionId,
+    profile: surface?.leadProfile
+  })
+
+  // A project can retain membership written while another profile led the
+  // session. Keep that durable record for those sessions, but never render
+  // the current lead a second time as its own collaborator.
+  return [...merged.values()].filter(member => collaborationMemberKey(member) !== leadIdentity)
+}
+
+function collaborationMembersInScope(
+  store,
+  surface,
+  scope,
+  sourceId = surface?.leadConnectionId,
+  sessionBindings = $collaborationSessionBindings.get()
+) {
+  const normalized = normalizeCollaborationMemberships(store)
+  const bucket = scope === 'project' ? 'projects' : 'sessions'
+  const key = collaborationScopeKey(scope, surface, sourceId)
+
+  if (!key) {
+    return []
+  }
+
+  const values = [...(normalized[bucket][key] || [])]
+
+  // A fresh chat has only a runtime id. Once persistence assigns its durable
+  // id, read both identities until the additive migration below is saved so
+  // an invite never disappears for a render or after a reload retry.
+  if (scope === 'session') {
+    const runtimeKey = collaborationRuntimeSessionScopeKey(surface, sourceId)
+
+    if (runtimeKey && runtimeKey !== key) {
+      values.push(...(normalized.sessions[runtimeKey] || []))
+    }
+
+    for (const priorStored of collaborationBoundSessionIds(sessionBindings, surface)) {
+      const priorKey = collaborationStoredSessionScopeKey(surface, priorStored, sourceId)
+
+      if (priorKey && priorKey !== key && priorKey !== runtimeKey) {
+        values.push(...(normalized.sessions[priorKey] || []))
+      }
+    }
+  }
+
+  // v31 previews briefly wrote project:<source>:<project>. Adopt that
+  // unqualified bucket only on an authoritative foreground resolution; an
+  // unknown/background surface must never guess which lead profile owned it.
+  if (scope === 'project' && surface?.projectResolutionKnown === true) {
+    const legacyKey = legacyCollaborationProjectScopeKey(surface, sourceId)
+
+    if (legacyKey && legacyKey !== key) {
+      values.push(...(normalized.projects[legacyKey] || []))
+    }
+  }
+
+  const unique = new Map()
+
+  for (const value of values) {
+    unique.set(collaborationMemberKey(value), value)
+  }
+
+  return [...unique.values()]
+}
+
+function migrateRuntimeCollaborationSessionScope(
+  store,
+  surface,
+  sourceId = surface?.leadConnectionId,
+  sessionBindings = $collaborationSessionBindings.get()
+) {
+  const current = normalizeCollaborationMemberships(store)
+
+  if (hasFutureCollaborationSchema(current)) {
+    return { changed: false, store: current }
+  }
+
+  const durableKey = collaborationScopeKey('session', surface, sourceId)
+  const runtimeKey = collaborationRuntimeSessionScopeKey(surface, sourceId)
+  const storedId = String(surface?.storedSessionId || '').trim()
+  const previousKeys = collaborationBoundSessionIds(sessionBindings, surface)
+    .map(value => collaborationStoredSessionScopeKey(surface, value, sourceId))
+  const sourceKeys = [...new Set([runtimeKey, ...previousKeys].filter(key => key && key !== durableKey))]
+  const sourceMembers = sourceKeys.flatMap(key => current.sessions[key] || [])
+
+  if (!storedId || !durableKey || !sourceMembers.length) {
+    return { changed: false, store: current }
+  }
+
+  const combined = new Map()
+
+  for (const value of [...sourceMembers, ...(current.sessions[durableKey] || [])]) {
+    combined.set(collaborationMemberKey(value), value)
+  }
+
+  const sessions = { ...current.sessions, [durableKey]: [...combined.values()] }
+  for (const key of sourceKeys) {
+    delete sessions[key]
+  }
+
+  return {
+    changed: true,
+    store: normalizeCollaborationMemberships({ ...current, sessions })
+  }
+}
+
+function migrateLegacyCollaborationProjectScope(store, surface, sourceId = surface?.leadConnectionId) {
+  const current = normalizeCollaborationMemberships(store)
+
+  if (hasFutureCollaborationSchema(current) || surface?.projectResolutionKnown !== true) {
+    return { changed: false, store: current }
+  }
+
+  const key = collaborationScopeKey('project', surface, sourceId)
+  const legacyKey = legacyCollaborationProjectScopeKey(surface, sourceId)
+  const legacyMembers = legacyKey && legacyKey !== key ? current.projects[legacyKey] || [] : []
+
+  if (!key || !legacyMembers.length) {
+    return { changed: false, store: current }
+  }
+
+  const combined = new Map()
+
+  for (const value of [...legacyMembers, ...(current.projects[key] || [])]) {
+    combined.set(collaborationMemberKey(value), value)
+  }
+
+  const projects = { ...current.projects, [key]: [...combined.values()] }
+  delete projects[legacyKey]
+
+  return {
+    changed: true,
+    store: normalizeCollaborationMemberships({ ...current, projects })
+  }
+}
+
+function saveCollaborationMemberships(next) {
+  const normalized = normalizeCollaborationMemberships(next)
+  $collaborationMemberships.set(normalized)
+
+  if (hasFutureCollaborationSchema(normalized)) {
+    return normalized
+  }
+
+  try {
+    pluginCtx?.storage?.set?.(COLLABORATION_KEY, normalized)
+  } catch {
+    /* persistence unavailable — keep this window's additive state */
+  }
+
+  return normalized
+}
+
+function updateCollaborationMembership(
+  store,
+  surface,
+  scope,
+  member,
+  present,
+  sourceId,
+  sessionBindings = $collaborationSessionBindings.get()
+) {
+  if (hasFutureCollaborationSchema(store)) {
+    return { changed: false, store: normalizeCollaborationMemberships(store) }
+  }
+
+  const scopeKey = collaborationScopeKey(scope, surface, sourceId)
+  const normalizedMember = normalizeCollaborationMember(member)
+  const leadIdentity = collaborationMemberKey({
+    connectionId: surface?.leadConnectionId || sourceId || 'local',
+    profile: surface?.leadProfile || 'default'
+  })
+
+  if (!scopeKey || !normalizedMember || collaborationMemberKey(normalizedMember) === leadIdentity) {
+    return { changed: false, store: normalizeCollaborationMemberships(store) }
+  }
+
+  const bucket = scope === 'project' ? 'projects' : 'sessions'
+  const migration =
+    scope === 'project'
+      ? migrateLegacyCollaborationProjectScope(store, surface, sourceId)
+      : migrateRuntimeCollaborationSessionScope(store, surface, sourceId, sessionBindings)
+  const current = migration.store
+  const nextScope = { ...current[bucket] }
+  const members = [...(nextScope[scopeKey] || [])]
+  const migrated = migration.changed
+
+  const identity = collaborationMemberKey(normalizedMember)
+  const exists = members.some(value => collaborationMemberKey(value) === identity)
+
+  if (present === exists && !migrated) {
+    return { changed: false, store: current }
+  }
+
+  const nextMembers = present
+    ? [...members, normalizedMember]
+    : members.filter(value => collaborationMemberKey(value) !== identity)
+  if (nextMembers.length) {
+    nextScope[scopeKey] = nextMembers
+  } else {
+    delete nextScope[scopeKey]
+  }
+
+  return {
+    changed: true,
+    store: normalizeCollaborationMemberships({ ...current, [bucket]: nextScope })
+  }
+}
+
+function setCollaborationMember(surface, scope, bot, present, options = {}) {
+  const sourceId = String(surface?.leadConnectionId || '').trim()
+
+  if (!sourceId) {
+    return false
+  }
+
+  const member = collaborationMemberForBot(bot, options.rosterOwner)
+  const result = updateCollaborationMembership(
+    options.store || $collaborationMemberships.get(),
+    surface,
+    scope,
+    member,
+    present,
+    sourceId,
+    options.sessionBindings || $collaborationSessionBindings.get()
+  )
+
+  if (!result.changed) {
+    return false
+  }
+
+  const save = typeof options.save === 'function' ? options.save : saveCollaborationMemberships
+  save(result.store)
+
+  return true
+}
+
+const AGENT_DESCRIPTION_CACHE_TTL = 5 * 60 * 1000
+const AGENT_DESCRIPTION_CONCURRENCY = 4
+const agentDescriptionCache = new Map()
+const agentDescriptionPending = new Map()
+
+function agentDescriptionKey(value) {
+  return `${String(value?.connectionId || 'local').trim() || 'local'}::${String(value?.name || value?.profile || 'default').trim() || 'default'}`
+}
+
+function uniqueAgentTerms(values) {
+  const seen = new Set()
+  const result = []
+
+  for (const value of values) {
+    const text = String(value || '').trim()
+    const key = text.toLowerCase()
+
+    if (text && !seen.has(key)) {
+      seen.add(key)
+      result.push(text)
+    }
+  }
+
+  return result
+}
+
+function enabledAgentCapabilities(values) {
+  return Array.isArray(values)
+    ? values.filter(value => typeof value === 'string' || (value && value.enabled === true))
+    : []
+}
+
+function normalizeAgentDescription(bot, detail) {
+  const rawModel = detail?.model
+  const model =
+    (typeof rawModel === 'string' ? rawModel : rawModel?.default) ||
+    (typeof bot?.model === 'string' ? bot.model : bot?.model?.default) ||
+    ''
+  const provider =
+    (typeof rawModel === 'object' ? rawModel?.provider : detail?.provider) ||
+    bot?.provider ||
+    ''
+  const skills = enabledAgentCapabilities(detail?.skills)
+  const toolsets = enabledAgentCapabilities(detail?.toolsets)
+  const mcpServers = enabledAgentCapabilities(detail?.mcp_servers)
+  const skillNames = skills.map(value => (typeof value === 'string' ? value : value?.name || value?.id))
+  const toolsetNames = toolsets.map(value =>
+    typeof value === 'string' ? value : value?.label || value?.name || value?.id
+  )
+  const toolsetSearchTerms = toolsets.flatMap(value =>
+    typeof value === 'string' ? [value] : [value?.name, value?.label]
+  )
+  const mcpNames = mcpServers.map(value => (typeof value === 'string' ? value : value?.name || value?.id))
+  const capabilities = uniqueAgentTerms([...skillNames, ...toolsetNames, ...mcpNames])
+  const capabilitySearch = uniqueAgentTerms([
+    ...skillNames,
+    ...toolsetSearchTerms,
+    ...mcpNames
+  ])
+
+  return {
+    role: String(detail?.role || bot?.role || '').trim(),
+    description: String(detail?.description || bot?.description || '').trim(),
+    model: String(model || '').trim(),
+    provider: String(provider || '').trim(),
+    capabilities,
+    capabilitySearch,
+    skills: uniqueAgentTerms(skillNames),
+    toolsets: uniqueAgentTerms(toolsetNames),
+    mcp_servers: uniqueAgentTerms(mcpNames),
+    capabilitiesHydrated: true
+  }
+}
+
+function cachedAgentDescription(cache, key, now) {
+  const entry = cache.get(key)
+
+  if (!entry || entry.expiresAt <= now) {
+    if (entry) {
+      cache.delete(key)
+    }
+
+    return null
+  }
+
+  return entry.value
+}
+
+function mergeAgentDescriptions(roster, cache = agentDescriptionCache, now = Date.now()) {
+  return roster.map(bot => {
+    const detail = cachedAgentDescription(cache, agentDescriptionKey(bot), now)
+
+    return detail ? { ...bot, ...detail } : bot
+  })
+}
+
+function invalidateAgentDescription(name, connectionId = collaborationSourceId()) {
+  agentDescriptionCache.delete(agentDescriptionKey({ connectionId, name }))
+}
+
+async function hydrateAgentDescriptions(roster, activeConnectionId, runtime = host, options = {}) {
+  const cache = options.cache || agentDescriptionCache
+  const pending = options.pending || agentDescriptionPending
+  const now = typeof options.now === 'function' ? options.now : Date.now
+  const concurrency = Math.max(1, Number(options.concurrency) || AGENT_DESCRIPTION_CONCURRENCY)
+  const ttl = Math.max(1, Number(options.ttl) || AGENT_DESCRIPTION_CACHE_TTL)
+  const descriptions = new Map()
+  const targets = []
+  const activeId = String(activeConnectionId || '').trim()
+
+  for (const bot of roster) {
+    if (!bot?.name) {
+      continue
+    }
+
+    const key = agentDescriptionKey(bot)
+    const cached = cachedAgentDescription(cache, key, now())
+
+    if (cached) {
+      descriptions.set(key, cached)
+    } else {
+      targets.push(bot)
+    }
+  }
+
+  let routes = []
+
+  if (targets.some(bot => bot.remoteSource) && typeof runtime.profileRoutes === 'function') {
+    try {
+      routes = await runtime.profileRoutes()
+    } catch {
+      routes = []
+    }
+  }
+
+  const routeByKey = new Map(
+    (Array.isArray(routes) ? routes : []).map(route => [agentDescriptionKey(route), route])
+  )
+  const outcomes = []
+
+  for (let index = 0; index < targets.length; index += concurrency) {
+    const batch = targets.slice(index, index + concurrency)
+    const settled = await Promise.allSettled(
+      batch.map(async bot => {
+        const key = agentDescriptionKey(bot)
+        let request = pending.get(key)
+
+        if (!request) {
+          request = (async () => {
+            const botConnectionId = String(bot.connectionId || '').trim()
+            const usesActiveSource =
+              bot.remoteSource === false ||
+              (bot.remoteSource !== true && (!activeId || !botConnectionId || botConnectionId === activeId))
+            let detail
+
+            if (usesActiveSource) {
+              detail = await runtime.request('profiles.describe', { name: bot.name })
+            } else {
+              const route = routeByKey.get(key)
+
+              if (!route || typeof runtime.requestProfile !== 'function') {
+                throw new Error(`No profile route for ${key}`)
+              }
+
+              detail = await runtime.requestProfile(route, 'profiles.describe', {
+                name: String(route.targetProfile || bot.name).trim() || bot.name
+              })
+            }
+
+            const value = normalizeAgentDescription(bot, detail)
+            cache.set(key, { expiresAt: now() + ttl, value })
+
+            return value
+          })().finally(() => pending.delete(key))
+          pending.set(key, request)
+        }
+
+        const value = await request
+        descriptions.set(key, value)
+
+        try {
+          options.onUpdate?.(key, value)
+        } catch {
+          /* a rendering callback cannot fail capability hydration */
+        }
+
+        return { key, value }
+      })
+    )
+
+    outcomes.push(...settled)
+  }
+
+  return { descriptions, outcomes }
+}
+
+function agentRoleText(bot) {
+  return String(bot?.role || '').trim()
+}
+
+function agentDescriptionText(bot, meta) {
+  return uniqueAgentTerms([meta?.description, bot?.description]).join(' · ')
+}
+
+function agentModelText(bot) {
+  return uniqueAgentTerms([bot?.provider, typeof bot?.model === 'string' ? bot.model : bot?.model?.default]).join(' · ')
+}
+
+function agentCapabilityText(bot, _meta, copy = agentText) {
+  const list = []
+  const add = value => {
+    if (typeof value === 'string' && value.trim()) {
+      list.push(value.trim())
+    }
+  }
+  const addMany = values => {
+    if (Array.isArray(values)) {
+      values
+        .filter(value => typeof value === 'string' || value?.enabled === true)
+        .forEach(value => add(typeof value === 'string' ? value : value?.label || value?.name || value?.id))
+    }
+  }
+
+  addMany(bot?.capabilities)
+  if (!bot?.capabilitiesHydrated) {
+    addMany(bot?.skills)
+    addMany(bot?.toolsets)
+    addMany(bot?.tools)
+    addMany(bot?.mcp_servers)
+  }
+
+  if (!list.length && Number(bot?.skill_count) > 0) {
+    add(copy('session.skills', bot.skill_count))
+  }
+
+  return [...new Set(list)].join(' · ')
+}
+
+function filterAgentCandidates(roster, metaByName, query, copy = agentText, rosterOwner = null) {
+  const needle = String(query || '').trim().toLowerCase()
+
+  if (!needle) {
+    return roster
+  }
+
+  return roster.filter(bot => {
+    const meta = botRosterMeta(bot, metaByName, rosterOwner)
+    const haystack = [
+      bot?.name,
+      botHandle(bot?.name, bot),
+      displayName(bot, meta),
+      bot?.role,
+      meta?.description,
+      bot?.description,
+      bot?.provider,
+      typeof bot?.model === 'string' ? bot.model : bot?.model?.default,
+      bot?.connectionLabel,
+      ...(Array.isArray(bot?.capabilitySearch) ? bot.capabilitySearch : []),
+      agentCapabilityText(bot, meta, copy)
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+
+    return haystack.includes(needle)
+  })
+}
+
+function agentSourcePresentation(bot, roster) {
+  const profile = String(bot?.name || bot?.profile || '').trim().toLowerCase()
+  const connectionId = String(bot?.connectionId || '').trim()
+  const sourceIds = new Set(
+    roster
+      .filter(value => String(value?.name || value?.profile || '').trim().toLowerCase() === profile)
+      .map(value => String(value?.connectionId || '').trim())
+      .filter(Boolean)
+  )
+  const visible = Boolean(bot?.remoteSource) || sourceIds.size > 1
+
+  if (!visible) {
+    return { accessible: '', handle: '', source: '', visible: false }
+  }
+
+  const handle = `@${botHandle(bot?.name || bot?.profile, bot)}`
+  const source = String(bot?.connectionLabel || connectionId).trim()
+
+  return {
+    accessible: uniqueAgentTerms([handle, source]).join(' · '),
+    handle,
+    source,
+    visible: true
+  }
+}
+
+function agentAccessibleLabel(bot, roster, meta) {
+  const source = agentSourcePresentation(bot, roster)
+
+  return uniqueAgentTerms([displayName(bot, meta), source.accessible]).join(' · ')
+}
+
+function rosterBotForMember(roster, member, rosterOwner = null) {
+  const exact = roster.find(
+    bot =>
+      collaborationMemberKey(collaborationMemberForBot(bot, rosterOwner)) ===
+      collaborationMemberKey(member)
+  )
+
+  if (exact) {
+    return exact
+  }
+
+  if (member.connectionId === 'local' && rosterOwner?.connectionId === 'local') {
+    return (
+      roster.find(
+        bot =>
+          !bot.remoteSource &&
+          (!bot.connectionId || bot.connectionId === 'local') &&
+          bot.name === member.profile
+      ) || null
+    )
+  }
+
+  return null
 }
 
 function slugify(value) {
@@ -3203,6 +6201,35 @@ function groupMembershipPatch(meta, group, enabled) {
   return { groups, group: groups[0] || null }
 }
 
+async function updateDurableGroupMembership(member, group, enabled, runtime = host) {
+  const connectionId = String(member?.connectionId || '').trim()
+  const name = String(member?.name || '').trim()
+
+  if (!connectionId || !name) {
+    return false
+  }
+
+  const routed = {
+    ...member,
+    name,
+    connectionId,
+    remoteSource: true,
+    sourceScoped: true
+  }
+  const listed = await requestForBot(routed, 'profiles.list', {}, runtime)
+  const profile = listed?.profiles?.find(value => value?.name === name)
+  const current = profile?.ui_meta?.['hermes-bots']
+  const next = { ...(current && typeof current === 'object' ? current : {}), ...groupMembershipPatch(current, group, enabled) }
+  const result = await requestForBot(
+    routed,
+    'profiles.configure',
+    { name, ui_meta: { 'hermes-bots': next } },
+    runtime
+  )
+
+  return result?.applied?.ui_meta !== false
+}
+
 /** Group chats that should hold a roster row: every group named in bot meta
  *  (local members) plus every room record that still has stored members or
  *  log — cross-connection rooms whose members can't ride bot-meta. */
@@ -3229,41 +6256,61 @@ function groupLastActivity(room) {
 /** Seat a group's member roster: local bots whose meta names the group, plus
  *  the room record's stored descriptors (remote members can't ride bot-meta).
  *  Prefers the LIVE roster row for a stored descriptor when present. */
-function groupChatMemberBots(group, roster, metaByName) {
-  const local = (roster || []).filter(
-    bot => !bot.remoteSource && botGroups(botRosterMeta(bot, metaByName)).includes(group)
-  )
-  const stored = ($groupChats.get()[group] || {}).members || []
-  const seated = new Set(local.map(botRosterKey))
-  const remote = []
+function groupChatMemberBots(
+  group,
+  roster,
+  metaByName,
+  rooms = $groupChats.get(),
+  rosterOwner = $lastRosterOwner.get(),
+  metaOwner = $botMetaOwner.get()
+) {
+  const stored = (rooms?.[group] || {}).members || []
 
-  for (const descriptor of stored) {
-    const key = botRosterKey(descriptor)
-
-    if (seated.has(key)) {
-      continue
-    }
-
-    seated.add(key)
-    remote.push((roster || []).find(bot => botRosterKey(bot) === key) || descriptor)
+  // Once a room has durable composite identities they are authoritative.
+  // Unioning the old name-keyed bot-meta membership here would ghost-seat a
+  // same-named Agent from the newly active source and expose A's room to B.
+  if (stored.length) {
+    return stored.map(descriptor =>
+      (roster || []).find(bot => botRosterKey(bot) === botRosterKey(descriptor)) || descriptor
+    )
   }
 
-  return [...local, ...remote]
+  // Legacy rooms without a durable roster retain their name-keyed metadata
+  // fallback until they are next saved with source-qualified members.
+  return (roster || []).filter(
+    bot => !bot.remoteSource && botGroups(botRosterMeta(bot, metaByName, rosterOwner, metaOwner)).includes(group)
+  )
 }
 
 /** Persist source-qualified identities for every selected member. The active
  *  source's row may become remote after a connection switch, so retaining it
  *  here is what keeps the same room intact across machines. */
-function durableGroupChatMembers(bots) {
-  return (bots || []).map(bot => ({
-    name: bot.name,
-    handle: bot.handle || bot.name,
-    connectionId: bot.connectionId,
-    connectionKind: bot.connectionKind,
-    connectionLabel: bot.connectionLabel,
-    remoteSource: true,
-    sourceScoped: true
-  }))
+function durableGroupChatMembers(bots, rosterOwner = null) {
+  const owner = normalizeRosterOwner(rosterOwner?.connectionId, rosterOwner?.profile)
+
+  return (bots || []).flatMap(bot => {
+    const connectionId = String(bot?.connectionId || (!bot?.remoteSource ? owner?.connectionId : '') || '').trim()
+
+    if (!bot?.name || !connectionId) {
+      return []
+    }
+
+    return [
+      {
+        name: bot.name,
+        handle: bot.handle || bot.name,
+        connectionId,
+        connectionKind: bot.connectionKind || (connectionId === 'local' ? 'local' : undefined),
+        connectionLabel: bot.connectionLabel,
+        remoteSource: true,
+        sourceScoped: true
+      }
+    ]
+  })
+}
+
+function groupChatEligibleBots(roster, rosterOwner = null) {
+  return (roster || []).filter(bot => durableGroupChatMembers([bot], rosterOwner).length === 1)
 }
 
 /** Existing group names, alphabetical — feeds the Manage-groups dialog. */
@@ -3566,17 +6613,31 @@ async function disbandGroupChat(group, members) {
     /* storage unavailable — the atom reset above still empties the room */
   }
 
-  // Remove this membership last. saveBotMeta never throws (local storage +
-  // best-effort profiles.configure per member), so a flaky gateway can't
-  // strand the disband halfway with the room log already gone.
-  for (const member of members) {
-    if (!member?.name || member.remoteSource) {
-      continue
+  // Remove membership last, routed through each durable member's captured
+  // source. Durable descriptors intentionally all carry remoteSource:true so
+  // they remain routable after an A -> B switch; skipping that flag would
+  // leave stale ui_meta and resurrect the disbanded row on the next refresh.
+  const owner = currentBotMetaOwner()
+  const cleanup = (members || []).flatMap(member => {
+    if (!member?.name) {
+      return []
     }
 
-    const meta = $botMeta.get()[member.name] || {}
-    await saveBotMeta(member.name, groupMembershipPatch(meta, group, false))
-  }
+    if (member.connectionId) {
+      return [updateDurableGroupMembership(member, group, false)]
+    }
+
+    // Pre-v31 rooms had no durable descriptor. Retain the old local cleanup
+    // only under an exact explicit local owner; unknown/remote stays closed.
+    if (!member.remoteSource && isExactLocalRosterOwner(owner)) {
+      const meta = botRosterMeta(member, $botMeta.get(), owner)
+      return [saveBotMeta(member.name, groupMembershipPatch(meta, group, false), meta, owner)]
+    }
+
+    return []
+  })
+
+  await Promise.allSettled(cleanup)
 }
 
 function appendGroupChatEntry(group, from, text) {
@@ -4031,9 +7092,9 @@ function hasMessagingProtocol(soul) {
  *  that already has it (clone-from-default after a backfill, Edit save).
  *  No-op when the backend injects the protocol into the system prompt
  *  itself (bot_mode_protocol) — SOUL.md stays the user's identity text. */
-function ensureMessagingProtocol(soul, name, roster) {
+function ensureMessagingProtocol(soul, name, roster, protocolInjected = false) {
   const text = (soul || '').trim()
-  if (serverInjectsProtocol || hasMessagingProtocol(text)) return text
+  if (protocolInjected || hasMessagingProtocol(text)) return text
   const section = messagingProtocolSection(name, roster)
   return text ? text + '\n\n' + section : section
 }
@@ -4044,50 +7105,115 @@ const soulProtocolInflight = new Set()
 /** One-shot per profile per session: if an existing SOUL has no protocol,
  *  append it. This is the install-time fix for default / pre-Bot-Mode
  *  personas that #16 never touched. Never overwrites identity text. */
-function backfillMessagingProtocol(roster) {
+async function backfillMessagingProtocol(
+  roster,
+  rosterOwner,
+  { protocolInjected = false, runtime = host } = {}
+) {
   // Newer backends teach the protocol via the system prompt — never touch
   // user SOUL files when the server already covers every session.
-  if (serverInjectsProtocol) {
+  if (protocolInjected) {
     return
   }
 
+  const owner = normalizeRosterOwner(rosterOwner?.connectionId, rosterOwner?.profile)
+
+  if (!owner) {
+    return
+  }
+
+  const candidates = []
+
   for (const bot of roster || []) {
-    const name = bot && bot.name
-    if (!name || soulProtocolChecked.has(name) || soulProtocolInflight.has(name)) {
+    const name = String(bot?.name || '').trim()
+    const source = String(bot?.connectionId || owner.connectionId).trim()
+    const key = source && name ? `${source}::${name}` : ''
+
+    if (
+      !key ||
+      source !== owner.connectionId ||
+      soulProtocolChecked.has(key) ||
+      soulProtocolInflight.has(key)
+    ) {
       continue
     }
 
-    soulProtocolInflight.add(name)
-    host
-      .request('profiles.describe', { name })
-      .then(res => {
+    soulProtocolInflight.add(key)
+    candidates.push({ bot, key, name, source })
+  }
+
+  if (!candidates.length) {
+    return
+  }
+
+  let routes = []
+
+  if (typeof runtime?.requestProfile === 'function' && typeof runtime?.profileRoutes === 'function') {
+    try {
+      routes = await runtime.profileRoutes()
+    } catch {
+      routes = []
+    }
+  }
+
+  const routeFor = candidate =>
+    (Array.isArray(routes) ? routes : []).find(route =>
+      String(route?.connectionId || '').trim() === candidate.source &&
+      String(route?.targetProfile || route?.profile || '').trim() === candidate.name
+    ) || null
+
+  await Promise.allSettled(
+    candidates.map(async candidate => {
+      const { key, name } = candidate
+      const route = routeFor(candidate)
+      const request = async (method, params) => {
+        if (route && typeof runtime?.requestProfile === 'function') {
+          return runtime.requestProfile(route, method, params)
+        }
+
+        // Older SDK fallback is safe only while the captured active owner is
+        // still exact. Revalidate before every ambient request so a delayed A
+        // describe can never configure B's same-named profile after a switch.
+        if (!rosterOwnerStillActive(owner, runtime)) {
+          throw new Error(agentSourceUnavailableMessage(agentText, name, owner.connectionId))
+        }
+
+        return runtime.request(method, params)
+      }
+
+      try {
+        const res = await request('profiles.describe', { name })
         const soul = (res && res.soul) || ''
         if (hasMessagingProtocol(soul)) {
-          soulProtocolChecked.add(name)
-          return null
+          soulProtocolChecked.add(key)
+          return
         }
-        return host
-          .request('profiles.configure', { name, soul: ensureMessagingProtocol(soul, name, roster) })
-          .then(() => {
-            soulProtocolChecked.add(name)
-          })
-      })
-      .catch(() => {
-        // Older gateway or a one-off describe/configure miss — do not hammer.
-        soulProtocolChecked.add(name)
-      })
-      .finally(() => {
-        soulProtocolInflight.delete(name)
-      })
-  }
+
+        await request('profiles.configure', {
+          name,
+          soul: ensureMessagingProtocol(soul, name, roster, protocolInjected)
+        })
+        soulProtocolChecked.add(key)
+      } catch {
+        // A normal one-off RPC miss stays one-shot. An ambient legacy request
+        // aborted because its captured owner changed must remain retryable
+        // when the user returns to that source.
+        if (route || rosterOwnerStillActive(owner, runtime)) {
+          soulProtocolChecked.add(key)
+        }
+      } finally {
+        soulProtocolInflight.delete(key)
+      }
+    })
+  )
 }
 
 /** SOUL.md for a new bot: identity (or the user's custom SOUL) + the
  *  messaging protocol — which ships UNLESS the backend injects it into the
  *  system prompt itself (bot_mode_protocol capability). */
-function composeSoul({ name, title, description, roster, customSoul }) {
+function composeSoul({ name, title, description, roster, customSoul, protocolInjected = false }) {
   if (customSoul && customSoul.trim()) {
-    return ensureMessagingProtocol(customSoul, name, roster)
+    return ensureMessagingProtocol(customSoul, name, roster, protocolInjected)
   }
 
   const lines = [
@@ -4102,7 +7228,7 @@ function composeSoul({ name, title, description, roster, customSoul }) {
 
   const identity = lines.filter(line => line !== null).join('\n')
 
-  return serverInjectsProtocol ? identity : identity + '\n\n' + messagingProtocolSection(name, roster)
+  return protocolInjected ? identity : identity + '\n\n' + messagingProtocolSection(name, roster)
 }
 
 // ── human-readable row helpers ───────────────────────────────────────────────
@@ -4148,11 +7274,11 @@ function generatedSessionTitle(session, preview) {
   }
   const cleaned = (preview || '').trim().replace(A2A_PREFIX_RE, '').trim()
   if (!cleaned) {
-    return raw || 'Conversation'
+    return raw || agentText('profile.conversation')
   }
   const words = cleaned.split(/\s+/).slice(0, 5).join(' ').replace(/[,;:.]+$/, '')
   if (!words) {
-    return raw || 'Conversation'
+    return raw || agentText('profile.conversation')
   }
   return words.length > 34 ? `${words.slice(0, 33)}…` : words
 }
@@ -4177,9 +7303,67 @@ function activeBots(roster, activeProfile, gatewayState, now = Date.now()) {
 
 // ── bot row ──────────────────────────────────────────────────────────────────
 
-function BotRow({ bot, onDelete, onEdit, onGroup }) {
+function agentProfileActionsAvailable(bot) {
+  return Boolean(bot?.name) && bot?.remoteSource !== true
+}
+
+function agentProfileDeleteRoute(owner, runtime = host) {
+  const normalized = normalizeRosterOwner(owner?.connectionId, owner?.profile)
+
+  if (!normalized) {
+    return null
+  }
+
+  if (normalized.connectionId !== 'local' && runtime?.deleteProfileConnectionScoped !== true) {
+    return null
+  }
+
+  return {
+    connectionId: runtime?.deleteProfileConnectionScoped === true ? normalized.connectionId : undefined,
+    profile: normalized.profile
+  }
+}
+
+function agentDeleteClearsLegacyMeta(owner, cacheOwner) {
+  return isExactLocalRosterOwner(owner) && sameRosterOwner(owner, cacheOwner)
+}
+
+function captureAgentProfileAction(bot, rosterOwner) {
+  if (!agentProfileActionsAvailable(bot)) {
+    return null
+  }
+
+  const owner = normalizeRosterOwner(bot?.connectionId || rosterOwner?.connectionId, rosterOwner?.profile)
+
+  return owner ? { ...bot, actionOwner: owner } : null
+}
+
+function agentProfileActionMatchesOwner(bot, rosterOwner) {
+  const expected = normalizeRosterOwner(bot?.actionOwner?.connectionId, bot?.actionOwner?.profile)
+  const current = normalizeRosterOwner(rosterOwner?.connectionId, rosterOwner?.profile)
+
+  return Boolean(
+    agentProfileActionsAvailable(bot) &&
+      expected &&
+      current &&
+      expected.connectionId === current.connectionId &&
+      expected.profile === current.profile
+  )
+}
+
+function invokeAgentProfileAction(bot, action, rosterOwner = null) {
+  if (!agentProfileActionMatchesOwner(bot, rosterOwner) || typeof action !== 'function') {
+    return false
+  }
+
+  action(bot)
+  return true
+}
+
+function BotRow({ bot, rosterOwner, onDelete, onEdit, onGroup }) {
+  const copy = useAgentText()
   const activeProfile = useValue(host.state.profile)
-  const meta = botRosterMeta(bot, useValue($botMeta))
+  const meta = botRosterMeta(bot, useValue($botMeta), rosterOwner)
   const groups = botGroups(meta)
   const last = bot.last_session
   const isActive = !bot.remoteSource && bot.name === activeProfile
@@ -4208,8 +7392,14 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
   const displayPreview = stripPreviewMarkdown(
     fromBot
       ? (previewSession?.preview || '').replace(A2A_PREFIX_RE, '').trim() || '…'
-      : previewSession?.preview || bot.description || 'No conversations yet — say hi'
+      : previewSession?.preview || bot.description || copy('roster.noConversations')
   )
+  const actionBot = captureAgentProfileAction(bot, rosterOwner)
+  const runProfileAction = action =>
+    invokeAgentProfileAction(actionBot, action, {
+      connectionId: host.state.connectionId?.get?.() || 'local',
+      profile: host.state.profile?.get?.() || 'default'
+    })
 
   const warm = () => {
     // Multi-source row: pre-dial the agent's OWN source (feature-detected).
@@ -4243,7 +7433,7 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
       host.notify?.({
         kind: 'info',
         title: displayName(bot),
-        message: `Stay in this chat and @${handle} to message them. Gateway stays on this device.`
+        message: copy('remote.stayHere', handle)
       })
       return
     }
@@ -4261,19 +7451,29 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
     try {
       pinnedChat = await prepareBotSource(bot, pinnedChat)
     } catch (error) {
-      host.notifyError?.(error, `Could not reach ${bot.connectionLabel || 'the remote source'}`)
+      host.notifyError?.(error, copy('remote.couldNotReach', bot.connectionLabel || copy('remote.sourceFallback')))
 
       return
     }
 
+    const openOwner = normalizeRosterOwner(bot.connectionId || rosterOwner?.connectionId, rosterOwner?.profile)
+
+    if (!openOwner || !rosterOwnerStillActive(openOwner)) {
+      return
+    }
+
     try {
-      const id = await openBotCanonicalChat(bot.name, pinnedChat, bot.last_session)
+      const id = await openBotCanonicalChat(bot.name, pinnedChat, bot.last_session, openOwner)
 
       if (id) {
         return
       }
     } catch {
       // Fall through to the older-gateway draft below.
+    }
+
+    if (!rosterOwnerStillActive(openOwner)) {
+      return
     }
 
     if (typeof host.newChat === 'function') {
@@ -4313,7 +7513,7 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
                   meta?.pinned
                     ? jsx('span', {
                         className: 'shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)',
-                        title: 'Pinned',
+                        title: copy('roster.pinned'),
                         children: '📌'
                       })
                     : null,
@@ -4321,7 +7521,7 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
                     ? jsx(Codicon, {
                         name: 'eye-closed',
                         className: 'shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)',
-                        title: 'Hidden from the roster'
+                        title: copy('roster.hidden')
                       })
                     : null,
                   jsx('span', {
@@ -4338,7 +7538,7 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
                     ? jsx('span', {
                         className:
                           'shrink-0 rounded bg-(--chrome-action-hover) px-1 font-mono text-[0.625rem] text-(--ui-text-tertiary)',
-                        title: `Lives on ${bot.connectionLabel}`,
+                        title: copy('remote.livesOn', bot.connectionLabel),
                         children: bot.connectionLabel
                       })
                     : null
@@ -4347,13 +7547,13 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
               unread
                 ? jsx('span', {
                     className: 'size-2 shrink-0 rounded-full bg-(--ui-accent,#4f9cf9)',
-                    'aria-label': 'unread'
+                    'aria-label': copy('roster.unread')
                   })
                 : null,
               activeNow
                 ? jsx('span', {
                     className: 'hermes-bots-pulse size-1.5 shrink-0 rounded-full bg-(--ui-accent,#4f9cf9)',
-                    title: 'Active in the last 90s'
+                    title: copy('roster.activeRecently')
                   })
                 : null,
               last
@@ -4377,7 +7577,7 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
                 ? jsxs('span', {
                     className:
                       'flex shrink-0 items-center gap-1 rounded-full bg-(--chrome-action-hover) px-1.5 py-px text-[0.625rem] font-medium text-(--ui-accent,#4f9cf9)',
-                    title: `Last message came from @${fromBot} (bot-to-bot)`,
+                    title: copy('roster.lastFrom', fromBot),
                     children: ['🤖', `@${fromBot}`]
                   })
                 : null
@@ -4392,7 +7592,7 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
   // metadata is not loaded yet, so edit/delete/pin/group actions would mutate
   // whichever backend happens to be active. A normal click activates the
   // owner; the refreshed rich row then exposes the full context menu.
-  if (bot.remoteSource) {
+  if (!actionBot) {
     return row
   }
 
@@ -4402,22 +7602,24 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
       jsxs(ContextMenuContent, {
         children: [
           jsx(ContextMenuItem, {
-            onSelect: () => {
-              const pinned = Boolean($botMeta.get()[bot.name]?.pinned)
-              saveBotMeta(bot.name, { pinned: !pinned })
+            onSelect: () => runProfileAction(() => {
+              const pinned = Boolean(meta?.pinned)
+              saveBotMeta(bot.name, { pinned: !pinned }, meta, actionBot.actionOwner)
               host.notify({
                 kind: 'info',
-                message: `${displayName(bot, meta)} ${pinned ? 'unpinned' : 'pinned to top'}`
+                message: pinned
+                  ? copy('roster.unpinned', displayName(bot, meta))
+                  : copy('roster.pinnedTop', displayName(bot, meta))
               })
-            },
-            children: meta?.pinned ? 'Unpin' : 'Pin to top'
+            }),
+            children: meta?.pinned ? copy('roster.unpin') : copy('roster.pinTop')
           }),
           jsx(ContextMenuItem, {
-            onSelect: () => {
-              const hidden = Boolean($botMeta.get()[bot.name]?.hidden)
+            onSelect: () => runProfileAction(() => {
+              const hidden = Boolean(meta?.hidden)
               // `hidden: false` (not null) so unhide round-trips through the
               // server ui_meta merge the same way the local merge sees it.
-              saveBotMeta(bot.name, { hidden: !hidden })
+              saveBotMeta(bot.name, { hidden: !hidden }, meta, actionBot.actionOwner)
 
               if (!hidden) {
                 fallbackSelectionAfterHide(bot.name)
@@ -4426,54 +7628,57 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
               host.notify({
                 kind: 'info',
                 message: hidden
-                  ? `${displayName(bot, meta)} is back in the roster`
-                  : `${displayName(bot, meta)} hidden — use the eye button in the Bots header to see hidden bots`
+                  ? copy('roster.visibleAgain', displayName(bot, meta))
+                  : copy('roster.hiddenNotice', displayName(bot, meta))
               })
-            },
-            children: meta?.hidden ? 'Unhide Bot' : 'Hide Bot'
+            }),
+            children: meta?.hidden ? copy('roster.unhide') : copy('roster.hide')
           }),
           jsx(ContextMenuSeparator, {}),
           jsx(ContextMenuItem, {
-            onSelect: () => openBotSessionsWorkspace(bot),
-            children: 'Sessions'
+            onSelect: () => runProfileAction(() => openBotSessionsWorkspace(bot)),
+            children: copy('common.sessions')
           }),
-          jsx(ContextMenuItem, { onSelect: () => onEdit(bot), children: 'Edit Profile' }),
+          jsx(ContextMenuItem, {
+            onSelect: () => runProfileAction(() => onEdit(actionBot)),
+            children: copy('common.editProfile')
+          }),
           !bot.remoteSource
             ? jsx(ContextMenuItem, {
-                onSelect: () => onGroup(bot),
-                children: groups.length ? `Groups: ${groups.join(', ')}…` : 'Manage groups…'
+                onSelect: () => runProfileAction(() => onGroup(actionBot)),
+                children: groups.length ? copy('roster.groups', groups.join(', ')) : copy('roster.manageGroups')
               })
             : null,
           jsx(ContextMenuItem, {
-            onSelect: () => {
-              host.notify({ kind: 'info', message: `Duplicating ${displayName(bot, meta)}…` })
-              duplicateBot(bot, $lastRoster.get().filter(candidate => !candidate.remoteSource))
+            onSelect: () => runProfileAction(() => {
+              host.notify({ kind: 'info', message: copy('profile.duplicateStarted', displayName(bot, meta)) })
+              duplicateBot(actionBot, $lastRoster.get().filter(candidate => !candidate.remoteSource), meta)
                 .then(name => {
                   queryClient.invalidateQueries({ queryKey: ROSTER_KEY })
-                  host.notify({ kind: 'success', message: `Created ${name} — full copy of ${bot.name}` })
+                  host.notify({ kind: 'success', message: copy('profile.duplicateCreated', name, bot.name) })
                 })
-                .catch(err => host.notifyError(err, 'Duplicate failed'))
-            },
-            children: 'Duplicate'
+                .catch(err => host.notifyError(err, copy('profile.duplicateFailed')))
+            }),
+            children: copy('common.duplicate')
           }),
           jsx(ContextMenuSeparator, {}),
           jsx(ContextMenuItem, {
-            onSelect: () => {
+            onSelect: () => runProfileAction(() => {
               $selectedBot.set(bot.name)
 
               if (typeof host.newChat === 'function') {
                 host.newChat(bot.name)
               }
-            },
-            children: 'New chat with this agent'
+            }),
+            children: copy('roster.newChat')
           }),
           bot.is_default ? null : jsx(ContextMenuSeparator, {}),
           bot.is_default
             ? null
             : jsx(ContextMenuItem, {
-                onSelect: () => onDelete(bot),
+                onSelect: () => runProfileAction(() => onDelete(actionBot)),
                 variant: 'destructive',
-                children: 'Delete'
+                children: copy('common.delete')
               })
         ]
       })
@@ -4483,10 +7688,18 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
 
 // ── model picker (provider/model dropdowns via model.options) ───────────────
 
-function useModelOptions() {
+function useModelOptions(rosterOwner) {
+  const owner = normalizeRosterOwner(rosterOwner?.connectionId, rosterOwner?.profile)
+
   return useQuery({
-    queryKey: [ID, 'model-options'],
-    queryFn: () => host.request('model.options', { include_unconfigured: true, explicit_only: false, refresh: true }),
+    queryKey: [ID, 'model-options', owner?.connectionId || '', owner?.profile || ''],
+    queryFn: () =>
+      createRosterOwnerRequester(host, owner)('model.options', {
+        include_unconfigured: true,
+        explicit_only: false,
+        refresh: true
+      }),
+    enabled: Boolean(owner),
     staleTime: 120000,
     retry: false
   })
@@ -4497,8 +7710,9 @@ function useModelOptions() {
  * same data the core model picker shows. `value = {provider, model}`;
  * onChange receives the merged patch.
  */
-function ModelPicker({ value, onChange, placeholderModel = 'gateway default' }) {
-  const { data, isLoading, error } = useModelOptions()
+function ModelPicker({ value, onChange, placeholderModel = null, rosterOwner = currentBotMetaOwner() }) {
+  const copy = useAgentText()
+  const { data, isLoading, error } = useModelOptions(rosterOwner)
 
   // Hooks are ALWAYS declared up front, before any conditional return.
   // Declaring them after a return trips React error #310.
@@ -4522,17 +7736,17 @@ function ModelPicker({ value, onChange, placeholderModel = 'gateway default' }) 
       style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' },
       children: [
         labeled(
-          'Provider',
+          copy('model.provider'),
           jsx(Input, {
-            placeholder: 'omnirouter / 9router / nous \u2026',
+            placeholder: copy('model.providerPlaceholder'),
             value: value.provider,
             onChange: event => onChange({ provider: event.target.value })
           })
         ),
         labeled(
-          'Model',
+          copy('model.model'),
           jsx(Input, {
-            placeholder: 'antigravity/gemini-3.6-flash-high',
+            placeholder: copy('model.modelPlaceholder'),
             value: value.model,
             onChange: event => onChange({ model: event.target.value })
           })
@@ -4549,17 +7763,17 @@ function ModelPicker({ value, onChange, placeholderModel = 'gateway default' }) 
           style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' },
           children: [
             labeled(
-              'Provider (Custom)',
+              copy('model.providerCustom'),
               jsx(Input, {
-                placeholder: 'e.g. omnirouter, inferx, 9router',
+                placeholder: copy('model.providerExample'),
                 value: value.provider,
                 onChange: event => onChange({ provider: event.target.value })
               })
             ),
             labeled(
-              'Model (Custom)',
+              copy('model.modelCustom'),
               jsx(Input, {
-                placeholder: 'e.g. antigravity/gemini-3.6-flash-high',
+                placeholder: copy('model.modelExample'),
                 value: value.model,
                 onChange: event => onChange({ model: event.target.value })
               })
@@ -4571,7 +7785,7 @@ function ModelPicker({ value, onChange, placeholderModel = 'gateway default' }) 
           size: 'sm',
           className: 'h-6 self-start text-xs text-(--ui-text-tertiary)',
           onClick: () => setUseFreeText(false),
-          children: '← Back to dropdowns'
+          children: copy('model.backToDropdowns')
         })
       ]
     })
@@ -4586,7 +7800,7 @@ function ModelPicker({ value, onChange, placeholderModel = 'gateway default' }) 
     style: { display: 'grid', gridTemplateColumns: '1fr 1.4fr', gap: '10px' },
     children: [
       labeled(
-        'Provider',
+        copy('model.provider'),
         jsxs(Select, {
           value: value.provider || NONE,
           onValueChange: v => {
@@ -4610,7 +7824,7 @@ function ModelPicker({ value, onChange, placeholderModel = 'gateway default' }) 
             jsx(SelectTrigger, { className: 'h-8 rounded-md', children: jsx(SelectValue, {}) }),
             jsxs(SelectContent, {
               children: [
-                jsx(SelectItem, { value: NONE, children: 'Inherit (launch profile)' }),
+                jsx(SelectItem, { value: NONE, children: copy('model.inherit') }),
                 ...providers.map(p =>
                   jsx(
                     SelectItem,
@@ -4618,14 +7832,14 @@ function ModelPicker({ value, onChange, placeholderModel = 'gateway default' }) 
                     p.slug
                   )
                 ),
-                jsx(SelectItem, { value: CUSTOM, children: '✏️ Enter manually…' })
+                jsx(SelectItem, { value: CUSTOM, children: copy('model.manual') })
               ]
             })
           ]
         })
       ),
       labeled(
-        'Model',
+        copy('model.model'),
         activeProvider && models.length > 0
           ? jsxs(Select, {
               value: value.model || (models[0] ?? ''),
@@ -4638,7 +7852,7 @@ function ModelPicker({ value, onChange, placeholderModel = 'gateway default' }) 
               ]
             })
           : jsx(Input, {
-              placeholder: placeholderModel || 'e.g. model name',
+              placeholder: placeholderModel || copy('model.exampleName'),
               value: value.model,
               onChange: event => onChange({ model: event.target.value })
             })
@@ -4653,7 +7867,7 @@ function ModelPicker({ value, onChange, placeholderModel = 'gateway default' }) 
 // a not-yet-created profile has nothing installed to toggle). Backed by
 // profiles.describe / profiles.configure; feature-detects older gateways.
 
-function CheckList({ items, onToggle, columns = 2 }) {
+function CheckList({ items, onToggle, columns = 2, disabled = false }) {
   return jsx('div', {
     style: {
       display: 'grid',
@@ -4669,6 +7883,7 @@ function CheckList({ items, onToggle, columns = 2 }) {
           children: [
             jsx(Checkbox, {
               checked: item.enabled,
+              disabled,
               onCheckedChange: value => onToggle(item.name, Boolean(value))
             }),
             jsx('span', { className: 'truncate', children: item.name }),
@@ -4686,18 +7901,41 @@ function CheckList({ items, onToggle, columns = 2 }) {
   })
 }
 
-function AdvancedProfileConfig({ bot, state, setState }) {
+function agentEmbeddedCapabilitiesAvailable(component, rosterOwner, runtime = host, remoteTarget = false) {
+  return Boolean(
+    component &&
+    !remoteTarget &&
+    (typeof runtime?.connections !== 'function' || runtime?.capabilityConnectionScoped === true) &&
+    rosterOwnerStillActive(rosterOwner, runtime)
+  )
+}
+
+async function loadAdvancedProfileConfig(bot, rosterOwner, runtime = host) {
+  const request = createRosterOwnerRequester(runtime, rosterOwner)
+  const [profile, catalog, roster] = await Promise.all([
+    request('profiles.describe', { name: bot }),
+    request('mcp.catalog', { profile: bot }).catch(() => null),
+    request('profiles.list', {}).catch(() => null)
+  ])
+
+  return { catalog, profile, protocolInjected: Boolean(roster?.bot_mode_protocol) }
+}
+
+function AdvancedProfileConfig({ bot, state, setState, rosterOwner }) {
+  const copy = useAgentText()
   const [loaded, setLoaded] = useState(false)
   const [unsupported, setUnsupported] = useState(false)
   const [skillFilter, setSkillFilter] = useState('')
+  const liveConnectionId = useValue(host.state.connectionId)
+  const liveProfile = useValue(host.state.profile)
+  const liveOwner = normalizeRosterOwner(liveConnectionId, liveProfile || 'default')
+  const ownerActive = sameRosterOwner(rosterOwner, liveOwner)
+  const embeddedCapabilities = agentEmbeddedCapabilitiesAvailable(SkillsView, rosterOwner)
 
-  if (!loaded) {
+  if (!loaded && ownerActive) {
     setLoaded(true)
-    Promise.all([
-      host.request('profiles.describe', { name: bot }),
-      host.request('mcp.catalog', { profile: bot }).catch(() => null)
-    ])
-      .then(([res, cat]) => {
+    loadAdvancedProfileConfig(bot, rosterOwner)
+      .then(({ profile: res, catalog: cat, protocolInjected }) => {
         const configured = res.mcp_servers || []
         const have = new Set(configured.map(m => m.name))
         const catalog = ((cat && cat.servers) || []).filter(s => !have.has(s.name))
@@ -4706,6 +7944,7 @@ function AdvancedProfileConfig({ bot, state, setState }) {
           provider: res.model?.provider || '',
           model: res.model?.default || '',
           soul: res.soul || '',
+          protocolInjected,
           skills: res.skills || [],
           toolsets: res.toolsets || [],
           mcp: [
@@ -4726,10 +7965,17 @@ function AdvancedProfileConfig({ bot, state, setState }) {
       .catch(() => setUnsupported(true))
   }
 
+  if (!ownerActive) {
+    return jsx('div', {
+      className: 'px-2 py-3 text-center text-xs text-(--ui-text-tertiary)',
+      children: copy('profile.sourceChanged')
+    })
+  }
+
   if (unsupported) {
     return jsx('div', {
       className: 'px-2 py-3 text-center text-xs text-(--ui-text-tertiary)',
-      children: 'Full configuration needs a newer gateway (restart it after updating Hermes).'
+      children: copy('advanced.newerGateway')
     })
   }
 
@@ -4777,24 +8023,29 @@ function AdvancedProfileConfig({ bot, state, setState }) {
   // Render THAT instead of the checkbox stand-ins; writes go straight to the
   // bot's backend, so the dirty-section staging below only carries
   // model + SOUL on these builds. Older builds keep the full checklist UI.
-  if (SkillsView) {
+  if (embeddedCapabilities) {
     return jsxs('div', {
       className: 'grid gap-4',
       children: [
         jsx(ModelPicker, {
+          rosterOwner,
           value: { provider: state.provider, model: state.model },
           onChange: patch => setState(prev => ({ ...prev, dirtyModel: true, ...patch }))
         }),
         labeled(
-          'Capabilities (applies immediately — skills, tools, MCP)',
+          copy('advanced.capabilitiesNow'),
           jsx('div', {
             className: 'overflow-hidden rounded-md border border-(--ui-stroke-secondary)',
             style: { height: 460, minHeight: 300, resize: 'vertical', overflow: 'auto' },
-            children: jsx(SkillsView, { embedded: true, fixedProfile: bot })
+            children: jsx(
+              SkillsView,
+              { embedded: true, fixedConnectionId: rosterOwner.connectionId, fixedProfile: bot },
+              `${rosterOwner.connectionId}::${bot}`
+            )
           })
         ),
         labeled(
-          'SOUL.md (persona + agent-messaging protocol)',
+          copy('advanced.soulProtocol'),
           jsx(Textarea, {
             className: 'min-h-28 font-mono text-xs leading-5',
             value: state.soul,
@@ -4809,17 +8060,18 @@ function AdvancedProfileConfig({ bot, state, setState }) {
     className: 'grid gap-4',
     children: [
       jsx(ModelPicker, {
+        rosterOwner,
         value: { provider: state.provider, model: state.model },
         onChange: patch => setState(prev => ({ ...prev, dirtyModel: true, ...patch }))
       }),
       labeled(
-        `Skills (${enabledSkills}/${state.skills.length} enabled)`,
+        copy('advanced.skillsEnabled', enabledSkills, state.skills.length),
         jsxs('div', {
           className: 'grid gap-1.5 rounded-md border border-(--ui-stroke-secondary) p-2',
           children: [
             jsx(Input, {
               className: 'h-7 text-xs',
-              placeholder: 'Filter skills…',
+              placeholder: copy('advanced.filterSkills'),
               value: skillFilter,
               onChange: event => setSkillFilter(event.target.value)
             }),
@@ -4841,7 +8093,7 @@ function AdvancedProfileConfig({ bot, state, setState }) {
         })
       ),
       labeled(
-        `Toolsets (${enabledToolsets}/${state.toolsets.length} enabled — unchecking all restores the default)`,
+        copy('advanced.toolsetsEnabled', enabledToolsets, state.toolsets.length),
         jsx('div', {
           className: 'rounded-md border border-(--ui-stroke-secondary) p-2',
           children: jsx(ScrollArea, {
@@ -4868,7 +8120,7 @@ function AdvancedProfileConfig({ bot, state, setState }) {
                       // The REAL per-toolset config (env vars / API keys / model
                       // picker / post-setup), scoped to THIS bot's profile, when
                       // the desktop build exposes it. Older builds: just the toggle.
-                      ToolsetConfigPanel
+                      embeddedCapabilities && ToolsetConfigPanel
                         ? jsx('div', {
                             className: 'mt-1.5 border-t border-(--ui-stroke-secondary) pt-1.5',
                             children: jsx(ToolsetConfigPanel, { toolset: tset.name, profile: bot })
@@ -4884,14 +8136,14 @@ function AdvancedProfileConfig({ bot, state, setState }) {
         })
       ),
       labeled(
-        'MCP servers',
+        copy('advanced.mcpServers'),
         jsx('div', {
           className: 'overflow-hidden rounded-md border border-(--ui-stroke-secondary)',
           // The REAL MCP tab core Settings renders — per-server enable + OAuth
           // sign-in + API-key setup + live probes — scoped to this bot's profile.
           // Feature-detected: older desktop builds without the SDK export fall
           // back to the plugin's own checkbox list + inline setup buttons.
-          children: McpTab && typeof host.getGateway === 'function'
+          children: embeddedCapabilities && McpTab && typeof host.getGateway === 'function'
             ? jsx('div', {
                 style: { minHeight: 220, maxHeight: 360 },
                 children: jsx(McpTab, { gateway: host.getGateway(), profile: bot })
@@ -4899,7 +8151,7 @@ function AdvancedProfileConfig({ bot, state, setState }) {
             : mcpList.length === 0
               ? jsx('div', {
                   className: 'px-1 py-2 text-center text-xs text-(--ui-text-tertiary)',
-                  children: 'No MCP servers configured or in the catalog.'
+                  children: copy('mcp.none')
                 })
               : jsx(ScrollArea, {
                   className: 'hermes-scroll-cap',
@@ -4925,7 +8177,7 @@ function AdvancedProfileConfig({ bot, state, setState }) {
                                 m.fromCatalog && !needsSetup
                                   ? jsx('span', {
                                       className: 'ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)',
-                                      children: m.installed ? 'catalog · installed' : 'catalog'
+                                      children: m.installed ? copy('mcp.catalogInstalled') : copy('mcp.catalog')
                                     })
                                   : null,
                                 needsSetup
@@ -4953,7 +8205,7 @@ function AdvancedProfileConfig({ bot, state, setState }) {
         })
       ),
       labeled(
-        'SOUL.md (persona + agent-messaging protocol)',
+        copy('advanced.soulProtocol'),
         jsx(Textarea, {
           className: 'min-h-28 font-mono text-xs leading-5',
           value: state.soul,
@@ -4975,6 +8227,7 @@ const HUB_ORIGIN = 'https://hermes-agent.nousresearch.com'
 const HUB_PICKER_URL = HUB_ORIGIN + '/docs/skills?embed=picker'
 
 function HubSkillsSection({ forProfile, onInstalled }) {
+  const copy = useAgentText()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
   const [searching, setSearching] = useState(false)
@@ -5065,13 +8318,13 @@ function HubSkillsSection({ forProfile, onInstalled }) {
         ...(forProfile ? { profile: forProfile } : {})
       })
       setInstalled(prev => ({ ...prev, [label]: true }))
-      host.notify({ kind: 'success', message: `Skill "${label}" installed` })
+      host.notify({ kind: 'success', message: copy('hub.installed', label) })
 
       if (typeof onInstalled === 'function') {
         onInstalled(label)
       }
     } catch (err) {
-      host.notifyError(err, `Installing "${label}" failed`)
+      host.notifyError(err, copy('hub.installFailed', label))
     } finally {
       setInstalling(null)
     }
@@ -5087,13 +8340,13 @@ function HubSkillsSection({ forProfile, onInstalled }) {
         children: [
           jsx('div', {
             className: 'text-[0.7rem] font-medium text-(--ui-text-secondary)',
-            children: 'Skills Hub'
+            children: copy('hub.title')
           }),
           jsx('button', {
             type: 'button',
             className: 'text-[0.65rem] text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)',
             onClick: () => setBrowseHub(v => !v),
-            children: browseHub ? 'hide the hub browser' : 'browse the full hub ▾'
+            children: browseHub ? copy('hub.hide') : copy('hub.browse')
           })
         ]
       }),
@@ -5121,7 +8374,7 @@ function HubSkillsSection({ forProfile, onInstalled }) {
                 },
                 children: jsx('iframe', {
                   src: HUB_PICKER_URL,
-                  title: 'Hermes Skills Hub',
+                  title: copy('hub.frameTitle'),
                   ref: frameRef,
                   style: {
                     width: '133.34%',
@@ -5138,8 +8391,8 @@ function HubSkillsSection({ forProfile, onInstalled }) {
                 className: 'px-1 text-[0.65rem] leading-4 text-(--ui-text-quaternary)',
                 children:
                   installing
-                    ? `Installing "${installing}"…`
-                    : 'Hit "+ Add to this Agent" on any skill — it installs and appears in the list above. Drag the corner to resize.'
+                    ? copy('hub.installing', installing)
+                    : copy('hub.addHint')
               })
             ]
           })
@@ -5149,7 +8402,7 @@ function HubSkillsSection({ forProfile, onInstalled }) {
         children: [
           jsx(Input, {
             className: 'h-7 flex-1 text-xs',
-            placeholder: 'Search the hub (community + well-known sources)…',
+            placeholder: copy('hub.searchPlaceholder'),
             value: query,
             onChange: event => setQuery(event.target.value),
             onKeyDown: event => {
@@ -5164,14 +8417,14 @@ function HubSkillsSection({ forProfile, onInstalled }) {
             variant: 'secondary',
             disabled: searching || !query.trim(),
             onClick: () => void search(),
-            children: searching ? 'Searching…' : 'Search'
+            children: searching ? copy('common.searching') : copy('common.search')
           })
         ]
       }),
       searching
         ? jsx('div', {
             className: 'px-1 text-[0.65rem] text-(--ui-text-quaternary)',
-            children: 'Searching community + well-known sources — can take ~10s…'
+            children: copy('hub.searchingHint')
           })
         : null,
       results === null
@@ -5179,7 +8432,7 @@ function HubSkillsSection({ forProfile, onInstalled }) {
         : results.length === 0
           ? jsx('div', {
               className: 'px-1 py-1.5 text-[0.7rem] text-(--ui-text-quaternary)',
-              children: 'No hub skills matched.'
+              children: copy('hub.noMatch')
             })
           : jsx(ScrollArea, {
               className: 'hermes-scroll-cap',
@@ -5207,14 +8460,14 @@ function HubSkillsSection({ forProfile, onInstalled }) {
                         installed[r.name]
                           ? jsx('span', {
                               className: 'shrink-0 text-[0.65rem] text-(--ui-text-tertiary)',
-                              children: '✓ added'
+                              children: copy('hub.added')
                             })
                           : jsx(Button, {
                               size: 'sm',
                               variant: 'ghost',
                               className: 'shrink-0 px-2 font-semibold',
                               disabled: installing !== null,
-                              title: `Install "${r.name}" and add it to the list above`,
+                              title: copy('hub.installTitle', r.name),
                               onClick: () => void install(r.name),
                               children: installing === r.name ? '…' : '+'
                             })
@@ -5242,17 +8495,22 @@ function emptyAdvancedState() {
     dirtySoul: false,
     dirtySkills: false,
     dirtyToolsets: false,
-    dirtyMcp: false
+    dirtyMcp: false,
+    protocolInjected: false
   }
 }
 
 /** Persist only the dirty sections of the advanced editor. */
-async function applyAdvancedConfig(bot, state) {
+async function applyAdvancedConfig(bot, state, expectedOwner = null) {
   const payload = { name: bot }
   const applied = {}
 
+  if (expectedOwner && !rosterOwnerStillActive(expectedOwner)) {
+    return { applied, ok: false, sourceChanged: true }
+  }
+
   if (state.dirtySoul) {
-    payload.soul = ensureMessagingProtocol(state.soul, bot, $lastRoster.get())
+    payload.soul = ensureMessagingProtocol(state.soul, bot, $lastRoster.get(), state.protocolInjected)
   }
 
   if (state.dirtyModel) {
@@ -5267,6 +8525,11 @@ async function applyAdvancedConfig(bot, state) {
         const result = await host.request('cli.exec', {
           argv: ['--profile', bot, 'config', 'unset', 'model']
         })
+
+        if (expectedOwner && !rosterOwnerStillActive(expectedOwner)) {
+          return { applied, ok: false, sourceChanged: true }
+        }
+
         applied.model = result?.blocked !== true && result?.code === 0
       } catch {
         applied.model = false
@@ -5292,11 +8555,20 @@ async function applyAdvancedConfig(bot, state) {
   }
 
   if (Object.keys(payload).length === 1) {
+    if (Object.values(applied).some(Boolean)) {
+      invalidateAgentDescription(bot)
+    }
+
     return { ok: Object.values(applied).every(Boolean), applied }
+  }
+
+  if (expectedOwner && !rosterOwnerStillActive(expectedOwner)) {
+    return { applied, ok: false, sourceChanged: true }
   }
 
   const result = await host.request('profiles.configure', payload)
   const merged = { ...applied, ...(result?.applied || {}) }
+  invalidateAgentDescription(bot)
 
   return { ...result, ok: Object.values(merged).every(Boolean), applied: merged }
 }
@@ -5317,8 +8589,9 @@ function labeled(label, control) {
 }
 
 function EditProfileDialog({ bot, open, onClose }) {
+  const copy = useAgentText()
   const metaAll = useValue($botMeta)
-  const meta = bot ? metaAll[bot.name] : null
+  const meta = bot ? botRosterMeta(bot, metaAll, bot.actionOwner) : null
   const appearance = bot ? botAppearance(bot.name, meta) : { shape: 'circle', color: AVATAR_COLORS[3] }
   const [shape, setShape] = useState(appearance.shape)
   const [color, setColor] = useState(appearance.color)
@@ -5355,23 +8628,47 @@ function EditProfileDialog({ bot, open, onClose }) {
       return
     }
 
+    if (
+      !agentProfileActionMatchesOwner(bot, {
+        connectionId: host.state.connectionId?.get?.() || 'local',
+        profile: host.state.profile?.get?.() || 'default'
+      })
+    ) {
+      host.notify({ kind: 'error', message: copy('profile.sourceChanged') })
+      onClose()
+      return
+    }
+
     setBusy(true)
     let advancedFailed = false
-    const persistence = await saveBotMeta(bot.name, {
-      shape,
-      color,
-      image,
-      imageKind: image ? 'photo' : 'shape',
-      title: title.trim(),
-      custom: true
-    })
+    const expectedOwner = normalizeRosterOwner(bot.actionOwner?.connectionId, bot.actionOwner?.profile)
+    const persistence = await saveBotMeta(
+      bot.name,
+      {
+        shape,
+        color,
+        image,
+        imageKind: image ? 'photo' : 'shape',
+        title: title.trim(),
+        custom: true
+      },
+      meta,
+      expectedOwner
+    )
+
+    if (!rosterOwnerStillActive(expectedOwner)) {
+      host.notify({ kind: 'error', message: copy('profile.sourceChanged') })
+      setBusy(false)
+      onClose()
+      return
+    }
     // Only an explicit remote failure is an error — 'unsupported' is the
     // documented older-gateway fallback (local wins, silently), and toasting
     // it would flag every save on every legacy setup forever.
     const lookFailed = persistence.serverOutcome === 'failed'
 
     if (lookFailed) {
-      host.notify({ kind: 'error', message: 'Saved look locally; remote persistence failed' })
+      host.notify({ kind: 'error', message: copy('edit.localLookFailed') })
     }
     if (persistence.serverOutcome === 'persisted') {
       queryClient.invalidateQueries({ queryKey: ROSTER_KEY })
@@ -5379,33 +8676,56 @@ function EditProfileDialog({ bot, open, onClose }) {
 
     const desc = description.trim()
     if (desc !== (bot.description || '').trim()) {
+      if (!rosterOwnerStillActive(expectedOwner)) {
+        host.notify({ kind: 'error', message: copy('profile.sourceChanged') })
+        setBusy(false)
+        onClose()
+        return
+      }
+
       try {
         await host.request('cli.exec', {
           argv: ['profile', 'describe', bot.name, '--text', desc]
         })
+
+        if (!rosterOwnerStillActive(expectedOwner)) {
+          host.notify({ kind: 'error', message: copy('profile.sourceChanged') })
+          setBusy(false)
+          onClose()
+          return
+        }
+        invalidateAgentDescription(bot.name)
         queryClient.invalidateQueries({ queryKey: ROSTER_KEY })
       } catch (err) {
-        host.notifyError(err, 'Saved look locally; description update failed')
+        host.notifyError(err, copy('edit.descriptionFailed'))
       }
     }
 
     if (adv.loaded && (adv.dirtyModel || adv.dirtySoul || adv.dirtySkills || adv.dirtyToolsets || adv.dirtyMcp)) {
       try {
-        const res = await applyAdvancedConfig(bot.name, adv)
+        const res = await applyAdvancedConfig(bot.name, adv, expectedOwner)
+
+        if (res?.sourceChanged || !rosterOwnerStillActive(expectedOwner)) {
+          host.notify({ kind: 'error', message: copy('profile.sourceChanged') })
+          setBusy(false)
+          onClose()
+          return
+        }
+
         const failed = Object.entries(res?.applied || {}).filter(([, ok]) => !ok)
 
         if (failed.length) {
           advancedFailed = true
-          host.notify({ kind: 'error', message: `Some sections failed: ${failed.map(([k]) => k).join(', ')}` })
+          host.notify({ kind: 'error', message: copy('edit.sectionsFailed', failed.map(([k]) => k).join(', ')) })
         }
       } catch (err) {
         advancedFailed = true
-        host.notifyError(err, 'Advanced configuration failed')
+        host.notifyError(err, copy('edit.advancedFailed'))
       }
     }
 
     if (!advancedFailed && !lookFailed) {
-      host.notify({ kind: 'success', message: `${displayName(bot, { title })} updated` })
+      host.notify({ kind: 'success', message: copy('edit.updated', displayName(bot, { title })) })
     }
     setBusy(false)
     onClose()
@@ -5423,8 +8743,8 @@ function EditProfileDialog({ bot, open, onClose }) {
       children: [
         jsxs(DialogHeader, {
           children: [
-            jsx(DialogTitle, { children: 'Edit Profile' }),
-            jsx(DialogDescription, { children: `Appearance and role for ${displayName(bot, null)} (${bot.name}).` })
+            jsx(DialogTitle, { children: copy('edit.title') }),
+            jsx(DialogDescription, { children: copy('edit.description', displayName(bot, null), bot.name) })
           ]
         }),
         jsxs('div', {
@@ -5444,7 +8764,7 @@ function EditProfileDialog({ bot, open, onClose }) {
               generateSeed: { name: bot.name, title, description }
             }),
             labeled(
-              'Title',
+              copy('edit.nameTitle'),
               jsx(Input, {
                 placeholder: displayName(bot, null),
                 value: title,
@@ -5452,10 +8772,10 @@ function EditProfileDialog({ bot, open, onClose }) {
               })
             ),
             labeled(
-              'Description',
+              copy('edit.descriptionLabel'),
               jsx(Textarea, {
                 className: 'min-h-16',
-                placeholder: 'What should this agent help with?',
+                placeholder: copy('edit.descriptionPlaceholder'),
                 value: description,
                 onChange: event => setDescription(event.target.value)
               })
@@ -5467,21 +8787,26 @@ function EditProfileDialog({ bot, open, onClose }) {
               onClick: () => setAdvanced(v => !v),
               children: [
                 jsx(Codicon, { name: advanced ? 'chevron-down' : 'chevron-right', className: 'text-[0.8rem]' }),
-                'Advanced — model, skills, toolsets, SOUL.md'
+                copy('edit.advanced')
               ]
             }),
             advanced
               ? jsx('div', {
                   className: 'rounded-md border border-(--ui-stroke-secondary) p-3',
-                  children: jsx(AdvancedProfileConfig, { bot: bot.name, state: adv, setState: setAdv })
+                  children: jsx(AdvancedProfileConfig, {
+                    bot: bot.name,
+                    state: adv,
+                    setState: setAdv,
+                    rosterOwner: bot.actionOwner
+                  })
                 })
               : null
           ]
         }),
         jsxs(DialogFooter, {
           children: [
-            jsx(Button, { variant: 'ghost', disabled: busy, onClick: onClose, children: 'Cancel' }),
-            jsx(Button, { disabled: busy, onClick: submit, children: busy ? 'Saving…' : 'Save' })
+            jsx(Button, { variant: 'ghost', disabled: busy, onClick: onClose, children: copy('common.cancel') }),
+            jsx(Button, { disabled: busy, onClick: submit, children: busy ? copy('common.saving') : copy('common.save') })
           ]
         })
       ]
@@ -5492,16 +8817,15 @@ function EditProfileDialog({ bot, open, onClose }) {
 // ── create dialog ────────────────────────────────────────────────────────────
 
 function CreateAgentDialog({ open, onClose, roster }) {
+  const copy = useAgentText()
+  const liveConnectionId = useValue(host.state.connectionId)
+  const liveProfile = useValue(host.state.profile)
   const [name, setName] = useState('')
   // Create mode: the profile is created LAZILY. Capability toggles are staged in
   // component state; the profile is materialized either on Create (submit) or on
   // the first MCP credential setup (ensureAgentCreated), whichever comes first —
   // so OAuth / API-key setup works DURING creation, not only after in Edit.
-  const createdRef = useRef(null)
-  // In-flight profiles.create shared across concurrent triggers (Create
-  // button + MCP setup buttons). Distinct from createdRef on purpose:
-  // createdRef must stay a slug string for its sibling consumers.
-  const flightRef = useRef(null)
+  const draftLifecycleRef = useRef(null)
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [shape, setShape] = useState('circle')
@@ -5513,7 +8837,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
   const [provider, setProvider] = useState('')
   const [soul, setSoul] = useState('')
   const [noSkills, setNoSkills] = useState(false)
-  const [shareAuth, setShareAuth] = useState(true)
+  const [shareAuth, setShareAuth] = useState(DEFAULT_SHARE_AUTH)
   const [advTab, setAdvTab] = useState('general')
   // Where the profile is created: '' = the active gateway (unchanged default),
   // else a registry connection id — the profiles.create lands on THAT
@@ -5529,11 +8853,11 @@ function CreateAgentDialog({ open, onClose, roster }) {
 
     host
       .connections()
-      .then(value => setConnections(Array.isArray(value) ? value : []))
+      .then(value => setConnections(normalizeAgentConnections(value)))
       .catch(() => setConnections([]))
   }, [open, connections])
 
-  const activeConnectionId = String(host.state?.connectionId?.get?.() || '').trim()
+  const activeConnectionId = String(liveConnectionId || '').trim()
   // Remote target = an explicitly picked registry connection that is not the
   // one this window is already on.
   const remoteTarget = Boolean(targetConnection) && targetConnection !== (activeConnectionId || 'local')
@@ -5541,38 +8865,96 @@ function CreateAgentDialog({ open, onClose, roster }) {
     ? (connections || []).find(c => c.id === targetConnection)?.label || targetConnection
     : ''
 
-  /** Gateway RPC on the create target: the picked connection's default
-   *  backend for remote targets, the active gateway otherwise. */
-  const requestForTarget = (method, params = {}) =>
-    remoteTarget
-      ? host.requestProfile(
-          { connectionId: targetConnection, mode: 'remote', profile: 'default', targetProfile: 'default' },
-          method,
-          params
-        )
-      : host.request(method, params)
-
   // Set once ensureAgentCreated() materializes the profile for the live
   // Capabilities tab (SkillsView needs a real backend to point at). State —
-  // not just createdRef — because the render must flip when it lands.
+  // not just lifecycle state — because the render must flip when it lands.
   const [createdForCaps, setCreatedForCaps] = useState(null)
   const [caps, setCaps] = useState(null)
-  const [capsFailed, setCapsFailed] = useState(false)
+  const [capsFailedScope, setCapsFailedScope] = useState('')
+  const capsRequestStateRef = useRef({ scopeKey: '', generation: 0, pending: false })
   const [dirtyCaps, setDirtyCaps] = useState({ skills: false, toolsets: false, mcp: false })
   const [capFilter, setCapFilter] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
+  const [draftLock, setDraftLock] = useState(null)
 
   const slug = slugify(name)
   const valid = slug.length > 0 && NAME_RE.test(slug)
+  const targetConnectionRecord = (connections || []).find(connection => connection.id === (targetConnection || activeConnectionId))
+  const targetMode = targetConnectionRecord?.kind === 'local' ? 'local' : targetConnectionRecord ? 'remote' : null
+  const capSource = cloneFrom === '__none__' ? 'default' : cloneFrom
+  const modelRosterOwner = normalizeRosterOwner(
+    remoteTarget ? targetConnection : activeConnectionId || 'local',
+    remoteTarget ? 'default' : liveProfile || 'default'
+  )
+  const capabilityScopeKey = agentCapabilityCatalogScopeKey(modelRosterOwner, capSource)
+
+  if (capsRequestStateRef.current.scopeKey !== capabilityScopeKey) {
+    capsRequestStateRef.current = {
+      scopeKey: capabilityScopeKey,
+      generation: capsRequestStateRef.current.generation + 1,
+      pending: false
+    }
+  }
+
+  const resetCapabilityCatalog = () => {
+    capsRequestStateRef.current = {
+      scopeKey: '',
+      generation: capsRequestStateRef.current.generation + 1,
+      pending: false
+    }
+    setCaps(null)
+    setCapsFailedScope('')
+    setDirtyCaps({ skills: false, toolsets: false, mcp: false })
+  }
+
+  const embeddedCapabilities = agentEmbeddedCapabilitiesAvailable(
+    SkillsView,
+    modelRosterOwner,
+    host,
+    remoteTarget
+  )
+  const creationLocked = agentCreationFieldsLocked(draftLock)
+  const createdSlug = draftLifecycleRef.current?.created()?.slug || null
+
+  const cleanupDraft = async draft => {
+    try {
+      const result = await requestAgentDraft(host, draft, 'cli.exec', {
+        argv: ['profile', 'delete', draft.slug, '--yes']
+      })
+
+      if (result?.blocked || result?.code !== 0) {
+        throw new Error(result?.hint || result?.output || copy('profile.deleteFailed', draft.slug))
+      }
+
+      const currentSource = String(host.state.connectionId?.get?.() || 'local').trim() || 'local'
+
+      if (!draft.remoteTarget && currentSource === draft.connectionId) {
+        const meta = { ...$botMeta.get() }
+        delete meta[draft.slug]
+        $botMeta.set(meta)
+        void Promise.resolve(pluginCtx?.storage?.set?.('bot-meta', meta)).catch(() => undefined)
+      }
+
+      queryClient.invalidateQueries({ queryKey: ROSTER_KEY })
+      host.notify({ kind: 'success', message: copy('profile.draftDiscarded', draft.slug) })
+    } catch (error) {
+      host.notifyError(error, copy('profile.draftCleanupFailed', draft.slug))
+    }
+  }
+
+  if (!draftLifecycleRef.current) {
+    draftLifecycleRef.current = createAgentDraftLifecycle({ cleanup: cleanupDraft, onChange: setDraftLock })
+  }
+
   // Once the draft profile is materialized (Capabilities tab / MCP setup) it
   // shows up in the roster — its OWN slug must not read as "taken".
   // A remote-target create is gated by the TARGET machine's roster: a local
   // name clash is fine there, and the remote's own duplicate check rejects
   // real collisions at profiles.create time.
   const taken = remoteTarget
-    ? roster.some(b => b.remoteSource && b.connectionId === targetConnection && b.name === slug && b.name !== createdRef.current)
-    : roster.some(b => !b.remoteSource && b.name === slug && b.name !== createdRef.current)
+    ? roster.some(b => b.remoteSource && b.connectionId === targetConnection && b.name === slug && b.name !== createdSlug)
+    : roster.some(b => !b.remoteSource && b.name === slug && b.name !== createdSlug)
 
   // Draft semantics for the lazily-created profile: opening the Capabilities
   // tab (or running MCP setup) materializes the profile so the LIVE config
@@ -5581,20 +8963,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
   // preconfigure-then-back-out leaves zero residue. Best-effort and
   // fire-and-forget: a failed cleanup surfaces a toast, never blocks close.
   const discardDraft = () => {
-    const draft = createdRef.current
-
-    if (!draft) {
-      return
-    }
-
-    createdRef.current = null
-    flightRef.current = null
-    const discard = remoteTarget
-      ? requestForTarget('cli.exec', { argv: ['profile', 'delete', draft, '--yes'] })
-      : deleteBot({ name: draft })
-    void Promise.resolve(discard)
-      .then(() => host.notify({ kind: 'success', message: `Draft agent "${draft}" discarded` }))
-      .catch(err => host.notifyError(err, `Could not clean up draft profile "${draft}"`))
+    void draftLifecycleRef.current?.cancel()
   }
 
   const reset = () => {
@@ -5613,58 +8982,61 @@ function CreateAgentDialog({ open, onClose, roster }) {
     setProvider('')
     setSoul('')
     setNoSkills(false)
-    setShareAuth(true)
+    setShareAuth(DEFAULT_SHARE_AUTH)
     setAdvTab('general')
     setCreatedForCaps(null)
-    setCaps(null)
-    setCapsFailed(false)
-    setDirtyCaps({ skills: false, toolsets: false, mcp: false })
+    resetCapabilityCatalog()
     setCapFilter('')
     setTargetConnection('')
     setBusy(false)
     setError(null)
-    createdRef.current = null
-    flightRef.current = null
   }
 
   // Capability catalog for the tabs: the profile doesn't exist yet, so show
   // what it WILL have — the clone source's catalog, else the main profile's.
-  const capSource = cloneFrom === '__none__' ? 'default' : cloneFrom
   const ensureCaps = () => {
-    if ((caps && caps.source === capSource) || capsFailed) {
+    const currentRequest = capsRequestStateRef.current
+
+    if (
+      !capabilityScopeKey ||
+      caps?.scopeKey === capabilityScopeKey ||
+      capsFailedScope === capabilityScopeKey ||
+      (currentRequest.scopeKey === capabilityScopeKey && currentRequest.pending)
+    ) {
       return
     }
 
-    Promise.all([
-      requestForTarget('profiles.describe', { name: remoteTarget ? 'default' : capSource }),
-      requestForTarget('mcp.catalog', {}).catch(() => null)
-    ])
-      .then(([res, cat]) => {
-        // Full MCP menu = the profile's configured servers + the bundled
-        // catalog (installable). Configured entries win on name clash.
-        const configured = res.mcp_servers || []
-        const have = new Set(configured.map(m => m.name))
-        const catalog = ((cat && cat.servers) || []).filter(s => !have.has(s.name))
+    const token = {
+      scopeKey: capabilityScopeKey,
+      generation: currentRequest.generation + 1
+    }
+    capsRequestStateRef.current = { ...token, pending: true }
+    const request = createRosterOwnerRequester(host, modelRosterOwner)
+    const describeName = remoteTarget ? 'default' : capSource
 
-        setCaps({
-          source: capSource,
-          skills: res.skills || [],
-          toolsets: res.toolsets || [],
-          mcp: [
-            ...configured,
-            ...catalog.map(s => ({
-              name: s.name,
-              enabled: false,
-              fromCatalog: true,
-              installed: s.installed,
-              auth: s.auth,
-              requires: s.requires || [],
-              description: s.description || ''
-            }))
-          ]
-        })
+    void loadAgentCapabilityCatalog(
+      request,
+      token,
+      capSource,
+      describeName,
+      pending => agentCapabilityCatalogRequestCurrent(pending, capsRequestStateRef.current)
+    )
+      .then(nextCaps => {
+        if (!agentCapabilityCatalogRequestCurrent(token, capsRequestStateRef.current)) {
+          return
+        }
+
+        capsRequestStateRef.current = { ...token, pending: false }
+        if (nextCaps) {
+          setCaps(nextCaps)
+        }
       })
-      .catch(() => setCapsFailed(true))
+      .catch(() => {
+        if (agentCapabilityCatalogRequestCurrent(token, capsRequestStateRef.current)) {
+          capsRequestStateRef.current = { ...token, pending: false }
+          setCapsFailedScope(token.scopeKey)
+        }
+      })
   }
 
   const toggleCap = (kind, name, enabled) => {
@@ -5676,105 +9048,103 @@ function CreateAgentDialog({ open, onClose, roster }) {
     )
   }
 
-  // Materialize the profile exactly once. createdRef stores the finished slug
-  // (its consumers — the taken check, draft discard on cancel, the MCP setup
-  // button's profile param — all read a string); flightRef shares the
-  // in-flight creation promise so simultaneous MCP setup / Create clicks fire
-  // ONE profiles.create. A settled flight clears its slot: failures retry,
-  // and a null result (form invalid at flight time) isn't sticky.
+  // Materialize exactly once through an immutable owner descriptor. The
+  // lifecycle shares concurrent triggers and cleans a late result after a
+  // Cancel generation edge without consulting mutable form state.
   const ensureAgentCreated = () => {
-    // Renamed since the draft materialized? The old draft is orphaned —
-    // discard it and create fresh under the new slug.
-    if (createdRef.current && createdRef.current !== slug) {
-      discardDraft()
-      setCreatedForCaps(null)
+    if (!valid || taken) {
+      return Promise.resolve(null)
     }
 
-    if (createdRef.current) {
-      return Promise.resolve(createdRef.current)
+    const provenance = createAgentDraftProvenance({
+      slug,
+      remoteTarget,
+      targetConnectionId: targetConnection,
+      activeConnectionId: activeConnectionId || 'local',
+      activeProfile: host.state.profile.get?.() || 'default',
+      targetMode
+    })
+    const descriptionText = [title, description].filter(Boolean).join(' — ')
+    const createPayload = {
+      name: slug,
+      description: descriptionText,
+      // Clone sources are profiles of the TARGET backend. The picker's
+      // roster is the local one, so a remote create always starts from the
+      // remote machine's default (or fresh) — never a local profile name
+      // the remote box doesn't have.
+      clone_from: cloneFrom === '__none__' ? null : remoteTarget ? 'default' : cloneFrom,
+      no_skills: noSkills,
+      // Shared (not copied) auth keeps ONE OAuth/token pool with the main
+      // profile, so refreshes can't invalidate each other. The create result
+      // must explicitly confirm this contract; older gateways that ignore
+      // the flag are cleaned up instead of silently forking credentials.
+      ...agentCreateAuthPayload(shareAuth),
+      ...(model.trim() && provider.trim() ? { model: model.trim(), provider: provider.trim() } : {})
+    }
+    const appearance = {
+      shape,
+      color,
+      image,
+      imageKind: image ? 'photo' : 'shape',
+      title: title.trim(),
+      created: Date.now()
     }
 
-    const flight = singleFlight(flightRef, async () => {
-      if (!valid || taken) {
-        return null
-      }
+    return draftLifecycleRef.current.ensure(
+      provenance,
+      async draft => {
+        const protocolInjected = await agentDraftProtocolInjected(host, draft)
 
-      const descriptionText = [title, description].filter(Boolean).join(' — ')
-
-      await requestForTarget('profiles.create', {
-        name: slug,
-        description: descriptionText,
-        // Clone sources are profiles of the TARGET backend. The picker's
-        // roster is the local one, so a remote create always starts from the
-        // remote machine's default (or fresh) — never a local profile name
-        // the remote box doesn't have.
-        clone_from: cloneFrom === '__none__' ? null : remoteTarget ? 'default' : cloneFrom,
-        no_skills: noSkills,
-        // Shared (not copied) auth keeps ONE OAuth/token pool with the main
-        // profile, so refreshes can't invalidate each other. Older gateways
-        // ignore the param and copy — still functional, just forked.
-        share_auth: shareAuth,
-        soul: composeSoul({ name: slug, title, description, roster, customSoul: soul }),
-        ...(model.trim() && provider.trim() ? { model: model.trim(), provider: provider.trim() } : {})
-      })
-
-      createdRef.current = slug
-
-      // Apply capability picks from the Advanced tabs (best-effort; the
-      // profile exists either way and Edit Profile can finish the job).
-      try {
-        const capPayload = {}
-
-        if (dirtyCaps.skills && caps) {
-          capPayload.disabled_skills = caps.skills.filter(s => !s.enabled).map(s => s.name)
-        }
-        if (dirtyCaps.toolsets && caps) {
-          const en = caps.toolsets.filter(t => t.enabled)
-          capPayload.enabled_toolsets =
-            en.length === caps.toolsets.length || en.length === 0 ? [] : en.map(t => t.name)
-        }
-        if (dirtyCaps.mcp && caps) {
-          capPayload.enabled_mcp_servers = caps.mcp.filter(m => m.enabled).map(m => m.name)
-        }
-        if (Object.keys(capPayload).length) {
-          await requestForTarget('profiles.configure', { name: slug, ...capPayload })
-        }
-      } catch {
-        /* capability application is best-effort */
-      }
-
-      if (remoteTarget) {
-        // The bot lives on ANOTHER machine — local bot-meta is scoped to the
-        // active gateway, so write appearance/title into the remote
-        // profile's ui_meta (and asset store) directly. Best-effort: the
-        // profile exists either way.
-        const { image: avatarImage, ...look } = {
-          shape,
-          color,
-          image,
-          imageKind: image ? 'photo' : 'shape',
-          title: title.trim(),
-          created: Date.now()
-        }
-
+        return requestAgentDraft(host, draft, 'profiles.create', {
+          ...createPayload,
+          soul: composeSoul({ name: slug, title, description, roster, customSoul: soul, protocolInjected })
+        })
+      },
+      async (draft, isCurrent) => {
+        // Apply capability picks from the Advanced tabs (best-effort; the
+        // profile exists either way and Edit Profile can finish the job).
         try {
-          void requestForTarget('profiles.configure', { name: slug, ui_meta: { 'hermes-bots': look } }).catch(() => undefined)
+          const capPayload = {}
 
-          if (avatarImage) {
-            void requestForTarget('profiles.set_asset', { name: slug, asset: 'avatar', data: avatarImage }).catch(() => undefined)
+          const currentCaps = caps?.scopeKey === capabilityScopeKey ? caps : null
+
+          if (dirtyCaps.skills && currentCaps) {
+            capPayload.disabled_skills = currentCaps.skills.filter(s => !s.enabled).map(s => s.name)
+          }
+          if (dirtyCaps.toolsets && currentCaps) {
+            const en = currentCaps.toolsets.filter(t => t.enabled)
+            capPayload.enabled_toolsets =
+              en.length === currentCaps.toolsets.length || en.length === 0 ? [] : en.map(t => t.name)
+          }
+          if (dirtyCaps.mcp && currentCaps) {
+            capPayload.enabled_mcp_servers = currentCaps.mcp.filter(m => m.enabled).map(m => m.name)
+          }
+          if (isCurrent() && Object.keys(capPayload).length) {
+            await requestAgentDraft(host, draft, 'profiles.configure', { name: draft.slug, ...capPayload })
           }
         } catch {
-          /* older remote gateway */
+          /* capability application is best-effort */
         }
-      } else {
-        saveBotMeta(slug, { shape, color, image, imageKind: image ? 'photo' : 'shape', title: title.trim(), created: Date.now() })
+
+        if (!isCurrent()) {
+          return
+        }
+
+        // Appearance always follows the same immutable route as create. This
+        // is required even when the target was the active source at click
+        // time: the user can switch A -> B while profiles.create is in flight.
+        await applyAgentDraftAppearance(host, draft, appearance)
+
+        if (isCurrent()) {
+          queryClient.invalidateQueries({ queryKey: ROSTER_KEY })
+        }
+      },
+      result => {
+        if (!agentSharedAuthCreateResultAccepted(result, shareAuth)) {
+          throw new Error('shared_auth_not_supported')
+        }
       }
-
-      queryClient.invalidateQueries({ queryKey: ROSTER_KEY })
-      return slug
-    })
-
-    return flight
+    )
   }
 
   const submit = async () => {
@@ -5789,47 +9159,69 @@ function CreateAgentDialog({ open, onClose, roster }) {
       const slugCreated = await ensureAgentCreated()
       if (!slugCreated) {
         setBusy(false)
-        setError('Could not create the agent.')
+        setError(copy('create.createFailed'))
+        return
+      }
+
+      const createdDraft = draftLifecycleRef.current?.created()
+      const finalizePlan = agentDraftFinalizePlan(createdDraft, currentBotMetaOwner())
+      const canonicalOwner = normalizeRosterOwner(createdDraft?.connectionId, createdDraft?.route?.profile)
+
+      if (!createdDraft || !finalizePlan.slug) {
+        setBusy(false)
+        setError(copy('create.createFailed'))
         return
       }
 
       host.notify({
         kind: 'success',
-        message: remoteTarget
-          ? `Agent "${displayName({ name: slug, title })}" created on ${targetLabel}`
-          : `Agent "${displayName({ name: slug, title })}" created`
+        message: finalizePlan.remotePresentation
+          ? copy(
+              'create.createdOn',
+              displayName({ name: finalizePlan.slug, title }),
+              createdDraft.remoteTarget ? targetLabel || finalizePlan.connectionId : finalizePlan.connectionId
+            )
+          : copy('create.created', displayName({ name: finalizePlan.slug, title }))
       })
-      const wasRemote = remoteTarget
+      draftLifecycleRef.current?.finalize()
       reset()
       onClose()
 
-      if (wasRemote) {
+      if (!finalizePlan.openCanonical) {
         // The bot lives on another machine: it appears in the roster via the
-        // union enumeration; chat routes through its own source. No local
-        // canonical chat to birth here.
+        // union enumeration. A source switch during creation also lands here:
+        // fail closed instead of opening/pinning a same-named profile on the
+        // newly active backend.
         queryClient.invalidateQueries({ queryKey: ROSTER_KEY })
         return
       }
 
-      $selectedBot.set(slug)
+      $selectedBot.set(finalizePlan.slug)
 
       // Birth the bot's forever chat right away: it introduces itself as
       // the first thing the user sees, and the pin exists from minute one.
       try {
         // Creates, pins, opens, and kicks off the intro in one flow.
-        const sid = await createCanonicalChat(slug)
+        const sid = await createCanonicalChat(finalizePlan.slug, canonicalOwner)
 
-        if (!sid && typeof host.newChat === 'function') {
-          host.newChat(slug)
+        if (!sid && rosterOwnerStillActive(canonicalOwner) && typeof host.newChat === 'function') {
+          host.newChat(finalizePlan.slug)
         }
       } catch {
-        if (typeof host.newChat === 'function') {
-          host.newChat(slug)
+        if (rosterOwnerStillActive(canonicalOwner) && typeof host.newChat === 'function') {
+          host.newChat(finalizePlan.slug)
         }
       }
     } catch (err) {
       setBusy(false)
-      setError(err instanceof Error ? err.message : String(err))
+      const message = err instanceof Error ? err.message : String(err)
+      setError(
+        message.includes('shared_auth_pool_unavailable')
+          ? copy('create.sharedAuthUnavailable')
+          : message.includes('shared_auth_not_supported')
+            ? copy('create.sharedAuthUnsupported')
+            : message
+      )
     }
   }
 
@@ -5855,9 +9247,9 @@ function CreateAgentDialog({ open, onClose, roster }) {
       children: [
         jsxs(DialogHeader, {
           children: [
-            jsx(DialogTitle, { children: 'New Agent' }),
+            jsx(DialogTitle, { children: copy('create.title') }),
             jsx(DialogDescription, {
-              children: 'A named teammate with its own memory, skills, and chat. It can message your other agents.'
+              children: copy('create.description')
             })
           ]
         }),
@@ -5868,21 +9260,27 @@ function CreateAgentDialog({ open, onClose, roster }) {
               className: 'flex justify-center py-1',
               children: jsx(BotFace, { shape, color, image, size: 56, name: slug || 'agent' })
             }),
-            jsx(AvatarPicker, {
-              shape,
-              color,
-              image,
-              onShape: setShape,
-              onColor: setColor,
-              onImage: setImage,
-              generateSeed: { name: slug || 'agent', title, description }
+            jsx('div', {
+              'aria-disabled': creationLocked || undefined,
+              className: creationLocked ? 'pointer-events-none opacity-65' : undefined,
+              inert: creationLocked ? '' : undefined,
+              children: jsx(AvatarPicker, {
+                shape,
+                color,
+                image,
+                onShape: setShape,
+                onColor: setColor,
+                onImage: setImage,
+                generateSeed: { name: slug || 'agent', title, description }
+              })
             }),
             labeled(
-              'Name',
+              copy('create.name'),
               jsx(Input, {
                 autoFocus: true,
-                placeholder: 'inbox-triage',
+                placeholder: copy('create.namePlaceholder'),
                 value: name,
+                disabled: creationLocked,
                 onChange: event => setName(event.target.value)
               })
             ),
@@ -5890,8 +9288,8 @@ function CreateAgentDialog({ open, onClose, roster }) {
               ? jsx('div', {
                   className: 'text-xs text-(--ui-accent)',
                   children: remoteTarget
-                    ? `An agent named "${slug}" already exists on ${targetLabel}.`
-                    : `An agent named "${slug}" already exists.`
+                    ? copy('create.duplicateRemote', slug, targetLabel)
+                    : copy('create.duplicateLocal', slug)
                 })
               : null,
             // Multi-connection desktops choose WHERE the agent lives. Hidden
@@ -5899,16 +9297,16 @@ function CreateAgentDialog({ open, onClose, roster }) {
             // possible home, exactly the old behavior.
             Array.isArray(connections) && connections.length > 1
               ? labeled(
-                  'Create on',
+                  copy('create.createOn'),
                   jsxs(Select, {
+                    disabled: creationLocked,
                     value: targetConnection || activeConnectionId || 'local',
                     onValueChange: value => {
                       setTargetConnection(value === (activeConnectionId || 'local') ? '' : value)
                       // The capability catalog and clone list belong to the
                       // target backend — refetch for the new home. The live
                       // Capabilities tab only exists for the active gateway.
-                      setCaps(null)
-                      setCapsFailed(false)
+                      resetCapabilityCatalog()
                       setAdvTab('general')
                     },
                     children: [
@@ -5924,7 +9322,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
                               value: connection.id,
                               children:
                                 connection.id === (activeConnectionId || 'local')
-                                  ? `${connection.label || connection.id} (current)`
+                                  ? copy('create.current', connection.label || connection.id)
                                   : connection.label || connection.id
                             },
                             connection.id
@@ -5938,23 +9336,25 @@ function CreateAgentDialog({ open, onClose, roster }) {
             remoteTarget
               ? jsx('div', {
                   className: 'text-[0.7rem] leading-5 text-(--ui-text-tertiary)',
-                  children: `The agent is created on ${targetLabel} and appears in the roster as a Connections bot. Chat routes to that machine.`
+                  children: copy('create.remoteHelp', targetLabel)
                 })
               : null,
             labeled(
-              'Title',
+              copy('create.titleLabel'),
               jsx(Input, {
-                placeholder: 'Inbox Triage',
+                placeholder: copy('create.titlePlaceholder'),
                 value: title,
+                disabled: creationLocked,
                 onChange: event => setTitle(event.target.value)
               })
             ),
             labeled(
-              'Description',
+              copy('create.descriptionLabel'),
               jsx(Textarea, {
                 className: 'min-h-16',
-                placeholder: 'What should this Bot help with?',
+                placeholder: copy('create.descriptionPlaceholder'),
                 value: description,
+                disabled: creationLocked,
                 onChange: event => setDescription(event.target.value)
               })
             ),
@@ -5972,7 +9372,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
               },
               children: [
                 jsx(Codicon, { name: advanced ? 'chevron-down' : 'chevron-right', className: 'text-[0.8rem]' }),
-                'Advanced'
+                copy('create.advanced')
               ]
             }),
             advanced
@@ -5987,16 +9387,16 @@ function CreateAgentDialog({ open, onClose, roster }) {
                       // the ACTIVE gateway's backend — a remote-target draft
                       // lives elsewhere, so it keeps the staged checklists
                       // (their catalog reads already route to the target).
-                      children: (SkillsView && !remoteTarget
+                      children: (embeddedCapabilities
                         ? [
-                            ['general', 'General'],
-                            ['capabilities', 'Capabilities']
+                            ['general', copy('create.general')],
+                            ['capabilities', copy('create.capabilities')]
                           ]
                         : [
-                            ['general', 'General'],
-                            ['skills', 'Skills'],
-                            ['toolsets', 'Tools'],
-                            ['mcp', 'MCP']
+                            ['general', copy('create.general')],
+                            ['skills', copy('create.skills')],
+                            ['toolsets', copy('create.tools')],
+                            ['mcp', copy('create.mcp')]
                           ]
                       ).map(([id, label]) =>
                         jsx(
@@ -6018,7 +9418,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                 // the MCP setup buttons use).
                                 void ensureAgentCreated()
                                   .then(created => created && setCreatedForCaps(created))
-                                  .catch(err => host.notifyError(err, 'Could not create the profile yet'))
+                                  .catch(err => host.notifyError(err, copy('create.profileNotReady')))
                               } else if (id !== 'general') {
                                 ensureCaps()
                               }
@@ -6030,18 +9430,18 @@ function CreateAgentDialog({ open, onClose, roster }) {
                       )
                     }),
                     advTab === 'general'
-                      ? jsxs('div', {
-                          className: 'grid gap-3.5',
+                      ? jsxs('fieldset', {
+                          className: 'grid min-w-0 gap-3.5 border-0 p-0',
+                          disabled: creationLocked,
                           children: [
                             labeled(
-                              remoteTarget ? `Clone from profile (on ${targetLabel})` : 'Clone from profile',
+                              remoteTarget ? copy('create.cloneOn', targetLabel) : copy('create.clone'),
                               jsxs(Select, {
-                                disabled: remoteTarget,
+                                disabled: remoteTarget || creationLocked,
                                 value: remoteTarget ? 'default' : cloneFrom,
                                 onValueChange: value => {
                                   setCloneFrom(value)
-                                  setCaps(null)
-                                  setCapsFailed(false)
+                                  resetCapabilityCatalog()
                                 },
                                 children: [
                                   jsx(SelectTrigger, {
@@ -6052,7 +9452,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                     children: [
                                       jsx(SelectItem, {
                                         value: '__none__',
-                                        children: 'Fresh profile (bundled skills)'
+                                        children: copy('create.fresh')
                                       }),
                                       ...roster.map(b => jsx(SelectItem, { value: b.name, children: b.name }, b.name))
                                     ]
@@ -6061,6 +9461,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
                               })
                             ),
                             jsx(ModelPicker, {
+                              rosterOwner: modelRosterOwner,
                               value: { provider, model },
                               onChange: patch => {
                                 if ('provider' in patch) {
@@ -6070,14 +9471,14 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                   setModel(patch.model)
                                 }
                               },
-                              placeholderModel: 'inherited from launch profile'
+                              placeholderModel: copy('model.inherited')
                             }),
                             labeled(
-                              'SOUL.md (optional — replaces the generated persona)',
+                              copy('create.soul'),
                               jsx(Textarea, {
                                 className: 'min-h-24 font-mono text-xs leading-5',
                                 placeholder:
-                                  'Leave blank to auto-generate from name/title/description + agent-messaging roster.',
+                                  copy('create.soulHint'),
                                 value: soul,
                                 onChange: event => setSoul(event.target.value)
                               })
@@ -6089,13 +9490,12 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                   checked: shareAuth,
                                   onCheckedChange: value => setShareAuth(Boolean(value))
                                 }),
-                                'Share keys & accounts with the main profile'
+                                copy('create.shareAuth')
                               ]
                             }),
                             jsx('div', {
                               className: 'pl-6 pt-0.5 text-[0.7rem] leading-5 text-(--ui-text-tertiary)',
-                              children:
-                                'Subscriptions, OAuth logins, and API keys stay shared (not copied), so token refreshes never invalidate each other. Uncheck for an isolated snapshot copy.'
+                              children: copy('create.shareAuthHelp')
                             }),
                             jsxs('label', {
                               className: 'flex items-center gap-2 text-xs text-(--ui-text-secondary)',
@@ -6104,18 +9504,18 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                   checked: noSkills,
                                   onCheckedChange: value => setNoSkills(Boolean(value))
                                 }),
-                                'Create empty (skip bundled skills)'
+                                copy('create.empty')
                               ]
                             })
                           ]
                         })
-                      : advTab === 'capabilities'
+                      : advTab === 'capabilities' && embeddedCapabilities
                         ? !valid || taken
                           ? jsx('div', {
                               className: 'px-2 py-3 text-center text-xs text-(--ui-text-tertiary)',
                               children: taken
-                                ? 'That name is taken — pick another before configuring capabilities.'
-                                : 'Name the agent first — a draft profile is created when you open this tab (discarded if you cancel).'
+                                ? copy('create.nameTakenCaps')
+                                : copy('create.nameFirstCaps')
                             })
                           : !createdForCaps
                             ? jsx('div', {
@@ -6132,15 +9532,23 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                 // one-click hub installs + tools + MCP), pinned
                                 // to the just-created profile. Writes land
                                 // immediately — no staging needed.
-                                children: jsx(SkillsView, { embedded: true, fixedProfile: createdForCaps })
+                                children: jsx(
+                                  SkillsView,
+                                  {
+                                    embedded: true,
+                                    fixedConnectionId: modelRosterOwner.connectionId,
+                                    fixedProfile: createdForCaps
+                                  },
+                                  `${modelRosterOwner.connectionId}::${createdForCaps}`
+                                )
                               })
-                      : capsFailed
+                      : capsFailedScope === capabilityScopeKey
                         ? jsx('div', {
                             className: 'px-2 py-3 text-center text-xs text-(--ui-text-tertiary)',
                             children:
-                              'Capability catalog needs a newer gateway (restart it after updating Hermes).'
+                              copy('advanced.catalogNeedsGateway')
                           })
-                        : !caps
+                        : !caps || caps.scopeKey !== capabilityScopeKey
                           ? jsx('div', {
                               className: 'flex justify-center py-4',
                               children: jsx(GlyphSpinner, {
@@ -6152,14 +9560,14 @@ function CreateAgentDialog({ open, onClose, roster }) {
                             ? noSkills
                               ? jsx('div', {
                                   className: 'px-2 py-3 text-center text-xs text-(--ui-text-tertiary)',
-                                  children: '“Create empty” is checked — no bundled skills will be installed.'
+                                  children: copy('advanced.emptySkills')
                                 })
                               : jsxs('div', {
                                   className: 'grid gap-1.5',
                                   children: [
                                     jsx(Input, {
                                       className: 'h-7 text-xs',
-                                      placeholder: 'Filter skills…',
+                                      placeholder: copy('advanced.filterSkills'),
                                       value: capFilter,
                                       onChange: event => setCapFilter(event.target.value)
                                     }),
@@ -6172,23 +9580,26 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                               s.name.toLowerCase().includes(capFilter.trim().toLowerCase())
                                             )
                                           : caps.skills,
+                                        disabled: creationLocked,
                                         onToggle: (name, enabled) => toggleCap('skills', name, enabled),
                                         columns: 2
                                       })
                                     }),
                                     jsx('div', {
                                       className: 'text-[0.65rem] leading-4 text-(--ui-text-quaternary)',
-                                      children: `Catalog from ${caps.source} — unchecked skills are disabled after creation.`
+                                      children: copy('advanced.catalogSource', caps.source)
                                     }),
-                                    jsx(HubSkillsSection, {
-                                      forProfile: null,
-                                      onInstalled: name =>
-                                        setCaps(prev =>
-                                          !prev || prev.skills.some(s => s.name === name)
-                                            ? prev
-                                            : { ...prev, skills: [...prev.skills, { name, enabled: true }] }
-                                        )
-                                    })
+                                    creationLocked
+                                      ? null
+                                      : jsx(HubSkillsSection, {
+                                          forProfile: null,
+                                          onInstalled: name =>
+                                            setCaps(prev =>
+                                              !prev || prev.skills.some(s => s.name === name)
+                                                ? prev
+                                                : { ...prev, skills: [...prev.skills, { name, enabled: true }] }
+                                            )
+                                        })
                                   ]
                                 })
                             : advTab === 'toolsets'
@@ -6200,20 +9611,21 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                       style: { maxHeight: 200 },
                                       children: jsx(CheckList, {
                                         items: caps.toolsets,
+                                        disabled: creationLocked,
                                         onToggle: (name, enabled) => toggleCap('toolsets', name, enabled),
                                         columns: 2
                                       })
                                     }),
                                     jsx('div', {
                                       className: 'text-[0.65rem] leading-4 text-(--ui-text-quaternary)',
-                                      children: 'Leaving all (or none) checked keeps the default toolset behavior.'
+                                      children: copy('advanced.defaultTools')
                                     })
                                   ]
                                 })
                               : caps.mcp.length === 0
                                 ? jsx('div', {
                                     className: 'px-2 py-3 text-center text-xs text-(--ui-text-tertiary)',
-                                    children: 'No MCP servers configured or in the catalog.'
+                                    children: copy('mcp.none')
                                   })
                                 : jsxs('div', {
                                     className: 'grid gap-1.5',
@@ -6234,7 +9646,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                                 children: [
                                                   jsx(Checkbox, {
                                                     checked: !!m.enabled,
-                                                    disabled: needsSetup,
+                                                    disabled: needsSetup || creationLocked,
                                                     onCheckedChange: value => toggleCap('mcp', m.name, Boolean(value))
                                                   }),
                                                   jsxs('span', {
@@ -6245,33 +9657,42 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                                         ? jsx('span', {
                                                             className: 'ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)',
                                                             children: m.installed
-                                                              ? 'catalog · installed'
-                                                              : 'catalog'
+                                                              ? copy('mcp.catalogInstalled')
+                                                              : copy('mcp.catalog')
                                                           })
                                                         : null,
                                                       needsSetup
-                                                        ? jsx(McpSetupButton, {
-                                                            profile: createdRef.current,
-                                                            entry: m,
-                                                            ensureProfile: ensureAgentCreated,
-                                                            onDone: () => {
-                                                              // Setup done: mark installed so the row's
-                                                              // checkbox un-disables, and enable it.
-                                                              setCaps(prev =>
-                                                                prev
-                                                                  ? {
-                                                                      ...prev,
-                                                                      mcp: prev.mcp.map(x =>
-                                                                        x.name === m.name
-                                                                          ? { ...x, installed: true, enabled: true }
-                                                                          : x
-                                                                      )
-                                                                    }
-                                                                  : prev
+                                                        ? agentMcpSetupAvailable(remoteTarget)
+                                                          ? jsx(McpSetupButton, {
+                                                              profile: createdSlug,
+                                                              entry: m,
+                                                              ensureProfile: ensureAgentCreated,
+                                                              onDone: () => {
+                                                                // Setup done: mark installed so the row's
+                                                                // checkbox un-disables, and enable it.
+                                                                setCaps(prev =>
+                                                                  prev
+                                                                    ? {
+                                                                        ...prev,
+                                                                        mcp: prev.mcp.map(x =>
+                                                                          x.name === m.name
+                                                                            ? { ...x, installed: true, enabled: true }
+                                                                            : x
+                                                                        )
+                                                                      }
+                                                                    : prev
+                                                                )
+                                                                setDirtyCaps(prev => ({ ...prev, mcp: true }))
+                                                              }
+                                                            })
+                                                          : jsx('span', {
+                                                              className:
+                                                                'ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)',
+                                                              children: copy(
+                                                                'mcp.needsSetup',
+                                                                (m.requires || []).join(', ')
                                                               )
-                                                              setDirtyCaps(prev => ({ ...prev, mcp: true }))
-                                                            }
-                                                          })
+                                                            })
                                                         : null,
                                                       m.description
                                                         ? jsx('div', {
@@ -6291,8 +9712,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                       }),
                                       jsx('div', {
                                         className: 'text-[0.65rem] leading-4 text-(--ui-text-quaternary)',
-                                        children:
-                                          'Configured servers copy from the main profile; catalog entries are the bundled MCP menu. Entries needing API keys route through setup first (credentials follow the shared keys setting).'
+                                        children: copy('mcp.createHelp')
                                       })
                                     ]
                                   })
@@ -6317,12 +9737,12 @@ function CreateAgentDialog({ open, onClose, roster }) {
                 reset()
                 onClose()
               },
-              children: 'Cancel'
+              children: copy('common.cancel')
             }),
             jsx(Button, {
               disabled: busy || !valid || taken,
               onClick: submit,
-              children: busy ? 'Creating…' : 'Create Agent'
+              children: busy ? copy('create.creating') : copy('create.action')
             })
           ]
         })
@@ -6346,8 +9766,8 @@ function routineBot(job) {
   return match ? match[1].toLowerCase() : null
 }
 
-function routineTitle(job) {
-  return (job?.name || '').replace(BOT_TAG_RE, '') || 'Untitled cronjob'
+function routineTitle(job, copy = agentText) {
+  return (job?.name || '').replace(BOT_TAG_RE, '') || copy('routines.untitled')
 }
 
 function isLegacyDelegatedRoutine(job) {
@@ -6355,13 +9775,27 @@ function isLegacyDelegatedRoutine(job) {
   return Boolean(routineBot(job) && typeof preview === 'string' && preview.startsWith(LEGACY_DELEGATED_ROUTINE_PREFIX))
 }
 
-async function loadRoutines(profile) {
+function routineOwnerKey(owner, profile = owner?.profile) {
+  const normalized = normalizeRosterOwner(owner?.connectionId, profile || owner?.profile)
+
+  return normalized ? `${normalized.connectionId}::${normalized.profile}` : ''
+}
+
+function routineQueryKey(owner, profile = owner?.profile) {
+  const normalized = normalizeRosterOwner(owner?.connectionId, profile || owner?.profile)
+
+  return [...ROUTINES_KEY, normalized?.connectionId || '', normalized?.profile || '']
+}
+
+async function loadRoutines(profile, rosterOwner = currentBotMetaOwner(), runtime = host) {
+  const owner = normalizeRosterOwner(rosterOwner?.connectionId, rosterOwner?.profile)
+  const request = createRosterOwnerRequester(runtime, owner)
   // profile scopes cron.manage to that bot's own cron store (core RPC gained an
   // optional `profile` param). Older gateways ignore the unknown param and
   // return the launch-profile store — the [bot:] tag filter in selectRoutineJobs
   // remains the graceful fallback there.
   const scope = profile ? { profile } : {}
-  const data = await host.request('cron.manage', { action: 'list', include_disabled: true, ...scope })
+  const data = await request('cron.manage', { action: 'list', include_disabled: true, ...scope })
   const jobs = Array.isArray(data?.jobs) ? data.jobs : []
   const activeLegacyJobs = jobs.filter(
     job => isLegacyDelegatedRoutine(job) && job.enabled !== false && job.state !== 'paused'
@@ -6374,42 +9808,53 @@ async function loadRoutines(profile) {
   // actually paused, and the next poll retries the rest.
   const pauses = await Promise.all(
     activeLegacyJobs.map(job =>
-      host
-        .request('cron.manage', { action: 'pause', name: job.job_id, ...scope })
+      request('cron.manage', { action: 'pause', name: job.job_id, ...scope })
         .then(() => true)
         .catch(() => false)
     )
   )
 
   if (!activeLegacyJobs.length) {
-    return data
+    return { ...data, routineOwner: owner }
   }
 
   const pausedIds = new Set(activeLegacyJobs.filter((job, index) => pauses[index]).map(job => job.job_id))
   return {
     ...data,
+    routineOwner: owner,
     jobs: jobs.map(job => (pausedIds.has(job.job_id) ? { ...job, enabled: false, state: 'paused' } : job))
   }
 }
 
-function useRoutines(profile) {
+function useRoutines(profile, rosterOwner) {
+  const owner = normalizeRosterOwner(rosterOwner?.connectionId, rosterOwner?.profile)
+
   return useQuery({
-    queryKey: [...ROUTINES_KEY, profile || ''],
-    queryFn: () => loadRoutines(profile),
+    queryKey: routineQueryKey(owner, profile),
+    queryFn: () => loadRoutines(profile, owner),
+    enabled: Boolean(owner),
     refetchInterval: 20000,
     staleTime: 8000
   })
 }
 
 function routineCreateTarget(owner, activeBot) {
-  return owner || activeBot
+  return owner?.bot || owner || activeBot
 }
 
-async function invalidateRoutineOwner(profile) {
+async function invalidateRoutineOwner(profile, rosterOwner) {
   await queryClient.invalidateQueries({
-    queryKey: [...ROUTINES_KEY, profile || ''],
+    queryKey: routineQueryKey(rosterOwner, profile),
     exact: true
   })
+}
+
+async function runRoutineAction(job, action, profile, rosterOwner, runtime = host) {
+  const owner = normalizeRosterOwner(rosterOwner?.connectionId, rosterOwner?.profile)
+  const request = createRosterOwnerRequester(runtime, owner)
+
+  await request('cron.manage', { action, name: job?.job_id, ...(profile ? { profile } : {}) })
+  return true
 }
 
 /** Pick which cron jobs to show. A failed refresh keeps the last good list. */
@@ -6434,12 +9879,11 @@ function selectRoutineJobs(data, error, lastJobs, bot) {
  * Return a short explanation string in that case, or null when the store is
  * genuinely empty (or the active bot's jobs are already shown).
  */
-function routineFilterHint(all, jobs) {
+function routineFilterHint(all, jobs, copy = agentText) {
   if (jobs.length !== 0 || !Array.isArray(all) || all.length === 0) {
     return null
   }
-  return 'Cronjobs exist in this profile but none are tagged for this bot. ' +
-    'Name a job "[bot:<name>] …" to show it here, or see them in Cron below.'
+  return copy('routines.filterHint')
 }
 
 function normalizedProfileName(profile) {
@@ -6457,13 +9901,13 @@ function shellDoubleQuote(value) {
   return String(value).replace(/[\\"`$]/g, ch => '\\' + ch)
 }
 
-function routineInputError(title, instruction) {
+function routineInputError(title, instruction, copy = agentText) {
   if (String(title).includes('\0')) {
-    return 'Cronjob name cannot contain NUL (U+0000).'
+    return copy('routines.nameNul')
   }
 
   if (String(instruction).includes('\0')) {
-    return 'Cronjob instruction cannot contain NUL (U+0000).'
+    return copy('routines.instructionNul')
   }
 
   return null
@@ -6481,17 +9925,17 @@ function routinePrompt(bot, title, instruction, activeProfile) {
     `If the command fails, report the error instead.`
   )
 }
-function scheduleLabel(schedule) {
+function scheduleLabel(schedule, copy = agentText) {
   const once = /^once in (.+)$/.exec(schedule || '')
 
   if (once) {
-    return `Once (${once[1]})`
+    return copy('routines.once', once[1])
   }
 
   const bare = /^(\d+)([mhd])$/.exec(schedule || '')
 
   if (bare) {
-    return `Once (${bare[1]}${bare[2]})`
+    return copy('routines.once', `${bare[1]}${bare[2]}`)
   }
 
   const match = /^every (\d+)m$/.exec(schedule || '')
@@ -6501,21 +9945,22 @@ function scheduleLabel(schedule) {
 
     if (minutes % 1440 === 0) {
       const d = minutes / 1440
-      return d === 1 ? 'Daily' : `Every ${d} days`
+      return d === 1 ? copy('routines.daily') : copy('routines.everyDays', d)
     }
 
     if (minutes % 60 === 0) {
       const h = minutes / 60
-      return h === 1 ? 'Hourly' : `Every ${h}h`
+      return h === 1 ? copy('routines.hourly') : copy('routines.everyHours', h)
     }
 
-    return `Every ${minutes}m`
+    return copy('routines.everyMinutes', minutes)
   }
 
   return schedule || ''
 }
 
-function RoutineRow({ job, profile }) {
+function RoutineRow({ job, profile, rosterOwner }) {
+  const copy = useAgentText()
   const [busy, setBusy] = useState(false)
   // Optimistic overlay: null = trust server state. Set immediately on
   // toggle so the switch responds even before the refetch lands.
@@ -6540,11 +9985,11 @@ function RoutineRow({ job, profile }) {
     }
 
     try {
-      await host.request('cron.manage', { action, name: job.job_id, ...(profile ? { profile } : {}) })
-      await invalidateRoutineOwner(profile)
+      await runRoutineAction(job, action, profile, rosterOwner)
+      await invalidateRoutineOwner(profile, rosterOwner)
     } catch (err) {
       setPendingActive(null)
-      host.notifyError(err, 'Cronjob update failed')
+      host.notifyError(err, copy('routines.updateFailed'))
     } finally {
       setBusy(false)
     }
@@ -6565,7 +10010,7 @@ function RoutineRow({ job, profile }) {
           }),
           jsx('span', {
             className: cn('min-w-0 flex-1 truncate text-xs font-medium', !active && 'text-(--ui-text-tertiary)'),
-            children: routineTitle(job)
+            children: routineTitle(job, copy)
           }),
           jsx(Switch, {
             checked: active,
@@ -6573,7 +10018,7 @@ function RoutineRow({ job, profile }) {
             onCheckedChange: value => act(value ? 'resume' : 'pause')
           }),
           jsx(Tip, {
-            label: 'Delete cronjob',
+            label: copy('routines.delete'),
             children: jsx('button', {
               type: 'button',
               disabled: busy,
@@ -6591,11 +10036,13 @@ function RoutineRow({ job, profile }) {
           jsxs('span', {
             className:
               'inline-flex items-center gap-1 rounded-full border border-(--ui-stroke-secondary) px-1.5 py-0.5 text-[0.65rem] text-(--ui-text-tertiary)',
-            children: [jsx(Codicon, { name: 'calendar', className: 'text-[0.7rem]' }), scheduleLabel(job.schedule)]
+            children: [jsx(Codicon, { name: 'calendar', className: 'text-[0.7rem]' }), scheduleLabel(job.schedule, copy)]
           }),
           jsx('span', {
             className: 'truncate text-[0.65rem] text-(--ui-text-quaternary)',
-            children: active && job.next_run_at ? `next ${relativeTime(new Date(job.next_run_at).getTime())}` : 'paused'
+            children: active && job.next_run_at
+              ? copy('routines.next', relativeTime(new Date(job.next_run_at).getTime()))
+              : copy('routines.paused')
           })
         ]
       }),
@@ -6603,7 +10050,7 @@ function RoutineRow({ job, profile }) {
         ? jsx('div', {
             className:
               'rounded-md border border-(--ui-stroke-secondary) px-2 py-1.5 text-[0.65rem] leading-4 text-(--ui-accent)',
-            children: 'Paused for security: delete and recreate this legacy cronjob before running it again.'
+            children: copy('routines.legacyPaused')
           })
         : null
     ]
@@ -6614,37 +10061,41 @@ function RoutineRow({ job, profile }) {
 // frequency needs (time of day, weekday, day of month, interval). Emits a
 // Hermes-native schedule string; Advanced exposes it raw.
 const FREQUENCIES = [
-  { id: 'once', label: 'Once, in\u2026' },
-  { id: 'hourly', label: 'Every hour' },
-  { id: 'daily', label: 'Every day' },
-  { id: 'weekdays', label: 'Weekdays' },
-  { id: 'weekly', label: 'Every week' },
-  { id: 'monthly', label: 'Every month' },
-  { id: 'interval', label: 'Interval' },
-  { id: 'advanced', label: 'Advanced\u2026' }
+  { id: 'once', key: 'frequencyOnce' },
+  { id: 'hourly', key: 'frequencyHourly' },
+  { id: 'daily', key: 'frequencyDaily' },
+  { id: 'weekdays', key: 'frequencyWeekdays' },
+  { id: 'weekly', key: 'frequencyWeekly' },
+  { id: 'monthly', key: 'frequencyMonthly' },
+  { id: 'interval', key: 'frequencyInterval' },
+  { id: 'advanced', key: 'frequencyAdvanced' }
 ]
 
 const WEEKDAYS = [
-  { id: '1', label: 'Monday' },
-  { id: '2', label: 'Tuesday' },
-  { id: '3', label: 'Wednesday' },
-  { id: '4', label: 'Thursday' },
-  { id: '5', label: 'Friday' },
-  { id: '6', label: 'Saturday' },
-  { id: '0', label: 'Sunday' }
+  { id: '1', key: 'monday' },
+  { id: '2', key: 'tuesday' },
+  { id: '3', key: 'wednesday' },
+  { id: '4', key: 'thursday' },
+  { id: '5', key: 'friday' },
+  { id: '6', key: 'saturday' },
+  { id: '0', key: 'sunday' }
 ]
 
-const TIMES = (() => {
+function localizedRoutineOptions(options, copy) {
+  return options.map(option => ({ id: option.id, label: copy(`routines.${option.key}`) }))
+}
+
+function routineTimes(copy = agentText) {
   const out = []
   for (let h = 0; h < 24; h++) {
     for (const m of [0, 30]) {
-      const ampm = h < 12 ? 'AM' : 'PM'
+      const ampm = h < 12 ? copy('routines.am') : copy('routines.pm')
       const h12 = h % 12 === 0 ? 12 : h % 12
       out.push({ id: `${h}:${m}`, label: `${h12}:${String(m).padStart(2, '0')} ${ampm}`, h, m })
     }
   }
   return out
-})()
+}
 
 /** Compose the Hermes schedule string from picker state. */
 function composeSchedule(state) {
@@ -6674,33 +10125,36 @@ function composeSchedule(state) {
   }
 }
 
-function scheduleSummary(state) {
-  const t = TIMES.find(x => x.id === state.time)
-  const tl = t ? t.label : '9:00 AM'
+function scheduleSummary(state, copy = agentText) {
+  const weekdays = localizedRoutineOptions(WEEKDAYS, copy)
+  const times = routineTimes(copy)
+  const t = times.find(x => x.id === state.time)
+  const tl = t ? t.label : `9:00 ${copy('routines.am')}`
 
-  const unitWord = u => (u === 'm' ? 'minute(s)' : u === 'd' ? 'day(s)' : 'hour(s)')
+  const unitWord = u =>
+    u === 'm' ? copy('routines.minuteUnit') : u === 'd' ? copy('routines.dayUnit') : copy('routines.hourUnit')
   const cap =
     state.freq !== 'once' && String(state.repeatN || '').trim()
-      ? `, ${Math.max(1, parseInt(state.repeatN, 10) || 1)} time(s) total`
+      ? copy('routines.totalRuns', Math.max(1, parseInt(state.repeatN, 10) || 1))
       : ''
 
   switch (state.freq) {
     case 'once':
-      return `Runs once, ${Math.max(1, parseInt(state.onceN, 10) || 1)} ${unitWord(state.onceUnit)} from now`
+      return copy('routines.summaryOnce', Math.max(1, parseInt(state.onceN, 10) || 1), unitWord(state.onceUnit))
     case 'hourly':
-      return 'Runs at the top of every hour' + cap
+      return copy('routines.summaryHourly') + cap
     case 'daily':
-      return `Runs every day at ${tl}` + cap
+      return copy('routines.summaryDaily', tl) + cap
     case 'weekdays':
-      return `Runs Monday\u2013Friday at ${tl}` + cap
+      return copy('routines.summaryWeekdays', tl) + cap
     case 'weekly':
-      return `Runs every ${(WEEKDAYS.find(w => w.id === state.weekday) || WEEKDAYS[0]).label} at ${tl}` + cap
+      return copy('routines.summaryWeekly', (weekdays.find(w => w.id === state.weekday) || weekdays[0]).label, tl) + cap
     case 'monthly':
-      return `Runs on day ${state.monthday || '1'} of each month at ${tl}` + cap
+      return copy('routines.summaryMonthly', state.monthday || '1', tl) + cap
     case 'interval':
-      return `Runs every ${Math.max(1, parseInt(state.intervalN, 10) || 1)} ${unitWord(state.intervalUnit)}` + cap
+      return copy('routines.summaryInterval', Math.max(1, parseInt(state.intervalN, 10) || 1), unitWord(state.intervalUnit)) + cap
     default:
-      return 'Raw schedule \u2014 every Nm/Nh/Nd or 5-field cron'
+      return copy('routines.summaryRaw')
   }
 }
 
@@ -6718,8 +10172,12 @@ function pickerSelect(value, onChange, options) {
 }
 
 function SchedulePicker({ state, setState }) {
+  const copy = useAgentText()
   const upd = patch => setState(prev => ({ ...prev, ...patch }))
   const needsTime = ['daily', 'weekdays', 'weekly', 'monthly'].includes(state.freq)
+  const frequencies = localizedRoutineOptions(FREQUENCIES, copy)
+  const weekdays = localizedRoutineOptions(WEEKDAYS, copy)
+  const times = routineTimes(copy)
 
   return jsxs('div', {
     className: 'grid gap-2',
@@ -6727,8 +10185,8 @@ function SchedulePicker({ state, setState }) {
       jsxs('div', {
         style: { display: 'grid', gridTemplateColumns: needsTime ? '1fr 1fr' : '1fr', gap: '8px' },
         children: [
-          pickerSelect(state.freq, v => upd({ freq: v }), FREQUENCIES),
-          needsTime ? pickerSelect(state.time, v => upd({ time: v }), TIMES) : null
+          pickerSelect(state.freq, v => upd({ freq: v }), frequencies),
+          needsTime ? pickerSelect(state.time, v => upd({ time: v }), times) : null
         ]
       }),
       state.freq === 'once'
@@ -6742,19 +10200,19 @@ function SchedulePicker({ state, setState }) {
                 onChange: event => upd({ onceN: event.target.value.replace(/[^0-9]/g, '').slice(0, 4) })
               }),
               pickerSelect(state.onceUnit, v => upd({ onceUnit: v }), [
-                { id: 'm', label: 'minutes from now' },
-                { id: 'h', label: 'hours from now' },
-                { id: 'd', label: 'days from now' }
+                { id: 'm', label: copy('routines.minutesFromNow') },
+                { id: 'h', label: copy('routines.hoursFromNow') },
+                { id: 'd', label: copy('routines.daysFromNow') }
               ])
             ]
           })
         : null,
       state.freq === 'weekly'
-        ? pickerSelect(state.weekday, v => upd({ weekday: v }), WEEKDAYS)
+        ? pickerSelect(state.weekday, v => upd({ weekday: v }), weekdays)
         : null,
       state.freq === 'monthly'
         ? labeled(
-            'Day of month',
+            copy('routines.dayOfMonth'),
             jsx(Input, {
               className: 'h-8',
               placeholder: '1',
@@ -6774,9 +10232,9 @@ function SchedulePicker({ state, setState }) {
                 onChange: event => upd({ intervalN: event.target.value.replace(/[^0-9]/g, '').slice(0, 4) })
               }),
               pickerSelect(state.intervalUnit, v => upd({ intervalUnit: v }), [
-                { id: 'm', label: 'minutes' },
-                { id: 'h', label: 'hours' },
-                { id: 'd', label: 'days' }
+                { id: 'm', label: copy('routines.minutes') },
+                { id: 'h', label: copy('routines.hours') },
+                { id: 'd', label: copy('routines.days') }
               ])
             ]
           })
@@ -6784,7 +10242,7 @@ function SchedulePicker({ state, setState }) {
       state.freq === 'advanced'
         ? jsx(Input, {
             className: 'h-8 font-mono text-xs',
-            placeholder: 'every 1d \u00b7 every 2h \u00b7 0 9 * * * (cron)',
+            placeholder: copy('routines.rawPlaceholder'),
             value: state.raw,
             onChange: event => upd({ raw: event.target.value })
           })
@@ -6793,20 +10251,20 @@ function SchedulePicker({ state, setState }) {
         ? jsxs('div', {
             className: 'flex items-center gap-2',
             children: [
-              jsx('span', { className: 'text-xs text-(--ui-text-tertiary)', children: 'Stop after' }),
+              jsx('span', { className: 'text-xs text-(--ui-text-tertiary)', children: copy('routines.stopAfter') }),
               jsx(Input, {
                 className: 'h-7 w-16 text-xs',
                 placeholder: '\u221e',
                 value: state.repeatN,
                 onChange: event => upd({ repeatN: event.target.value.replace(/[^0-9]/g, '').slice(0, 4) })
               }),
-              jsx('span', { className: 'text-xs text-(--ui-text-tertiary)', children: 'runs (blank = forever)' })
+              jsx('span', { className: 'text-xs text-(--ui-text-tertiary)', children: copy('routines.runsForever') })
             ]
           })
         : null,
       jsx('div', {
         className: 'text-[0.65rem] text-(--ui-text-quaternary)',
-        children: `${scheduleSummary(state)} \u00b7 ${composeSchedule(state) || '\u2014'}`
+        children: `${scheduleSummary(state, copy)} \u00b7 ${composeSchedule(state) || '\u2014'}`
       })
     ]
   })
@@ -6816,14 +10274,14 @@ function defaultScheduleState() {
   return { freq: 'daily', time: '9:0', weekday: '1', monthday: '1', intervalN: '2', intervalUnit: 'h', onceN: '30', onceUnit: 'm', repeatN: '', raw: '' }
 }
 
-function CreateRoutineDialog({ bot, open, onClose }) {
+function CreateRoutineDialog({ bot, rosterOwner, open, onClose }) {
+  const copy = useAgentText()
   const [name, setName] = useState('')
   const [instruction, setInstruction] = useState('')
   const [sched, setSched] = useState(defaultScheduleState())
   const [continuity, setContinuity] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-  const activeProfile = useValue(host.state.profile)
   const schedule = composeSchedule(sched)
 
   const reset = () => {
@@ -6838,7 +10296,7 @@ function CreateRoutineDialog({ bot, open, onClose }) {
   const submit = async () => {
     const title = name.trim()
     const task = instruction.trim()
-    const inputError = routineInputError(title, task)
+    const inputError = routineInputError(title, task, copy)
 
     if (inputError) {
       setError(inputError)
@@ -6857,17 +10315,18 @@ function CreateRoutineDialog({ bot, open, onClose }) {
         sched.freq !== 'once' && sched.freq !== 'advanced' && String(sched.repeatN || '').trim()
           ? Math.max(1, parseInt(sched.repeatN, 10) || 1)
           : null
-      await host.request('cron.manage', {
+      const request = createRosterOwnerRequester(host, rosterOwner)
+      await request('cron.manage', {
         action: 'add',
         name: `[bot:${bot}] ${title}`,
         schedule: schedule.trim(),
-        prompt: routinePrompt(bot, title, task, activeProfile),
+        prompt: routinePrompt(bot, title, task, rosterOwner?.profile),
         ...(bot ? { profile: bot } : {}),
         ...(repeatN ? { repeat: repeatN } : {}),
         ...(continuity ? { continuity: true } : {})
       })
-      await invalidateRoutineOwner(bot)
-      host.notify({ kind: 'success', message: `Cronjob "${title}" scheduled` })
+      await invalidateRoutineOwner(bot, rosterOwner)
+      host.notify({ kind: 'success', message: copy('routines.scheduled', title) })
       reset()
       onClose()
     } catch (err) {
@@ -6889,9 +10348,9 @@ function CreateRoutineDialog({ bot, open, onClose }) {
       children: [
         jsxs(DialogHeader, {
           children: [
-            jsx(DialogTitle, { children: 'New Cronjob' }),
+            jsx(DialogTitle, { children: copy('routines.newTitle') }),
             jsx(DialogDescription, {
-              children: `A recurring task ${displayName({ name: bot }, $botMeta.get()[bot])} runs on a schedule. Runs land in its own chat history.`
+              children: copy('routines.newDescription', displayName({ name: bot }, $botMeta.get()[bot]))
             })
           ]
         }),
@@ -6899,24 +10358,24 @@ function CreateRoutineDialog({ bot, open, onClose }) {
           className: 'grid gap-3.5',
           children: [
             labeled(
-              'Name',
+              copy('routines.name'),
               jsx(Input, {
                 autoFocus: true,
-                placeholder: 'Name this cronjob',
+                placeholder: copy('routines.namePlaceholder'),
                 value: name,
                 onChange: event => setName(event.target.value)
               })
             ),
             labeled(
-              'Instruction',
+              copy('routines.instruction'),
               jsx(Textarea, {
                 className: 'min-h-20',
-                placeholder: 'What should this cronjob do each time it runs?',
+                placeholder: copy('routines.instructionPlaceholder'),
                 value: instruction,
                 onChange: event => setInstruction(event.target.value)
               })
             ),
-            labeled('When to run', jsx(SchedulePicker, { state: sched, setState: setSched })),
+            labeled(copy('routines.when'), jsx(SchedulePicker, { state: sched, setState: setSched })),
             jsxs('label', {
               className: 'flex items-center gap-2 text-xs text-(--ui-text-tertiary) cursor-pointer select-none',
               children: [
@@ -6926,7 +10385,7 @@ function CreateRoutineDialog({ bot, open, onClose }) {
                   checked: continuity,
                   onChange: event => setContinuity(event.target.checked)
                 }),
-                'Continuity: each run sees the previous run\u2019s output (dedupe, continue where it left off)'
+                copy('routines.continuity')
               ]
             }),
             error
@@ -6946,12 +10405,12 @@ function CreateRoutineDialog({ bot, open, onClose }) {
                 reset()
                 onClose()
               },
-              children: 'Cancel'
+              children: copy('common.cancel')
             }),
             jsx(Button, {
               disabled: busy || !name.trim() || !instruction.trim() || !schedule.trim(),
               onClick: submit,
-              children: busy ? 'Scheduling…' : 'Create Cronjob'
+              children: busy ? copy('routines.scheduling') : copy('routines.create')
             })
           ]
         })
@@ -6961,33 +10420,38 @@ function CreateRoutineDialog({ bot, open, onClose }) {
 }
 
 function RoutinesPane() {
+  const copy = useAgentText()
   const selected = useValue($selectedBot)
   const gatewayProfile = useValue(host.state.profile)
+  const gatewayConnectionId = useValue(host.state.connectionId)
   // The tile maps to the bot you're chatting with: the live gateway profile
   // is the truth once a chat opens; $selectedBot covers the gap between a
   // roster click and the profile swap landing.
   const bot = (gatewayProfile || selected || 'default').trim() || 'default'
+  const routineOwner = normalizeRosterOwner(gatewayConnectionId, bot)
   const meta = useValue($botMeta)[bot]
   const { shape, color, image } = botAppearance(bot, meta)
-  const { data, error, isLoading, refetch } = useRoutines(bot)
+  const { data, error, isLoading, refetch } = useRoutines(bot, routineOwner)
   const [createOpen, setCreateOpen] = useState(false)
   const [createOwner, setCreateOwner] = useState(null)
   const createTarget = routineCreateTarget(createOwner, bot)
 
   const openCreate = () => {
-    setCreateOwner(bot)
+    setCreateOwner({ bot, rosterOwner: routineOwner })
     setCreateOpen(true)
   }
 
-  const view = selectRoutineJobs(data, error, $lastJobs.get(), bot)
+  const cacheKey = routineOwnerKey(routineOwner, bot)
+  const lastByOwner = $lastJobs.get()
+  const view = selectRoutineJobs(data, error, lastByOwner[cacheKey] || [], bot)
   if (view.live) {
-    $lastJobs.set(view.live)
+    $lastJobs.set({ ...lastByOwner, [cacheKey]: view.live })
   }
   const jobs = view.jobs
   const staleNotice = error && !view.live && view.all.length
-    ? 'Could not refresh cronjobs. Showing the last list we had.'
+    ? copy('routines.stale')
     : null
-  const filterHint = routineFilterHint(view.all, jobs)
+  const filterHint = routineFilterHint(view.all, jobs, copy)
 
   return jsxs('div', {
     className: 'flex h-full flex-col',
@@ -7016,12 +10480,12 @@ function RoutinesPane() {
               }),
               jsx('div', {
                 className: 'text-[0.65rem] uppercase tracking-wider text-(--ui-text-quaternary)',
-                children: 'Cronjobs'
+                children: copy('routines.tab')
               })
             ]
           }),
           jsx(Tip, {
-            label: 'New Cronjob',
+            label: copy('routines.newTitle'),
             children: jsx('button', {
               type: 'button',
               className:
@@ -7051,13 +10515,13 @@ function RoutinesPane() {
                 jsx(Codicon, { name: 'warning', className: 'text-[1.6rem] text-(--ui-text-quaternary)' }),
                 jsx('div', {
                   className: 'text-xs leading-5 text-(--ui-text-tertiary)',
-                  children: 'Could not load cronjobs. The list may still be there.'
+                  children: copy('routines.loadFailed')
                 }),
                 jsx(Button, {
                   variant: 'secondary',
                   size: 'sm',
                   onClick: () => void refetch(),
-                  children: 'Retry'
+                  children: copy('common.retry')
                 })
               ]
             })
@@ -7079,7 +10543,7 @@ function RoutinesPane() {
                   variant: 'secondary',
                   size: 'sm',
                   onClick: openCreate,
-                  children: filterHint ? 'Create a cronjob for this bot' : 'Create Cronjob'
+                  children: filterHint ? copy('routines.createForAgent') : copy('routines.create')
                 })
               ]
             })
@@ -7087,11 +10551,12 @@ function RoutinesPane() {
               className: 'min-h-0 flex-1',
               children: jsx('div', {
                 className: 'grid gap-1.5 px-2.5 py-2',
-                children: jobs.map(job => jsx(RoutineRow, { job, profile: bot }, job.job_id))
+                children: jobs.map(job => jsx(RoutineRow, { job, profile: bot, rosterOwner: routineOwner }, job.job_id))
               })
             }),
       jsx(CreateRoutineDialog, {
         bot: createTarget,
+        rosterOwner: createOwner?.rosterOwner || routineOwner,
         open: createOpen,
         onClose: () => {
           setCreateOpen(false)
@@ -7141,7 +10606,7 @@ async function openProfileSession(botName, storedId, gatewayGeneration) {
   const id = String(storedId || '')
   if (!NAME_RE.test(profile) || !id || gatewayGeneration !== $sessionsGatewayGeneration.get()) return
   if (typeof host.openSession !== 'function') {
-    throw new Error('This Hermes Vietnamese version cannot open stored sessions')
+    throw new Error(agentText('profile.unsupportedSessionOpen'))
   }
   await host.openSession(id, { profile })
   if (gatewayGeneration !== $sessionsGatewayGeneration.get()) return
@@ -7149,10 +10614,14 @@ async function openProfileSession(botName, storedId, gatewayGeneration) {
 }
 
 function ProfileSessionRow({ session, botName, active, gatewayGeneration }) {
+  const copy = useAgentText()
   return jsxs('button', {
     type: 'button',
     'aria-current': active ? 'page' : undefined,
-    onClick: () => void openProfileSession(botName, session.id, gatewayGeneration).catch(err => host.notifyError(err, 'Could not open session')),
+    onClick: () =>
+      void openProfileSession(botName, session.id, gatewayGeneration).catch(err =>
+        host.notifyError(err, copy('profile.sessionOpenFailed'))
+      ),
     className: cn(
       'flex w-full flex-col gap-0.5 overflow-hidden rounded-md px-2 py-1.5 text-left transition-colors',
       'hover:bg-(--chrome-action-hover)',
@@ -7161,17 +10630,18 @@ function ProfileSessionRow({ session, botName, active, gatewayGeneration }) {
     children: [
       jsx('span', {
         className: 'truncate text-[0.8125rem] font-medium',
-        children: session.title || 'Untitled session'
+        children: session.title || copy('sessions.untitled')
       }),
       jsx('div', {
         className: 'truncate text-[0.7rem] text-(--ui-text-tertiary)',
-        children: session.preview || session.source || 'No messages yet'
+        children: session.preview || session.source || copy('sessions.noMessages')
       })
     ]
   })
 }
 
 function ProfileSessionsWorkspace({ bot }) {
+  const copy = useAgentText()
   const gatewayGeneration = useValue($sessionsGatewayGeneration)
   const { data, isLoading, error } = useProfileSessions(bot.name, gatewayGeneration)
   const selectedByProfile = useValue($botSelectedSessions)
@@ -7188,11 +10658,11 @@ function ProfileSessionsWorkspace({ bot }) {
         variant: 'ghost',
         size: 'sm',
         onClick: () => $botSessionsWorkspace.set(null),
-        children: 'Back'
+        children: copy('common.back')
       }),
       jsx('div', {
         className: 'min-w-0 flex-1 truncate text-sm font-semibold',
-        children: `${displayName(bot, $botMeta.get()[bot.name])} sessions`
+        children: copy('sessions.heading', displayName(bot, $botMeta.get()[bot.name]))
       })
     ]
   })
@@ -7204,8 +10674,8 @@ function ProfileSessionsWorkspace({ bot }) {
       jsx('div', {
         className: 'px-2 pb-2',
         children: jsx(Input, {
-          'aria-label': 'Filter sessions',
-          placeholder: 'Filter sessions…',
+          'aria-label': copy('sessions.filterAria'),
+          placeholder: copy('sessions.filterPlaceholder'),
           value: query,
           onChange: event => setQuery(event.target.value)
         })
@@ -7213,7 +10683,7 @@ function ProfileSessionsWorkspace({ bot }) {
       inventoryBounded
         ? jsx('div', {
             className: 'px-2.5 pb-2 text-[0.65rem] text-(--ui-text-quaternary)',
-            children: `Showing the ${PROFILE_SESSION_LIST_LIMIT} most recent sessions.`
+            children: copy('sessions.recent', PROFILE_SESSION_LIST_LIMIT)
           })
         : null,
       isLoading
@@ -7224,7 +10694,7 @@ function ProfileSessionsWorkspace({ bot }) {
         : error
           ? jsx('div', {
               className: 'px-3 py-3 text-xs text-(--ui-text-tertiary)',
-              children: 'Could not load sessions for this profile.'
+              children: copy('sessions.loadFailed')
             })
           : jsx(ScrollArea, {
               className: 'min-h-0 flex-1',
@@ -7241,9 +10711,9 @@ function ProfileSessionsWorkspace({ bot }) {
                       className: 'px-2 py-3 text-center text-xs text-(--ui-text-tertiary)',
                       children: query.trim()
                         ? inventoryBounded
-                          ? `No matching sessions in the ${PROFILE_SESSION_LIST_LIMIT} most recent.`
-                          : 'No sessions match that filter.'
-                        : 'No stored sessions yet.'
+                          ? copy('sessions.noRecentMatch', PROFILE_SESSION_LIST_LIMIT)
+                          : copy('sessions.noMatch')
+                        : copy('sessions.none')
                     })
               })
             })
@@ -7258,7 +10728,8 @@ function ProfileSessionsWorkspace({ bot }) {
  *  message landed inside the liveness window). Reuses the row avatar; each
  *  chip opens that bot's canonical Bot Chat. Omitted entirely when nothing
  *  is active, and never reorders the roster below it. */
-function ActiveNowStrip({ roster, activeProfile, gatewayState, metaByName, onOpen }) {
+function ActiveNowStrip({ roster, activeProfile, gatewayState, metaByName, rosterOwner, onOpen }) {
+  const copy = useAgentText()
   const active = activeBots(roster, activeProfile, gatewayState)
 
   if (!active.length) {
@@ -7268,22 +10739,22 @@ function ActiveNowStrip({ roster, activeProfile, gatewayState, metaByName, onOpe
   return jsxs('div', {
     role: 'status',
     'aria-live': 'polite',
-    'aria-label': 'Active now',
+    'aria-label': copy('sessions.activeNow'),
     className: 'flex flex-wrap items-center gap-1.5 px-2.5 pb-1.5',
     children: [
       jsx('span', {
         className: 'text-[0.6875rem] font-semibold uppercase tracking-wider text-(--ui-text-quaternary)',
-        children: 'Active now'
+        children: copy('sessions.activeNow')
       }),
       ...active.map(bot => {
-        const meta = metaByName?.[bot.name]
+        const meta = botRosterMeta(bot, metaByName, rosterOwner)
         const { shape, color, image } = botAppearance(bot.name, meta)
         const photo = Boolean(image && !isBackfilledFacePng(image))
         const label = displayName(bot, meta)
 
         return jsx('button', {
           type: 'button',
-          title: `Open ${label}'s chat`,
+          title: copy('sessions.openChat', label),
           className: cn(
             'flex items-center gap-1.5 rounded-md bg-(--chrome-action-hover) px-1.5 py-1 text-left transition-colors',
             'hover:bg-(--chrome-action-hover) hover:text-foreground'
@@ -7313,18 +10784,35 @@ function ActiveNowStrip({ roster, activeProfile, gatewayState, metaByName, onOpe
  *  Existing groups are independent toggles; the input creates and joins a new
  *  one. Canonical groups + the legacy scalar projection ride ui_meta. */
 function GroupDialog({ bot, onClose }) {
-  const meta = useValue($botMeta)
+  const copy = useAgentText()
+  const metaByName = useValue($botMeta)
   const [name, setName] = useState('')
-  const current = botGroups(meta[bot?.name])
-  const groups = knownGroups(meta)
+  const rowMeta = botRosterMeta(bot, metaByName, bot?.actionOwner)
+  const localMeta =
+    isExactLocalRosterOwner(bot?.actionOwner) && sameRosterOwner($botMetaOwner.get(), bot?.actionOwner)
+      ? metaByName
+      : {}
+  const current = botGroups(rowMeta)
+  const groups = knownGroups({ ...localMeta, [bot?.name]: rowMeta })
+  const actionCurrent = () =>
+    agentProfileActionMatchesOwner(bot, {
+      connectionId: host.state.connectionId?.get?.() || 'local',
+      profile: host.state.profile?.get?.() || 'default'
+    })
 
   const setMembership = (group, enabled) => {
-    saveBotMeta(bot.name, groupMembershipPatch(meta[bot.name], group, enabled))
+    if (!actionCurrent()) {
+      host.notify({ kind: 'error', message: copy('profile.sourceChanged') })
+      onClose()
+      return
+    }
+
+    saveBotMeta(bot.name, groupMembershipPatch(rowMeta, group, enabled), rowMeta, bot.actionOwner)
     host.notify({
       kind: 'info',
       message: enabled
-        ? `${displayName(bot, meta[bot.name])} added to “${group}”`
-        : `${displayName(bot, meta[bot.name])} removed from “${group}”`
+        ? copy('groups.added', displayName(bot, rowMeta), group)
+        : copy('groups.removed', displayName(bot, rowMeta), group)
     })
   }
 
@@ -7340,9 +10828,9 @@ function GroupDialog({ bot, onClose }) {
       children: [
         jsxs(DialogHeader, {
           children: [
-            jsx(DialogTitle, { children: 'Manage groups' }),
+            jsx(DialogTitle, { children: copy('groups.manage') }),
             jsx(DialogDescription, {
-              children: 'A bot can join multiple group chats. Memberships sync to every machine.'
+              children: copy('groups.manageDescription')
             })
           ]
         }),
@@ -7384,11 +10872,11 @@ function GroupDialog({ bot, onClose }) {
           children: [
             jsx(Input, {
               autoFocus: true,
-              placeholder: groups.length ? 'New group…' : 'Group name (e.g. Research)',
+              placeholder: groups.length ? copy('groups.newPlaceholder') : copy('groups.namePlaceholder'),
               value: name,
               onChange: event => setName(event.target.value)
             }),
-            jsx(Button, { type: 'submit', size: 'sm', disabled: !name.trim(), children: 'Create & join' })
+            jsx(Button, { type: 'submit', size: 'sm', disabled: !name.trim(), children: copy('groups.createJoin') })
           ]
         }),
         current.length
@@ -7396,8 +10884,15 @@ function GroupDialog({ bot, onClose }) {
               variant: 'ghost',
               size: 'sm',
               className: 'justify-self-start',
-              onClick: () => saveBotMeta(bot.name, { groups: [], group: null }),
-              children: 'Remove from all groups'
+              onClick: () => {
+                if (actionCurrent()) {
+                  saveBotMeta(bot.name, { groups: [], group: null }, rowMeta, bot.actionOwner)
+                } else {
+                  host.notify({ kind: 'error', message: copy('profile.sourceChanged') })
+                  onClose()
+                }
+              },
+              children: copy('groups.removeAll')
             })
           : null
       ]
@@ -7409,7 +10904,8 @@ function GroupDialog({ bot, onClose }) {
  *  search), name the group, create. Assignment appends to each local bot's
  *  group membership list, so the room appears in the roster and syncs
  *  cross-machine via ui_meta without replacing its other groups. */
-function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
+function CreateGroupChatDialog({ open, roster, rosterOwner, onClose, onCreated }) {
+  const copy = useAgentText()
   const allMeta = useValue($botMeta)
   const [query, setQuery] = useState('')
   const [checked, setChecked] = useState({})
@@ -7425,11 +10921,11 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
   }, [open])
 
   const selected = roster.filter(bot => checked[botRosterKey(bot)])
-  const visible = filterBots(roster, allMeta, query)
+  const visible = filterBots(roster, allMeta, query, rosterOwner)
   const atCap = selected.length >= GROUP_CHAT_MAX_MEMBERS
   const placeholder = selected.length
-    ? selected.map(bot => displayName(bot, botRosterMeta(bot, allMeta))).join(', ')
-    : 'Group name'
+    ? selected.map(bot => displayName(bot, botRosterMeta(bot, allMeta, rosterOwner))).join(', ')
+    : copy('groups.nameAria')
   const canCreate = selected.length >= 2 && Boolean(name.trim() || selected.length)
 
   const create = () => {
@@ -7446,7 +10942,8 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
     // both live rooms and any bot's current grouping.
     const taken = new Set(Object.keys($groupChats.get()))
 
-    for (const meta of Object.values($botMeta.get() || {})) {
+    for (const bot of roster) {
+      const meta = botRosterMeta(bot, allMeta, rosterOwner)
       for (const existing of botGroups(meta)) {
         taken.add(existing)
       }
@@ -7462,23 +10959,28 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
       groupName = `${groupName} ${n}`.slice(0, 64)
     }
 
+    const roomMembers = durableGroupChatMembers(selected, rosterOwner)
+
+    if (roomMembers.length !== selected.length) {
+      return
+    }
+
     for (const bot of selected) {
       if (!bot.remoteSource) {
-        void saveBotMeta(bot.name, groupMembershipPatch(botRosterMeta(bot, allMeta), groupName, true))
+        const meta = botRosterMeta(bot, allMeta, rosterOwner)
+        void saveBotMeta(bot.name, groupMembershipPatch(meta, groupName, true), meta, rosterOwner)
       }
     }
 
     // Persist every machine identity, including today's active source. That
     // member becomes remote after a source switch and cannot rely on the new
     // gateway's name-keyed bot metadata to remain seated in this room.
-    const roomMembers = durableGroupChatMembers(selected)
-
     updateGroupChat(groupName, room => {
       room.members = roomMembers
       return room
     })
 
-    host.notify({ kind: 'info', message: `“${groupName}” created with ${selected.length} bots` })
+    host.notify({ kind: 'info', message: copy('groups.created', groupName, selected.length) })
     onClose()
     onCreated?.(groupName)
   }
@@ -7495,18 +10997,18 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
       children: [
         jsxs(DialogHeader, {
           children: [
-            jsx(DialogTitle, { children: 'New Group Chat' }),
+            jsx(DialogTitle, { children: copy('groups.newChat') }),
             jsx(DialogDescription, {
-              children: `Pick 2–${GROUP_CHAT_MAX_MEMBERS} bots. Local memberships sync through each Bot profile; cross-machine members stay scoped to this room.`
+              children: copy('groups.pickDescription', GROUP_CHAT_MAX_MEMBERS)
             })
           ]
         }),
         jsx(SearchField, {
-          'aria-label': 'Search bots to add',
+          'aria-label': copy('groups.searchAria'),
           autoFocus: true,
           containerClassName: 'w-full',
           inputClassName: 'w-full',
-          placeholder: 'Search bots to add…',
+          placeholder: copy('groups.searchPlaceholder'),
           value: query,
           onChange: setQuery
         }),
@@ -7518,9 +11020,12 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
                   type: 'button',
                   className:
                     'flex items-center gap-1 rounded-full bg-(--chrome-action-hover) py-0.5 pl-2 pr-1.5 text-[0.6875rem] text-(--ui-text-secondary) transition-colors hover:text-foreground',
-                  title: 'Remove from selection',
+                  title: copy('groups.removeSelection'),
                   onClick: () => setChecked(prev => ({ ...prev, [botRosterKey(bot)]: false })),
-                  children: [displayName(bot, botRosterMeta(bot, allMeta)), jsx(Codicon, { name: 'close', className: 'text-[0.6rem]' })]
+                  children: [
+                    displayName(bot, botRosterMeta(bot, allMeta, rosterOwner)),
+                    jsx(Codicon, { name: 'close', className: 'text-[0.6rem]' })
+                  ]
                 }, botRosterKey(bot))
               )
             })
@@ -7531,7 +11036,7 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
             className: 'grid gap-0.5 pr-2',
             children: visible.length
               ? visible.map(bot => {
-                  const meta = botRosterMeta(bot, allMeta)
+                  const meta = botRosterMeta(bot, allMeta, rosterOwner)
                   const { shape, color, image } = botAppearance(bot.name, meta)
                   const isChecked = Boolean(checked[botRosterKey(bot)])
                   const disabled = !isChecked && atCap
@@ -7558,7 +11063,7 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
                             className: 'truncate text-[0.625rem] text-(--ui-text-quaternary)',
                             children: [
                               currentGroups.length
-                                ? `@${botHandle(bot.name, bot)} · in ${currentGroups.map(group => `“${group}”`).join(', ')}`
+                                ? `@${botHandle(bot.name, bot)} · ${copy('groups.inGroups', currentGroups.map(group => `“${group}”`).join(', '))}`
                                 : `@${botHandle(bot.name, bot)}`,
                               bot.remoteSource && bot.connectionLabel ? ` · ${bot.connectionLabel}` : ''
                             ].join('')
@@ -7575,7 +11080,7 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
                 })
               : jsx('div', {
                   className: 'px-1.5 py-3 text-center text-xs text-(--ui-text-tertiary)',
-                  children: query.trim() ? `No bots match “${query.trim()}”` : 'No bots yet — create agents first.'
+                  children: query.trim() ? copy('groups.noMatch', query.trim()) : copy('groups.noAgents')
                 })
           })
         }),
@@ -7585,7 +11090,7 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
             create()
           },
           children: jsx(Input, {
-            'aria-label': 'Group name',
+            'aria-label': copy('groups.nameAria'),
             maxLength: 64,
             placeholder,
             value: name,
@@ -7594,12 +11099,12 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
         }),
         jsxs(DialogFooter, {
           children: [
-            jsx(Button, { variant: 'secondary', onClick: onClose, children: 'Cancel' }),
+            jsx(Button, { variant: 'secondary', onClick: onClose, children: copy('common.cancel') }),
             jsx(Button, {
               disabled: !canCreate,
-              title: selected.length < 2 ? 'Pick at least 2 bots' : undefined,
+              title: selected.length < 2 ? copy('groups.pickMinimum') : undefined,
               onClick: create,
-              children: `Create Group${selected.length ? ` (${selected.length})` : ''}`
+              children: copy('groups.createAction', selected.length)
             })
           ]
         })
@@ -7614,7 +11119,8 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
  *  window (host.openWorkspace tile) and in the bots panel (older-desktop
  *  fallback); `onBack` is where the Back button routes — the main tile's
  *  closer, or clearing the in-panel workspace atom. */
-function GroupChatWorkspace({ group, members, onBack }) {
+function GroupChatWorkspace({ group, members, onBack, rosterOwner }) {
+  const copy = useAgentText()
   const rooms = useValue($groupChats)
   const allMeta = useValue($botMeta)
   const room = rooms[group] || { log: [], running: false }
@@ -7632,19 +11138,19 @@ function GroupChatWorkspace({ group, members, onBack }) {
         variant: 'ghost',
         size: 'sm',
         onClick: () => (onBack ? onBack() : $groupChatWorkspace.set(null)),
-        children: 'Back'
+        children: copy('common.back')
       }),
       jsx('div', {
         className: 'min-w-0 flex-1 truncate text-sm font-semibold',
-        children: `${group} — group chat`
+        children: copy('groups.chatHeading', group)
       }),
       // Member faces: the room's roster at a glance, matching each bot's
       // avatar in the sidebar. Falls back to the count for the title tooltip.
       jsx('div', {
         className: 'flex shrink-0 items-center -space-x-1.5',
-        title: members.map(b => displayName(b, botRosterMeta(b, allMeta))).join(', '),
+        title: members.map(b => displayName(b, botRosterMeta(b, allMeta, rosterOwner))).join(', '),
         children: members.slice(0, 6).map(b => {
-          const bMeta = botRosterMeta(b, allMeta)
+          const bMeta = botRosterMeta(b, allMeta, rosterOwner)
           const { shape, color, image } = botAppearance(b.name, bMeta)
           const photo = Boolean(image && !isBackfilledFacePng(image))
 
@@ -7656,13 +11162,13 @@ function GroupChatWorkspace({ group, members, onBack }) {
       }),
       jsx('span', {
         className: 'shrink-0 text-[0.65rem] text-(--ui-text-quaternary)',
-        children: `${members.length} bots`
+        children: copy('groups.memberCount', members.length)
       }),
       jsx(Button, {
         variant: 'ghost',
         size: 'sm',
         className: 'shrink-0 text-(--ui-text-tertiary) hover:text-destructive',
-        title: `Disband the ${group} group chat`,
+        title: copy('groups.disbandTitle', group),
         onClick: () => setConfirmDisband(true),
         children: jsx(Codicon, { name: 'trash' })
       })
@@ -7714,13 +11220,13 @@ function GroupChatWorkspace({ group, members, onBack }) {
                           ? (b.connectionLabel || b.connectionId) === entry.from.source
                           : !b.remoteSource)
                       ) || null
-                  const display = isUser ? 'You' : displayName(member || { name: entry.from.name }, meta)
+                  const display = isUser ? copy('groups.you') : displayName(member || { name: entry.from.name }, meta)
                   const entryKey = `${entry.at}:${index}`
                   const revealed = !isUser && revealedSpeaker === entryKey
                   // Clicked: append the gateway name so same-named agents on
                   // two connections are tellable apart on demand.
                   const label = isUser
-                    ? 'You'
+                    ? copy('groups.you')
                     : revealed
                       ? `${display}${entry.from.source ? `-${entry.from.source}` : ''} (@${botHandle(entry.from.name, member || undefined)})`
                       : display
@@ -7766,7 +11272,7 @@ function GroupChatWorkspace({ group, members, onBack }) {
                                     type: 'button',
                                     className:
                                       'cursor-pointer border-0 bg-transparent p-0 text-left text-[0.7rem] font-semibold text-(--ui-accent,#4f9cf9)',
-                                    title: revealed ? 'Hide full handle' : 'Show full handle',
+                                    title: revealed ? copy('groups.hideHandle') : copy('groups.showHandle'),
                                     onClick: () => setRevealedSpeaker(revealed ? null : entryKey),
                                     children: label
                                   }),
@@ -7789,15 +11295,15 @@ function GroupChatWorkspace({ group, members, onBack }) {
               : [
                   jsx('div', {
                     className: 'px-2 py-4 text-center text-xs text-(--ui-text-tertiary)',
-                    children: 'Say something — every bot in this group hears the room.'
+                    children: copy('groups.empty')
                   }, 'empty')
                 ]),
             room.running
               ? jsx('div', {
                   className: 'px-2 py-1 text-[0.7rem] italic text-(--ui-text-quaternary)',
                   children: room.turn
-                    ? `${groupSpeakerLabel(room.turn)} is thinking…`
-                    : 'The room is working…'
+                    ? copy('groups.thinking', groupSpeakerLabel(room.turn))
+                    : copy('groups.working')
                 }, 'working')
               : null
           ]
@@ -7813,37 +11319,27 @@ function GroupChatWorkspace({ group, members, onBack }) {
           },
           children: [
             jsx(Input, {
-              'aria-label': `Message ${group}`,
-              placeholder: `Message ${group}… (@name to direct, @everyone for all)`,
+              'aria-label': copy('groups.messageAria', group),
+              placeholder: copy('groups.messagePlaceholder', group),
               value: draft,
               onChange: event => setDraft(event.target.value)
             }),
-            jsx(Button, { type: 'submit', size: 'sm', disabled: !draft.trim(), children: 'Send' })
+            jsx(Button, { type: 'submit', size: 'sm', disabled: !draft.trim(), children: copy('groups.send') })
           ]
         })
       }),
       jsx(ConfirmDialog, {
         open: confirmDisband,
-        title: 'Disband group chat?',
-        description: jsxs('span', {
-          children: [
-            'This removes the ',
-            jsx('span', { className: 'font-medium text-foreground', children: group }),
-            ' grouping from its ',
-            String(members.length),
-            ' bots and clears the shared room log. The bots themselves and their “Group: ',
-            group,
-            '” sessions are kept — you can still open those from each bot’s session browser.'
-          ]
-        }),
+        title: copy('groups.disbandConfirm'),
+        description: copy('groups.disbandDescription', group, members.length),
         destructive: true,
-        confirmLabel: 'Disband',
-        busyLabel: 'Disbanding…',
-        doneLabel: 'Disbanded',
+        confirmLabel: copy('groups.disband'),
+        busyLabel: copy('groups.disbanding'),
+        doneLabel: copy('groups.disbanded'),
         onClose: () => setConfirmDisband(false),
         onConfirm: async () => {
           await disbandGroupChat(group, members)
-          host.notify({ kind: 'success', message: `Disbanded “${group}”` })
+          host.notify({ kind: 'success', message: copy('groups.disbandedToast', group) })
         }
       })
     ]
@@ -7876,9 +11372,15 @@ function GroupChatMainView({ group }) {
   // Subscribe: membership changes ride bot meta AND the room record.
   useValue($groupChats)
   const roster = useValue($lastRoster)
+  const rosterOwner = useValue($lastRosterOwner)
   const members = groupChatMemberBots(group, roster, allMeta)
 
-  return jsx(GroupChatWorkspace, { group, members, onBack: () => closeGroupChatMainTab(group) })
+  return jsx(GroupChatWorkspace, {
+    group,
+    members,
+    rosterOwner,
+    onBack: () => closeGroupChatMainTab(group)
+  })
 }
 
 /** Open a group chat the Discord way: a tab taking over the MAIN chat window
@@ -7913,6 +11415,7 @@ function openGroupChat(group) {
  *  needs-you badge on the row itself. Sorts into the same recency ordering
  *  as bot rows; clicking opens the room in the main chat window. */
 function GroupRow({ group, members, needsYou, onOpen }) {
+  const copy = useAgentText()
   const rooms = useValue($groupChats)
   const allMeta = useValue($botMeta)
   const room = rooms[group] || { log: [] }
@@ -7920,8 +11423,8 @@ function GroupRow({ group, members, needsYou, onOpen }) {
   const last = log.length ? log[log.length - 1] : null
   const lastAt = groupLastActivity(room)
   const preview = last
-    ? `${last.from?.kind === 'user' ? 'You' : `@${last.from?.name || 'bot'}`}: ${stripPreviewMarkdown(last.text) || '…'}`
-    : 'No messages yet — say hi to the room'
+    ? `${last.from?.kind === 'user' ? copy('groups.you') : `@${last.from?.name || 'agent'}`}: ${stripPreviewMarkdown(last.text) || '…'}`
+    : copy('groups.noMessages')
   const faces = members.slice(0, 3)
 
   return jsxs('button', {
@@ -7977,7 +11480,7 @@ function GroupRow({ group, members, needsYou, onOpen }) {
                   jsx('span', { className: 'truncate text-[0.8125rem] font-medium', children: group }),
                   jsx('span', {
                     className: 'shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)',
-                    children: `${members.length} bots`
+                    children: copy('groups.memberCount', members.length)
                   })
                 ]
               }),
@@ -7985,8 +11488,8 @@ function GroupRow({ group, members, needsYou, onOpen }) {
                 ? jsx('span', {
                     className:
                       'shrink-0 rounded-full bg-(--ui-accent,#4f9cf9) px-1.5 text-[0.6rem] font-semibold text-white',
-                    title: 'A bot in this room needs your input',
-                    children: 'needs you'
+                    title: copy('groups.needsInputTitle'),
+                    children: copy('groups.needsYou')
                   })
                 : null,
               lastAt
@@ -8007,22 +11510,619 @@ function GroupRow({ group, members, needsYou, onOpen }) {
   })
 }
 
-function BotsPane() {
-  const { data, error, isLoading, refetch } = useRoster()
+function useHydratedAgentRoster(open, roster, activeConnectionId) {
+  const [, setVersion] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const signature = roster.map(agentDescriptionKey).join('\u0000')
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (!open || !roster.length) {
+      setLoading(false)
+      return () => {
+        cancelled = true
+      }
+    }
+
+    const missing = roster.some(
+      bot => !cachedAgentDescription(agentDescriptionCache, agentDescriptionKey(bot), Date.now())
+    )
+    setLoading(missing)
+
+    void hydrateAgentDescriptions(roster, activeConnectionId, host, {
+      onUpdate: () => {
+        if (!cancelled) {
+          setVersion(value => value + 1)
+        }
+      }
+    }).finally(() => {
+      if (!cancelled) {
+        setLoading(false)
+        setVersion(value => value + 1)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeConnectionId, open, roster, signature])
+
+  return { loading, roster: mergeAgentDescriptions(roster) }
+}
+
+function SessionAgentsControl(surface) {
+  const copy = useAgentText()
+  const { data, rosterOwner: liveRosterOwner } = useRoster()
+  const memberships = useValue($collaborationMemberships)
+  const projectBindings = useValue($collaborationProjectBindings)
+  const sessionBindings = useValue($collaborationSessionBindings)
+  const allMeta = useValue($botMeta)
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const collaborationSurface = resolveCollaborationSurface(surface, projectBindings, sessionBindings)
+  const scopeAvailability = collaborationScopeAvailability(collaborationSurface)
+  const sessionAvailable = scopeAvailability.session
+  const projectAvailable = scopeAvailability.project
+  const [scope, setScope] = useState(sessionAvailable ? 'session' : 'project')
+  const hasLiveRoster = Array.isArray(data?.profiles)
+  const live = hasLiveRoster ? data.profiles : $lastRoster.get()
+  const rawRoster = Array.isArray(live) ? live : []
+  const rosterOwner = hasLiveRoster ? liveRosterOwner : $lastRosterOwner.get()
+  const scopedRosterOwner = collaborationRosterOwnerForSurface(rosterOwner, collaborationSurface)
+  const sourceId = scopeAvailability.sourceId
+  const hydrated = useHydratedAgentRoster(open, rawRoster, collaborationSourceId())
+  const roster = hydrated.roster
+  const lead =
+    roster.find(bot => isCollaborationLeadRosterBot(bot, collaborationSurface, scopedRosterOwner)) ||
+    { name: collaborationSurface.leadProfile }
+  const members = collaborationMembersForSurface(memberships, collaborationSurface, sourceId, sessionBindings)
+  const candidates = filterAgentCandidates(
+    roster.filter(bot => {
+      if (!bot?.name || !collaborationMemberForBot(bot, scopedRosterOwner)) {
+        return false
+      }
+
+      return !isCollaborationLeadRosterBot(bot, collaborationSurface, scopedRosterOwner)
+    }),
+    allMeta,
+    query,
+    copy,
+    scopedRosterOwner
+  )
+  const selectedKeys = new Set(
+    collaborationMembersInScope(memberships, collaborationSurface, scope, sourceId, sessionBindings).map(
+      collaborationMemberKey
+    )
+  )
+  const scopeAvailable = scope === 'session' ? sessionAvailable : projectAvailable
+  const scopeMessageKey = collaborationScopeMessageKey(scope, scopeAvailability)
+  const leadMeta = botRosterMeta(lead, allMeta, scopedRosterOwner)
+  const leadRole = agentRoleText(lead)
+  const leadDescription = agentDescriptionText(lead, leadMeta)
+  const leadModel = agentModelText(lead)
+  const leadCapability = agentCapabilityText(lead, leadMeta, copy)
+  const leadStatus = sessionAgentStatusPresentation('lead', surface, copy)
+  const leadAccessibleLabel = agentAccessibleLabel(lead, roster, leadMeta)
+
+  useEffect(() => {
+    rememberCollaborationProject(surface, { sessionBindings })
+    const projectMigration = migrateLegacyCollaborationProjectScope(
+      memberships,
+      surface,
+      surface.leadConnectionId
+    )
+    const sessionMigration = migrateRuntimeCollaborationSessionScope(
+      projectMigration.store,
+      surface,
+      surface.leadConnectionId,
+      sessionBindings
+    )
+
+    if (projectMigration.changed || sessionMigration.changed) {
+      saveCollaborationMemberships(sessionMigration.store)
+    }
+    rememberCollaborationSession(surface)
+  }, [
+    memberships,
+    sessionBindings,
+    surface.leadConnectionId,
+    surface.leadProfile,
+    surface.projectKey,
+    surface.projectResolutionKnown,
+    surface.runtimeSessionId,
+    surface.storedSessionId
+  ])
+
+  useEffect(() => {
+    if (scope === 'session' && !sessionAvailable && projectAvailable) {
+      setScope('project')
+    } else if (scope === 'project' && !projectAvailable && sessionAvailable) {
+      setScope('session')
+    }
+  }, [projectAvailable, scope, sessionAvailable])
+
+  const toggleMember = (bot, present) => {
+    if (
+      !scopeAvailable ||
+      !setCollaborationMember(collaborationSurface, scope, bot, present, {
+        rosterOwner: scopedRosterOwner,
+        sessionBindings
+      })
+    ) {
+      return
+    }
+
+    const label = displayName(bot, botRosterMeta(bot, allMeta, scopedRosterOwner))
+    host.notify?.({ kind: 'success', message: present ? copy('session.added', label) : copy('session.removed', label) })
+  }
+
+  return jsxs(DropdownMenu, {
+    open,
+    onOpenChange: value => {
+      setOpen(value)
+      if (!value) {
+        setQuery('')
+      }
+    },
+    children: [
+      jsx(Tip, {
+        label: copy('session.trigger', members.length),
+        children: jsx(DropdownMenuTrigger, {
+          asChild: true,
+          children: jsxs(Button, {
+            type: 'button',
+            variant: 'ghost',
+            size: 'xs',
+            className: cn(
+              'min-w-0 max-w-36 gap-1 px-1.5 text-[0.6875rem]',
+              members.length ? 'text-primary' : 'text-(--ui-text-tertiary)'
+            ),
+            'aria-label': copy('session.trigger', members.length),
+            'data-session-agents-trigger': '',
+            children: [
+              jsx(Codicon, { name: 'organization', className: 'size-3.5 shrink-0' }),
+              jsx('span', {
+                className: 'hidden min-w-0 truncate @md:inline',
+                children: members.length ? `${copy('session.title')} · ${members.length}` : copy('session.title')
+              }),
+              jsx(Codicon, { name: 'chevron-down', className: 'size-2.5 shrink-0 opacity-60' })
+            ]
+          })
+        })
+      }),
+      jsxs(DropdownMenuContent, {
+        align: 'end',
+        side: 'bottom',
+        sideOffset: 6,
+        className: 'w-[min(24rem,calc(100vw-1rem))] p-0',
+        children: [
+          jsxs('div', {
+            className: 'border-b border-(--ui-stroke-secondary) px-3 py-2.5',
+            children: [
+              jsx('div', { className: 'text-sm font-semibold text-foreground', children: copy('session.title') }),
+              jsx('div', {
+                className: 'mt-0.5 text-[0.6875rem] text-(--ui-text-tertiary)',
+                children: copy('session.leadHelp')
+              })
+            ]
+          }),
+          jsxs('div', {
+            className: 'border-b border-(--ui-stroke-secondary) px-3 py-2',
+            children: [
+              jsxs('div', {
+                className: 'flex min-w-0 items-center gap-2',
+                'aria-label': `${leadAccessibleLabel} · ${copy('session.lead')} · ${leadStatus.aria}`,
+                role: 'group',
+                children: [
+                  jsx(BotFace, { ...botAppearance(lead.name, leadMeta), name: lead.name, size: 30 }),
+                  jsxs('div', {
+                    className: 'min-w-0 flex-1',
+                    children: [
+                      jsxs('div', {
+                        className: 'flex min-w-0 items-center gap-1.5',
+                        children: [
+                          jsx('span', {
+                            className: 'truncate text-xs font-medium text-foreground',
+                            children: displayName(lead, leadMeta)
+                          }),
+                          jsx('span', {
+                            className: 'shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[0.5625rem] font-medium text-primary',
+                            children: copy('session.lead')
+                          }),
+                          jsx('span', {
+                            className: cn(
+                              'shrink-0 rounded-full px-1.5 py-0.5 text-[0.5625rem] font-medium',
+                              leadStatus.active
+                                ? 'bg-primary/10 text-primary'
+                                : 'bg-(--chrome-action-hover) text-(--ui-text-tertiary)'
+                            ),
+                            children: leadStatus.text
+                          }),
+                          leadModel
+                            ? jsx('span', {
+                                className: 'shrink-0 font-mono text-[0.5625rem] text-(--ui-text-quaternary)',
+                                children: leadModel
+                              })
+                            : null
+                        ]
+                      }),
+                      leadRole
+                        ? jsx('div', {
+                            className: 'truncate text-[0.625rem] text-(--ui-text-secondary)',
+                            children: leadRole
+                          })
+                        : null,
+                      leadDescription
+                        ? jsx('div', {
+                            className: 'truncate text-[0.625rem] text-(--ui-text-secondary)',
+                            children: leadDescription
+                          })
+                        : null,
+                      jsx('div', {
+                        className: 'truncate text-[0.625rem] text-(--ui-text-tertiary)',
+                        children: leadCapability || `@${botHandle(lead.name, lead)}`
+                      })
+                    ]
+                  })
+                ]
+              })
+            ]
+          }),
+          members.length
+            ? jsxs('div', {
+                className: 'border-b border-(--ui-stroke-secondary) px-3 py-2',
+                children: [
+                  jsx('div', {
+                    className: 'mb-1 text-[0.625rem] font-semibold uppercase tracking-wide text-(--ui-text-quaternary)',
+                    children: copy('session.collaborators')
+                  }),
+                  ...members.map(member => {
+                    const bot = rosterBotForMember(roster, member, scopedRosterOwner) || {
+                      name: member.profile,
+                      connectionId: member.connectionId,
+                      remoteSource: member.connectionId !== 'local'
+                    }
+                    const meta = botRosterMeta(bot, allMeta, scopedRosterOwner)
+                    const label = displayName(bot, meta)
+                    const source = agentSourcePresentation(bot, roster)
+                    const accessibleLabel = agentAccessibleLabel(bot, roster, meta)
+                    const inScope = member.scopes.includes(scope)
+                    const memberStatus = sessionAgentStatusPresentation('collaborator', surface, copy)
+
+                    return jsxs(
+                      'div',
+                      {
+                        className: 'flex min-w-0 items-center gap-2 rounded-md py-1',
+                        'aria-label': `${accessibleLabel} · ${memberStatus.aria}`,
+                        role: 'group',
+                        children: [
+                          jsx(BotFace, { ...botAppearance(bot.name, meta), name: bot.name, size: 26 }),
+                          jsxs('div', {
+                            className: 'min-w-0 flex-1',
+                            children: [
+                              jsxs('div', {
+                                className: 'flex min-w-0 items-center gap-1',
+                                children: [
+                                  jsx('span', { className: 'truncate text-xs text-foreground', children: label }),
+                                  source.visible
+                                    ? jsx('span', {
+                                        className:
+                                          'max-w-32 shrink-0 truncate rounded bg-(--chrome-action-hover) px-1 py-0.5 font-mono text-[0.5625rem] text-(--ui-text-tertiary)',
+                                        title: source.source,
+                                        children: source.accessible
+                                      })
+                                    : null,
+                                  ...member.scopes.map(value =>
+                                    jsx(
+                                      'span',
+                                      {
+                                        className:
+                                          'shrink-0 rounded bg-(--chrome-action-hover) px-1 py-0.5 text-[0.5625rem] text-(--ui-text-tertiary)',
+                                        children:
+                                          value === 'session' ? copy('session.scopeSession') : copy('session.scopeProject')
+                                      },
+                                      value
+                                    )
+                                  )
+                                ]
+                              }),
+                              jsx(Tip, {
+                                label: copy('session.workHint', botHandle(bot.name, bot)),
+                                children: jsx('div', {
+                                  className: 'truncate text-[0.625rem] text-(--ui-text-tertiary)',
+                                  children: source.visible
+                                    ? `${source.source} · ${memberStatus.text}`
+                                    : memberStatus.text
+                                })
+                              })
+                            ]
+                          }),
+                          jsx(Button, {
+                            type: 'button',
+                            size: 'icon',
+                            variant: 'ghost',
+                            disabled: !scopeAvailable,
+                            'aria-label': inScope
+                              ? copy('session.remove', accessibleLabel)
+                              : copy('session.invite', accessibleLabel),
+                            onClick: event => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              toggleMember(bot, !inScope)
+                            },
+                            children: jsx(Codicon, { name: inScope ? 'remove' : 'add', size: '0.8rem' })
+                          })
+                        ]
+                      },
+                      collaborationMemberKey(member)
+                    )
+                  })
+                ]
+              })
+            : null,
+          jsxs('div', {
+            className: 'grid gap-2 px-3 py-2.5',
+            children: [
+              jsxs('div', {
+                className: 'flex items-center gap-2',
+                role: 'group',
+                'aria-label': copy('session.scope'),
+                children: [
+                  jsx('span', {
+                    className: 'shrink-0 text-[0.625rem] font-medium text-(--ui-text-tertiary)',
+                    children: copy('session.scope')
+                  }),
+                  jsx(Button, {
+                    type: 'button',
+                    size: 'xs',
+                    variant: scope === 'session' ? 'secondary' : 'ghost',
+                    disabled: !sessionAvailable,
+                    'aria-pressed': scope === 'session',
+                    onClick: () => setScope('session'),
+                    children: copy('session.scopeSession')
+                  }),
+                  jsx(Button, {
+                    type: 'button',
+                    size: 'xs',
+                    variant: scope === 'project' ? 'secondary' : 'ghost',
+                    disabled: !projectAvailable,
+                    'aria-pressed': scope === 'project',
+                    onClick: () => setScope('project'),
+                    children: copy('session.scopeProject')
+                  })
+                ]
+              }),
+              scopeMessageKey
+                ? jsx('div', {
+                    className: 'text-[0.625rem] text-(--ui-warning,#d99b2b)',
+                    children: copy(scopeMessageKey)
+                  })
+                : null,
+              DropdownMenuSearch
+                ? jsx(DropdownMenuSearch, {
+                    'aria-label': copy('session.search'),
+                    className: 'w-full',
+                    placeholder: copy('session.search'),
+                    value: query,
+                    onValueChange: setQuery
+                  })
+                : jsx(SearchField, {
+                    'aria-label': copy('session.search'),
+                    containerClassName: 'w-full',
+                    inputClassName: 'w-full',
+                    placeholder: copy('session.search'),
+                    value: query,
+                    onChange: setQuery
+                  })
+            ]
+          }),
+          hydrated.loading
+            ? jsx('div', {
+                'aria-live': 'polite',
+                className: 'sr-only',
+                children: copy('common.searching')
+              })
+            : null,
+          jsx(ScrollArea, {
+            className: 'max-h-64',
+            children: candidates.length
+              ? jsx('div', {
+                  className: 'grid gap-0.5 px-2 pb-2',
+                  children: candidates.map(bot => {
+                    const member = collaborationMemberForBot(bot, scopedRosterOwner)
+                    const identity = collaborationMemberKey(member)
+                    const meta = botRosterMeta(bot, allMeta, scopedRosterOwner)
+                    const label = displayName(bot, meta)
+                    const source = agentSourcePresentation(bot, roster)
+                    const accessibleLabel = agentAccessibleLabel(bot, roster, meta)
+                    const role = agentRoleText(bot)
+                    const description = agentDescriptionText(bot, meta)
+                    const model = agentModelText(bot)
+                    const capability = agentCapabilityText(bot, meta, copy)
+                    const inScope = selectedKeys.has(identity)
+                    const CandidateItem = DropdownMenuCheckboxItem || DropdownMenuItem
+                    const selectionProps = DropdownMenuCheckboxItem
+                      ? {
+                          checked: inScope,
+                          onCheckedChange: checked => toggleMember(bot, checked === true),
+                          onSelect: event => event.preventDefault()
+                        }
+                      : {
+                          role: 'menuitemcheckbox',
+                          'aria-checked': inScope,
+                          onSelect: event => {
+                            event.preventDefault()
+                            toggleMember(bot, !inScope)
+                          }
+                        }
+
+                    return jsxs(
+                      CandidateItem,
+                      {
+                        ...selectionProps,
+                        disabled: !scopeAvailable,
+                        className:
+                          'flex min-w-0 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left outline-hidden focus:bg-(--chrome-action-hover) data-[disabled]:cursor-default data-[disabled]:opacity-55',
+                        'aria-label': inScope
+                          ? `${accessibleLabel} · ${copy('session.joined')}`
+                          : copy('session.invite', accessibleLabel),
+                        children: [
+                          jsx(BotFace, { ...botAppearance(bot.name, meta), name: bot.name, size: 30 }),
+                          jsxs('span', {
+                            className: 'min-w-0 flex-1',
+                            children: [
+                              jsxs('span', {
+                                className: 'flex min-w-0 items-center gap-1.5',
+                                children: [
+                                  jsx('span', { className: 'truncate text-xs font-medium text-foreground', children: label }),
+                                  source.visible
+                                    ? jsx('span', {
+                                        className:
+                                          'max-w-32 shrink-0 truncate rounded bg-(--chrome-action-hover) px-1 py-0.5 font-mono text-[0.5625rem] text-(--ui-text-tertiary)',
+                                        title: source.source,
+                                        children: source.accessible
+                                      })
+                                    : null,
+                                  model
+                                    ? jsx('span', {
+                                        className: 'shrink-0 font-mono text-[0.5625rem] text-(--ui-text-quaternary)',
+                                        children: model
+                                      })
+                                    : null
+                                ]
+                              }),
+                              role
+                                ? jsx('span', {
+                                    className: 'block truncate text-[0.625rem] text-(--ui-text-secondary)',
+                                    children: role
+                                  })
+                                : null,
+                              description
+                                ? jsx('span', {
+                                    className: 'block truncate text-[0.625rem] text-(--ui-text-secondary)',
+                                    children: description
+                                  })
+                                : null,
+                              jsx('span', {
+                                className: 'block truncate text-[0.625rem] text-(--ui-text-tertiary)',
+                                children: capability || copy('session.capabilities')
+                              })
+                            ]
+                          }),
+                          DropdownMenuCheckboxItem && inScope
+                            ? null
+                            : jsx(Codicon, {
+                                name: inScope ? 'check' : 'add',
+                                className: 'shrink-0',
+                                size: '0.8rem'
+                              })
+                        ]
+                      },
+                      botRosterKey(bot)
+                    )
+                  })
+                })
+              : jsx('div', {
+                  'aria-live': 'polite',
+                  className: 'px-4 py-5 text-center text-xs text-(--ui-text-tertiary)',
+                  children: hydrated.loading
+                    ? copy('common.searching')
+                    : query.trim()
+                      ? copy('session.noMatch')
+                      : copy('session.noCandidates')
+                })
+          }),
+          jsx('div', {
+            className: 'border-t border-(--ui-stroke-secondary) p-2',
+            children: jsxs(DropdownMenuItem, {
+              className: 'w-full cursor-pointer justify-start gap-2 px-2 py-1.5',
+              onSelect: () => {
+                setOpen(false)
+                host.navigate(AGENT_MANAGEMENT_PATH)
+              },
+              children: [jsx(Codicon, { name: 'settings-gear' }), copy('session.manage')]
+            })
+          })
+        ]
+      })
+    ]
+  })
+}
+
+function AgentsManagementPage() {
+  const copy = useAgentText()
+  const [tab, setTab] = useState('agents')
+
+  return jsxs('div', {
+    className: 'flex h-full min-w-0 flex-col overflow-hidden bg-(--ui-chat-surface-background)',
+    'data-agents-management-page': '',
+    children: [
+      jsxs('header', {
+        className: 'border-b border-(--ui-stroke-secondary) px-5 py-4',
+        children: [
+          jsx('h1', { className: 'text-base font-semibold text-foreground', children: copy('management.title') }),
+          jsx('p', {
+            className: 'mt-1 max-w-3xl text-xs text-(--ui-text-tertiary)',
+            children: copy('management.description')
+          }),
+          jsxs('div', {
+            className: 'mt-3 flex items-center gap-1',
+            children: [
+              jsx(Button, {
+                type: 'button',
+                size: 'sm',
+                variant: tab === 'agents' ? 'secondary' : 'ghost',
+                onClick: () => setTab('agents'),
+                children: copy('management.agents')
+              }),
+              jsx(Button, {
+                type: 'button',
+                size: 'sm',
+                variant: tab === 'routines' ? 'secondary' : 'ghost',
+                onClick: () => setTab('routines'),
+                children: copy('management.routines')
+              })
+            ]
+          })
+        ]
+      }),
+      jsx('main', {
+        className: 'min-h-0 min-w-0 flex-1 overflow-hidden',
+        children: tab === 'agents' ? jsx(BotsPane, { management: true }) : jsx(RoutinesPane, {})
+      })
+    ]
+  })
+}
+
+function BotsPane({ management = false } = {}) {
+  const copy = useAgentText()
+  const { data, error, isLoading, refetch, rosterOwner } = useRoster()
   const gatewayState = useValue(host.state.gateway)
   const gatewayUp = gatewayState === 'open'
   const activeProfile = (useValue(host.state.profile) || 'default').trim() || 'default'
+  const currentProfileActionOwner = {
+    connectionId: String(host.state.connectionId?.get?.() || 'local').trim() || 'local',
+    profile: activeProfile
+  }
   const [createOpen, setCreateOpen] = useState(false)
   const [groupCreateOpen, setGroupCreateOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [deleting, setDeleting] = useState(null)
   const [grouping, setGrouping] = useState(null)
   const [query, setQuery] = useState('')
+  const newAgentRequest = useValue($newAgentRequest)
   const activityToasts = useValue($activityToasts)
   const sessionsWorkspaceName = useValue($botSessionsWorkspace)
   const groupChatName = useValue($groupChatWorkspace)
   const groupNeedsYou = useValue($groupNeedsYou)
   const groupRooms = useValue($groupChats)
+
+  useEffect(() => {
+    if (management && newAgentRequest > 0 && consumeNewAgentRequest()) {
+      setCreateOpen(true)
+    }
+  }, [management, newAgentRequest])
 
   // The socket opening (boot, SSH reconnect, sleep/wake) is the signal to
   // retry immediately instead of waiting out the poll interval.
@@ -8036,49 +12136,38 @@ function BotsPane() {
   // the newest of (bot created, last message in any of its sessions). A
   // freshly created bot tops the list until another bot gets a message.
   // No special slot for the primary bot — it competes on recency too.
-  const activityOf = bot => {
-    const created = botRosterMeta(bot, allMeta)?.created || bot.ui_meta?.['hermes-bots']?.created || 0
-    const lastMsg = (bot.last_session?.last_active || 0) * 1000
-
-    return Math.max(created, lastMsg)
-  }
+  const activityOf = bot => rosterActivity(bot, allMeta, rosterOwner)
   // Pinned bots (right-click → Pin) float to the top as a group; within the
   // pinned group and within the unpinned group, recency still rules. A
   // plain boolean flag in bot-meta (rides ui_meta to every machine).
-  const isPinned = bot => Boolean(botRosterMeta(bot, allMeta)?.pinned)
+  const isPinned = bot => rosterPinned(bot, allMeta, rosterOwner)
   // Resilience (@wesleysimplicio, #13): a failed refresh must not erase a
   // roster the user already had — mixed local+cloud gateways and remotes
   // waking from sleep fail transiently. Render the last good snapshot with
   // a notice; the full error card is reserved for "never had a roster".
   const live = Array.isArray(data?.profiles) ? data.profiles : null
   const source = live ?? (error ? $lastRoster.get() : [])
-  const roster = source.slice().sort((a, b) => {
-    const pa = isPinned(a) ? 1 : 0
-    const pb = isPinned(b) ? 1 : 0
-
-    if (pa !== pb) {
-      return pb - pa
-    }
-
-    return activityOf(b) - activityOf(a)
-  })
+  const roster = sortRosterSnapshot(source, allMeta, rosterOwner)
   const activeSourceRoster = roster.filter(bot => !bot.remoteSource)
+  const groupEligibleRoster = groupChatEligibleBots(roster, rosterOwner)
   // Hidden bots (right-click → Hide Bot) drop out of the roster list unless
   // the header eye toggle reveals them. Display-only: every other consumer
   // (mentions, group chats, name-collision checks, merge/avatar/activity
   // sweeps) keeps the FULL roster.
   const showHidden = useValue($showHiddenBots)
   const unreadByName = useValue($botUnread)
-  const hiddenBots = roster.filter(bot => isBotHidden(bot, allMeta))
+  const hiddenBots = roster.filter(bot => isBotHidden(bot, allMeta, rosterOwner))
   const hiddenUnread = hiddenBots.some(bot => !bot.remoteSource && unreadByName[bot.name])
-  const visibleRoster = showHidden ? roster : roster.filter(bot => !isBotHidden(bot, allMeta))
-  const filteredRoster = filterBots(visibleRoster, allMeta, query)
+  const visibleRoster = showHidden ? roster : roster.filter(bot => !isBotHidden(bot, allMeta, rosterOwner))
+  const filteredRoster = filterBots(visibleRoster, allMeta, query, rosterOwner)
   // Group chats are first-class roster rows (Discord-style): one standalone
   // row per room, competing in the SAME recency ordering as bot rows — a
   // group's activity is its newest room-log line. Pinned bots still lead;
   // groups and unpinned bots interleave by recency below them.
   const needle = query.trim().toLowerCase()
-  const groupRows = groupChatNames(allMeta, groupRooms)
+  const scopedLegacyMeta =
+    isExactLocalRosterOwner(rosterOwner) && sameRosterOwner($botMetaOwner.get(), rosterOwner) ? allMeta : {}
+  const groupRows = groupChatNames(scopedLegacyMeta, groupRooms)
     .filter(name => !needle || name.toLowerCase().includes(needle))
     .map(name => ({
       kind: 'group',
@@ -8100,16 +12189,8 @@ function BotsPane() {
     return b.activity - a.activity
   })
 
-  if (live) {
-    $lastRoster.set(roster)
-    mergeServerMeta(activeSourceRoster)
-    pullServerAvatars(activeSourceRoster)
-    trackInboundActivity(activeSourceRoster)
-    backfillMessagingProtocol(activeSourceRoster)
-  }
-
   const staleNotice = error && !live && roster.length
-    ? 'Roster refresh failed — showing the last good list.' + (gatewayUp ? '' : ' Waiting for the gateway to reconnect…')
+    ? copy('roster.stale') + (gatewayUp ? '' : copy('roster.waitingReconnect'))
     : null
   const sessionsWorkspaceBot = roster.find(bot => bot.name === sessionsWorkspaceName)
 
@@ -8120,7 +12201,7 @@ function BotsPane() {
   const groupChatMembers = groupChatName ? groupChatMemberBots(groupChatName, roster, allMeta) : []
 
   if (groupChatName && groupChatMembers.length) {
-    return jsx(GroupChatWorkspace, { group: groupChatName, members: groupChatMembers })
+    return jsx(GroupChatWorkspace, { group: groupChatName, members: groupChatMembers, rosterOwner })
   }
 
   return jsxs('div', {
@@ -8131,13 +12212,13 @@ function BotsPane() {
         children: [
           jsx('span', {
             className: 'text-[0.6875rem] font-semibold uppercase tracking-wider text-(--ui-text-quaternary)',
-            children: 'Bots'
+            children: copy('roster.title')
           }),
           jsxs('div', {
             className: 'flex items-center gap-0.5',
             children: [
               jsx(Tip, {
-                label: activityToasts ? 'Activity toasts on — click to silence' : 'Activity toasts off — click to enable',
+                label: activityToasts ? copy('roster.toastsOn') : copy('roster.toastsOff'),
                 children: jsx('button', {
                   type: 'button',
                   className:
@@ -8152,11 +12233,11 @@ function BotsPane() {
               hiddenBots.length
                 ? jsx(Tip, {
                     label: showHidden
-                      ? 'Hide hidden bots again'
-                      : `Show ${hiddenBots.length} hidden bot${hiddenBots.length === 1 ? '' : 's'}`,
+                      ? copy('roster.hideHiddenAgain')
+                      : copy('roster.showHidden', hiddenBots.length),
                     children: jsxs('button', {
                       type: 'button',
-                      'aria-label': showHidden ? 'Hide hidden bots' : 'Show hidden bots',
+                      'aria-label': showHidden ? copy('roster.hideHidden') : copy('roster.showHiddenAria'),
                       className: cn(
                         'relative flex size-6 items-center justify-center rounded-md transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground',
                         showHidden ? 'text-foreground' : 'text-(--ui-text-tertiary)'
@@ -8168,7 +12249,7 @@ function BotsPane() {
                           ? jsx('span', {
                               className:
                                 'absolute right-0.5 top-0.5 size-1.5 rounded-full bg-(--ui-accent,#4f9cf9)',
-                              'aria-label': 'a hidden bot has unread activity'
+                              'aria-label': copy('roster.hiddenUnread')
                             })
                           : null
                       ]
@@ -8178,12 +12259,12 @@ function BotsPane() {
               jsxs(DropdownMenu, {
                 children: [
                   jsx(Tip, {
-                    label: 'New…',
+                    label: copy('roster.newMenu'),
                     children: jsx(DropdownMenuTrigger, {
                       asChild: true,
                       children: jsx('button', {
                         type: 'button',
-                        'aria-label': 'New agent or group chat',
+                        'aria-label': copy('roster.newAria'),
                         className:
                           'flex size-6 items-center justify-center rounded-md text-(--ui-text-tertiary) transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground',
                         children: jsx(Codicon, { name: 'add' })
@@ -8195,12 +12276,12 @@ function BotsPane() {
                     children: [
                       jsxs(DropdownMenuItem, {
                         onSelect: () => setCreateOpen(true),
-                        children: [jsx(Codicon, { name: 'hubot', className: 'mr-1.5' }), 'New Agent']
+                        children: [jsx(Codicon, { name: 'hubot', className: 'mr-1.5' }), copy('common.newAgent')]
                       }),
                       jsxs(DropdownMenuItem, {
-                        disabled: activeSourceRoster.length < 2,
+                        disabled: groupEligibleRoster.length < 2,
                         onSelect: () => setGroupCreateOpen(true),
-                        children: [jsx(Codicon, { name: 'organization', className: 'mr-1.5' }), 'New Group Chat']
+                        children: [jsx(Codicon, { name: 'organization', className: 'mr-1.5' }), copy('common.newGroupChat')]
                       })
                     ]
                   })
@@ -8215,6 +12296,7 @@ function BotsPane() {
         activeProfile,
         gatewayState,
         metaByName: allMeta,
+        rosterOwner,
         onOpen: bot => {
           haptic('tap')
           $selectedBot.set(bot.name)
@@ -8224,7 +12306,7 @@ function BotsPane() {
             host.notify?.({
               kind: 'info',
               title: displayName(bot),
-              message: `Stay in this chat and @${handle} to message them. Gateway stays on this device.`
+              message: copy('remote.stayHere', handle)
             })
             return
           }
@@ -8236,24 +12318,34 @@ function BotsPane() {
           }
 
           void (async () => {
-            let pinnedChat = botRosterMeta(bot, allMeta)?.chat
+            let pinnedChat = botRosterMeta(bot, allMeta, rosterOwner)?.chat
 
             try {
               pinnedChat = await prepareBotSource(bot, pinnedChat)
             } catch (error) {
-              host.notifyError?.(error, `Could not reach ${bot.connectionLabel || 'the remote source'}`)
+              host.notifyError?.(error, copy('remote.couldNotReach', bot.connectionLabel || copy('remote.sourceFallback')))
 
               return
             }
 
+            const openOwner = normalizeRosterOwner(bot.connectionId || rosterOwner?.connectionId, rosterOwner?.profile)
+
+            if (!openOwner || !rosterOwnerStillActive(openOwner)) {
+              return
+            }
+
             try {
-              const id = await openBotCanonicalChat(bot.name, pinnedChat, bot.last_session)
+              const id = await openBotCanonicalChat(bot.name, pinnedChat, bot.last_session, openOwner)
 
               if (id) {
                 return
               }
             } catch {
               // Fall through to the older-gateway draft below.
+            }
+
+            if (!rosterOwnerStillActive(openOwner)) {
+              return
             }
 
             if (typeof host.newChat === 'function') {
@@ -8268,10 +12360,10 @@ function BotsPane() {
         ? jsx('div', {
             className: 'px-2.5 pb-1.5',
             children: jsx(SearchField, {
-              'aria-label': 'Search bots',
+              'aria-label': copy('roster.searchAria'),
               containerClassName: 'w-full',
               inputClassName: 'w-full',
-              placeholder: 'Search bots…',
+              placeholder: copy('roster.searchPlaceholder'),
               value: query,
               onChange: setQuery
             })
@@ -8294,23 +12386,23 @@ function BotsPane() {
               children: [
                 jsx('div', {
                   children: gatewayUp
-                    ? `Roster unavailable: ${error instanceof Error ? error.message : 'gateway error'}. If your gateway predates profiles.list, update Hermes and restart the gateway.`
-                    : 'Waiting for the gateway connection… (remote gateways can take a few seconds; retries automatically)'
+                    ? copy('roster.unavailable', error instanceof Error ? error.message : copy('roster.gatewayError'))
+                    : copy('roster.waitingGateway')
                 }),
                 jsx(Button, {
                   variant: 'secondary',
                   size: 'sm',
                   className: 'justify-self-start',
                   onClick: () => void refetch(),
-                  children: 'Retry now'
+                  children: copy('common.retryNow')
                 })
               ]
             })
           : roster.length === 0
             ? jsx(EmptyState, {
                 icon: 'hubot',
-                title: 'No agents yet',
-                description: 'Create your first teammate.'
+                title: copy('roster.none'),
+                description: copy('roster.noneHelp')
               })
             : filteredRoster.length === 0 && rosterRows.length === 0
               ? jsx('div', {
@@ -8319,8 +12411,8 @@ function BotsPane() {
                     'flex flex-1 items-center justify-center px-4 text-center text-xs text-(--ui-text-tertiary)',
                   role: 'status',
                   children: query.trim()
-                    ? `No bots match “${query.trim()}”`
-                    : 'All bots are hidden — use the eye button above to show them.'
+                    ? copy('roster.noMatch', query.trim())
+                    : copy('roster.allHidden')
                 })
               : jsx(ScrollArea, {
                   className: 'hermes-bots-roster min-h-0 flex-1',
@@ -8342,7 +12434,13 @@ function BotsPane() {
                           )
                         : jsx(
                             BotRow,
-                            { bot: row.bot, onDelete: setDeleting, onEdit: setEditing, onGroup: setGrouping },
+                            {
+                              bot: row.bot,
+                              rosterOwner,
+                              onDelete: setDeleting,
+                              onEdit: setEditing,
+                              onGroup: setGrouping
+                            },
                             botRosterKey(row.bot)
                           )
                     )
@@ -8354,7 +12452,7 @@ function BotsPane() {
           className: 'w-full justify-center gap-1.5',
           variant: 'secondary',
           onClick: () => setCreateOpen(true),
-          children: [jsx(Codicon, { name: 'add' }), 'New Agent']
+          children: [jsx(Codicon, { name: 'add' }), copy('common.newAgent')]
         })
       }),
       jsx(CreateAgentDialog, {
@@ -8369,47 +12467,55 @@ function BotsPane() {
         open: groupCreateOpen,
         // Full multi-source roster: group chats can seat bots from other
         // registered connections — their turns route to their own machines.
-        roster,
+        roster: groupEligibleRoster,
+        rosterOwner,
         onClose: () => setGroupCreateOpen(false),
         onCreated: groupName => openGroupChat(groupName)
       }),
       jsx(EditProfileDialog, {
-        bot: editing,
-        open: Boolean(editing),
+        bot: agentProfileActionMatchesOwner(editing, currentProfileActionOwner) ? editing : null,
+        open: agentProfileActionMatchesOwner(editing, currentProfileActionOwner),
         onClose: () => {
           setEditing(null)
           void refetch()
         }
       }),
-      grouping ? jsx(GroupDialog, { bot: grouping, onClose: () => setGrouping(null) }) : null,
+      agentProfileActionMatchesOwner(grouping, currentProfileActionOwner)
+        ? jsx(GroupDialog, { bot: grouping, onClose: () => setGrouping(null) })
+        : null,
       jsx(ConfirmDialog, {
-        open: Boolean(deleting),
-        title: 'Delete bot and profile?',
+        open: agentProfileActionMatchesOwner(deleting, currentProfileActionOwner),
+        title: copy('roster.deleteTitle'),
         description: deleting
           ? jsxs('span', {
               children: [
-                'This will permanently delete the bot ',
+                copy('roster.deleteDescriptionStart'),
                 jsx('span', { className: 'font-medium text-foreground', children: deleting.name }),
-                ' and its associated Hermes profile at ',
+                copy('roster.deleteDescriptionMiddle'),
                 jsx('span', { className: 'font-mono text-xs', children: deleting.path }),
-                '. This cannot be undone.'
+                copy('roster.deleteDescriptionEnd')
               ]
             })
           : null,
         destructive: true,
-        confirmLabel: 'Delete',
-        busyLabel: 'Deleting…',
-        doneLabel: 'Deleted',
+        confirmLabel: copy('common.delete'),
+        busyLabel: copy('common.deleting'),
+        doneLabel: copy('common.deleted'),
         onClose: () => setDeleting(null),
         onConfirm: async () => {
-          if (!deleting) {
-            return
+          const liveOwner = {
+            connectionId: String(host.state.connectionId?.get?.() || 'local').trim() || 'local',
+            profile: String(host.state.profile?.get?.() || 'default').trim() || 'default'
+          }
+
+          if (!agentProfileActionMatchesOwner(deleting, liveOwner)) {
+            throw new Error(copy('profile.sourceChanged'))
           }
 
           const name = deleting.name
           await deleteBot(deleting)
           await refetch()
-          host.notify({ kind: 'success', message: `Deleted profile ${name}` })
+          host.notify({ kind: 'success', message: copy('profile.deleted', name) })
         }
       })
     ]
@@ -8418,12 +12524,189 @@ function BotsPane() {
 
 // ── plugin ───────────────────────────────────────────────────────────────────
 
+function registerAgentSurfaces(ctx, namespace) {
+  const capabilities = namespace ?? (typeof sdk === 'undefined' ? null : sdk)
+  const registered = []
+
+  if (typeof capabilities?.SESSION_AGENTS_AREA === 'string') {
+    ctx.register({
+      id: 'session-control',
+      area: capabilities.SESSION_AGENTS_AREA,
+      data: { render: surface => jsx(SessionAgentsControl, surface) }
+    })
+    registered.push('session-control')
+  }
+
+  if (typeof capabilities?.ROUTES_AREA === 'string') {
+    ctx.register({
+      id: 'management-page',
+      area: capabilities.ROUTES_AREA,
+      data: { path: AGENT_MANAGEMENT_PATH },
+      render: () => jsx(AgentsManagementPage, {})
+    })
+    registered.push('management-page')
+  }
+
+  return registered
+}
+
+function createAgentPaletteContributions(options = {}) {
+  const text = typeof options.text === 'function' ? options.text : agentText
+  const navigate = typeof options.navigate === 'function' ? options.navigate : path => host.navigate(path)
+  const queueNew = typeof options.queueNew === 'function' ? options.queueNew : queueNewAgentRequest
+
+  // The management page is optional on older SDKs. Do not publish commands
+  // that can only navigate to an unregistered/dead route.
+  if (options.routeAvailable === false) {
+    return []
+  }
+
+  return [
+    {
+      id: 'manage-agents',
+      area: PALETTE_AREA,
+      data: {
+        id: `${ID}.manage-agents`,
+        label: () => text('palette.manage'),
+        keywords: ['agents', 'profiles', 'capabilities', 'routines', 'manage'],
+        run: () => navigate(AGENT_MANAGEMENT_PATH)
+      }
+    },
+    {
+      id: 'new-agent',
+      area: PALETTE_AREA,
+      data: {
+        id: `${ID}.new-agent`,
+        label: () => text('palette.newAgent'),
+        keywords: ['bot', 'agent', 'profile', 'teammate', 'create'],
+        run: () => {
+          queueNew()
+          navigate(AGENT_MANAGEMENT_PATH)
+        }
+      }
+    }
+  ]
+}
+
+// Executable, side-effect-free seams for Node behavior tests. Keeping them on
+// the default single-file plugin avoids a second runtime module and avoids
+// tests that copy, regex, or evaluate slices of production source.
+const hermesBotsTesting = Object.freeze({
+  AGENT_LOCALES,
+  agentCapabilityCatalogRequestCurrent,
+  agentCapabilityCatalogScopeKey,
+  agentDraftFinalizePlan,
+  agentAccessibleLabel,
+  agentCapabilityText,
+  agentCreationFieldsLocked,
+  agentCreateAuthPayload,
+  agentSharedAuthCreateResultAccepted,
+  agentDraftProtocolInjected,
+  agentDeleteClearsLegacyMeta,
+  agentEmbeddedCapabilitiesAvailable,
+  agentMcpSetupAvailable,
+  agentProfileDeleteRoute,
+  agentProfileActionMatchesOwner,
+  agentProfileActionsAvailable,
+  agentDescriptionText,
+  agentDescriptionKey,
+  agentRoleText,
+  agentSourcePresentation,
+  agentSourceUnavailableMessage,
+  applyAgentDraftAppearance,
+  botRosterMeta,
+  canonicalCreationKey,
+  cachedRosterSnapshot,
+  collaborationMemberKey,
+  collaborationMemberForBot,
+  collaborationMembersInScope,
+  collaborationMembersForSurface,
+  collaborationProjectBindingKeys,
+  collaborationProjectBindingKey,
+  collaborationSessionBindingKey,
+  collaborationRosterOwnerForSurface,
+  collaborationScopeAvailability,
+  collaborationScopeKey,
+  collaborationScopeMessageKey,
+  composeSoul,
+  consumeNewAgentRequest,
+  captureAgentProfileAction,
+  createAgentDraftLifecycle,
+  createAgentDraftProvenance,
+  createAgentPaletteContributions,
+  createMcpRequester,
+  createRosterSnapshotCoordinator,
+  createRosterOwnerRequester,
+  durableGroupChatMembers,
+  emptyCollaborationMemberships,
+  ensureMessagingProtocol,
+  ensureRemoteCanonicalChat,
+  filterAgentCandidates,
+  groupChatEligibleBots,
+  groupChatMemberBots,
+  hydrateAgentDescriptions,
+  hasMessagingProtocol,
+  backfillMessagingProtocol,
+  mergeAgentDescriptions,
+  mergeCollaborationMemberships,
+  mergeCollaborationSessionBindings,
+  migrateLegacyCollaborationProjectScope,
+  migrateRuntimeCollaborationSessionScope,
+  normalizeAgentDescription,
+  normalizeAgentConnections,
+  normalizeCollaborationMemberships,
+  normalizeCollaborationProjectBindings,
+  normalizeCollaborationSessionBindings,
+  normalizeRosterOwner,
+  invokeAgentProfileAction,
+  isCollaborationLeadRosterBot,
+  isLegacyDelegatedRoutine,
+  queueNewAgentRequest,
+  registerAgentLocales,
+  registerAgentSurfaces,
+  rememberCollaborationProject,
+  rememberCollaborationSession,
+  prepareBotSource,
+  persistAvatarForOwner,
+  requestAgentDraft,
+  requestForBot,
+  resolveCollaborationSurface,
+  resolveRosterMentions,
+  rosterOwnerStillActive,
+  rosterBotForMember,
+  rosterMentionCompletionsFromCache,
+  rosterMentionsFromCache,
+  routineCreateTarget,
+  routineFilterHint,
+  routineInputError,
+  routineOwnerKey,
+  routinePrompt,
+  routineQueryKey,
+  selectRoutineJobs,
+  runRoutineAction,
+  loadRoutines,
+  loadAdvancedProfileConfig,
+  loadAgentCapabilityCatalog,
+  mcpRpc,
+  mcpSetupSupported,
+  sessionAgentStatusPresentation,
+  setCollaborationMember,
+  sortRosterSnapshot,
+  updateCollaborationMembership,
+  updateCollaborationProjectBinding,
+  updateCollaborationSessionBinding,
+  updateDurableGroupMembership
+})
+
 export default {
+  __testing: hermesBotsTesting,
   id: ID,
-  name: 'Bots',
-  description: 'Bot Mode — a one-chat-per-agent roster with avatars, routines, group chats, and bot-to-bot messaging. Ships with the app; disable here if unwanted.',
+  name: 'Agents',
+  description: agentManifestDescription,
+  required: true,
   register(ctx) {
     pluginCtx = ctx
+    registerAgentLocales(ctx)
     startFaceClock()
     // Disabling the plugin (or a hot reload) must actually stop the clock —
     // before this, the rAF loop + 1Hz document scan ran until app restart.
@@ -8442,43 +12725,19 @@ export default {
       area: COMPOSER_AREAS.atCompletions,
       data: {
         provide: query => {
-          const roster = queryClient.getQueryData(ROSTER_KEY)
-          const profiles = Array.isArray(roster?.profiles) ? roster.profiles : []
-
-          if (!profiles.length) {
-            return []
-          }
-
           const active = (host.state.profile.get() || 'default').trim() || 'default'
-          const q = (query || '').toLowerCase()
-          const items = []
           const live = {
             name: active,
             connectionId: String(host.state.connectionId?.get?.() || host.activeConnectionId?.() || 'local')
           }
 
-          for (const profile of profiles) {
-            if (!profile?.name || isActiveRosterBot(profile, live)) {
-              continue
-            }
-
-            const handle = botHandle(profile.name, profile)
-
-            if (q && !handle.toLowerCase().startsWith(q)) {
-              continue
-            }
-
-            const display = displayName(profile, $botMeta.get()[profile.name])
-            const source = profile.connectionLabel ? ` · ${profile.connectionLabel}` : ''
-
-            items.push({
-              insert: `@${handle}`,
-              display: `@${handle}`,
-              meta: `Bot · ${display}${source}`
-            })
-          }
-
-          return items.slice(0, 8)
+          return rosterMentionCompletionsFromCache(
+            query,
+            queryClient,
+            host.state.connectionId?.get?.(),
+            live,
+            $botMeta.get()
+          )
         }
       }
     })
@@ -8492,24 +12751,40 @@ export default {
       document.head.appendChild(style)
     }
 
-    // Hydrate persisted avatars/titles. Storage may be sync, async, or
-    // absent depending on shell version — normalize through Promise.resolve
-    // inside a try so a storage quirk can NEVER fail the plugin load.
-    try {
-      Promise.resolve(ctx.storage?.get?.('bot-meta'))
-        .then(value => {
-          if (value && typeof value === 'object' && !Array.isArray(value)) {
-            const live = $botMeta.get()
+    // Hydrate persisted avatars/titles only for the explicit local source.
+    // `bot-meta` predates Connections and is keyed by bare profile name, so
+    // loading it while A/B/unknown is active would let same-named Agents
+    // borrow local metadata. Re-run when a later source transition reaches
+    // `local`; older storage remains compatible without becoming global.
+    const hydrateLocalBotMeta = () => {
+      try {
+        Promise.resolve(ctx.storage?.get?.('bot-meta'))
+          .then(value => {
+            const owner = currentBotMetaOwner()
+
+            if (!isExactLocalRosterOwner(owner) || !value || typeof value !== 'object' || Array.isArray(value)) {
+              return
+            }
+
+            const live = isExactLocalRosterOwner($botMetaOwner.get()) ? $botMeta.get() : {}
             const next = { ...value }
             for (const name of Object.keys(live)) {
               next[name] = { ...(value[name] || {}), ...live[name] }
             }
+            $botMetaOwner.set(owner)
             $botMeta.set(next)
-          }
-        })
-        .catch(() => undefined)
-    } catch {
-      /* no storage on this shell — defaults stay */
+          })
+          .catch(() => undefined)
+      } catch {
+        /* no storage on this shell — defaults stay */
+      }
+    }
+
+    hydrateLocalBotMeta()
+    const unbindBotMetaConnection = host.state.connectionId?.listen?.(hydrateLocalBotMeta)
+
+    if (typeof unbindBotMetaConnection === 'function' && typeof ctx.onDispose === 'function') {
+      ctx.onDispose(unbindBotMetaConnection)
     }
 
     // Bot Mode sessions are always hidden now — the old "hide Bot Chats"
@@ -8559,6 +12834,50 @@ export default {
       /* no storage — rooms start empty */
     }
 
+    // v31 collaborator membership is additive. It never rewrites legacy
+    // profile, session, group-chat, or routine data, and malformed records
+    // safely become an empty set.
+    try {
+      Promise.resolve(ctx.storage?.get?.(COLLABORATION_KEY, emptyCollaborationMemberships()))
+        .then(value => {
+          const merged = mergeCollaborationMemberships(value, $collaborationMemberships.get())
+
+          if (hasFutureCollaborationSchema(merged)) {
+            $collaborationMemberships.set(merged)
+          } else {
+            saveCollaborationMemberships(merged)
+          }
+        })
+        .catch(() => undefined)
+    } catch {
+      /* no storage — invitations made in this window remain available */
+    }
+
+    try {
+      Promise.resolve(ctx.storage?.get?.(COLLABORATION_PROJECT_BINDINGS_KEY, {}))
+        .then(value => {
+          const stored = normalizeCollaborationProjectBindings(value)
+          const live = $collaborationProjectBindings.get()
+
+          saveCollaborationProjectBindings({ ...stored, ...live })
+        })
+        .catch(() => undefined)
+    } catch {
+      /* no storage — bindings learned in this window remain available */
+    }
+
+    try {
+      Promise.resolve(ctx.storage?.get?.(COLLABORATION_SESSION_BINDINGS_KEY, {}))
+        .then(value => {
+          const merged = mergeCollaborationSessionBindings(value, $collaborationSessionBindings.get())
+
+          saveCollaborationSessionBindings(merged)
+        })
+        .catch(() => undefined)
+    } catch {
+      /* no storage — the live runtime/durable bridge remains available */
+    }
+
     // Routines follow the chat you're in: track the live gateway profile.
     // Capture the unbinds: without them a disable → re-enable cycle stacks a
     // duplicate listener per cycle (same survives-disable class as the face
@@ -8600,94 +12919,22 @@ export default {
     })
     scheduleHideSweep()
 
-    ctx.register({
-      id: 'pane',
-      area: 'panes',
-      title: 'Bots',
-      // dock: explicit adoption gesture — CENTER-STACK into the sessions zone
-      // so the sidebar grows a SESSIONS | BOTS tab strip instead of splitting
-      // two cramped panes down the column. Center is safe now: insertAtGroup
-      // pins the zone's header explicitly shown on a center gain (and it
-      // stays shown once the zone has stacked), so the sessions pane can
-      // never vanish behind a stripless Bots tab — the lone-pane auto-hide
-      // trap this dock used to work around with a 'bottom' split.
-      // enforce: standing invariant, not a one-shot migration — the pane
-      // re-homes into the sessions strip at EVERY boot it isn't already
-      // there, whatever tokens or user placement an older install persisted.
-      // The one-time heal ('sessions-tab-v1') burned its token even when its
-      // guards skipped the move, so exactly the users who had fought the old
-      // stacked layout (dragged panes → $userPlacedPanes) stayed stacked
-      // forever. Owner's order: SESSIONS | BOTS is always a tab strip.
-      // An intra-session drag still sticks until the next launch (the
-      // invariant runs at adoption time only — see enforceDockedPanes in the
-      // tree store).
-      data: { placement: 'left', width: '260px', dock: { pane: 'sessions', pos: 'center', enforce: true } },
-      render: () => jsx(BotsPane, {})
+    // The v31 entry is owned by each chat header, not by a dismissible pane.
+    // Feature-detection keeps this single-file plugin importable by older SDKs;
+    // the v31 bundled desktop always exposes both contribution areas.
+    const registeredAgentSurfaces = registerAgentSurfaces(ctx)
+
+    const paletteContributions = createAgentPaletteContributions({
+      routeAvailable: registeredAgentSurfaces.includes('management-page')
     })
 
-    // Routines — its OWN tiling pane splitting the workspace's right edge
-    // (NOT the collapsible right sidebar; placement 'right' is that sidebar's
-    // role and hides the pane until "Show Right Sidebar").
-    //
-    // Registered ONLY while Bot Mode is on screen: the pane exists while the
-    // Bots pane is visible (its zone's active tab, or a lone pane in a
-    // stacked pre-heal layout) and unregisters when the user tabs back to
-    // Sessions — no Cronjobs tile squatting beside the chat outside Bot Mode.
-    // `ctx.register` returns the disposer that makes this cheap; the tree
-    // keeps the pane's spot, so re-registering re-adopts it where it was.
-    // host.paneVisibility is feature-detected: older desktops without the SDK
-    // export keep the always-registered behavior.
-    const registerRoutinesPane = () =>
-      ctx.register({
-        id: 'routines',
-        area: 'panes',
-        title: 'Cronjobs',
-        data: {
-          placement: 'main',
-          dock: { pane: 'workspace', pos: 'right' },
-          width: '250px'
-        },
-        render: () => jsx(RoutinesPane, {})
-      })
-
-    if (typeof host.paneVisibility === 'function') {
-      // The contribution-scoped pane id (`register` prefixes `${ID}:`).
-      const $botsPaneVisible = host.paneVisibility(`${ID}:pane`)
-      let unregisterRoutines = null
-
-      const syncRoutinesPane = visible => {
-        if (visible) {
-          unregisterRoutines ??= registerRoutinesPane()
-        } else if (unregisterRoutines) {
-          unregisterRoutines()
-          unregisterRoutines = null
-        }
-      }
-
-      const stopRoutinesSync = $botsPaneVisible.listen(syncRoutinesPane)
-      syncRoutinesPane($botsPaneVisible.get())
-
-      if (typeof ctx.onDispose === 'function') {
-        // The registration disposer is already tracked by ctx.register; only
-        // the listener needs explicit teardown or it survives plugin disable.
-        ctx.onDispose(stopRoutinesSync)
-      }
+    if (typeof ctx.registerMany === 'function') {
+      ctx.registerMany(paletteContributions)
     } else {
-      registerRoutinesPane()
-    }
-
-    ctx.register({
-      id: 'new-agent',
-      area: PALETTE_AREA,
-      data: {
-        id: `${ID}.new-agent`,
-        label: 'New Agent…',
-        keywords: ['bot', 'agent', 'profile', 'teammate', 'create'],
-        run: () => {
-          host.notify({ kind: 'info', message: 'Open the Bots pane and hit “New Agent”.' })
-        }
+      for (const contribution of paletteContributions) {
+        ctx.register(contribution)
       }
-    })
+    }
 
     // @-mention middleware: "@<bot> do the thing" in any chat becomes an
     // explicit handoff instruction the active agent's SOUL.md knows how to
@@ -8710,17 +12957,32 @@ export default {
 
           if (slashNew) {
             const activeBot = $selectedBot.get()
-            const meta = activeBot ? $botMeta.get()[activeBot] : null
+            const owner = currentBotMetaOwner()
+            const cached = owner
+              ? cachedRosterSnapshot(queryClient, owner.connectionId, owner.profile)
+              : null
+            const row = cached?.profiles?.find(bot =>
+              isActiveRosterBot(bot, { name: activeBot, connectionId: owner?.connectionId })
+            )
+            const meta = activeBot
+              ? botRosterMeta(
+                  row || {
+                    name: activeBot,
+                    connectionId: owner?.connectionId,
+                    connectionKind: owner?.connectionId === 'local' ? 'local' : undefined
+                  },
+                  $botMeta.get(),
+                  cached?.rosterOwner || owner
+                )
+              : null
             const pinnedId = meta?.chat || null
             const currentId = host.activeSessionId?.get?.() ?? null
 
             if (activeBot && pinnedId && currentId && String(currentId) === String(pinnedId)) {
               host.notify({
                 kind: 'info',
-                title: 'This chat never resets',
-                message:
-                  'Bot chats are one continuous conversation — compacting instead. ' +
-                  'For a throwaway session with this agent, use Sessions mode.'
+                title: agentText('profile.continuousTitle'),
+                message: agentText('profile.continuousMessage')
               })
 
               return { ...draft, text: '/compact' }
@@ -8735,13 +12997,15 @@ export default {
             name: (host.state.profile.get() || 'default').trim() || 'default',
             connectionId: String(host.state.connectionId?.get?.() || host.activeConnectionId?.() || 'local')
           }
-          const cached = typeof queryClient !== 'undefined' && queryClient && typeof queryClient.getQueryData === 'function'
-            ? queryClient.getQueryData(ROSTER_KEY)
-            : null
-          const roster = Array.isArray(cached?.profiles) ? cached.profiles : null
-          let mentionedBots = roster ? resolveRosterMentions(text, roster, live) : []
+          const cachedMentions = rosterMentionsFromCache(
+            text,
+            live,
+            queryClient,
+            host.state.connectionId?.get?.()
+          )
+          let mentionedBots = cachedMentions || []
 
-          if (!roster) {
+          if (cachedMentions === null) {
             let names = []
             try {
               const res = await host.request('profiles.list', { include_sessions: false })
@@ -8775,7 +13039,20 @@ export default {
           const localMentions = mentionedBots.filter(bot => !bot.remoteSource)
           const remoteMentions = mentionedBots.filter(bot => bot.remoteSource)
 
-          const activeMeta = $botMeta.get()[live.name]
+          const activeOwner = currentBotMetaOwner()
+          const activeSnapshot = activeOwner
+            ? cachedRosterSnapshot(queryClient, activeOwner.connectionId, activeOwner.profile)
+            : null
+          const activeRow = activeSnapshot?.profiles?.find(bot => isActiveRosterBot(bot, live))
+          const activeMeta = botRosterMeta(
+            activeRow || {
+              name: live.name,
+              connectionId: activeOwner?.connectionId,
+              connectionKind: activeOwner?.connectionId === 'local' ? 'local' : undefined
+            },
+            $botMeta.get(),
+            activeSnapshot?.rosterOwner || activeOwner
+          )
           const senderName = displayName({ name: live.name, title: activeMeta?.title }, activeMeta)
 
           if (remoteMentions.length && typeof host.requestProfile === 'function') {

@@ -16,6 +16,14 @@ import { clearAllPaneSizeOverrides } from '@/store/panes'
 import { isSecondaryWindow } from '@/store/windows'
 
 import {
+  hasRetiredAgentPane,
+  hasRetiredAgentPaneList,
+  hasRetiredAgentPaneRecord,
+  retireAgentPaneList,
+  retireAgentPaneRecord,
+  retireAgentPanes
+} from './legacy-agent-pane-migration'
+import {
   allPaneIds,
   type DropPosition,
   findGroup,
@@ -45,6 +53,54 @@ import { rootChildSide } from './renderer/track-model'
 // v2: v1 trees were saved against placeholder panes with index-order zone
 // assignment (chat could land in a corner cell). Retire them wholesale.
 const STORAGE_KEY = 'hermes.desktop.layoutTree.v2'
+const DISMISSED_KEY = 'hermes.desktop.dismissedPanes.v1'
+const PANE_SHARE_KEY = 'hermes.desktop.paneShare.v1'
+const USER_PLACED_KEY = 'hermes.desktop.userPlacedPanes.v1'
+const RETIRED_AGENT_PANES_MIGRATION_KEY = 'hermes.desktop.layoutMigration.agents-v31'
+
+function migrateRetiredAgentPanes(): void {
+  if (isSecondaryWindow()) {
+    return
+  }
+
+  const persisted = readJson<unknown>(STORAGE_KEY)
+  const dismissed = readJson<unknown>(DISMISSED_KEY)
+  const userPlaced = readJson<unknown>(USER_PLACED_KEY)
+  const paneShare = readJson<unknown>(PANE_SHARE_KEY)
+
+  const hasRetiredData =
+    (isLayoutNode(persisted) && hasRetiredAgentPane(persisted)) ||
+    hasRetiredAgentPaneList(dismissed) ||
+    hasRetiredAgentPaneList(userPlaced) ||
+    hasRetiredAgentPaneRecord(paneShare)
+
+  // Keep the marker as the cheap steady-state path, but self-heal if a user
+  // rolls back to a release that can persist the retired panes and later
+  // upgrades to v31 again.
+  if (readKey(RETIRED_AGENT_PANES_MIGRATION_KEY) === '1' && !hasRetiredData) {
+    return
+  }
+
+  if (isLayoutNode(persisted) && hasRetiredAgentPane(persisted)) {
+    writeJson(STORAGE_KEY, retireAgentPanes(persisted))
+  }
+
+  if (hasRetiredAgentPaneList(dismissed)) {
+    writeJson(DISMISSED_KEY, retireAgentPaneList(dismissed))
+  }
+
+  if (hasRetiredAgentPaneList(userPlaced)) {
+    writeJson(USER_PLACED_KEY, retireAgentPaneList(userPlaced))
+  }
+
+  if (hasRetiredAgentPaneRecord(paneShare)) {
+    writeJson(PANE_SHARE_KEY, retireAgentPaneRecord(paneShare))
+  }
+
+  writeKey(RETIRED_AGENT_PANES_MIGRATION_KEY, '1')
+}
+
+migrateRetiredAgentPanes()
 
 writeKey('hermes.desktop.layoutTree.v1', null)
 
@@ -178,8 +234,6 @@ function frontPaneInGroup(paneId: string) {
  *  - closing the sole pane from a plugin disables that plugin, preserving the
  *    discoverable Settings → Plugins recovery path for single-pane plugins.
  */
-const DISMISSED_KEY = 'hermes.desktop.dismissedPanes.v1'
-
 function loadDismissed(): ReadonlySet<string> {
   return new Set(readJson<string[]>(DISMISSED_KEY) ?? [])
 }
@@ -204,8 +258,6 @@ function setDismissed(paneId: string, dismissed: boolean) {
 // re-opening it docks at the size the user left it. Without this every
 // re-open split the anchor zone [1, 1] again: each agent-triggered browser
 // open re-took half the chat, whatever the user had resized it to.
-const PANE_SHARE_KEY = 'hermes.desktop.paneShare.v1'
-
 const paneShares: Record<string, number> = readJson<Record<string, number>>(PANE_SHARE_KEY) ?? {}
 
 const validShare = (share: unknown): share is number =>
@@ -1304,8 +1356,6 @@ function commit(next: LayoutNode | null) {
 // docking (dockPaneBeside) only steers panes the user hasn't touched.
 // Presets and resets hand placement back to the app.
 // ---------------------------------------------------------------------------
-
-const USER_PLACED_KEY = 'hermes.desktop.userPlacedPanes.v1'
 
 export const $userPlacedPanes = atom<ReadonlySet<string>>(new Set(readJson<string[]>(USER_PLACED_KEY) ?? []))
 

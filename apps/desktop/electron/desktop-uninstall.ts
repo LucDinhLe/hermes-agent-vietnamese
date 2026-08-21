@@ -55,6 +55,11 @@ function modeRemovesUserData(mode) {
   return mode === 'full'
 }
 
+/** Pass Chromium user data to detached cleanup only for a full wipe. */
+function userDataPathForUninstallMode(mode, userDataPath) {
+  return modeRemovesUserData(mode) ? userDataPath : null
+}
+
 /**
  * Pick the interpreter that drives the detached uninstall process.
  *
@@ -346,5 +351,6 @@ export {
   selectUninstallPython,
   shouldRemoveAppBundle,
   UNINSTALL_MODES,
-  uninstallArgsForMode
+  uninstallArgsForMode,
+  userDataPathForUninstallMode
 }

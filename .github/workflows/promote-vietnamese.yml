@@ -24,7 +24,7 @@ on:
           - stable
 
 concurrency:
-  group: hermes-vietnamese-promotion-${{ inputs.tag }}
+  group: hermes-vietnamese-promotion
   cancel-in-progress: false
 
 permissions:
@@ -37,6 +37,11 @@ jobs:
     runs-on: ubuntu-24.04
     environment: release-production
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          ref: ${{ inputs.tag }}
+
       - name: Xác minh draft, manifest và runtime-smoke
         shell: bash
         env:
@@ -46,10 +51,58 @@ jobs:
           SMOKE_RUN_ID: ${{ inputs.runtime_smoke_run_id }}
           RELEASE_CLASS: ${{ inputs.release_class }}
         run: |
+          set -euo pipefail
           [[ "$TAG" =~ ^vi-v(0|[1-9][0-9]{0,2})\.[0-9]+\.[0-9]+-(0|[1-9][0-9]*)$ ]]
-          test "$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" = "true"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,isPrerelease,name,body > candidate-release.json
+          test "$(jq -r .isDraft candidate-release.json)" = "true"
+          TAG="$TAG" RELEASE_CLASS="$RELEASE_CLASS" \
+            RELEASE_JSON_PATH=candidate-release.json node --input-type=module <<'NODE'
+          import fs from 'node:fs'
+          import {
+            resolveVietnameseReleaseCandidate,
+            validateFeaturedCandidatePromotion,
+            validateVietnameseReleaseNotesForClass,
+            validateVietnameseReleasePresentation,
+          } from './scripts/vietnamese-release.mjs'
+
+          const release = JSON.parse(fs.readFileSync(process.env.RELEASE_JSON_PATH, 'utf8'))
+          const candidate = resolveVietnameseReleaseCandidate(process.env.TAG)
+          if (process.env.RELEASE_CLASS === 'community-prerelease') {
+            const publicRelease = JSON.parse(fs.readFileSync('.github/public-release.json', 'utf8'))
+            validateFeaturedCandidatePromotion({
+              featuredCandidate: publicRelease.featuredCandidate,
+              tag: process.env.TAG,
+            })
+          }
+          const expectedBody = fs.readFileSync('.github/release-notes-vietnamese.md', 'utf8')
+          validateVietnameseReleaseNotesForClass({
+            body: expectedBody,
+            releaseClass: process.env.RELEASE_CLASS,
+          })
+          validateVietnameseReleasePresentation({
+            body: release.body,
+            expectedBody,
+            expectedTitle: candidate.releaseTitle,
+            name: release.name,
+          })
+          NODE
           mkdir candidate
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir candidate
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > release-api.json
+          TAG="$TAG" REPOSITORY="$GITHUB_REPOSITORY" node <<'NODE'
+          const fs = require('fs')
+          const api = JSON.parse(fs.readFileSync('release-api.json', 'utf8'))
+          const local = fs.readdirSync('candidate').sort()
+          const remote = api.assets.map(asset => asset.name).sort()
+          if (JSON.stringify(local) !== JSON.stringify(remote)) throw new Error('draft asset inventory mismatch')
+          const prefix = `https://github.com/${process.env.REPOSITORY}/releases/download/${process.env.TAG}/`
+          for (const asset of api.assets) {
+            if (asset.browser_download_url !== prefix + asset.name) throw new Error(`asset URL mismatch: ${asset.name}`)
+            if (asset.size !== fs.statSync(`candidate/${asset.name}`).size) throw new Error(`asset size mismatch: ${asset.name}`)
+          }
+          NODE
+          node scripts/release-asset-inventory.mjs candidate release-runtime-evidence.json > /dev/null
           actual_manifest_sha="$(sha256sum candidate/SHA256SUMS.txt | cut -d' ' -f1)"
           test "$actual_manifest_sha" = "$EXPECTED_MANIFEST_SHA"
           cd candidate
@@ -60,23 +113,47 @@ jobs:
           test "$(jq -r .name <<<"$run_json")" = "Kiểm thử runtime artifact Hermes Vietnamese"
           test "$(jq -r .conclusion <<<"$run_json")" = "success"
           candidate_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
-          gh run download "$SMOKE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "release-evidence-$TAG" --dir evidence
-          CANDIDATE_COMMIT="$candidate_commit" node -e "const e=require('./evidence/release-evidence.json'); const required=['windows-x64','windows-arm64','macos-arm64','macos-x64','linux-x64','linux-arm64']; if(e.tag!==process.env.TAG || e.commit!==process.env.CANDIDATE_COMMIT || e.releaseClass!==process.env.RELEASE_CLASS || e.sha256sumsSha256!==process.env.EXPECTED_MANIFEST_SHA || required.some(k=>e.platforms?.[k]?.decision!=='GO')) process.exit(1)"
+          test "$(git rev-parse HEAD)" = "$candidate_commit"
+          public_tag="$(node -p "require('./.github/public-release.json').tag")"
+          if [[ "$RELEASE_CLASS" == "stable" ]]; then
+            test "$public_tag" = "$TAG"
+            test "$(node -p "require('./.github/public-release.json').releaseClass")" = "stable"
+            node scripts/validate-public-release-contract.mjs candidate "$TAG" "$GITHUB_REPOSITORY" > /dev/null
+            python - <<'PY'
+          import runpy
 
-      - name: Công khai đúng các byte đã smoke
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ inputs.tag }}
-          RELEASE_CLASS: ${{ inputs.release_class }}
-        run: |
-          if [[ "$RELEASE_CLASS" == "community-prerelease" ]]; then
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=true
-          else
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false
+          tests = runpy.run_path('tests/test_public_release_downloads.py')
+          for name, test in sorted(tests.items()):
+              if name.startswith('test_') and callable(test):
+                  test()
+          PY
           fi
+          node scripts/validate-release-evidence.mjs \
+            candidate/release-runtime-evidence.json \
+            candidate/SHA256SUMS.txt \
+            "$TAG" \
+            "$candidate_commit" \
+            "$EXPECTED_MANIFEST_SHA" \
+            "$RELEASE_CLASS" \
+            > /dev/null
+          gh run download "$SMOKE_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "release-evidence-$TAG" --dir evidence
+          CANDIDATE_COMMIT="$candidate_commit" node - <<'NODE'
+          const assert = require('node:assert/strict')
+          const candidate = require('./candidate/release-runtime-evidence.json')
+          const validated = require('./evidence/release-evidence.json')
+          assert.deepStrictEqual(candidate, validated, 'draft runtime evidence differs from validated workflow evidence')
+          NODE
+          CANDIDATE_COMMIT="$candidate_commit" node -e "const e=require('./evidence/release-evidence.json'); const required=['windows-x64','windows-arm64','macos-arm64','macos-x64','linux-x64','linux-arm64']; if(e.tag!==process.env.TAG || e.commit!==process.env.CANDIDATE_COMMIT || e.releaseClass!==process.env.RELEASE_CLASS || e.sha256sumsSha256!==process.env.EXPECTED_MANIFEST_SHA || required.some(k=>e.platforms?.[k]?.decision!=='GO')) process.exit(1)"
+          node scripts/validate-release-evidence.mjs \
+            evidence/release-evidence.json \
+            candidate/SHA256SUMS.txt \
+            "$TAG" \
+            "$candidate_commit" \
+            "$EXPECTED_MANIFEST_SHA" \
+            "$RELEASE_CLASS" \
+            > /dev/null
 
-      - name: Kiểm tra lại URL và hash công khai
+      - name: Công khai, hậu kiểm và tự quay về draft nếu hậu kiểm lỗi
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -84,13 +161,80 @@ jobs:
           EXPECTED_MANIFEST_SHA: ${{ inputs.sha256sums_sha256 }}
           RELEASE_CLASS: ${{ inputs.release_class }}
         run: |
-          release_json="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease)"
-          test "$(jq -r .isDraft <<<"$release_json")" = "false"
+          set -euo pipefail
+          previous_latest="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)"
           expected_prerelease=false
           [[ "$RELEASE_CLASS" == "community-prerelease" ]] && expected_prerelease=true
-          test "$(jq -r .isPrerelease <<<"$release_json")" = "$expected_prerelease"
+
+          if [[ "$RELEASE_CLASS" == "stable" ]]; then
+            TAG="$TAG" PREVIOUS_LATEST="$previous_latest" node --input-type=module <<'NODE'
+          import { validateStablePromotionOrder } from './scripts/vietnamese-release.mjs'
+
+          validateStablePromotionOrder({
+            previousLatestTag: process.env.PREVIOUS_LATEST,
+            tag: process.env.TAG,
+          })
+          NODE
+          fi
+
+          rollback_publication() {
+            trap - ERR
+            echo "::error::Public postcheck failed; returning $TAG to draft and restoring Latest=$previous_latest"
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=true --prerelease="$expected_prerelease" --latest=false || true
+            if [[ -n "$previous_latest" && "$previous_latest" != "$TAG" ]]; then
+              gh release edit "$previous_latest" --repo "$GITHUB_REPOSITORY" --latest || true
+            fi
+            return 1
+          }
+          trap rollback_publication ERR
+
+          if [[ "$RELEASE_CLASS" == "community-prerelease" ]]; then
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=true --latest=false
+          else
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --json isDraft,isPrerelease,name,body > published-release.json
+          test "$(jq -r .isDraft published-release.json)" = "false"
+          test "$(jq -r .isPrerelease published-release.json)" = "$expected_prerelease"
+          TAG="$TAG" RELEASE_JSON_PATH=published-release.json node --input-type=module <<'NODE'
+          import fs from 'node:fs'
+          import {
+            resolveVietnameseReleaseCandidate,
+            validateVietnameseReleasePresentation,
+          } from './scripts/vietnamese-release.mjs'
+
+          const release = JSON.parse(fs.readFileSync(process.env.RELEASE_JSON_PATH, 'utf8'))
+          const candidate = resolveVietnameseReleaseCandidate(process.env.TAG)
+          validateVietnameseReleasePresentation({
+            body: release.body,
+            expectedBody: fs.readFileSync('.github/release-notes-vietnamese.md', 'utf8'),
+            expectedTitle: candidate.releaseTitle,
+            name: release.name,
+          })
+          NODE
           mkdir public
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir public
           test "$(sha256sum public/SHA256SUMS.txt | cut -d' ' -f1)" = "$EXPECTED_MANIFEST_SHA"
+          node scripts/release-asset-inventory.mjs public release-runtime-evidence.json > /dev/null
+          candidate_commit="$(git rev-parse HEAD)"
+          node scripts/validate-release-evidence.mjs \
+            public/release-runtime-evidence.json \
+            public/SHA256SUMS.txt \
+            "$TAG" \
+            "$candidate_commit" \
+            "$EXPECTED_MANIFEST_SHA" \
+            "$RELEASE_CLASS" \
+            > /dev/null
+          cmp candidate/release-runtime-evidence.json public/release-runtime-evidence.json
           cd public
           sha256sum --check SHA256SUMS.txt
+          cd ..
+          latest_tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)"
+          if [[ "$RELEASE_CLASS" == "stable" ]]; then
+            test "$latest_tag" = "$TAG"
+          else
+            test "$latest_tag" = "$(node -p "require('./.github/public-release.json').tag")"
+            test "$latest_tag" != "$TAG"
+          fi
+          trap - ERR

@@ -1,5 +1,7 @@
 {
   "displayName": "Hermes Vietnamese",
+  "productVersion": "v31.0",
+  "technicalVersion": "0.31.0",
   "communityMaintainer": {
     "name": "Lê Đình Lực",
     "handle": "LucDinhLe",
@@ -9,6 +11,7 @@
   },
   "upstream": {
     "productName": "Hermes Agent",
+    "version": "0.20.4",
     "publisher": "Nous Research",
     "repository": "NousResearch/hermes-agent"
   },

@@ -11,6 +11,7 @@ import vm from 'node:vm'
 // born visible under the old pref get reconciled.
 
 const source = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
+const LOCAL_OWNER = { connectionId: 'local', profile: 'default' }
 
 function loadCreate() {
   const start = source.indexOf('const canonicalCreations = new Map()')
@@ -28,11 +29,13 @@ function loadCreate() {
       }
     },
     saveBotMeta: () => {},
+    normalizeRosterOwner: (connectionId, profile) => ({ connectionId, profile }),
+    rosterOwnerStillActive: () => true,
     window: { setTimeout: cb => cb() }
   }
   const section = source.slice(start, end).concat('\nglobalThis.__c = { createCanonicalChat };\n')
   vm.runInNewContext(section, context, { filename: 'c.js' })
-  return { create: context.__c.createCanonicalChat, created }
+  return { create: name => context.__c.createCanonicalChat(name, LOCAL_OWNER), created }
 }
 
 test('createCanonicalChat always passes hidden:true — no pref gate', async () => {

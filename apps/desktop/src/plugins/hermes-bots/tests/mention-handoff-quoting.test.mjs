@@ -26,6 +26,11 @@ function load({ activeProfile = 'research', profiles = ['research', 'ops'], titl
     atom,
     PALETTE_AREA: 'palette',
     COMPOSER_AREAS: { middleware: 'middleware' },
+    queryClient: {
+      getQueryData: () => ({
+        profiles: profiles.map(name => ({ name, connectionId: 'local' }))
+      })
+    },
     document: { getElementById: () => null, createElement: () => ({}), head: { appendChild: () => undefined } },
     host: {
       request: async method => {
@@ -34,7 +39,11 @@ function load({ activeProfile = 'research', profiles = ['research', 'ops'], titl
         }
         return {}
       },
-      state: { profile: { get: () => activeProfile, listen: () => undefined }, gateway: { listen: () => undefined } }
+      state: {
+        profile: { get: () => activeProfile, listen: () => undefined },
+        connectionId: { get: () => 'local', listen: () => undefined },
+        gateway: { listen: () => undefined }
+      }
     }
   }
   const source = pluginSource
@@ -44,8 +53,9 @@ function load({ activeProfile = 'research', profiles = ['research', 'ops'], titl
     .replace(/^import .* from 'react'\r?\n/m, '')
     .replace(/^import .* from 'react\/jsx-runtime'\r?\n/m, '')
     .replace('export default {', 'globalThis.plugin = {')
-    .concat('\nglobalThis.__mention = { $botMeta };\n')
+    .concat('\nglobalThis.__mention = { $botMeta, $botMetaOwner };\n')
   vm.runInNewContext(source, context, { filename: 'plugin.js' })
+  context.__mention.$botMetaOwner.set({ connectionId: 'local', profile: activeProfile })
   context.__mention.$botMeta.set(title ? { [activeProfile]: { title } } : {})
 
   const registered = []

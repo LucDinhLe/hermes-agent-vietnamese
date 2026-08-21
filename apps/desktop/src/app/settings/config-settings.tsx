@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { getElevenLabsVoices, getHermesConfigSchema, saveHermesConfig } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
+import type { BackendOwner } from '@/store/backend-owner'
 import {
   $dataUrlReadMaxMb,
   clampDataUrlReadMaxMb,
@@ -21,13 +22,13 @@ import {
 import { $disableF12, setDisableF12 } from '@/store/disable-f12'
 import { $keepAwake, setKeepAwake } from '@/store/keep-awake'
 import { notify, notifyError } from '@/store/notifications'
-import { normalizeProfileKey } from '@/store/profile'
 import { repoDiscoveryPolicyFromConfig, repoDiscoveryPolicySignature, scanAndRecordRepos } from '@/store/projects'
 import { $settingsScopeOverride } from '@/store/settings-scope'
 import type { ConfigFieldSchema, HermesConfigRecord } from '@/types/hermes'
 
+import { scopedBackendOwner, settingsBackendOwnerKey } from '../hooks/backend-owner-scope'
+import { useBackendOwnerGuard } from '../hooks/use-backend-owner-guard'
 import { hermesConfigCacheWriter, useHermesConfigRecord } from '../hooks/use-config-record'
-import { useOnProfileSwitch } from '../hooks/use-on-profile-switch'
 import { PanelEmpty } from '../overlays/panel'
 
 import { ConfigField } from './config-field'
@@ -68,6 +69,7 @@ export function voiceFieldVisible(key: string, config: HermesConfigRecord): bool
 
 export function ConfigSettings({
   activeSectionId,
+  backendOwner = null,
   onConfigSaved,
   onMainModelChanged,
   importInputRef
@@ -77,21 +79,26 @@ export function ConfigSettings({
   // when the target profile changes — the same guarantee useOnProfileSwitch
   // provides for app-wide switches, without hand-clearing each piece.
   const scopeProfile = useStore($settingsScopeOverride)
+  const targetOwner = scopedBackendOwner(backendOwner, scopeProfile)
+  const targetKey = targetOwner ? settingsBackendOwnerKey(targetOwner) : (scopeProfile ?? '__ambient__')
 
   return (
     <ConfigSettingsInner
       activeSectionId={activeSectionId}
+      backendOwner={backendOwner}
       importInputRef={importInputRef}
-      key={scopeProfile ?? '__active__'}
+      key={targetKey}
       onConfigSaved={onConfigSaved}
       onMainModelChanged={onMainModelChanged}
       scopeProfile={scopeProfile}
+      targetOwner={targetOwner}
     />
   )
 }
 
 interface ConfigSettingsProps {
   activeSectionId: string
+  backendOwner?: BackendOwner | null
   onConfigSaved?: () => void
   onMainModelChanged?: (provider: string, model: string) => void
   importInputRef: React.RefObject<HTMLInputElement | null>
@@ -99,23 +106,34 @@ interface ConfigSettingsProps {
 
 function ConfigSettingsInner({
   activeSectionId,
+  backendOwner,
   onConfigSaved,
   onMainModelChanged,
   importInputRef,
-  scopeProfile
-}: ConfigSettingsProps & { scopeProfile: null | string }) {
+  scopeProfile,
+  targetOwner
+}: ConfigSettingsProps & { scopeProfile: null | string; targetOwner: BackendOwner | null }) {
   const { t } = useI18n()
   const c = t.settings.config
   const keepAwake = useStore($keepAwake)
   const disableF12 = useStore($disableF12)
+  const isCurrentOwner = useBackendOwnerGuard(targetOwner)
+  const apiProfile = targetOwner?.profile ?? scopeProfile ?? undefined
+  const connectionId = targetOwner?.connectionId
   // The editable draft is local (debounced autosave watches it), but it's seeded
   // from — and saved back through — the shared config cache, so edits are visible
   // in the MCP/model surfaces and reopening the page doesn't reload-flash.
   const [config, setConfig] = useState<HermesConfigRecord | null>(null)
-  const { data: loadedConfig, isError: configLoadFailed, refetch: refetchConfig } = useHermesConfigRecord(scopeProfile)
+
+  const {
+    data: loadedConfig,
+    isError: configLoadFailed,
+    refetch: refetchConfig
+  } = useHermesConfigRecord(apiProfile, connectionId)
+
   // Writes land on the same cache key the query above reads (base key when
   // following the active profile, suffixed when a scope override is set).
-  const writeConfigCache = useMemo(() => hermesConfigCacheWriter(scopeProfile), [scopeProfile])
+  const writeConfigCache = useMemo(() => hermesConfigCacheWriter(apiProfile, connectionId), [apiProfile, connectionId])
 
   const {
     data: schemaResponse,
@@ -125,8 +143,10 @@ function ConfigSettingsInner({
     // Base key when following the active profile (matches every pre-existing
     // consumer); suffixed only for an explicit scope override.
     queryKey:
-      scopeProfile == null ? ['hermes-config-schema'] : ['hermes-config-schema', normalizeProfileKey(scopeProfile)],
-    queryFn: () => getHermesConfigSchema(scopeProfile ?? undefined),
+      connectionId == null && apiProfile == null
+        ? ['hermes-config-schema']
+        : ['hermes-config-schema', connectionId ?? '__ambient__', apiProfile ?? '__active__'],
+    queryFn: () => getHermesConfigSchema(apiProfile, connectionId),
     staleTime: 5 * 60 * 1000
   })
 
@@ -150,24 +170,12 @@ function ConfigSettingsInner({
     }
   }, [loadedConfig])
 
-  // A profile switch invalidates (but doesn't clear) the shared config query, so
-  // the local draft would otherwise keep profile A's data and autosave it into
-  // B. Drop the seed + draft (re-seeds from B's refetch) and zero saveVersion so
-  // the pending debounced autosave is cancelled by its effect cleanup.
-  useOnProfileSwitch(() => {
-    configSeeded.current = false
-    savedDiscoverySignatureRef.current = undefined
-    setConfig(null)
-    saveVersionRef.current = 0
-    setSaveVersion(0)
-  })
-
   useEffect(() => {
     let cancelled = false
 
-    getElevenLabsVoices(scopeProfile ?? undefined)
+    getElevenLabsVoices(apiProfile, connectionId)
       .then(result => {
-        if (cancelled || !result.available) {
+        if (cancelled || !isCurrentOwner() || !result.available) {
           return
         }
 
@@ -175,15 +183,14 @@ function ConfigSettingsInner({
         setElevenLabsVoiceLabels(Object.fromEntries(result.voices.map(voice => [voice.voice_id, voice.label])))
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!cancelled && isCurrentOwner()) {
           setElevenLabsVoiceOptions(null)
           setElevenLabsVoiceLabels({})
         }
       })
 
     return () => void (cancelled = true)
-    // scopeProfile is constant per mount (the inner component is keyed on it).
-  }, [scopeProfile])
+  }, [apiProfile, connectionId, isCurrentOwner])
 
   // eslint-disable-next-line no-restricted-syntax -- autosave bookkeeping refs, not an atom mirror
   useEffect(() => {
@@ -196,10 +203,14 @@ function ConfigSettingsInner({
     const t = window.setTimeout(() => {
       void (async () => {
         try {
-          const result = await saveHermesConfig(config, scopeProfile ?? undefined)
+          const result = await saveHermesConfig(config, apiProfile, connectionId)
 
           if (!result.ok) {
             throw new Error(c.autosaveFailed)
+          }
+
+          if (!isCurrentOwner()) {
+            return
           }
 
           // Mirror the saved record into the shared cache so MCP/model surfaces
@@ -215,13 +226,17 @@ function ConfigSettingsInner({
               if (savedDiscoverySignatureRef.current !== discoverySignature) {
                 savedDiscoverySignatureRef.current = discoverySignature
                 await scanAndRecordRepos(true)
+
+                if (!isCurrentOwner()) {
+                  return
+                }
               }
             }
 
             onConfigSaved?.()
           }
         } catch (err) {
-          if (saveVersionRef.current === v) {
+          if (isCurrentOwner() && saveVersionRef.current === v) {
             notifyError(err, c.autosaveFailed)
           }
         }
@@ -230,7 +245,7 @@ function ConfigSettingsInner({
 
     return () => window.clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- copy is stable; avoid re-scheduling autosave on locale change
-  }, [config, onConfigSaved, saveVersion])
+  }, [apiProfile, config, connectionId, isCurrentOwner, onConfigSaved, saveVersion])
 
   const updateConfig = (next: HermesConfigRecord) => {
     // Guard the single most destructive config edit: clearing the entire
@@ -342,7 +357,7 @@ function ConfigSettingsInner({
     if (activeSectionId === 'model') {
       return (
         <SettingsContent>
-          <SettingsProfileScope className="mb-5" />
+          <SettingsProfileScope backendOwner={backendOwner} className="mb-5" />
           <div className="mb-6">
             <ModelSettingsSkeleton />
           </div>
@@ -359,10 +374,14 @@ function ConfigSettingsInner({
     <SettingsContent>
       {/* Which profile's config.yaml this page edits — shared across every
           config-backed settings page (and hidden for single-profile users). */}
-      <SettingsProfileScope className="mb-5" />
+      <SettingsProfileScope backendOwner={backendOwner} className="mb-5" />
       {activeSectionId === 'model' && (
         <div className="mb-6">
-          <ModelSettings onMainModelChanged={onMainModelChanged} scopeProfile={scopeProfile} />
+          <ModelSettings
+            backendOwner={targetOwner}
+            onMainModelChanged={onMainModelChanged}
+            scopeProfile={scopeProfile}
+          />
         </div>
       )}
       {/* Device-local desktop prefs (not config.yaml) — they live here since
@@ -398,7 +417,7 @@ function ConfigSettingsInner({
               <ConfigField
                 descriptionExtra={
                   key === 'memory.provider' && isExternalMemoryProvider(getNested(config, key)) ? (
-                    <MemoryConnect profile={scopeProfile} provider={String(getNested(config, key))} />
+                    <MemoryConnect backendOwner={targetOwner} provider={String(getNested(config, key))} />
                   ) : undefined
                 }
                 enumOptions={
@@ -414,8 +433,8 @@ function ConfigSettingsInner({
               />
               {key === 'memory.provider' && isExternalMemoryProvider(getNested(config, key)) ? (
                 <ProviderConfigPanel
+                  backendOwner={targetOwner}
                   key={String(getNested(config, key))}
-                  profile={scopeProfile}
                   provider={String(getNested(config, key))}
                 />
               ) : null}

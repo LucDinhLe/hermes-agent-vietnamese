@@ -375,6 +375,8 @@ export const en: Translations = {
       reveal: 'Reveal in file manager',
       enable: 'Enable',
       disable: 'Disable',
+      required: 'required',
+      requiredDescription: 'This bundled Hermes feature is required and stays enabled.',
       failed: 'failed',
       empty: 'No desktop plugins installed yet.',
       kinds: { bundled: 'bundled', disk: 'on disk', runtime: 'runtime' },
@@ -583,6 +585,8 @@ export const en: Translations = {
       version: value => `Version ${value}`,
       versionUnavailable: 'Version unavailable',
       projectInfo: 'Project information',
+      technicalVersion: 'Technical version',
+      upstreamVersion: 'Upstream Hermes Agent version',
       upstreamPublisher: 'Original project and publisher',
       upstreamPublisherValue: 'Hermes Agent · Nous Research',
       communityMaintainer: 'Hermes Vietnamese publisher and maintainer',
@@ -592,7 +596,7 @@ export const en: Translations = {
       communityUpdateChannel: 'Hermes Vietnamese channel · GitHub Releases',
       bundleOutOfSync: 'App build out of date',
       bundleOutOfSyncDesc:
-        'The Hermes runtime was updated, but the desktop app itself is still an older build — new interface features (like Bot Mode) will be missing until it updates. Run the update below to rebuild the app. If that doesn\u2019t clear this warning, reinstall from the latest desktop installer.',
+        'The Hermes runtime was updated, but the desktop app itself is still an older build — new interface features (like Agents) will be missing until it updates. Run the update below to rebuild the app. If that doesn\u2019t clear this warning, reinstall from the latest desktop installer.',
       bundleOutOfSyncAction: 'Get the installer',
       updates: 'Updates',
       checkNow: 'Check now',
@@ -1215,6 +1219,10 @@ export const en: Translations = {
     archive: 'Archive',
     skillArchivedTitle: 'Skill archived',
     skillArchivedMessage: 'Restorable via hermes curator restore.',
+    archiveConfirmTitle: name => `Archive ${name}?`,
+    archiveDescription: 'The skill is archived and can be restored with hermes curator restore.',
+    archiveFailed: 'Archive failed',
+    defaultProfile: 'Hermes (default)',
     hub: {
       searchPlaceholder: 'Search the skill hub',
       search: 'Search',
@@ -2367,7 +2375,8 @@ export const en: Translations = {
       cancelTip: 'Click to cancel',
       added: server => `Added ${server}`,
       addedTip: 'Connected — its tools are ready in this chat',
-      connectFailed: server => `Could not connect ${server}`
+      connectFailed: server => `Could not connect ${server}`,
+      sourceChanged: 'The MCP suggestion belongs to another Agent source. Try again in this session.'
     },
     skillSuggestions: {
       label: skill => `Use skill: ${skill}`,
@@ -3122,6 +3131,10 @@ export const en: Translations = {
         count === 1
           ? 'Will resume when the background task finishes'
           : `Will resume when ${count} background tasks finish`,
+      agentMessaging: name => `Messaging ${name}…`,
+      agentMessaged: name => `Messaged ${name}`,
+      agentMessageFrom: name => `Message from ${name}`,
+      showAgentMessage: 'Show message',
       thinking: 'Thinking',
       thought: 'Thought',
       thoughtBriefly: 'Thought briefly',

@@ -664,6 +664,8 @@ export const ja = defineLocale({
       version: value => `バージョン ${value}`,
       versionUnavailable: 'バージョンを取得できません',
       projectInfo: 'プロジェクト情報',
+      technicalVersion: '技術バージョン',
+      upstreamVersion: '上流 Hermes Agent バージョン',
       upstreamPublisher: '元のプロジェクトと発行元',
       upstreamPublisherValue: 'Hermes Agent · Nous Research',
       communityMaintainer: 'ベトナム語コミュニティ版',
@@ -673,7 +675,7 @@ export const ja = defineLocale({
       communityUpdateChannel: 'Hermes Vietnamese チャンネル · GitHub Releases',
       bundleOutOfSync: 'アプリのビルドが古くなっています',
       bundleOutOfSyncDesc:
-        'Hermes ランタイムは更新されましたが、デスクトップアプリ自体は古いビルドのままです。アプリを更新するまで、新しいインターフェース機能(Bot Mode など)は表示されません。下の更新を実行してアプリを再ビルドしてください。それでもこの警告が消えない場合は、最新のデスクトップインストーラーから再インストールしてください。',
+        'Hermes ランタイムは更新されましたが、デスクトップアプリ自体は古いビルドのままです。アプリを更新するまで、新しいインターフェース機能(Agents など)は表示されません。下の更新を実行してアプリを再ビルドしてください。それでもこの警告が消えない場合は、最新のデスクトップインストーラーから再インストールしてください。',
       bundleOutOfSyncAction: 'インストーラーを入手',
       updates: '更新',
       checkNow: '今すぐ確認',
@@ -2744,6 +2746,10 @@ export const ja = defineLocale({
         count === 1
           ? 'バックグラウンドタスクの完了後に再開します'
           : `${count} 件のバックグラウンドタスクの完了後に再開します`,
+      agentMessaging: name => `${name} にメッセージを送信中…`,
+      agentMessaged: name => `${name} にメッセージを送信しました`,
+      agentMessageFrom: name => `${name} からのメッセージ`,
+      showAgentMessage: 'メッセージを表示',
       thinking: '考え中',
       thought: '思考済み',
       thoughtBriefly: '少し思考',

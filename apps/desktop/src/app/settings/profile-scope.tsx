@@ -1,10 +1,13 @@
 import { useStore } from '@nanostores/react'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
+import { getProfiles } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
+import type { BackendOwner } from '@/store/backend-owner'
 import { $activeGatewayProfile, $profiles, normalizeProfileKey, refreshProfiles } from '@/store/profile'
 import { $settingsScopeOverride, setSettingsScope } from '@/store/settings-scope'
+import type { ProfileInfo } from '@/types/hermes'
 
 // The same chip affordance the Gateway page uses for its per-profile
 // connection overrides (gateway-settings ScopeChip). That one stays local to
@@ -33,24 +36,50 @@ export function ScopeChip({ active, label, onSelect }: { active: boolean; label:
  *  selection persists across pages. Hidden with fewer than two profiles, so
  *  single-profile users never see it and every request keeps its unscoped
  *  default shape. */
-export function SettingsProfileScope({ className }: { className?: string }) {
+export function SettingsProfileScope({
+  backendOwner = null,
+  className
+}: {
+  backendOwner?: BackendOwner | null
+  className?: string
+}) {
   const { t } = useI18n()
   const scope = t.settings.profileScope
   const override = useStore($settingsScopeOverride)
   const active = useStore($activeGatewayProfile)
-  const profiles = useStore($profiles)
+  const ambientProfiles = useStore($profiles)
+  const [sourceProfiles, setSourceProfiles] = useState<ProfileInfo[] | null>(null)
 
   // Refresh lazily so a profile created elsewhere shows up; the cached list
   // paints immediately. Best-effort — a failure keeps the cached roster.
   useEffect(() => {
-    void refreshProfiles().catch(() => undefined)
-  }, [])
+    let cancelled = false
+
+    if (!backendOwner) {
+      void refreshProfiles().catch(() => undefined)
+
+      return () => void (cancelled = true)
+    }
+
+    setSourceProfiles(null)
+    void getProfiles(backendOwner.connectionId)
+      .then(({ profiles }) => {
+        if (!cancelled) {
+          setSourceProfiles(profiles)
+        }
+      })
+      .catch(() => undefined)
+
+    return () => void (cancelled = true)
+  }, [backendOwner])
+
+  const profiles = backendOwner ? (sourceProfiles ?? []) : ambientProfiles
 
   if (profiles.length < 2) {
     return null
   }
 
-  const selected = normalizeProfileKey(override ?? active)
+  const selected = normalizeProfileKey(override ?? backendOwner?.profile ?? active)
 
   return (
     <div className={cn('grid gap-2', className)}>

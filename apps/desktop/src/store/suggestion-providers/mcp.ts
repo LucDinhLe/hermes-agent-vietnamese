@@ -12,8 +12,15 @@ import { completeMcpDesktopOAuth, McpOAuthCancelled } from '@/lib/mcp-dashboard-
 import { MCP_DIRECTORY } from '@/lib/mcp-directory'
 import { prettyName } from '@/lib/text'
 import { type ComposerSuggestion, registerDraftProvider } from '@/store/composer-suggestions'
-import { $gateway } from '@/store/gateway'
+import { requestGatewayForAgent } from '@/store/gateway'
 import { notifyError } from '@/store/notifications'
+
+import {
+  type BackendOwner,
+  backendOwnerKey,
+  sameBackendOwner,
+  sessionBackendOwner
+} from '../backend-owner'
 
 /**
  * The MCP draft provider — the suggestion bus's founding member (PR #85036).
@@ -36,8 +43,7 @@ const CATALOG_TTL_MS = 5 * 60_000
 // Names already present in mcp_servers config (enabled or not) — those need a
 // toggle/auth at most, not an "add this server" pill. Cached briefly; a miss
 // (older backend, transient error) suggests nothing rather than nagging.
-let configuredNames: Set<string> | null = null
-let configuredAt = 0
+const configuredByOwner = new Map<string, { at: number; names: Set<string> }>()
 
 interface SuggestibleServer {
   server: string
@@ -49,36 +55,47 @@ interface SuggestibleServer {
 
 // Suggestible servers from the catalog (entries with `suggest` + an http
 // url), or the static directory on backends that predate `suggest`.
-let suggestible: SuggestibleServer[] | null = null
-let suggestibleAt = 0
+const suggestibleByOwner = new Map<string, { at: number; servers: SuggestibleServer[] }>()
 
 /** Drop the caches (profile switch / after an install). */
-export function invalidateMcpSuggestionIndex(): void {
-  configuredNames = null
-  configuredAt = 0
-  suggestible = null
-  suggestibleAt = 0
-}
+export function invalidateMcpSuggestionIndex(owner?: BackendOwner): void {
+  if (owner) {
+    const key = backendOwnerKey(owner)
+    configuredByOwner.delete(key)
+    suggestibleByOwner.delete(key)
 
-async function loadConfiguredNames(): Promise<Set<string>> {
-  if (configuredNames && Date.now() - configuredAt < CONFIGURED_TTL_MS) {
-    return configuredNames
+    return
   }
 
-  const { servers } = await listMcpServers()
-
-  configuredNames = new Set(servers.map(server => server.name))
-  configuredAt = Date.now()
-
-  return configuredNames
+  configuredByOwner.clear()
+  suggestibleByOwner.clear()
 }
 
-async function loadSuggestible(): Promise<SuggestibleServer[]> {
-  if (suggestible && Date.now() - suggestibleAt < CATALOG_TTL_MS) {
-    return suggestible
+async function loadConfiguredNames(owner: BackendOwner): Promise<Set<string>> {
+  const key = backendOwnerKey(owner)
+  const cached = configuredByOwner.get(key)
+
+  if (cached && Date.now() - cached.at < CONFIGURED_TTL_MS) {
+    return cached.names
   }
 
-  const { entries } = await getMcpCatalog()
+  const { servers } = await listMcpServers(owner.profile, owner.connectionId)
+  const names = new Set(servers.map(server => server.name))
+
+  configuredByOwner.set(key, { at: Date.now(), names })
+
+  return names
+}
+
+async function loadSuggestible(owner: BackendOwner): Promise<SuggestibleServer[]> {
+  const key = backendOwnerKey(owner)
+  const cached = suggestibleByOwner.get(key)
+
+  if (cached && Date.now() - cached.at < CATALOG_TTL_MS) {
+    return cached.servers
+  }
+
+  const { entries } = await getMcpCatalog(owner.profile, owner.connectionId)
 
   const fromCatalog: SuggestibleServer[] = entries
     .filter(
@@ -94,7 +111,7 @@ async function loadSuggestible(): Promise<SuggestibleServer[]> {
   // Compatibility rung: an older backend serves the catalog without any
   // `suggest` metadata. Fall back to the static directory rather than
   // silently losing the feature (remove once the backend contract bumps).
-  suggestible =
+  const servers =
     fromCatalog.length > 0
       ? fromCatalog
       : MCP_DIRECTORY.map(entry => ({
@@ -103,9 +120,9 @@ async function loadSuggestible(): Promise<SuggestibleServer[]> {
           server: entry.name,
           url: entry.url
         }))
-  suggestibleAt = Date.now()
+  suggestibleByOwner.set(key, { at: Date.now(), servers })
 
-  return suggestible
+  return servers
 }
 
 interface KeywordEntry {
@@ -189,35 +206,40 @@ export function matchSuggestions(text: string, index: KeywordEntry[]): McpMatch[
   return matches
 }
 
-async function connect(known: SuggestibleServer, sessionId: string | null, cancelled: () => boolean): Promise<void> {
+async function connect(
+  known: SuggestibleServer,
+  sessionId: string | null,
+  owner: BackendOwner,
+  cancelled: () => boolean
+): Promise<void> {
   try {
-    await addMcpServer({ name: known.server, url: known.url })
+    await addMcpServer({ name: known.server, url: known.url }, owner.profile, owner.connectionId)
 
     try {
       await completeMcpDesktopOAuth({
         serverName: known.server,
-        start: authMcpServer,
-        status: getMcpOAuthFlow,
+        start: name => authMcpServer(name, owner.profile, owner.connectionId),
+        status: flowId => getMcpOAuthFlow(flowId, owner.profile, owner.connectionId),
         cancelled,
-        cancel: cancelMcpOAuthFlow,
+        cancel: flowId => cancelMcpOAuthFlow(flowId, owner.profile, owner.connectionId),
         openExternal: url => window.hermesDesktop.openExternal(url)
       })
     } catch (error) {
       // Decline/failure means "no server" — roll back the config write
       // rather than stranding an unauthorized entry (authoritative-write
       // rule). Best-effort; the primary error wins.
-      await removeMcpServer(known.server).catch(() => {})
+      await removeMcpServer(known.server, owner.profile, owner.connectionId).catch(() => {})
       throw error
     }
 
     // Tools reach the live session before the pill claims success — the
     // same write-through the Capabilities tab and the setup card use.
-    await $gateway
-      .get()
-      ?.request('reload.mcp', { confirm: true, session_id: sessionId ?? undefined })
-      .catch(() => {})
+    await requestGatewayForAgent(owner.connectionId, owner.profile, 'reload.mcp', {
+      confirm: true,
+      session_id: sessionId ?? undefined
+    }).catch(() => {})
 
-    invalidateMcpSuggestionIndex()
+    invalidateMcpSuggestionIndex(owner)
   } catch (error) {
     if (!(error instanceof McpOAuthCancelled)) {
       notifyError(error, translateNow('composer.mcpSuggestions.connectFailed', prettyName(known.server)))
@@ -227,7 +249,12 @@ async function connect(known: SuggestibleServer, sessionId: string | null, cance
   }
 }
 
-function toSuggestion(match: McpMatch, known: SuggestibleServer, sessionId: string | null): ComposerSuggestion {
+function toSuggestion(
+  match: McpMatch,
+  known: SuggestibleServer,
+  sessionId: string | null,
+  sampledOwner: BackendOwner
+): ComposerSuggestion {
   const name = prettyName(match.server)
   const copy = (key: string, ...args: unknown[]) => translateNow(`composer.mcpSuggestions.${key}`, ...args)
 
@@ -238,7 +265,16 @@ function toSuggestion(match: McpMatch, known: SuggestibleServer, sessionId: stri
     id: match.server,
     // The pill's session wins over the one captured at sample time: the reload
     // has to reach the session the user is actually looking at.
-    invoke: context => connect(known, context.sessionId ?? sessionId, context.cancelled),
+    invoke: context => {
+      const targetSessionId = context.sessionId ?? sessionId
+      const owner = sessionBackendOwner(targetSessionId)
+
+      if (!sameBackendOwner(owner, sampledOwner)) {
+        throw new Error(translateNow('composer.mcpSuggestions.sourceChanged'))
+      }
+
+      return connect(known, targetSessionId, sampledOwner, context.cancelled)
+    },
     label: copy('label', name),
     provider: 'mcp',
     tip: copy('tip', match.keyword),
@@ -248,8 +284,14 @@ function toSuggestion(match: McpMatch, known: SuggestibleServer, sessionId: stri
 }
 
 registerDraftProvider('mcp', async ({ sessionId, text }) => {
+  const owner = sessionBackendOwner(sessionId)
+
+  if (!owner) {
+    return []
+  }
+
   // Catalog unreachable — suggest nothing rather than mis-suggest.
-  const index = await loadSuggestible()
+  const index = await loadSuggestible(owner)
   const candidates = matchSuggestions(text, index)
 
   // Fast path: no keyword hit at all → skip the servers fetch.
@@ -257,10 +299,10 @@ registerDraftProvider('mcp', async ({ sessionId, text }) => {
     return []
   }
 
-  const configured = await loadConfiguredNames()
+  const configured = await loadConfiguredNames(owner)
   const byName = new Map(index.map(entry => [entry.server, entry]))
 
   return candidates
     .filter(candidate => !configured.has(candidate.server))
-    .map(match => toSuggestion(match, byName.get(match.server)!, sessionId))
+    .map(match => toSuggestion(match, byName.get(match.server)!, sessionId, owner))
 })

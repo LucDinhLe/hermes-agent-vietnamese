@@ -32,6 +32,7 @@ import { useStoreSelector } from '@/lib/use-session-slice'
 import { $gateway } from '@/store/gateway'
 import { notify, notifyError } from '@/store/notifications'
 import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
+import { $connection } from '@/store/session'
 import type { SkillInfo, ToolsetInfo } from '@/types/hermes'
 
 import { useOnProfileSwitch } from '../hooks/use-on-profile-switch'
@@ -88,6 +89,7 @@ const toolCallsCache = new Map<string, { at: number; value: Record<string, numbe
 async function loadToolCalls(
   scopeKey: string,
   scopeProfile: null | string,
+  connectionId?: null | string,
   force = false
 ): Promise<Record<string, number>> {
   const cached = toolCallsCache.get(scopeKey)
@@ -96,7 +98,7 @@ async function loadToolCalls(
     return cached.value
   }
 
-  const analytics = await getUsageAnalytics(365, scopeProfile)
+  const analytics = await getUsageAnalytics(365, scopeProfile, connectionId)
 
   const value = Object.fromEntries((analytics.tools ?? []).map(e => [e.tool, e.count]))
 
@@ -110,7 +112,7 @@ const usageOf = (skill: SkillInfo): number => (typeof skill.usage === 'number' ?
 const categoryFor = (skill: SkillInfo): string => asText(skill.category) || 'general'
 
 // Row subtitle: category, with non-default origins badged.
-function skillSubtitle(skill: SkillInfo): React.ReactNode {
+function skillSubtitle(skill: SkillInfo, provenanceCopy: Record<'agent' | 'bundled' | 'hub', string>): React.ReactNode {
   const category = prettyName(categoryFor(skill))
   const provenance = skill.provenance
 
@@ -119,12 +121,12 @@ function skillSubtitle(skill: SkillInfo): React.ReactNode {
       <span className="truncate">{category}</span>
       {provenance === 'agent' && (
         <Badge className="shrink-0 normal-case" variant="default">
-          learned
+          {provenanceCopy.agent}
         </Badge>
       )}
       {provenance === 'hub' && (
         <Badge className="shrink-0 normal-case" variant="muted">
-          hub
+          {provenanceCopy.hub}
         </Badge>
       )}
     </>
@@ -182,6 +184,8 @@ function filteredToolsets(
 const visibleToolsetCount = (toolsets: ToolsetInfo[]) => toolsets.filter(ts => isDesktopToolsetVisible(ts.name)).length
 
 interface SkillsViewProps extends React.ComponentProps<'section'> {
+  /** Pin every capability request and cache entry to one backend source. */
+  fixedConnectionId?: null | string
   setStatusbarItemGroup?: SetStatusbarItemGroup
   /** Embedded mode (plugin dialogs — e.g. Bot Mode's Advanced section): tab
    *  state lives in local React state instead of the route's `?tab=` param,
@@ -193,8 +197,21 @@ interface SkillsViewProps extends React.ComponentProps<'section'> {
   fixedProfile?: string
 }
 
-export function SkillsView({
+export function SkillsView(props: SkillsViewProps) {
+  const connection = useStore($connection)
+  const connectionId =
+    props.fixedConnectionId === undefined
+      ? connection?.connectionId || (connection?.mode === 'local' ? 'local' : null)
+      : props.fixedConnectionId
+  const sourceKey = connectionId?.trim() || 'primary'
+  const profileKey = normalizeProfileKey(props.fixedProfile)
+
+  return <ScopedSkillsView {...props} fixedConnectionId={connectionId} key={`${sourceKey}::${profileKey}`} />
+}
+
+function ScopedSkillsView({
   embedded = false,
+  fixedConnectionId,
   fixedProfile,
   setStatusbarItemGroup: _setStatusbarItemGroup,
   ...props
@@ -231,10 +248,12 @@ export function SkillsView({
   const [scopeOverride, setScopeOverride] = useState<null | string>(null)
   const scopeProfile = fixedProfile ?? scopeOverride ?? activeProfile ?? null
   const scopeKey = normalizeProfileKey(scopeProfile)
+  const sourceKey = fixedConnectionId?.trim() || 'primary'
+  const capabilityScopeKey = `${sourceKey}::${scopeKey}`
 
   const { data: profilesData } = useQuery({
-    queryKey: ['capabilities-profiles'],
-    queryFn: getProfiles,
+    queryKey: ['capabilities-profiles', sourceKey],
+    queryFn: () => getProfiles(fixedConnectionId),
     staleTime: 60_000,
     // Pinned scope never shows the selector, so don't fetch the roster for it.
     enabled: !fixedProfile
@@ -247,14 +266,14 @@ export function SkillsView({
     isError: skillsFailed,
     error: skillsError
   } = useQuery({
-    queryKey: [...SKILLS_QUERY_KEY, scopeKey],
-    queryFn: () => getSkills(scopeProfile),
+    queryKey: [...SKILLS_QUERY_KEY, sourceKey, scopeKey],
+    queryFn: () => getSkills(scopeProfile, fixedConnectionId),
     staleTime: 0
   })
 
   const { data: toolsets, isError: toolsetsFailed } = useQuery({
-    queryKey: [...TOOLSETS_QUERY_KEY, scopeKey],
-    queryFn: () => getToolsets(scopeProfile),
+    queryKey: [...TOOLSETS_QUERY_KEY, sourceKey, scopeKey],
+    queryFn: () => getToolsets(scopeProfile, fixedConnectionId),
     staleTime: 0
   })
 
@@ -262,8 +281,8 @@ export function SkillsView({
   // archive repaint instantly; the next background refetch reconciles.
   const setSkills = useCallback(
     (fn: (cur: SkillInfo[] | undefined) => SkillInfo[] | undefined) =>
-      queryClient.setQueryData<SkillInfo[]>([...SKILLS_QUERY_KEY, scopeKey], prev => fn(prev) ?? prev),
-    [scopeKey]
+      queryClient.setQueryData<SkillInfo[]>([...SKILLS_QUERY_KEY, sourceKey, scopeKey], prev => fn(prev) ?? prev),
+    [scopeKey, sourceKey]
   )
 
   // tool name -> call count over the analytics window. null = still loading
@@ -293,11 +312,11 @@ export function SkillsView({
     if (toolCallsCache.size > 0) {
       const epoch = toolCallsEpoch.current
 
-      loadToolCalls(scopeKey, scopeProfile, true)
+      loadToolCalls(capabilityScopeKey, scopeProfile, fixedConnectionId, true)
         .then(value => toolCallsEpoch.current === epoch && setToolCalls(value))
         .catch(() => toolCallsEpoch.current === epoch && setToolCalls({}))
     }
-  }, [scopeKey, scopeProfile])
+  }, [capabilityScopeKey, fixedConnectionId, scopeProfile])
 
   const refreshToolsets = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: TOOLSETS_QUERY_KEY })
@@ -321,12 +340,12 @@ export function SkillsView({
     const epoch = toolCallsEpoch.current
     const live = () => !cancelled && toolCallsEpoch.current === epoch
 
-    loadToolCalls(scopeKey, scopeProfile)
+    loadToolCalls(capabilityScopeKey, scopeProfile, fixedConnectionId)
       .then(value => live() && setToolCalls(value))
       .catch(() => live() && setToolCalls({}))
 
     return () => void (cancelled = true)
-  }, [mode, scopeKey, scopeProfile, toolCalls])
+  }, [capabilityScopeKey, fixedConnectionId, mode, scopeProfile, toolCalls])
 
   // On an app-wide profile switch the analytics cache is scope-keyed, but our
   // local toolCalls state isn't — leaving it non-null would keep the lazy
@@ -407,7 +426,7 @@ export function SkillsView({
     setSkills(current => current?.map(row => (row.name === skill.name ? { ...row, enabled } : row)) ?? current)
 
     try {
-      await setSkillEnabled(skill.name, enabled, scopeProfile)
+      await setSkillEnabled(skill.name, enabled, scopeProfile, fixedConnectionId)
       // A disabled skill loses its `/name` command, so the composer's cached
       // `/` list has to be dropped along with the row repaint.
       invalidateSlashCompletions()
@@ -420,7 +439,7 @@ export function SkillsView({
   }
 
   async function handleToggleToolset(toolset: ToolsetInfo, enabled: boolean) {
-    const scopedToolsetKey = [...TOOLSETS_QUERY_KEY, scopeKey]
+    const scopedToolsetKey = [...TOOLSETS_QUERY_KEY, sourceKey, scopeKey]
 
     const writeScoped = (fn: (cur: ToolsetInfo[] | undefined) => ToolsetInfo[] | undefined) =>
       queryClient.setQueryData<ToolsetInfo[]>(scopedToolsetKey, prev => fn(prev) ?? prev)
@@ -431,7 +450,7 @@ export function SkillsView({
     )
 
     try {
-      await setToolsetEnabled(toolset.name, enabled, scopeProfile)
+      await setToolsetEnabled(toolset.name, enabled, scopeProfile, fixedConnectionId)
     } catch (err) {
       writeScoped(
         current =>
@@ -455,15 +474,15 @@ export function SkillsView({
 
     try {
       for (const row of skillTargets) {
-        await setSkillEnabled(row.name, enabled, scopeProfile)
+        await setSkillEnabled(row.name, enabled, scopeProfile, fixedConnectionId)
         setSkills(cur => cur?.map(r => (r.name === row.name ? { ...r, enabled } : r)) ?? cur)
         done += 1
       }
 
       for (const row of toolsetTargets) {
-        await setToolsetEnabled(row.name, enabled, scopeProfile)
+        await setToolsetEnabled(row.name, enabled, scopeProfile, fixedConnectionId)
         queryClient.setQueryData<ToolsetInfo[]>(
-          [...TOOLSETS_QUERY_KEY, scopeKey],
+          [...TOOLSETS_QUERY_KEY, sourceKey, scopeKey],
           cur => cur?.map(r => (r.name === row.name ? { ...r, enabled, available: enabled } : r)) ?? cur
         )
         done += 1
@@ -557,7 +576,7 @@ export function SkillsView({
     const epoch = skillEditorEpoch.current
 
     try {
-      const node = await getLearningNode(name, scopeProfile)
+      const node = await getLearningNode(name, scopeProfile, fixedConnectionId)
 
       if (skillEditorEpoch.current !== epoch) {
         return
@@ -578,7 +597,7 @@ export function SkillsView({
     setSkillSaving(true)
 
     try {
-      await editLearningNode(skillEditor.name, skillDraft, scopeProfile)
+      await editLearningNode(skillEditor.name, skillDraft, scopeProfile, fixedConnectionId)
       notify({
         kind: 'success',
         title: t.skills.skillUpdated,
@@ -650,7 +669,7 @@ export function SkillsView({
           <SelectContent>
             {profiles.map(p => (
               <SelectItem key={p.name} value={p.name}>
-                {p.is_default ? 'Hermes (default)' : p.name}
+              {p.is_default ? t.skills.defaultProfile : p.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -684,7 +703,12 @@ export function SkillsView({
         <div className="flex min-h-0 flex-1 flex-col">
           <div className={mode === 'skills' ? 'min-h-40 flex-1 overflow-hidden' : 'min-h-0 flex-1'}>
             {mode === 'mcp' ? (
-              <McpTab gateway={gateway} key={`mcp-${scopeKey}`} profile={scopeProfile} />
+              <McpTab
+                connectionId={fixedConnectionId}
+                gateway={gateway}
+                key={`mcp-${capabilityScopeKey}`}
+                profile={scopeProfile}
+              />
             ) : (skillsFailed || toolsetsFailed) && (!skills || !toolsets) ? (
               <PanelEmpty
                 action={
@@ -738,7 +762,7 @@ export function SkillsView({
                         meta={usageOf(skill) > 0 ? `×${compactNumber(usageOf(skill))}` : undefined}
                         onSelect={() => setSelectedSkill(skill.name)}
                         onToggle={enabled => void handleToggleSkill(skill, enabled)}
-                        subtitle={skillSubtitle(skill)}
+                        subtitle={skillSubtitle(skill, t.skills.provenance)}
                         title={skill.name}
                         toggleLabel={skill.name}
                       />
@@ -747,6 +771,7 @@ export function SkillsView({
                   <DetailColumn footer={t.skills.changesApplyNewSessions}>
                     {activeSkill && (
                       <SkillDetail
+                        connectionId={fixedConnectionId}
                         onArchive={() => setArchiveTarget(activeSkill.name)}
                         onEdit={() => void openSkillEditor(activeSkill.name)}
                         profile={scopeProfile}
@@ -784,7 +809,7 @@ export function SkillsView({
                           ) : calls > 0 ? (
                             `×${compactNumber(calls)}`
                           ) : (
-                            `${toolNames(toolset).length} tools`
+                            t.agents.toolsCount(toolNames(toolset).length)
                           )
                         }
                         onSelect={() => setSelectedToolset(toolset.name)}
@@ -799,6 +824,7 @@ export function SkillsView({
                 <DetailColumn footer={t.skills.changesApplyNewSessions}>
                   {activeToolset && (
                     <ToolsetDetail
+                      connectionId={fixedConnectionId}
                       onConfiguredChange={refreshToolsets}
                       profile={scopeProfile}
                       toolCalls={toolCalls ?? {}}
@@ -816,12 +842,18 @@ export function SkillsView({
               `profile` prop into each install call, and remounting on scope
               change would reload the whole site for no data benefit. */}
           {hubMounted && (
-            <EmbeddedHubPicker hidden={mode !== 'skills'} installedNames={installedSkillNames} profile={scopeProfile} />
+            <EmbeddedHubPicker
+              connectionId={fixedConnectionId}
+              hidden={mode !== 'skills'}
+              installedNames={installedSkillNames}
+              profile={scopeProfile}
+            />
           )}
         </div>
       </div>
       {archiveTarget && (
         <ArchiveSkillConfirmDialog
+          connectionId={fixedConnectionId}
           onApply={() => {
             const name = archiveTarget
             const snapshot = skills
@@ -912,11 +944,13 @@ function parseFrontmatter(content: string): { body: string; meta: [string, strin
 }
 
 function SkillDetail({
+  connectionId,
   onArchive,
   onEdit,
   profile,
   skill
 }: {
+  connectionId?: null | string
   onArchive: () => void
   onEdit: () => void
   profile?: null | string
@@ -931,8 +965,8 @@ function SkillDetail({
   // provenance, scoped to the Capabilities profile selector. The row list only
   // carries name/description; the pane shows the whole thing.
   const contentQuery = useQuery({
-    queryKey: ['skill-content', skill.name, normalizeProfileKey(profile)],
-    queryFn: () => getSkillContent(skill.name, profile),
+    queryKey: ['skill-content', connectionId?.trim() || 'primary', skill.name, normalizeProfileKey(profile)],
+    queryFn: () => getSkillContent(skill.name, profile, connectionId),
     staleTime: 60_000
   })
 
@@ -992,11 +1026,13 @@ function SkillDetail({
 }
 
 function ToolsetDetail({
+  connectionId,
   toolset,
   toolCalls,
   onConfiguredChange,
   profile
 }: {
+  connectionId?: null | string
   toolset: ToolsetInfo
   toolCalls: Record<string, number>
   onConfiguredChange: () => void
@@ -1047,10 +1083,23 @@ function ToolsetDetail({
           </div>
         </div>
       )}
-      {toolset.name === 'computer_use' && <ComputerUsePanel onConfiguredChange={onConfiguredChange} />}
-      {toolset.name === 'terminal' && <TerminalBackendPanel onConfiguredChange={onConfiguredChange} />}
+      {toolset.name === 'computer_use' && (
+        <ComputerUsePanel
+          connectionId={connectionId}
+          onConfiguredChange={onConfiguredChange}
+          profile={profile}
+        />
+      )}
+      {toolset.name === 'terminal' && (
+        <TerminalBackendPanel
+          connectionId={connectionId}
+          onConfiguredChange={onConfiguredChange}
+          profile={profile}
+        />
+      )}
       <ToolsetConfigPanel
-        key={`${toolset.name}:${normalizeProfileKey(profile)}`}
+        connectionId={connectionId}
+        key={`${connectionId?.trim() || 'primary'}:${toolset.name}:${normalizeProfileKey(profile)}`}
         onConfiguredChange={onConfiguredChange}
         profile={profile}
         toolset={toolset.name}

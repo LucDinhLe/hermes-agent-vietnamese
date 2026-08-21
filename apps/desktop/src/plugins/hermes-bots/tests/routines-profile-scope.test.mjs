@@ -1,31 +1,51 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-// #37: the Routines pane must scope cron.manage to the bot's OWN cron store via
-// the core RPC's optional `profile` param (a bot's profile can run a separate
-// gateway / keep cron in ~/.hermes/profiles/<name>/cron/). Older gateways
-// ignore the unknown param, so the [bot:] tag filter stays the fallback.
+import { loadHermesBotsPlugin } from './plugin-behavior-fixture.mjs'
 
-const source = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
+test('routine list, legacy pause, and row mutation keep profile and source scope', async () => {
+  const api = (await loadHermesBotsPlugin()).default.__testing
+  const owner = { connectionId: 'routine-scope-a', profile: 'ops' }
+  const calls = []
+  const runtime = {
+    state: {
+      connectionId: { get: () => owner.connectionId },
+      profile: { get: () => owner.profile }
+    },
+    requestProfile: async (route, method, params) => {
+      calls.push({ route, method, params })
+      if (params.action === 'list') {
+        return {
+          jobs: [{
+            job_id: 'legacy',
+            name: '[bot:ops] Audit',
+            prompt_preview: 'You are running the scheduled routine "Audit" for agent',
+            enabled: true
+          }]
+        }
+      }
+      return { success: true }
+    }
+  }
 
-test('loadRoutines forwards a profile scope to cron.manage list + pause', () => {
-  const fn = source.slice(source.indexOf('async function loadRoutines('), source.indexOf('function useRoutines('))
-  assert.match(fn, /const scope = profile \? \{ profile \} : \{\}/)
-  // list call spreads the scope
-  assert.match(fn, /action: 'list', include_disabled: true, \.\.\.scope/)
-  // legacy-pause call spreads the scope too
-  assert.match(fn, /action: 'pause', name: job\.job_id, \.\.\.scope/)
+  const result = await api.loadRoutines(owner.profile, owner, runtime)
+  await api.runRoutineAction(result.jobs[0], 'remove', owner.profile, owner, runtime)
+
+  assert.deepEqual(calls.map(call => [call.params.action, call.params.profile]), [
+    ['list', owner.profile],
+    ['pause', owner.profile],
+    ['remove', owner.profile]
+  ])
+  assert.equal(calls.every(call => call.route.connectionId === owner.connectionId), true)
 })
 
-test('useRoutines is bot-keyed so switching bots refetches', () => {
-  assert.match(source, /queryKey: \[\.\.\.ROUTINES_KEY, profile \|\| ''\]/)
-  assert.match(source, /queryFn: \(\) => loadRoutines\(profile\)/)
-})
+test('routine query identity separates same-named profiles on different sources', async () => {
+  const api = (await loadHermesBotsPlugin()).default.__testing
+  const a = api.routineQueryKey({ connectionId: 'routine-a', profile: 'ops' }, 'ops')
+  const b = api.routineQueryKey({ connectionId: 'routine-b', profile: 'ops' }, 'ops')
+  const otherProfile = api.routineQueryKey({ connectionId: 'routine-a', profile: 'lead' }, 'lead')
 
-test('RoutineRow toggle and create forward the profile scope', () => {
-  // RoutineRow pause/resume
-  assert.match(source, /action, name: job\.job_id, \.\.\.\(profile \? \{ profile \} : \{\}\)/)
-  // create
-  assert.match(source, /\.\.\.\(bot \? \{ profile: bot \} : \{\}\)/)
+  assert.notDeepEqual(a, b)
+  assert.notDeepEqual(a, otherProfile)
+  assert.deepEqual(a.slice(-2), ['routine-a', 'ops'])
 })

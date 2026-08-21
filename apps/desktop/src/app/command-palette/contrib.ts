@@ -12,7 +12,10 @@ export const PALETTE_AREA = 'palette'
 /** Payload of a `palette` data contribution. */
 export interface PaletteContribution {
   id: string
-  label: string
+  /** Static copy or a locale-aware getter. Getters are resolved on every
+   * palette render, so a boot-time plugin registration follows live locale
+   * changes without unregistering and registering its command again. */
+  label: string | (() => string)
   /** Keybind action id — its live combo renders as the hotkey hint. */
   action?: string
   icon?: IconComponent
@@ -30,11 +33,15 @@ export interface PaletteContribution {
   keepOpen?: boolean
 }
 
+export function resolvePaletteContributionLabel(label: PaletteContribution['label']): string {
+  return typeof label === 'function' ? label() : label
+}
+
 /** Contributed palette rows, with stable render keys. */
 export function usePaletteContributions(): Array<PaletteContribution & { key: string }> {
   return useContributions(PALETTE_AREA)
     .map(c => ({ key: `${c.source ?? 'core'}:${c.id}`, ...(c.data as PaletteContribution) }))
-    .filter(item => Boolean(item.label && item.run))
+    .filter(item => Boolean(resolvePaletteContributionLabel(item.label) && item.run))
 }
 
 /**

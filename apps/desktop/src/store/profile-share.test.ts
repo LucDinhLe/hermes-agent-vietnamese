@@ -27,6 +27,7 @@ const { $profileColors, setProfileColor } = await import('./profile')
 const { modePref, skinPref } = await import('@/themes/context')
 const { $userThemes } = await import('@/themes/user-themes')
 const { $layoutTree } = await import('@/components/pane-shell/tree/store')
+const { allPaneIds, findGroupOfPane } = await import('@/components/pane-shell/tree/model')
 const { exportProfileArchive } = await import('@/hermes')
 
 // isValidTheme only requires background/foreground/primary at runtime; the
@@ -102,6 +103,40 @@ describe('applyDesktopOverlay', () => {
     // Unresolvable skin → pref falls back to the default resolution.
     expect(skinPref.resolve('glam-copy')).toBe(skinPref.resolve('some-unassigned'))
     expect($layoutTree.get()).toBe(before)
+  })
+
+  it('removes retired Agent panes from an imported legacy layout without disturbing other panes', () => {
+    applyDesktopOverlay('legacy-copy', {
+      version: 1,
+      layoutTree: {
+        type: 'split',
+        id: 'legacy-root',
+        orientation: 'row',
+        weights: [1, 2],
+        children: [
+          {
+            type: 'group',
+            id: 'legacy-left',
+            panes: ['sessions', 'hermes-bots:pane', 'hermes-bots:routines'],
+            active: 'hermes-bots:pane'
+          },
+          {
+            type: 'group',
+            id: 'legacy-right',
+            panes: ['workspace', 'files', 'review'],
+            active: 'review'
+          }
+        ]
+      }
+    })
+
+    const tree = $layoutTree.get()
+
+    expect(tree).not.toBeNull()
+    expect(allPaneIds(tree!)).toEqual(['sessions', 'workspace', 'files', 'review'])
+    expect(findGroupOfPane(tree!, 'sessions')?.active).toBe('sessions')
+    expect(findGroupOfPane(tree!, 'review')?.active).toBe('review')
+    expect(JSON.parse(window.localStorage.getItem('hermes.desktop.layoutTree.v2') ?? 'null')).toEqual(tree)
   })
 
   it('is a no-op for a plain CLI archive (no overlay)', () => {

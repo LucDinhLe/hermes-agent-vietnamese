@@ -365,6 +365,8 @@ export const zh: Translations = {
       reveal: '在文件管理器中显示',
       enable: '启用',
       disable: '禁用',
+      required: '必需',
+      requiredDescription: '这是 Hermes 必需的内置功能，会始终保持启用。',
       failed: '失败',
       empty: '尚未安装桌面插件。',
       kinds: { bundled: '内置', disk: '磁盘', runtime: '运行时' },
@@ -791,6 +793,8 @@ export const zh: Translations = {
       version: value => `版本 ${value}`,
       versionUnavailable: '版本不可用',
       projectInfo: '项目信息',
+      technicalVersion: '技术版本',
+      upstreamVersion: '上游 Hermes Agent 版本',
       upstreamPublisher: '原始项目与发布方',
       upstreamPublisherValue: 'Hermes Agent · Nous Research',
       communityMaintainer: '越南语社区版本',
@@ -800,7 +804,7 @@ export const zh: Translations = {
       communityUpdateChannel: 'Hermes Vietnamese 渠道 · GitHub Releases',
       bundleOutOfSync: '应用构建版本过旧',
       bundleOutOfSyncDesc:
-        'Hermes 运行时已更新,但桌面应用本身仍是旧构建——在应用更新之前,新的界面功能(如 Bot Mode)不会显示。请运行下方的更新以重新构建应用。如果此警告仍未消除,请从最新的桌面安装程序重新安装。',
+        'Hermes 运行时已更新,但桌面应用本身仍是旧构建——在应用更新之前,新的界面功能(如 Agents)不会显示。请运行下方的更新以重新构建应用。如果此警告仍未消除,请从最新的桌面安装程序重新安装。',
       bundleOutOfSyncAction: '获取安装程序',
       updates: '更新',
       checkNow: '立即检查',
@@ -1395,6 +1399,10 @@ export const zh: Translations = {
     skillUpdated: '技能已更新',
     edit: '编辑',
     archive: '归档',
+    archiveConfirmTitle: name => `归档 ${name}？`,
+    archiveDescription: '技能将被归档，可通过 Hermes 技能管理工具恢复。',
+    archiveFailed: '无法归档技能',
+    defaultProfile: 'Hermes（默认）',
     skillArchivedTitle: '技能已归档',
     skillArchivedMessage: '可通过 hermes curator restore 恢复。',
     hub: {
@@ -2503,7 +2511,8 @@ export const zh: Translations = {
       cancelTip: '点击取消',
       added: server => `已添加 ${server}`,
       addedTip: '已连接 — 其工具已在此对话中可用',
-      connectFailed: server => `无法连接 ${server}`
+      connectFailed: server => `无法连接 ${server}`,
+      sourceChanged: '此 MCP 建议属于另一个 Agent 来源。请在当前会话中重试。'
     },
     skillSuggestions: {
       label: skill => `使用技能: ${skill}`,
@@ -3234,6 +3243,10 @@ export const zh: Translations = {
       loadingResponse: 'Hermes 正在加载回复',
       resumeWhenBackgroundDone: count =>
         count === 1 ? '后台任务完成后将自动继续' : `${count} 个后台任务完成后将自动继续`,
+      agentMessaging: name => `正在给 ${name} 发送消息…`,
+      agentMessaged: name => `已给 ${name} 发送消息`,
+      agentMessageFrom: name => `来自 ${name} 的消息`,
+      showAgentMessage: '显示消息',
       thinking: '思考中',
       thought: '已思考',
       thoughtBriefly: '思考了片刻',

@@ -16,6 +16,7 @@ import {
   copyExternalCommand,
   type OnboardingContext,
   type OnboardingFlow,
+  onboardingTerminalActionAvailable,
   recheckExternalSignin,
   runExternalSigninCommand,
   setOnboardingCode,
@@ -102,10 +103,12 @@ export function FlowPanel({
       <Step title={t.onboarding.signInWith(title)}>
         <p className="text-sm text-muted-foreground">{t.onboarding.externalPending(title)}</p>
         <CodeBlock copied={flow.copied} onCopy={() => void copyExternalCommand()} text={flow.provider.cli_command} />
-        <Button className="w-fit" onClick={runExternalSigninCommand} variant="outline">
-          <Terminal className="size-4" />
-          {t.onboarding.signInWith(title)}
-        </Button>
+        {onboardingTerminalActionAvailable() && (
+          <Button className="w-fit" onClick={runExternalSigninCommand} variant="outline">
+            <Terminal className="size-4" />
+            {t.onboarding.signInWith(title)}
+          </Button>
+        )}
         <FlowFooter
           left={
             flow.provider.docs_url ? (

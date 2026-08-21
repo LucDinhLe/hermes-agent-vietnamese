@@ -26,7 +26,8 @@ import {
   selectUninstallPython,
   shouldRemoveAppBundle,
   UNINSTALL_MODES,
-  uninstallArgsForMode
+  uninstallArgsForMode,
+  userDataPathForUninstallMode
 } from './desktop-uninstall'
 
 // --- uninstallArgsForMode ---
@@ -56,6 +57,14 @@ test('mode predicates classify what each mode removes', () => {
   assert.equal(modeRemovesUserData('gui'), false)
   assert.equal(modeRemovesUserData('lite'), false)
   assert.equal(modeRemovesUserData('full'), true)
+})
+
+test('detached cleanup receives user data only for a full wipe', () => {
+  const userDataPath = 'C:\\Users\\x\\AppData\\Roaming\\Hermes'
+
+  assert.equal(userDataPathForUninstallMode('gui', userDataPath), null)
+  assert.equal(userDataPathForUninstallMode('lite', userDataPath), null)
+  assert.equal(userDataPathForUninstallMode('full', userDataPath), userDataPath)
 })
 
 // --- selectUninstallPython ---

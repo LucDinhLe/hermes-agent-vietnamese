@@ -63,7 +63,7 @@ Phân loại rủi ro: B. Hermes giữ cấu hình và lịch sử làm việc t
 4. Kéo panel hẹp không làm panel phải đổi kích thước ngoài thao tác của người dùng và không tạo cuộn ngang.
 5. Bật Advisor ở một phiên không đổi phiên khác hay `advisor.enabled` toàn cục.
 6. Đóng rồi mở lại phiên vẫn khôi phục trạng thái Advisor của phiên.
-7. Mỗi dự án có thao tác Ghim hoặc Bỏ ghim trong menu thường và menu chuột phải.
+7. Mỗi dự án có thao tác Ghim hoặc Bỏ ghim trong menu.
 8. Dự án ghim mở đúng project scope và cho phép tạo phiên mới đúng thư mục.
 9. Kéo thả đổi thứ tự dự án ghim và thứ tự tồn tại sau tải lại.
 10. Pin chưa giải quyết không bị mất khi người dùng sắp xếp các pin đang hiển thị.

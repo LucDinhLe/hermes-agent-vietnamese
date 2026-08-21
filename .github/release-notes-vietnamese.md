@@ -1,128 +1,113 @@
-## Hermes Vietnamese vi-v0.20.4-39 — v31.1 cho công việc AI có kiểm soát
+## Hermes Vietnamese v31.0 — Agents cộng tác luôn sẵn trong từng phiên
 
-Hermes Vietnamese v31 là bản Desktop độc lập của
-[Hermes Agent](https://github.com/NousResearch/hermes-agent), do
+Candidate bất biến: `vi-v0.31.0-1`
+
+Phiên bản kỹ thuật Desktop: `0.31.0-vi.1`
+
+Lõi upstream: **Hermes Agent 0.20.4**
+
+Hermes Vietnamese v31.0 là bản Desktop độc lập do
 [Lê Đình Lực (LucDinhLe)](https://github.com/LucDinhLe) phát triển cho cộng
-đồng theo giấy phép MIT. Bản này dùng lõi Hermes Agent 0.20.4 và cung cấp môi
-trường làm việc hoàn chỉnh cho người muốn giao việc cho AI mà không phải tự
-dựng Hermes từ mã nguồn.
+đồng theo giấy phép MIT, dựa trên
+[Hermes Agent](https://github.com/NousResearch/hermes-agent). Phiên bản sản
+phẩm Việt hóa và phiên bản upstream được hiển thị riêng để người dùng không
+nhầm nguồn gốc hoặc đường nâng cấp.
 
-> **Lớp phát hành: community prerelease, chưa phải stable.** Windows và macOS
-> chưa ký số/công chứng đầy đủ. Hãy tải đúng kho chính thức và kiểm SHA-256.
+> **Lớp phát hành: community prerelease, chưa phải stable.** Candidate chỉ được
+> công khai sau khi sáu target build đạt, byte trên GitHub khớp SHA-256 và
+> Windows x64 vượt exact-artifact smoke. Bản tải mặc định/Latest hiện
+> hành vẫn là community pilot `vi-v0.20.0-25` cho tới khi signing và
+> smoke máy thật đủ theo policy; bản này không được tái phân loại thành stable.
 
-### Những lợi thế chính
+> **Chuẩn hóa phiên bản:** `v31.0` là mốc đầu tiên dùng hợp đồng
+> phiên bản sản phẩm tách khỏi upstream. Nhãn working `v31.1` trong kế hoạch
+> candidate vi39 không phải technical/updater version và được thay bằng mốc
+> chính thức `v31.0`; đường nâng cấp vẫn tăng từ `0.20.4-vi.39` lên
+> `0.31.0-vi.1`.
 
-#### Cài đặt và cập nhật như một ứng dụng Desktop
+### Agents: cộng tác thay vì thay người chủ trì
 
-- Bộ cài mang theo Python, Node.js, `uv`, Hermes và dependency đã khóa.
-- Lần mở đầu dùng runtime tích hợp, không phụ thuộc Git, nhánh động hoặc công cụ
-  lập trình trong máy người dùng.
-- Cập nhật giữ nguyên app identity và vùng dữ liệu. Cấu hình, cuộc trò chuyện,
-  lịch định kỳ và trạng thái onboarding không bị chuyển sang hồ sơ mới.
-- Có các lựa chọn sửa chữa, gỡ giao diện nhưng giữ dữ liệu hoặc gỡ toàn bộ.
+- Pane hồ sơ cộng tác cũ có thể đóng rồi mất lối vào đã được bỏ khỏi panel trái.
+- Mỗi phiên có nút **Agents** cố định cạnh mức dùng cửa sổ ngữ cảnh, chi phí
+  USD và Advisor; nút này co giãn trong chính panel chat, không lấn panel phải.
+- Dropdown cho biết Agent chủ trì, các Agent đang tham gia, vai trò/trạng thái,
+  model và mô tả năng lực ngắn. Có tìm kiếm để lọc roster dài.
+- Mời một Agent chỉ thêm cộng tác viên vào phiên hoặc dự án. Hành động đó không
+  đổi Agent chủ trì, gateway, model, system prompt hay tự phát sinh lượt model.
+- Một phiên hoặc dự án có thể giữ nhiều Agent cộng tác, kể cả Agent trùng tên
+  nằm trên các kết nối khác nhau.
+- **Quản lý Agents** là một trang ổn định để xem, tạo, sửa, sao chép, xóa, quản
+  lý nhóm, năng lực, kỹ năng, công cụ, MCP và tác vụ định kỳ.
 
-**Lợi ích:** người dùng tập trung vào công việc; môi trường cài đặt và nâng cấp
-được quản lý như một sản phẩm thay vì một dự án lập trình.
+### Việt hóa đầy đủ và giữ English hoàn chỉnh
 
-#### Làm việc theo phiên, dự án và panel
+- Toàn bộ bề mặt tạo/sửa/quản lý Agent, avatar, model, SOUL.md, capabilities,
+  skills, tools, MCP, profile sessions, groups và routines có copy tiếng Việt.
+- Locale English vẫn đầy đủ và có thể đổi trực tiếp mà không làm mất dữ liệu
+  đang nhập trong dialog.
+- Lựa chọn chia sẻ tài khoản/API key giải thích rõ quyền truy cập, hạn mức và
+  chi phí: yêu cầu của Agent được tính vào chính tài khoản/provider tương ứng.
+  Mặc định cũ được giữ nguyên; v31 không âm thầm đổi quyết định credential.
 
-- Mở nhiều phiên thành tab hoặc chia panel để đối chiếu song song.
-- Panel phải giữ Tệp, Trình duyệt và Terminal, co giãn độc lập với vùng chat.
-- Trang **Dự án** cho phép tìm, mở, ghim và tạo phiên đúng thư mục.
-- Trang **Thống kê sử dụng** tổng hợp token theo thời gian, dự án và model.
-- Từng phiên có chỉ báo mức dùng cửa sổ ngữ cảnh theo giới hạn model do nhà
-  cung cấp công bố, kèm ngưỡng rút gọn thực tế của Hermes.
-- Chi phí theo phiên được ước tính bằng USD từ token vào, token ra và cache,
-  có tách model làm việc với model Advisor.
+### Tương thích dữ liệu và đường nâng cấp
 
-**Lợi ích:** người dùng biết công việc nằm ở đâu, model nào đang tiêu tốn tài
-nguyên, chi phí tương đương API và khi nào một phiên sắp chạm giới hạn ngữ
-cảnh. Số tiền là ước tính theo bảng giá model, không thay thế hóa đơn thực tế
-của gói thuê bao hoặc nhà cung cấp.
+- Giữ nguyên app ID, executable, protocol, thư mục dữ liệu và bootstrap marker;
+  cài đè nhận đúng cấu hình, cuộc trò chuyện và onboarding hiện có.
+- Plugin ID `hermes-bots`, storage key, profile/session/group/routine schema,
+  tiêu đề `Bot Chat` và marker protocol cũ tiếp tục được đọc. Chỉ lớp trình bày
+  dùng Agent/Agents; v31 không rewrite dữ liệu người dùng.
+- Updater nhận `0.31.0-vi.1` là mới hơn `0.20.4-vi.39`. Cổng phát hành bắt buộc
+  thử cài đè từ `vi-v0.20.4-39` và kiểm tra profile, session, project, group,
+  routine cùng trạng thái onboarding còn nguyên.
 
-#### Advisor phản biện ngay trong từng phiên
+### Advisor và các bề mặt v26–v39 được giữ nguyên
 
-- Advisor là model độc lập, chỉ đọc và không có công cụ thao tác thay người làm.
-- Công tắc và menu model nằm ngay trong panel phiên; menu lấy đủ model từ mọi
-  nhà cung cấp đã kết nối.
-- Hermes gọi Advisor tại checkpoint kế hoạch, hướng phục hồi và kết quả cuối.
-- Trạng thái bật/tắt tách theo phiên; model Advisor dùng định tuyến riêng.
+- Planning/final checking của Advisor tiếp tục chạy theo từng phiên.
+- Context meter, USD estimate, model selector, Advisor selector/toggle, thinking
+  progress, tab/chia panel và panel phải vẫn hiện diện.
+- Browser, Projects, Usage analytics, routine catalog tiếng Việt, connector và
+  runtime resident tiếp tục dùng hợp đồng đã chốt ở các candidate trước.
 
-**Lợi ích:** công việc quan trọng có thêm một lớp kiểm tra mục tiêu và chất
-lượng, trong khi tác vụ đơn giản vẫn có thể tắt Advisor để tiết kiệm chi phí.
+### Tệp candidate theo nền tảng
 
-#### Theo dõi tiến trình mà không lộ suy luận riêng tư
+Chỉ dùng các liên kết dưới đây sau khi release chuyển khỏi draft. Luôn đối chiếu
+với `SHA256SUMS.txt` nằm trong cùng release.
 
-- Trong lúc làm, Hermes hiển thị việc đang thực hiện và lý do vận hành của bước
-  đó, ví dụ chuẩn bị công cụ, kiểm tra kết quả hoặc rút gọn ngữ cảnh.
-- Khi Advisor được gọi, phiên hiển thị rõ checkpoint và kết luận đạt, cần chỉnh
-  sửa hoặc chưa thể đánh giá.
-- Dòng tiến trình tự biến mất khi lượt làm việc hoàn tất, bị dừng hoặc lỗi.
-- Hermes không trình bày chain-of-thought ẩn; reasoning công khai do provider
-  thực sự trả về vẫn được giữ nguyên để người dùng đối chiếu.
-
-**Lợi ích:** người dùng theo kịp tiến trình và học được cách tổ chức công việc,
-đồng thời giữ được tính trung thực và quyền riêng tư của suy luận model.
-
-#### Dùng Browser và phiên đăng nhập có kiểm soát
-
-- Browser nhiều tab dùng chung giữa người dùng và agent nhưng nằm riêng trong
-  panel phải.
-- Hermes Connector cho Chrome/Edge chỉ hoạt động sau khi người dùng chọn domain
-  và xác nhận ghép cặp.
-- Không chuyển mật khẩu, autofill, lịch sử, bookmark hoặc toàn bộ hồ sơ trình
-  duyệt. Cookie nhập vào Electron session riêng và có thể thu hồi.
-
-**Lợi ích:** agent làm việc trên đúng website được phép mà không cần sao chép
-toàn bộ hồ sơ trình duyệt của người dùng.
-
-#### Tác vụ định kỳ bằng tiếng Việt
-
-- Có 16 mẫu làm sẵn cho bản tin sáng, email quan trọng, tổng kết tuần, nhắc
-  việc, điểm tin, theo dõi giá, theo dõi đối thủ, sức khỏe, học tập và bữa ăn.
-- Tên mẫu, mô tả, trường nhập, gợi ý và lựa chọn đều hiển thị bằng tiếng Việt.
-- Tác vụ tạo từ mẫu được lưu với tên tiếng Việt; lịch chạy và giá trị kỹ thuật
-  vẫn dùng hợp đồng chuẩn của Hermes để bảo đảm tương thích.
-
-**Lợi ích:** người dùng có thể tạo một lịch tự động hóa hoàn chỉnh mà không cần
-đọc thuật ngữ tiếng Anh hoặc tự viết biểu thức cron.
-
-### Tải đúng bản cho máy
-
-| Máy đang dùng           | Tệp cài v31                                                                                                                                               |
+| Máy đang dùng           | Tệp candidate                                                                                                                                             |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows 10/11 x64       | [Windows x64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-39/Hermes-Vietnamese-Windows-x64-Setup.exe)         |
-| Windows 10/11 ARM64     | [Windows ARM64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-39/Hermes-Vietnamese-Windows-arm64-Setup.exe)     |
-| Mac chip Apple M-series | [macOS Apple Silicon DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-39/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
-| Mac chip Intel          | [macOS Intel DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-39/Hermes-Vietnamese-macOS-Intel.dmg)                 |
-| Ubuntu/Debian x64       | [Linux x64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-39/Hermes-Vietnamese-Linux-x64.deb)                     |
-| Ubuntu/Debian ARM64     | [Linux ARM64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-39/Hermes-Vietnamese-Linux-arm64.deb)                 |
-| Fedora/RHEL x64         | [Linux x64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-39/Hermes-Vietnamese-Linux-x64.rpm)                     |
-| Fedora/RHEL ARM64       | [Linux ARM64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-39/Hermes-Vietnamese-Linux-arm64.rpm)                 |
-| Linux khác x64          | [Linux x64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-39/Hermes-Vietnamese-Linux-x64.AppImage)           |
-| Linux khác ARM64        | [Linux ARM64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-39/Hermes-Vietnamese-Linux-arm64.AppImage)       |
+| Windows 10/11 x64       | [Windows x64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-1/Hermes-Vietnamese-Windows-x64-Setup.exe)         |
+| Windows 10/11 ARM64     | [Windows ARM64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-1/Hermes-Vietnamese-Windows-arm64-Setup.exe)     |
+| Mac chip Apple M-series | [macOS Apple Silicon DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-1/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
+| Mac chip Intel          | [macOS Intel DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-1/Hermes-Vietnamese-macOS-Intel.dmg)                 |
+| Ubuntu/Debian x64       | [Linux x64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-1/Hermes-Vietnamese-Linux-x64.deb)                     |
+| Ubuntu/Debian ARM64     | [Linux ARM64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-1/Hermes-Vietnamese-Linux-arm64.deb)                 |
+| Fedora/RHEL x64         | [Linux x64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-1/Hermes-Vietnamese-Linux-x64.rpm)                     |
+| Fedora/RHEL ARM64       | [Linux ARM64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-1/Hermes-Vietnamese-Linux-arm64.rpm)                 |
+| Linux khác x64          | [Linux x64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-1/Hermes-Vietnamese-Linux-x64.AppImage)           |
+| Linux khác ARM64        | [Linux ARM64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-1/Hermes-Vietnamese-Linux-arm64.AppImage)       |
 
-### Quyền riêng tư, chi phí và tình trạng nghiệm thu
+### Tình trạng nghiệm thu candidate khi được công khai
 
-- Bản phân phối không kèm tài khoản, model trả phí, API key hoặc hạn mức sử
-  dụng. Chi phí phụ thuộc model/provider người dùng chọn.
-- Cookie, token và bí mật không được đưa vào artifact hoặc bằng chứng phát hành.
-- Tên hiển thị, shortcut và metadata là **Hermes Vietnamese**. App ID, tên tệp
-  thực thi nội bộ, giao thức và vùng dữ liệu vẫn giữ nguyên để cài đè nhận đúng
-  cấu hình và cuộc trò chuyện hiện có.
-- Windows x64: exact-artifact smoke chưa chạy cho candidate này.
+- Windows x64: exact-artifact smoke đạt trên chính byte phát hành là điều kiện
+  bắt buộc; workflow promotion kiểm lại evidence, SHA-256 và trạng thái
+  `PILOT-GO` trước khi candidate được chuyển khỏi draft.
 - Windows ARM64, macOS Apple Silicon/Intel và Linux x64/ARM64 **chưa có smoke
-  trên máy người dùng** và chỉ được xem là `BUILD-ONLY-PILOT` nếu công khai.
-- Windows chưa Authenticode; dự án đang theo đuổi ký qua SignPath Foundation.
-- Dự án chưa tham gia Apple Developer Program; macOS chưa có Developer ID hoặc
-  notarization.
+  trên máy người dùng**; nếu build đạt, các target này vẫn chỉ là
+  `BUILD-ONLY-PILOT`.
+- Windows chưa Authenticode. Hồ sơ SignPath Foundation vẫn đang chờ xét duyệt;
+  không được coi cảnh báo SmartScreen là bằng chứng bộ cài đã ký.
+- Dự án chưa tham gia Apple Developer Program; macOS chưa có Developer ID,
+  notarization hoặc stapling.
+- Artifact chưa vượt cổng không được quảng cáo là stable, final hoặc đã smoke.
 
-### Hỗ trợ và quay lui
+### Quyền riêng tư, chi phí và hỗ trợ
 
+- Bản phân phối không kèm tài khoản, model trả phí, API key hay hạn mức. Chi phí
+  phụ thuộc model/provider và tài khoản người dùng chọn.
+- Cookie, token và bí mật không nằm trong artifact, log hay bằng chứng release.
 - Lỗi và góp ý: [GitHub Issues](https://github.com/LucDinhLe/hermes-agent-vietnamese/issues)
 - Báo cáo bảo mật: [SECURITY.md](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/SECURITY.md)
-- Hướng dẫn: [README tiếng Việt](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md)
-- Mốc quay lui đã diễn tập: [`vi-v0.20.0-14`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-14).
+- Mốc quay lui của candidate: [`vi-v0.20.4-39`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.4-39).
 
 Phần mềm được cung cấp theo nguyên trạng theo giấy phép MIT, không kèm bảo hành.
 Người dùng chịu trách nhiệm kiểm tra kết quả, quyền đã cấp và chi phí dịch vụ.

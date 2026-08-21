@@ -124,6 +124,21 @@ describe('registry-agent scope eviction (activeGateway must never silently hit t
     expect($gateway.get()).toBe(publishedPrimary)
   })
 
+  it('keeps the primary active when the registry descriptor resolves but its socket cannot connect', async () => {
+    const primary = makePrimary()
+    setPrimaryGateway(primary as never, 'default')
+    await ensureGatewayForProfile('default')
+    const publishedPrimary = $gateway.get()
+    installAgentDesktop()
+    gatewayMocks.connect.mockRejectedValueOnce(new Error('socket refused'))
+
+    await expect(ensureGatewayForAgent('offline', 'research')).resolves.toBe(false)
+
+    expect(isActivePrimary()).toBe(true)
+    expect(activeGateway()).toBe(primary)
+    expect($gateway.get()).toBe(publishedPrimary)
+  })
+
   it('closeSecondaryGateways re-points the active key at the primary instead of dangling', async () => {
     const primary = makePrimary()
     setPrimaryGateway(primary as never, 'default')

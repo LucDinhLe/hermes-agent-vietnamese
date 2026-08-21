@@ -6,7 +6,7 @@ import { useI18n } from '@/i18n'
 import { Loader2 } from '@/lib/icons'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
-import { $hubActions, installHubSkill, UPDATE_ALL_KEY, updateHubSkills } from '@/store/hub-actions'
+import { $hubActions, hubActionKey, installHubSkill, UPDATE_ALL_KEY, updateHubSkills } from '@/store/hub-actions'
 import { notify, notifyError } from '@/store/notifications'
 import { $paneHeightOverride, setPaneHeightOverride } from '@/store/panes'
 
@@ -44,6 +44,8 @@ interface SkillPickMessage {
 }
 
 interface EmbeddedHubPickerProps {
+  /** Immutable backend source paired with `profile`. */
+  connectionId?: null | string
   /** Kept mounted but fully hidden (display:none). The Capabilities view uses
    *  this to preserve the loaded hub iframe across tab switches — a plain
    *  unmount would reload the whole docs site on every return to Skills. */
@@ -62,6 +64,7 @@ interface EmbeddedHubPickerProps {
  *  other pane) and an update-all action. Memoized: the iframe must not sit in
  *  the parent's keystroke/re-render path. */
 export const EmbeddedHubPicker = memo(function EmbeddedHubPicker({
+  connectionId,
   hidden = false,
   installedNames,
   profile
@@ -70,7 +73,8 @@ export const EmbeddedHubPicker = memo(function EmbeddedHubPicker({
   const h = t.skills.hub
   // Subscribe to the ONE flag this header renders, not the whole action map —
   // $hubActions churns on every tailed log line during an install.
-  const updating = useStoreSelector($hubActions, actions => actions[UPDATE_ALL_KEY]?.running ?? false)
+  const updatingKey = hubActionKey(UPDATE_ALL_KEY, profile, connectionId)
+  const updating = useStoreSelector($hubActions, actions => actions[updatingKey]?.running ?? false)
   // Collapse state rides the same persisted height override the sash writes
   // (0 = collapsed to the header), so "Hide the hub browser" survives tab
   // switches and restarts instead of re-expanding — and re-loading the docs
@@ -148,17 +152,17 @@ export const EmbeddedHubPicker = memo(function EmbeddedHubPicker({
       }
 
       notify({ kind: 'success', title: h.installStarted(label), message: h.actionLog })
-      void installHubSkill(target, profile).catch(err => notifyError(err, h.actionFailed))
+      void installHubSkill(target, profile, connectionId).catch(err => notifyError(err, h.actionFailed))
     }
 
     window.addEventListener('message', onMessage)
 
     return () => window.removeEventListener('message', onMessage)
-  }, [h, installedNames, open, profile])
+  }, [connectionId, h, installedNames, open, profile])
 
   const updateAll = () => {
     notify({ kind: 'success', title: h.updateStarted, message: h.actionLog })
-    void updateHubSkills(profile).catch(err => notifyError(err, h.actionFailed))
+    void updateHubSkills(profile, connectionId).catch(err => notifyError(err, h.actionFailed))
   }
 
   return (

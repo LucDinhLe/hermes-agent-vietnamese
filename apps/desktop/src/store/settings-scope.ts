@@ -1,6 +1,8 @@
 import { atom, computed } from 'nanostores'
 
+import { connectionOwnerId } from '@/store/backend-owner'
 import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
+import { $connection } from '@/store/session'
 
 // ── Shared settings "Applies to" scope ──────────────────────────────────────
 // One selection shared by every config-backed settings page (Model, Workspace,
@@ -29,13 +31,16 @@ export function setSettingsScope(name: string): void {
 // backend; a surviving override would silently keep edits pointed at the
 // previous target. Same drop-the-override contract as the Capabilities
 // selector (app/skills useOnProfileSwitch).
-let lastActiveProfile = normalizeProfileKey($activeGatewayProfile.get())
+const $activeSettingsOwnerKey = computed(
+  [$connection, $activeGatewayProfile],
+  (connection, profile) => `${connectionOwnerId(connection) ?? '__pending__'}::${normalizeProfileKey(profile)}`
+)
 
-$activeGatewayProfile.subscribe(value => {
-  const key = normalizeProfileKey(value)
+let lastActiveOwnerKey = $activeSettingsOwnerKey.get()
 
-  if (key !== lastActiveProfile) {
-    lastActiveProfile = key
+$activeSettingsOwnerKey.subscribe(key => {
+  if (key !== lastActiveOwnerKey) {
+    lastActiveOwnerKey = key
     $settingsScopeOverride.set(null)
   }
 })

@@ -52,6 +52,7 @@ import {
   $attentionSessionIds,
   $workingSessionIds,
   liveSessionScopes,
+  recordPrimarySessionEventSource,
   recordSessionEventScope,
   resetTileRuntimeBindings
 } from '@/store/session-states'
@@ -150,6 +151,12 @@ export function useGatewayBoot({
     let reconnecting = false
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null
     let reconnectAttempt = 0
+    let primaryConnection: HermesConnection | null = null
+    // The window-owned primary profile must follow primary adoption, not the
+    // globally active profile (which may point at a secondary tile later).
+    // Keep it mutable so cold boot and soft connection switches label every
+    // primary event with the profile actually selected by main.
+    let primaryProfile = normalizeProfileKey(windowProfileOverride() ?? $activeGatewayProfile.get())
     // Wall-clock start of the current disconnect episode (first failed
     // reconnect attempt); null while healthy. Drives the time-based
     // escalation below. Reset on a clean open or a manual/wake reconnect.
@@ -224,6 +231,8 @@ export function useGatewayBoot({
         if (cancelled) {
           return
         }
+
+        primaryConnection = conn
 
         // Only publish the primary descriptor when the primary is active.
         // Otherwise a background-profile view would inherit the primary's
@@ -332,11 +341,14 @@ export function useGatewayBoot({
       try {
         const profileKey = override ?? (await desktop.profile?.get?.())?.profile ?? ''
         const key = normalizeProfileKey(profileKey)
+        primaryProfile = key
         $activeGatewayProfile.set(key)
         setPrimaryGateway(gateway, key)
         void ensureGatewayForProfile(key)
       } catch {
-        $activeGatewayProfile.set(normalizeProfileKey(override))
+        const key = normalizeProfileKey(override)
+        primaryProfile = key
+        $activeGatewayProfile.set(key)
       }
     }
 
@@ -382,7 +394,9 @@ export function useGatewayBoot({
           return
         }
 
+        primaryConnection = conn
         publish(conn)
+        await adoptPrimaryProfile()
         const wsUrl = await resolveGatewayWsUrl(desktop, conn)
         await gateway.connect(wsUrl)
 
@@ -390,15 +404,15 @@ export function useGatewayBoot({
           return
         }
 
-        // Same shape as boot(): profile first (session scope depends on it),
-        // then the independent fetches concurrently. refreshActiveProfile is
+        // The profile already landed before opening the socket, so session
+        // events and the independent refreshes share the same scope.
+        // refreshActiveProfile is
         // explicit here: the rail's $profiles still shows the PREVIOUS
         // backend's list after a connection/mode apply, and nothing else
         // re-pulls /api/profiles deterministically post-switch — leaving the
         // rail stale or (if a stale in-flight response landed) collapsed
         // (#85731). Best-effort like the rest: a failure keeps the cached
         // list rather than blanking the rail.
-        await adoptPrimaryProfile()
         await Promise.all([
           seedDefaultCwd(),
           refreshActiveProfile().catch(() => undefined),
@@ -452,6 +466,7 @@ export function useGatewayBoot({
     // dead-code-eliminates out of the bundle.
     const survivor = import.meta.hot ? takeGatewaySurvivor() : null
     const adoptedFromHmr = Boolean(survivor && !survivorIsStale(survivor))
+    primaryConnection = survivor?.connection ?? null
 
     if (survivor && !adoptedFromHmr) {
       // Parked socket died between edits (e.g. backend restart) — release it.
@@ -520,11 +535,12 @@ export function useGatewayBoot({
       }
     })
 
-    const sourceProfile = normalizeProfileKey($activeGatewayProfile.get())
+    const offEvent = gateway.onEvent(event => {
+      const primaryEvent = { ...event, profile: primaryProfile }
 
-    const offEvent = gateway.onEvent(event =>
-      callbacksRef.current.handleGatewayEvent({ ...event, profile: sourceProfile })
-    )
+      recordPrimarySessionEventSource(primaryEvent, primaryConnection)
+      callbacksRef.current.handleGatewayEvent(primaryEvent)
+    })
 
     // Wake signals: power resume (macOS/Windows), network coming back, and the
     // window regaining focus/visibility. Each nudges an immediate reconnect.
@@ -623,6 +639,8 @@ export function useGatewayBoot({
           return
         }
 
+        primaryConnection = conn
+        await adoptPrimaryProfile()
         setDesktopBootStep({
           phase: 'renderer.gateway.connect',
           message: translateNow('boot.steps.connectingGateway'),
@@ -655,13 +673,12 @@ export function useGatewayBoot({
           return
         }
 
-        // Profile adoption must land first: refreshSessions scopes its fetch by
-        // $profileScope ← $activeGatewayProfile. The remaining three fetches
+        // Profile adoption landed before opening the socket: refreshSessions
+        // and every primary event now share that exact profile. The remaining
+        // three fetches
         // (cwd seed, config, sessions) are independent REST calls — running
         // them serially added their sum to time-to-populated-sidebar when only
         // the max is needed.
-        await adoptPrimaryProfile()
-
         setDesktopBootStep({
           phase: 'renderer.config',
           message: translateNow('boot.steps.loadingSettings'),

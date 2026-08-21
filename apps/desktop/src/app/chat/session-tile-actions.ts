@@ -11,7 +11,6 @@
 import type { AppendMessage, ThreadMessage } from '@assistant-ui/react'
 import { useCallback, useMemo, useRef } from 'react'
 
-import { useGatewayRequest } from '@/app/gateway/hooks/use-gateway-request'
 import type { ClientSessionState } from '@/app/types'
 import { useI18n } from '@/i18n'
 import { textPart } from '@/lib/chat-messages'
@@ -23,8 +22,10 @@ import { resetSessionBackground } from '@/store/composer-status'
 import { notifyError } from '@/store/notifications'
 import { clearPreviewArtifacts } from '@/store/preview-status'
 import { clearAllPrompts } from '@/store/prompts'
-import { $connection, $sessions, sessionMatchesStoredId } from '@/store/session'
-import { $sessionStates, sessionTileDelegate } from '@/store/session-states'
+import { activeBackendOwner, sameBackendOwner } from '@/store/backend-owner'
+import { requestGatewayForAgent } from '@/store/gateway'
+import { $sessions, sessionMatchesStoredId } from '@/store/session'
+import { $sessionStates, sessionTileDelegate, type SessionTileOwner } from '@/store/session-states'
 import { broadcastSessionsChanged } from '@/store/session-sync'
 import { clearSessionSubagents } from '@/store/subagents'
 import { clearSessionTodos } from '@/store/todos'
@@ -97,15 +98,20 @@ export function listTileSessionRow(deps: {
 }
 
 interface SessionTileActionsArgs {
+  owner: SessionTileOwner
   runtimeId: string
   scope: ComposerScope
   storedSessionId: string
 }
 
-export function useSessionTileActions({ runtimeId, scope, storedSessionId }: SessionTileActionsArgs) {
+export function useSessionTileActions({ owner, runtimeId, scope, storedSessionId }: SessionTileActionsArgs) {
   const { t } = useI18n()
   const copy = t.desktop
-  const { requestGateway } = useGatewayRequest()
+  const requestGateway = useCallback(
+    <T,>(method: string, params: Record<string, unknown> = {}, timeoutMs?: number, signal?: AbortSignal) =>
+      requestGatewayForAgent<T>(owner.connectionId, owner.profile, method, params, timeoutMs, signal),
+    [owner.connectionId, owner.profile]
+  )
 
   const runtimeIdRef = useRef(runtimeId)
   runtimeIdRef.current = runtimeId
@@ -152,6 +158,12 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId }: Ses
     const runtimeId = runtimeIdRef.current
     const state = $sessionStates.get()[runtimeId]
 
+    // The visible session list belongs to the foreground owner. A background
+    // A tile must never seed a synthetic row into B's same-profile list.
+    if (!sameBackendOwner(activeBackendOwner(), owner)) {
+      return
+    }
+
     listTileSessionRow({
       cwd: state?.cwd,
       model: state?.model,
@@ -160,7 +172,7 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId }: Ses
       sessions: $sessions.get(),
       storedSessionId: storedIdRef.current
     })
-  }, [])
+  }, [owner])
 
   // Tile-side attachment staging: same upload rules as the primary submit
   // (skip synced/pathless, byte-upload files+images), against the tile scope.
@@ -170,7 +182,7 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId }: Ses
       attachments: ComposerAttachment[],
       options: { updateComposerAttachments?: boolean } = {}
     ): Promise<{ attachments: ComposerAttachment[]; sessionId: string }> => {
-      const remote = $connection.get()?.mode === 'remote'
+      const remote = owner.connectionId !== 'local'
       let liveSessionId = sessionId
       const synced: ComposerAttachment[] = []
 
@@ -225,7 +237,7 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId }: Ses
 
       return { attachments: synced, sessionId: liveSessionId }
     },
-    [requestGateway, scope.attachments]
+    [owner.connectionId, requestGateway, scope.attachments]
   )
 
   // The REAL submit pipeline with tile seams: session always exists, and the
@@ -268,14 +280,14 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId }: Ses
 
       if (!attachments.length && SLASH_COMMAND_RE.test(visibleText)) {
         triggerHaptic('selection')
-        await sessionTileDelegate()?.executeSlash(visibleText, runtimeIdRef.current)
+        await sessionTileDelegate()?.executeSlash(visibleText, runtimeIdRef.current, owner)
 
         return true
       }
 
       return await submitPromptText(rawText, options)
     },
-    [listTileSession, scope.attachments.$attachments, submitPromptText]
+    [listTileSession, owner, scope.attachments.$attachments, submitPromptText]
   )
 
   const cancelRun = useCallback(async () => {

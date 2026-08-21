@@ -19,11 +19,13 @@ export interface PluginRecord {
   kind: PluginKind
   status: PluginStatus
   /** One-liner from the plugin's own metadata (what it adds). */
-  description?: string
+  description?: string | (() => string)
   /** Load/registration failure message (status 'error'). */
   error?: string
   /** Absolute plugin.js path (disk plugins) — powers "Reveal in Finder". */
   file?: string
+  /** Product-critical bundled surface that must remain registered. */
+  required?: boolean
 }
 
 // Explicit user enable/disable choices, id -> boolean. ABSENCE means "no
@@ -61,6 +63,13 @@ export function pluginActive(id: string, defaultEnabled = true): boolean {
   const decisions = $pluginDecisions.get()
 
   return id in decisions ? decisions[id] : defaultEnabled
+}
+
+/** Product-critical bundled features win over a historical user decision.
+ *  Keep the ordinary decision resolver unchanged for every optional plugin;
+ *  this narrow gate is what migrates a previously disabled feature back on. */
+export function pluginShouldActivate(id: string, defaultEnabled = true, required = false): boolean {
+  return required || pluginActive(id, defaultEnabled)
 }
 
 function saveDecisions(next: Record<string, boolean>) {
@@ -109,6 +118,10 @@ export function dropPlugin(id: string): void {
 
 /** Live toggle: deactivate + remember, or forget + reactivate. */
 export async function setPluginEnabled(id: string, enabled: boolean): Promise<void> {
+  if ($pluginRecords.get()[id]?.required && !enabled) {
+    return
+  }
+
   saveDecisions({ ...$pluginDecisions.get(), [id]: enabled })
 
   const handle = handles.get(id)

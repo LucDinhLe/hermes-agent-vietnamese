@@ -4,6 +4,7 @@ import test from 'node:test'
 import vm from 'node:vm'
 
 const pluginSource = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
+const LOCAL_OWNER = { connectionId: 'local', profile: 'default' }
 
 function load(configureResponse) {
   const values = new Map()
@@ -26,7 +27,11 @@ function load(configureResponse) {
         }
         return Promise.resolve({})
       },
-      state: { profile: { get: () => 'default', listen: () => undefined }, gateway: { listen: () => undefined } }
+      state: {
+        connectionId: { get: () => 'local', listen: () => undefined },
+        profile: { get: () => 'default', listen: () => undefined },
+        gateway: { listen: () => undefined }
+      }
     }
   }
   const source = pluginSource
@@ -52,7 +57,7 @@ test('server persistence failure is returned while the local look remains saved'
     shape: 'cloud',
     color: '#38bdf8',
     custom: true
-  })
+  }, null, LOCAL_OWNER)
 
   assert.equal($botMeta.get().researcher.shape, 'cloud')
   assert.equal($botMeta.get().researcher.color, '#38bdf8')
@@ -67,7 +72,7 @@ test('server persistence success is returned after ui_meta is applied', async ()
     shape: 'hexagon',
     color: '#8b5cf6',
     custom: true
-  })
+  }, null, LOCAL_OWNER)
 
   assert.equal(result.serverPersisted, true)
   assert.equal(result.serverOutcome, 'persisted')
@@ -76,7 +81,7 @@ test('server persistence success is returned after ui_meta is applied', async ()
 test('an older gateway (no applied contract) is unsupported, not failed', async () => {
   const { saveBotMeta } = load({})
 
-  const result = await saveBotMeta('researcher', { shape: 'circle', custom: true })
+  const result = await saveBotMeta('researcher', { shape: 'circle', custom: true }, null, LOCAL_OWNER)
 
   assert.equal(result.serverOutcome, 'unsupported')
   assert.equal(result.serverPersisted, false)
@@ -85,14 +90,17 @@ test('an older gateway (no applied contract) is unsupported, not failed', async 
 test('a rejected configure request is unsupported, not failed', async () => {
   const { saveBotMeta } = load(() => Promise.reject(new Error('param shape rejected')))
 
-  const result = await saveBotMeta('researcher', { shape: 'circle', custom: true })
+  const result = await saveBotMeta('researcher', { shape: 'circle', custom: true }, null, LOCAL_OWNER)
 
   assert.equal(result.serverOutcome, 'unsupported')
 })
 
-test('Edit Profile waits for persistence and reports a local-only save', () => {
-  assert.match(pluginSource, /const persistence = await saveBotMeta\(bot\.name,/)
-  assert.match(pluginSource, /Saved look locally; remote persistence failed/)
+test('Edit Agent profile waits for persistence and reports a localized local-only save', () => {
+  assert.match(pluginSource, /const persistence = await saveBotMeta\(\s*bot\.name,/)
+  assert.match(
+    pluginSource,
+    /if \(lookFailed\) \{\s*host\.notify\(\{ kind: 'error', message: copy\('edit\.localLookFailed'\) \}\)/
+  )
   // The toast fires only on an explicit remote failure — never on the
   // documented older-gateway fallback.
   assert.match(pluginSource, /serverOutcome === 'failed'/)

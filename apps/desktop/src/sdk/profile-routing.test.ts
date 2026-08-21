@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import type { HermesConnection } from '@/global'
 import type { ProfileInfo } from '@/types/hermes'
 
 vi.mock('@/app/chat/session-view', async () => {
@@ -72,6 +73,7 @@ vi.mock('@/store/gateway', async () => {
 
   return {
     $gateway: atom(null),
+    activeGatewayConnectionId: vi.fn(() => null),
     ensureGatewayForAgent: vi.fn(),
     openGatewayForAgent: vi.fn(),
     openGatewayForProfile: vi.fn(),
@@ -94,8 +96,12 @@ vi.mock('@/store/gateway', async () => {
 
 const { host } = await import('./index')
 const { deleteProfile } = await import('@/hermes')
-const { requestGatewayForAgent, requestGatewayForProfile, retireLocalProfileGateways } = await import('@/store/gateway')
-const { $profiles, refreshProfiles } = await import('@/store/profile')
+
+const { activeGatewayConnectionId, requestGatewayForAgent, requestGatewayForProfile, retireLocalProfileGateways } =
+  await import('@/store/gateway')
+
+const { $profiles, ensureGatewayAgent, refreshProfiles } = await import('@/store/profile')
+const { $connection } = await import('@/store/session')
 
 const profile = (name: string): ProfileInfo => ({
   has_env: false,
@@ -110,10 +116,33 @@ const profile = (name: string): ProfileInfo => ({
 afterEach(() => {
   vi.clearAllMocks()
   $profiles.set([profile('cached-only')])
+  $connection.set(null)
   delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
 })
 
 describe('connection-aware plugin host APIs', () => {
+  it('reports a registered remote primary from the published live connection', () => {
+    $connection.set({ connectionId: 'remote-primary', mode: 'remote', profile: 'default' } as HermesConnection)
+
+    expect(host.activeConnectionId()).toBe('remote-primary')
+  })
+
+  it('prefers the active pooled registry identity and keeps local primaries legacy-null', () => {
+    $connection.set({ connectionId: 'stale-remote', mode: 'local', profile: 'default' } as HermesConnection)
+
+    expect(host.activeConnectionId()).toBeNull()
+
+    vi.mocked(activeGatewayConnectionId).mockReturnValueOnce('active-pool')
+    expect(host.activeConnectionId()).toBe('active-pool')
+  })
+
+  it('propagates a registry activation failure to the plugin caller', async () => {
+    vi.mocked(ensureGatewayAgent).mockRejectedValueOnce(new Error('source unavailable'))
+
+    await expect(host.ensureAgent('local', 'research')).rejects.toThrow('source unavailable')
+    expect(ensureGatewayAgent).toHaveBeenCalledWith('local', 'research')
+  })
+
   it('retires a profile gateway before deleting it', async () => {
     const order: string[] = []
 
@@ -135,6 +164,24 @@ describe('connection-aware plugin host APIs', () => {
     expect(refreshProfiles).toHaveBeenCalled()
   })
 
+  it('deletes the active registry-remote profile through its exact source without retiring local sockets', async () => {
+    $connection.set({ connectionId: 'source-b', mode: 'remote', profile: 'worker' } as HermesConnection)
+
+    await host.deleteProfile('worker')
+
+    expect(retireLocalProfileGateways).not.toHaveBeenCalled()
+    expect(deleteProfile).toHaveBeenCalledWith('worker', 'source-b')
+  })
+
+  it('preserves explicit local deletion when the primary connection is remote', async () => {
+    $connection.set({ connectionId: 'remote-primary', mode: 'remote', profile: 'worker' } as HermesConnection)
+
+    await host.deleteProfile('worker', 'local')
+
+    expect(retireLocalProfileGateways).toHaveBeenCalledWith('worker')
+    expect(deleteProfile).toHaveBeenCalledWith('worker', 'local')
+  })
+
   it('refreshes the profile inventory before asking Electron for routes', async () => {
     const getProfileRoutes = vi.fn(async () => [
       { connectionId: 'connection-local', mode: 'local', profile: 'desktop-primary', targetProfile: 'desktop-primary' },
@@ -146,6 +193,7 @@ describe('connection-aware plugin host APIs', () => {
       }
     ])
 
+    $connection.set({ mode: 'local', profile: 'desktop-primary' } as HermesConnection)
     vi.mocked(refreshProfiles).mockResolvedValueOnce([profile('desktop-primary'), profile('remote-worker')])
     ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = { getProfileRoutes }
 
@@ -170,6 +218,7 @@ describe('connection-aware plugin host APIs', () => {
     ])
 
     $profiles.set([profile('cached-worker')])
+    $connection.set({ mode: 'local', profile: 'cached-worker' } as HermesConnection)
     vi.mocked(refreshProfiles).mockRejectedValueOnce(new Error('profile backend unavailable'))
     ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = { getProfileRoutes }
 
@@ -177,6 +226,18 @@ describe('connection-aware plugin host APIs', () => {
       { connectionId: 'connection-cached', mode: 'remote', profile: 'cached-worker', targetProfile: 'cached-worker' }
     ])
     expect(getProfileRoutes).toHaveBeenCalledWith(['cached-worker'])
+  })
+
+  it('does not present an active remote inventory as local fallback routes', async () => {
+    const getProfileRoutes = vi.fn(async () => [])
+
+    $profiles.set([profile('remote-only')])
+    $connection.set({ connectionId: 'source-remote', mode: 'remote', profile: 'remote-only' } as HermesConnection)
+    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = { getProfileRoutes }
+
+    await expect(host.profileRoutes()).resolves.toEqual([])
+    expect(refreshProfiles).not.toHaveBeenCalled()
+    expect(getProfileRoutes).toHaveBeenCalledWith([])
   })
 
   it('forwards a targeted request without changing foreground state', async () => {

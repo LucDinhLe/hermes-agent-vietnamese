@@ -2,8 +2,11 @@ import { useStore } from '@nanostores/react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { useI18n } from '@/i18n'
+import type { BackendOwner } from '@/store/backend-owner'
 import { $settingsScopeOverride } from '@/store/settings-scope'
 import type { EnvVarInfo } from '@/types/hermes'
+
+import { scopedBackendOwner, settingsBackendOwnerKey } from '../hooks/backend-owner-scope'
 
 import { CredentialKeyCard, credentialPlaceholder, credentialRowLabel } from './credential-key-ui'
 import { useEnvCredentials } from './env-credentials'
@@ -31,17 +34,19 @@ const VIEW_CATEGORIES: Record<KeysView, readonly string[]> = {
   tools: ['tool']
 }
 
-export function KeysSettings({ view }: KeysSettingsProps) {
+export function KeysSettings({ backendOwner = null, view }: KeysSettingsProps) {
   const { t } = useI18n()
   // Shared settings "Applies to" scope: fetch + edit the selected profile's
   // env store instead of the active one (null → active, the default path).
   const scopeProfile = useStore($settingsScopeOverride)
-  const { rowProps, vars } = useEnvCredentials(scopeProfile)
+  const targetOwner = scopedBackendOwner(backendOwner, scopeProfile)
+  const targetOwnerKey = targetOwner ? settingsBackendOwnerKey(targetOwner) : (scopeProfile ?? '__ambient__')
+  const { rowProps, vars } = useEnvCredentials(targetOwner, scopeProfile)
   const [openKey, setOpenKey] = useState<null | string>(null)
 
   useEffect(() => {
     setOpenKey(null)
-  }, [scopeProfile, view])
+  }, [targetOwnerKey, view])
 
   // Deep link from Capabilities env-var rows (?tab=keys&key=<ENV_KEY>): scroll
   // the credential card into view, flash it, and expand it. Same mechanism the
@@ -77,7 +82,7 @@ export function KeysSettings({ view }: KeysSettingsProps) {
 
   return (
     <SettingsContent>
-      <SettingsProfileScope className="mb-5" />
+      <SettingsProfileScope backendOwner={backendOwner} className="mb-5" />
       {visible.map(group => (
         <div className="grid gap-2" key={group.category}>
           {group.entries.map(([key, info]: [string, EnvVarInfo]) => {
@@ -111,5 +116,6 @@ export function KeysSettings({ view }: KeysSettingsProps) {
 }
 
 interface KeysSettingsProps {
+  backendOwner?: BackendOwner | null
   view: KeysView
 }

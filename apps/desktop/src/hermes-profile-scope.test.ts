@@ -1,15 +1,36 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  authMcpServer,
   checkHermesUpdate,
+  deleteProfile,
   getActionStatus,
   getElevenLabsVoices,
+  getEnvVars,
+  getHermesConfigRecord,
+  getLogs,
+  getMcpCatalog,
+  getMcpOAuthFlow,
   getMemoryProviderConfig,
+  getProfiles,
+  getSkillHubSources,
+  getSkills,
   getStatus,
+  getToolsets,
+  getUsageAnalytics,
+  installSkillFromHub,
+  pollOAuthSession,
   restartGateway,
+  saveHermesConfig,
+  saveMcpServers,
   saveMemoryProviderConfig,
+  setApiRequestConnection,
   setApiRequestProfile,
+  setEnvVar,
+  setSkillEnabled,
+  setToolsetEnabled,
   speakText,
+  startOAuthLogin,
   transcribeAudio,
   updateHermes
 } from './hermes'
@@ -19,7 +40,9 @@ import {
 // update hit the backend they're actually on — not the primary/default. The
 // System-panel "restart does nothing" bug was these helpers dropping it.
 describe('backend action helpers are profile-scoped', () => {
-  const api = vi.fn(async (_req: { path: string; profile?: string }) => ({}) as never)
+  const api = vi.fn(
+    async (_req: { path: string; profile?: string; connectionId?: string; method?: string }) => ({}) as never
+  )
 
   beforeEach(() => {
     ;(window as { hermesDesktop?: unknown }).hermesDesktop = { api }
@@ -28,6 +51,7 @@ describe('backend action helpers are profile-scoped', () => {
 
   afterEach(() => {
     setApiRequestProfile(null)
+    setApiRequestConnection(null)
     delete (window as { hermesDesktop?: unknown }).hermesDesktop
   })
 
@@ -78,6 +102,105 @@ describe('backend action helpers are profile-scoped', () => {
 
     for (const call of api.mock.calls) {
       expect(call[0].profile).toBe('jarvis')
+    }
+  })
+
+  it('forwards the active remote source to representative capability reads and writes', () => {
+    setApiRequestProfile('researcher')
+    setApiRequestConnection('source-remote')
+
+    void getHermesConfigRecord('researcher')
+    void saveHermesConfig({}, 'researcher')
+    void getEnvVars('researcher')
+    void setEnvVar('API_KEY', 'secret', 'researcher')
+    void getSkills('researcher')
+    void setSkillEnabled('web-research', true, 'researcher')
+    void getToolsets('researcher')
+    void setToolsetEnabled('browser', true, 'researcher')
+    void getUsageAnalytics(30, 'researcher')
+    void getSkillHubSources('researcher')
+    void installSkillFromHub('owner/skill', 'researcher')
+    void getMcpCatalog('researcher')
+    void saveMcpServers({ filesystem: { command: 'server' } }, 'researcher')
+    void getActionStatus('install-skill', 1, 'researcher')
+    void getProfiles('source-remote')
+
+    expect(api.mock.calls).toHaveLength(15)
+
+    for (const call of api.mock.calls) {
+      expect(call[0].connectionId).toBe('source-remote')
+    }
+
+    expect(api.mock.calls.at(-1)?.[0].profile).toBeUndefined()
+  })
+
+  it('keeps the legacy profile manager inventory unscoped unless a source is explicit', () => {
+    setApiRequestConnection('source-remote')
+
+    void getProfiles()
+
+    expect(api.mock.calls[0][0]).toMatchObject({ path: '/api/profiles' })
+    expect(api.mock.calls[0][0].connectionId).toBeUndefined()
+  })
+
+  it('lets an explicit null connection opt out of the ambient remote source', () => {
+    setApiRequestProfile('researcher')
+    setApiRequestConnection('source-remote')
+
+    void getSkills('researcher', null)
+
+    expect(api.mock.calls[0][0]).toMatchObject({ path: '/api/skills', profile: 'researcher' })
+    expect(api.mock.calls[0][0].connectionId).toBeUndefined()
+  })
+
+  it('preserves an explicit local source while the ambient primary is remote', () => {
+    setApiRequestProfile('researcher')
+    setApiRequestConnection('remote-primary')
+
+    void getSkills('researcher', 'local')
+    void getLogs({ file: 'mcp' }, 'researcher', 'local')
+
+    expect(api.mock.calls).toHaveLength(2)
+
+    for (const call of api.mock.calls) {
+      expect(call[0]).toMatchObject({ connectionId: 'local', profile: 'researcher' })
+    }
+  })
+
+  it('pins profile deletion to the captured registry source', () => {
+    setApiRequestConnection('source-b')
+
+    void deleteProfile('researcher', 'source-a')
+    void deleteProfile('writer', 'local')
+
+    expect(api.mock.calls[0][0]).toMatchObject({
+      connectionId: 'source-a',
+      method: 'DELETE',
+      path: '/api/profiles/researcher'
+    })
+    expect(api.mock.calls[1][0]).toMatchObject({
+      connectionId: 'local',
+      method: 'DELETE',
+      path: '/api/profiles/writer'
+    })
+  })
+
+  it('keeps a captured source immutable across OAuth start and poll calls', () => {
+    setApiRequestProfile('researcher')
+    setApiRequestConnection('source-a')
+
+    void startOAuthLogin('nous', 'researcher', 'source-a')
+    void authMcpServer('github', 'researcher', 'source-a')
+
+    setApiRequestConnection('source-b')
+
+    void pollOAuthSession('nous', 'provider-flow', 'researcher', 'source-a')
+    void getMcpOAuthFlow('mcp-flow', 'researcher', 'source-a')
+
+    expect(api.mock.calls).toHaveLength(4)
+
+    for (const call of api.mock.calls) {
+      expect(call[0]).toMatchObject({ connectionId: 'source-a', profile: 'researcher' })
     }
   })
 })

@@ -101,7 +101,21 @@ describe('ensureGatewayAgent → $connection / $activeGatewayProfile sync', () =
   it('does not republish a registry identity invalidated during activation', async () => {
     ensureGatewayForAgent.mockResolvedValueOnce(false)
 
-    await ensureGatewayAgent('removed-source', 'research')
+    await expect(ensureGatewayAgent('removed-source', 'research')).rejects.toThrow(
+      'Could not activate Agent research on source removed-source'
+    )
+
+    expect($activeGatewayProfile.get()).toBe('default')
+    expect($connection.get()?.mode).toBe('local')
+    expect(getConnectionFor).not.toHaveBeenCalled()
+  })
+
+  it('rejects when an explicit local registry source cannot be activated', async () => {
+    ensureGatewayForAgent.mockResolvedValueOnce(false)
+
+    await expect(ensureGatewayAgent('local', 'research')).rejects.toThrow(
+      'Could not activate Agent research on source local'
+    )
 
     expect($activeGatewayProfile.get()).toBe('default')
     expect($connection.get()?.mode).toBe('local')
@@ -195,5 +209,77 @@ describe('ensureGatewayAgent shares the gatewaySwitch mutex with profile switche
 
     expect(order).toEqual(['agent:research', 'profile:worker'])
     expect($activeGatewayProfile.get()).toBe('worker')
+  })
+
+  it('serializes every A → B → C activation when B and C queue behind A', async () => {
+    const firstProfileGate = deferred()
+    const secondProfileGate = deferred()
+    const order: string[] = []
+
+    ensureGatewayForProfile.mockImplementation(async (profile: string) => {
+      order.push(`profile:${profile}`)
+
+      if (profile === 'first') {
+        await firstProfileGate.promise
+      } else if (profile === 'second') {
+        await secondProfileGate.promise
+      }
+    })
+    ensureGatewayForAgent.mockImplementation(async (_connectionId, profile) => {
+      order.push(`agent:${profile}`)
+
+      return true
+    })
+    getConnection.mockImplementation(async profile => localConn({ profile: profile ?? 'default' }))
+    getConnectionFor.mockResolvedValue(agentConn({ profile: 'final' }))
+
+    const first = ensureGatewayProfile('first')
+    await vi.waitFor(() => expect(order).toEqual(['profile:first']))
+
+    const second = ensureGatewayProfile('second')
+    const final = ensureGatewayAgent('homelab', 'final')
+    await Promise.resolve()
+
+    expect(order).toEqual(['profile:first'])
+
+    firstProfileGate.resolve()
+    await vi.waitFor(() => expect(order).toEqual(['profile:first', 'profile:second']))
+
+    // C must not start merely because A completed; it stays behind B too.
+    expect(ensureGatewayForAgent).not.toHaveBeenCalledWith('homelab', 'final')
+
+    secondProfileGate.resolve()
+    await Promise.all([first, second, final])
+
+    expect(order).toEqual(['profile:first', 'profile:second', 'agent:final'])
+    expect($activeGatewayProfile.get()).toBe('final')
+    expect($connection.get()?.profile).toBe('final')
+  })
+
+  it('does not drop a final request that returns to the currently published profile', async () => {
+    const middleGate = deferred()
+    const order: string[] = []
+
+    ensureGatewayForProfile.mockImplementation(async (profile: string) => {
+      order.push(`profile:${profile}`)
+
+      if (profile === 'middle') {
+        await middleGate.promise
+      }
+    })
+    getConnection.mockImplementation(async profile => localConn({ profile: profile ?? 'default' }))
+
+    // The atom still says "default" while the middle activation is stalled.
+    // A naive outer fast path would therefore drop this final request.
+    const middle = ensureGatewayProfile('middle')
+    await vi.waitFor(() => expect(order).toEqual(['profile:middle']))
+    const backToDefault = ensureGatewayAgent(null, 'default')
+
+    middleGate.resolve()
+    await Promise.all([middle, backToDefault])
+
+    expect(order).toEqual(['profile:middle', 'profile:default'])
+    expect($activeGatewayProfile.get()).toBe('default')
+    expect($connection.get()?.profile).toBe('default')
   })
 })

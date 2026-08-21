@@ -22,8 +22,11 @@ import {
   Wrench,
   Zap
 } from '@/lib/icons'
+import { type BackendOwner, backendOwnerKey } from '@/store/backend-owner'
 import { notifyError } from '@/store/notifications'
 
+import { useActiveBackendOwner } from '../hooks/use-backend-owner'
+import { useBackendOwnerGuard } from '../hooks/use-backend-owner-guard'
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
 import { OverlayIconButton } from '../overlays/overlay-chrome'
 import { OverlayMain, OverlayNav, type OverlayNavGroup, OverlaySplitLayout } from '../overlays/overlay-split-layout'
@@ -60,10 +63,28 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   'about'
 ]
 
-export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: SettingsPageProps) {
+export function SettingsView(props: SettingsPageProps) {
+  const backendOwner = useActiveBackendOwner()
+
+  return (
+    <SettingsViewInner
+      {...props}
+      backendOwner={backendOwner}
+      key={backendOwner ? backendOwnerKey(backendOwner) : '__ambient__'}
+    />
+  )
+}
+
+function SettingsViewInner({
+  backendOwner,
+  onClose,
+  onConfigSaved,
+  onMainModelChanged
+}: SettingsPageProps & { backendOwner: BackendOwner | null }) {
   const { t } = useI18n()
   const navigate = useNavigate()
   const { hash, pathname, search } = useLocation()
+  const isCurrentOwner = useBackendOwnerGuard(backendOwner)
 
   // MCP moved out of Settings into Capabilities (/skills?tab=mcp). Keep old
   // `/settings?tab=mcp` deep links working — `useRouteEnumParam` would silently
@@ -124,7 +145,12 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
 
   const exportConfig = async () => {
     try {
-      const cfg = await getHermesConfigRecord()
+      const cfg = await getHermesConfigRecord(backendOwner?.profile, backendOwner?.connectionId)
+
+      if (!isCurrentOwner()) {
+        return
+      }
+
       const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -134,7 +160,9 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
       URL.revokeObjectURL(url)
       triggerHaptic('success')
     } catch (err) {
-      notifyError(err, t.settings.exportFailed)
+      if (isCurrentOwner()) {
+        notifyError(err, t.settings.exportFailed)
+      }
     }
   }
 
@@ -144,11 +172,24 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
     }
 
     try {
-      await saveHermesConfig(await getHermesConfigDefaults())
+      const defaults = await getHermesConfigDefaults(backendOwner?.connectionId)
+
+      if (!isCurrentOwner()) {
+        return
+      }
+
+      await saveHermesConfig(defaults, backendOwner?.profile, backendOwner?.connectionId)
+
+      if (!isCurrentOwner()) {
+        return
+      }
+
       triggerHaptic('success')
       onConfigSaved?.()
     } catch (err) {
-      notifyError(err, t.settings.resetFailed)
+      if (isCurrentOwner()) {
+        notifyError(err, t.settings.resetFailed)
+      }
     }
   }
 
@@ -311,7 +352,7 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
 
         <OverlayMain className="px-0 pb-0">
           {activeView === 'config:appearance' ? (
-            <AppearanceSettings />
+            <AppearanceSettings backendOwner={backendOwner} />
           ) : activeView === 'about' ? (
             <AboutSettings />
           ) : activeView === 'gateway' || activeView === 'connections' ? (
@@ -323,12 +364,14 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
           ) : activeView.startsWith('config:') ? (
             <ConfigSettings
               activeSectionId={activeView.slice('config:'.length)}
+              backendOwner={backendOwner}
               importInputRef={importInputRef}
               onConfigSaved={onConfigSaved}
               onMainModelChanged={onMainModelChanged}
             />
           ) : activeView === 'providers' ? (
             <ProvidersSettings
+              backendOwner={backendOwner}
               onClose={onClose}
               onConfigSaved={onConfigSaved}
               onMainModelChanged={onMainModelChanged}
@@ -336,7 +379,7 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
               view={providerView}
             />
           ) : activeView === 'keys' ? (
-            <KeysSettings view={keysView} />
+            <KeysSettings backendOwner={backendOwner} view={keysView} />
           ) : activeView === 'notifications' ? (
             <NotificationsSettings />
           ) : activeView === 'billing' ? (
@@ -344,7 +387,7 @@ export function SettingsView({ onClose, onConfigSaved, onMainModelChanged }: Set
           ) : activeView === 'plugins' ? (
             <PluginsSettings />
           ) : (
-            <SessionsSettings />
+            <SessionsSettings backendOwner={backendOwner} />
           )}
         </OverlayMain>
       </OverlaySplitLayout>

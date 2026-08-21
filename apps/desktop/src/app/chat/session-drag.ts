@@ -49,7 +49,14 @@ import {
   SESSION_TILE_DRAG
 } from '@/components/pane-shell/tree/store'
 import type { EngineZone, ZoneRect } from '@/components/pane-shell/tree/zones-engine'
-import { openSessionTile, type TileDock } from '@/store/session-states'
+import {
+  openSessionTile,
+  sessionTileIdentity,
+  sessionTilePaneId,
+  sessionTileForStoredId,
+  type SessionTileOwner,
+  type TileDock
+} from '@/store/session-states'
 
 import { requestComposerInsertRefs } from './composer/focus'
 import { type SessionDragPayload, sessionInlineRef, sessionLabel } from './composer/inline-refs'
@@ -59,7 +66,9 @@ import { type SessionDragPayload, sessionInlineRef, sessionLabel } from './compo
  *  (`data-composer-target`). */
 interface SurfaceSnapshot {
   anchor: string
+  connectionId: string
   composerTarget: string
+  profile: string
   rect: ZoneRect
 }
 
@@ -75,7 +84,9 @@ const snapRect = (el: HTMLElement): ZoneRect => {
 function snapshotSurfaces(): SurfaceSnapshot[] {
   return queryAllVisible('[data-session-anchor]').map(el => ({
     anchor: el.dataset.sessionAnchor || 'workspace',
+    connectionId: el.dataset.backendConnection || '',
     composerTarget: el.dataset.composerTarget || 'main',
+    profile: el.dataset.backendProfile || 'default',
     rect: snapRect(el)
   }))
 }
@@ -105,6 +116,11 @@ export function startSessionDrag(
   e: ReactPointerEvent<HTMLElement>,
   opts?: { double?: DoubleTapContext; onTap?: () => void }
 ) {
+  const owner: SessionTileOwner | undefined = payload.connectionId
+    ? { connectionId: payload.connectionId, profile: payload.profile || 'default' }
+    : undefined
+
+  const draggedTileKey = owner ? sessionTileIdentity(owner, payload.id) : payload.id
   let zones: EngineZone[] = []
   let strips: StripSnapshot[] = []
   let surfaces: SurfaceSnapshot[] = []
@@ -163,7 +179,7 @@ export function startSessionDrag(
       if (strip) {
         // Exclude the tile's OWN tab from the slots so re-dropping it in its
         // home strip reorders cleanly (a no-op for a sidebar-row drag).
-        const stack = slotBefore(strip.slots, x, `session-tile:${payload.id}`)
+        const stack = slotBefore(strip.slots, x, `session-tile:${draggedTileKey}`)
         split = { anchor: host.pane, before: stack.before, pos: 'center' }
         link = null
 
@@ -176,8 +192,25 @@ export function startSessionDrag(
       const surface = surfaces.find(s => rectContains(s.rect, x, y))
 
       if (pos === 'center' && host.chat) {
+        const sameOwner = Boolean(
+          surface &&
+            (payload.connectionId
+              ? surface.connectionId === payload.connectionId && surface.profile === (payload.profile || 'default')
+              : !surface.connectionId)
+        )
+
+        // @session currently serializes profile/id, which is not unique across
+        // registry sources. A cross-owner link would make B resolve A/S as B/S;
+        // deny it until the backend reference grammar carries connectionId.
+        if (!sameOwner) {
+          split = null
+          link = null
+
+          return null
+        }
+
         split = null
-        link = surface?.composerTarget ?? 'main'
+        link = surface.composerTarget
       } else if (pos === 'center') {
         // A preview/page zone has no composer to link to — its center stacks
         // the session as a tab, same as dropping on the strip's tail.
@@ -193,11 +226,19 @@ export function startSessionDrag(
 
     onCommit() {
       if (split) {
-        openSessionTile(payload.id, split.pos, split.anchor, split.before)
+        if (owner) {
+          openSessionTile(payload.id, split.pos, split.anchor, split.before, owner)
+        } else {
+          openSessionTile(payload.id, split.pos, split.anchor, split.before)
+        }
         // A tile for this session may already exist (openSessionTile is
         // idempotent — e.g. persisted from an earlier run): a drop must never
         // feel dead, so front/unhide/un-dismiss it either way.
-        revealTreePane(`session-tile:${payload.id}`)
+        const tile = sessionTileForStoredId(payload.id, owner)
+
+        if (tile) {
+          revealTreePane(sessionTilePaneId(tile))
+        }
       } else if (link) {
         // The "link to chat" drop: an @session chip in that surface's composer.
         requestComposerInsertRefs([sessionInlineRef(payload)], { target: link })

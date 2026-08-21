@@ -750,15 +750,15 @@ function pathWithProfileScope(path, profile) {
 
 /**
  * Registry connection a REST request is explicitly pinned to, or null for the
- * legacy profile-routed path. `''`/`'local'` mean the local pool — callers
- * only detour through the registry for a genuinely non-local connection, so
- * single-source users keep the byte-identical v1 route.
+ * legacy profile-routed path. An explicit `local` is meaningful: it forces the
+ * registry's local backend even when the legacy primary is remote. Only an
+ * absent/empty id keeps the byte-identical v1 route.
  */
 function apiRequestRegistryConnectionId(request): null | string {
   const raw = request && typeof request === 'object' ? (request as { connectionId?: unknown }).connectionId : ''
   const id = String(raw ?? '').trim()
 
-  if (!id || id === 'local') {
+  if (!id) {
     return null
   }
 

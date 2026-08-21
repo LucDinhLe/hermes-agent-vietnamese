@@ -284,11 +284,126 @@ def _(rid, params: dict) -> dict:
     name = str(params.get("name") or "").strip()
     if not name:
         return _err(rid, 4061, "name required")
+
+    # Sharing OAuth/account state is only truthful when the launch profile
+    # already reads the global pool.  A named launch profile may have its own
+    # provider state; creating a child without a local copy in that state
+    # would either leave the child unauthenticated or put it on a different
+    # refresh-token chain while reporting one shared pool.
+    # Fail before create_profile() so no orphan draft is materialized.  Do
+    # not silently copy or move refresh tokens: that would either contradict
+    # the caller's sharing choice or fork single-use token state.
+    mirror_credentials = is_truthy_value(params.get("mirror_credentials", True))
+    share_auth = is_truthy_value(params.get("share_auth", False))
+    clone_all = is_truthy_value(params.get("clone_all", False))
+    if share_auth:
+        if clone_all:
+            return _err(
+                rid,
+                4063,
+                "shared_auth_pool_unavailable: clone_all copies auth.json and "
+                "cannot truthfully use one shared refresh-token pool; use the "
+                "normal clone mode or turn off account sharing",
+            )
+        try:
+            import json
+
+            from hermes_constants import get_default_hermes_root, get_hermes_home
+
+            launch_auth = get_hermes_home() / "auth.json"
+            global_auth = get_default_hermes_root() / "auth.json"
+
+            private_state = False
+            try:
+                distinct_store = launch_auth.resolve(strict=False) != global_auth.resolve(strict=False)
+            except Exception:
+                distinct_store = launch_auth != global_auth
+            if distinct_store and launch_auth.is_file():
+                try:
+                    raw_auth = json.loads(launch_auth.read_text(encoding="utf-8"))
+                    private_state = not isinstance(raw_auth, dict) or any(
+                        (
+                            isinstance(raw_auth.get(key), dict)
+                            and bool(raw_auth.get(key))
+                        )
+                        for key in ("providers", "credential_pool", "systems")
+                    )
+                    private_state = private_state or bool(
+                        isinstance(raw_auth, dict)
+                        and str(raw_auth.get("active_provider") or "").strip()
+                    )
+                except Exception:
+                    # A malformed private auth file cannot safely be declared
+                    # equivalent to the global shared pool.
+                    private_state = True
+
+            # Generic credential-pool fallback is intentionally read-only in
+            # profile mode. Its refresh/status writes go to the child store,
+            # so a child would fork the supposedly shared token chain on its
+            # first mutation. Until credential-pool writes carry an explicit
+            # shared-store marker/source lock, require isolated snapshot mode.
+            global_pool_state = False
+            unsafe_global_provider = False
+            unsafe_global_systems = False
+            if global_auth.is_file():
+                try:
+                    raw_global_auth = json.loads(global_auth.read_text(encoding="utf-8"))
+                    if not isinstance(raw_global_auth, dict):
+                        raise ValueError("global auth store must be a JSON object")
+                    global_pool = (
+                        raw_global_auth.get("credential_pool")
+                        if isinstance(raw_global_auth, dict)
+                        else None
+                    )
+                    global_pool_state = isinstance(global_pool, dict) and any(
+                        isinstance(entries, list) and bool(entries)
+                        for entries in global_pool.values()
+                    )
+
+                    # Only these singleton provider refresh paths have been
+                    # audited to persist rotating tokens back to the exact
+                    # root store they were read from. Spotify, Codex and
+                    # unknown provider blocks still save through the active
+                    # profile and would fork a supposedly shared token chain.
+                    shared_provider_allowlist = {"nous", "xai-oauth"}
+                    global_providers = raw_global_auth.get("providers")
+                    if isinstance(global_providers, dict):
+                        unsafe_global_provider = any(
+                            bool(provider_state)
+                            and str(provider_id).strip() not in shared_provider_allowlist
+                            for provider_id, provider_state in global_providers.items()
+                        )
+                    elif global_providers:
+                        unsafe_global_provider = True
+
+                    # Legacy ``systems`` entries are migrated on read but do
+                    # not carry a source-aware refresh/write contract.
+                    unsafe_global_systems = bool(raw_global_auth.get("systems"))
+                except Exception:
+                    # A malformed global store cannot support the shared-pool
+                    # promise, even though the auth loader treats it as empty.
+                    unsafe_global_provider = True
+
+            if (
+                private_state
+                or global_pool_state
+                or unsafe_global_provider
+                or unsafe_global_systems
+            ):
+                return _err(
+                    rid,
+                    4063,
+                    "shared_auth_pool_unavailable: the current provider account state "
+                    "cannot use one safe shared refresh-token pool; turn off account "
+                    "sharing to create an isolated snapshot, or authenticate and launch "
+                    "from the main Hermes profile without a private credential pool",
+                )
+        except Exception as e:
+            return _err(rid, 5063, f"shared_auth_pool_preflight_failed: {e}")
     try:
         from hermes_cli import profiles as profiles_mod
 
         clone_from = str(params.get("clone_from") or "").strip() or None
-        clone_all = is_truthy_value(params.get("clone_all", False))
         path = profiles_mod.create_profile(
             name=name,
             clone_from=clone_from,
@@ -330,22 +445,23 @@ def _(rid, params: dict) -> dict:
     # secrets a clone brought along) and auth.json (only when absent), then
     # inherit model.provider/model.default unless the caller pinned a model.
     #
-    # ``share_auth`` (default false): SKIP the auth.json copy so the new
-    # profile reads OAuth/token state through the global-root fallback
-    # instead (hermes_cli.auth: profile reads fall back to the global
-    # store, and token refreshes write THROUGH to it). A copy forks token
-    # state — the first refresh in either store invalidates the other
-    # for single-use refresh tokens. Sharing keeps one live token pool
-    # for the main profile and every bot. Static .env keys still copy
-    # (no refresh semantics, so copying is safe).
+    # ``share_auth`` (default false): when true, SKIP the auth.json copy so
+    # the new profile reads OAuth/token state through the global-root
+    # fallback instead. The preflight above admits only provider refresh
+    # paths audited to write back to that exact root source. When false,
+    # copy the launch profile's effective auth snapshot: its own auth.json
+    # when present, otherwise the global-root fallback it currently reads.
+    # A copy forks token state — the first refresh in either store can
+    # invalidate the other for single-use refresh tokens. Safe sharing keeps
+    # one live provider state for the main profile and every agent. Static
+    # .env keys still copy in either mode (copying them cannot rotate state).
     mirrored = {"env": False, "auth": False, "model_inherited": False, "voice": False}
-    share_auth = is_truthy_value(params.get("share_auth", False))
     if share_auth:
         mirrored["auth"] = "shared"
-    if is_truthy_value(params.get("mirror_credentials", True)):
+    if mirror_credentials:
         import shutil
 
-        from hermes_constants import get_hermes_home
+        from hermes_constants import get_default_hermes_root, get_hermes_home
 
         launch_home = get_hermes_home()
         try:
@@ -361,7 +477,9 @@ def _(rid, params: dict) -> dict:
         except Exception:
             pass
         try:
-            src_auth = launch_home / "auth.json"
+            local_auth = launch_home / "auth.json"
+            global_auth = get_default_hermes_root() / "auth.json"
+            src_auth = local_auth if local_auth.is_file() else global_auth
             dst_auth = path / "auth.json"
             if not share_auth and src_auth.is_file() and not dst_auth.exists():
                 shutil.copy2(src_auth, dst_auth)
@@ -429,7 +547,7 @@ def _(rid, params: dict) -> dict:
         except Exception:
             return False
 
-    if is_truthy_value(params.get("mirror_credentials", True)):
+    if mirror_credentials:
         mirrored["voice"] = _mirror_voice_sections()
 
     if model and provider:
@@ -440,7 +558,7 @@ def _(rid, params: dict) -> dict:
             model_set = True
         except Exception:
             pass
-    elif is_truthy_value(params.get("mirror_credentials", True)):
+    elif mirror_credentials:
         # No explicit pin: inherit the launch profile's provider+model so the
         # first turn resolves. Gate on the MODEL SECTION being absent, not on
         # config.yaml existing — earlier mirroring steps (voice sections,

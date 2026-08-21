@@ -106,4 +106,50 @@ describe('host.state turn flags', () => {
 
     $sessionTiles.set([])
   })
+
+  it('fronts a contributed workspace page when navigating to its current hash again', async () => {
+    const tree = await import('@/components/pane-shell/tree/store')
+    const model = await import('@/components/pane-shell/tree/model')
+    const { registry } = await import('@/contrib/registry')
+    const { ROUTES_AREA } = await import('@/app/routes')
+    const route = '/agent-profiles'
+
+    registry.register({
+      area: ROUTES_AREA,
+      data: { path: route },
+      id: 'test-agent-profiles-route',
+      render: () => null,
+      title: 'Agents'
+    })
+
+    for (const id of ['workspace', 'session-tile:agents-cover']) {
+      registry.register({
+        area: 'panes',
+        data: id === 'workspace' ? { placement: 'main', uncloseable: true } : { placement: 'main' },
+        id,
+        render: () => null,
+        title: id
+      })
+    }
+
+    tree.declareDefaultTree(
+      model.split('row', [
+        model.group(['workspace'], { active: 'workspace', id: 'grp-agents-workspace' }),
+        model.group(['session-tile:agents-cover'], {
+          active: 'session-tile:agents-cover',
+          id: 'grp-agents-cover'
+        })
+      ])
+    )
+    tree.noteActiveTreeGroup('grp-agents-cover')
+    window.location.hash = `#${route}`
+
+    host.navigate(route)
+
+    const layout = tree.$layoutTree.get()
+
+    expect(window.location.hash).toBe(`#${route}`)
+    expect(tree.$activeTreeGroup.get()).toBeNull()
+    expect(layout && model.findGroupOfPane(layout, 'workspace')?.active).toBe('workspace')
+  })
 })

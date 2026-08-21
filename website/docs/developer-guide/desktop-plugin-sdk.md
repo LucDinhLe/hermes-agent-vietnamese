@@ -492,7 +492,7 @@ opening a duplicate. Closing the tab (the tab's Close control or ⌘W) tears the
 registration down and fires your `onClose`; the returned disposer closes it
 programmatically. Feature-detect it (`typeof host.openWorkspace ===
 'function'`) and fall back to a regular contributed pane on older desktop
-builds — Bot Mode's group-chat rooms are the reference consumer (main-window
+builds — Agents group-chat rooms are the reference consumer (main-window
 takeover when available, in-panel view otherwise).
 
 `host.paneVisibility(paneId)` returns a readonly reactive atom that is `true`
@@ -501,9 +501,7 @@ not dismissed or hidden, its zone un-minimized, and holding its zone's active
 tab slot (a lone pane in its own zone counts). The id is the
 contribution-scoped pane id, `<pluginId>:<paneId>`. Atoms are memoized per id,
 so calling it in render is safe. Use it to register companion UI only while
-your pane is visible — Bot Mode's Cronjobs pane is the reference consumer: it
-registers while the Bots pane holds the sidebar tab and unregisters when the
-user tabs back to Sessions. Feature-detect on older desktops
+your pane is visible. Feature-detect on older desktops
 (`typeof host.paneVisibility === 'function'`) and fall back to
 always-registered behavior.
 

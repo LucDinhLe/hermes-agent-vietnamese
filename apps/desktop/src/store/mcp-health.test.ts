@@ -16,13 +16,22 @@ vi.mock('@/store/notifications', () => ({
   notify: vi.fn()
 }))
 
+vi.mock('@/store/backend-owner', () => ({
+  activeBackendOwner: () => null,
+  backendOwnerKey: () => 'local::default'
+}))
+
 vi.mock('@/store/profile', () => ({
   $activeGatewayProfile: { get: () => 'default', listen: () => () => {} },
   normalizeProfileKey: (name: string | null | undefined) => (name ?? '').trim() || 'default'
 }))
 
 vi.mock('@/store/session', () => ({
-  $gatewayState: { get: () => 'closed', subscribe: () => () => {} }
+  $connection: { get: () => null, listen: () => () => {} },
+  $cronSessions: { get: () => [], listen: () => () => {} },
+  $gatewayState: { get: () => 'closed', subscribe: () => () => {} },
+  $messagingSessions: { get: () => [], listen: () => () => {} },
+  $sessions: { get: () => [], listen: () => () => {} }
 }))
 
 const { shouldNotifyOnTransition } = await import('./mcp-health')

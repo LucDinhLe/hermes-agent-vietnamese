@@ -11,13 +11,20 @@ function loadFilter() {
 
   assert.ok(start >= 0 && end > start, 'bot identity helper block must remain extractable')
 
-  const context = {}
+  const owner = { connectionId: 'local', profile: 'default' }
+  const context = {
+    $botMetaOwner: { get: () => owner },
+    normalizeRosterOwner: (connectionId, profile) =>
+      connectionId && profile ? { connectionId, profile } : null,
+    sameRosterOwner: (left, right) =>
+      Boolean(left && right && left.connectionId === right.connectionId && left.profile === right.profile)
+  }
   vm.runInNewContext(
     `${source.slice(start, end)}\nglobalThis.__filterBots = filterBots;`,
     context
   )
 
-  return context.__filterBots
+  return (roster, meta, query) => context.__filterBots(roster, meta, query, owner)
 }
 
 const roster = [
@@ -30,7 +37,7 @@ const meta = {
   default: {}
 }
 
-test('bot search matches visible display names case-insensitively', () => {
+test('Agent search matches visible display names case-insensitively', () => {
   const filterBots = loadFilter()
 
   assert.deepEqual(
@@ -39,7 +46,7 @@ test('bot search matches visible display names case-insensitively', () => {
   )
 })
 
-test('bot search matches profile handles and preserves roster order', () => {
+test('Agent search matches profile handles and preserves roster order', () => {
   const filterBots = loadFilter()
 
   assert.deepEqual(
@@ -56,14 +63,14 @@ test('bot search matches profile handles and preserves roster order', () => {
   )
 })
 
-test('blank bot search returns the existing roster reference', () => {
+test('blank Agent search returns the existing roster reference', () => {
   const filterBots = loadFilter()
 
   assert.equal(filterBots(roster, meta, '   '), roster)
 })
 
-test('Bot pane renders the canonical search field and no-match state', () => {
-  assert.match(source, /jsx\(SearchField,\s*\{[\s\S]*?placeholder: 'Search bots…'/)
+test('Agents management renders the localized search field and no-match state', () => {
+  assert.match(source, /jsx\(SearchField,\s*\{[\s\S]*?placeholder: copy\('roster\.searchPlaceholder'\)/)
   assert.match(source, /'aria-live': 'polite'/)
-  assert.match(source, /No bots match “\$\{query\.trim\(\)\}”/)
+  assert.match(source, /copy\('roster\.noMatch', query\.trim\(\)\)/)
 })

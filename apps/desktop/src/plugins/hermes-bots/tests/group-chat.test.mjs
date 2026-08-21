@@ -80,7 +80,11 @@ function load(turnScript) {
         }
         return {}
       },
-      state: { profile: { get: () => 'default', listen: () => undefined }, gateway: { listen: () => undefined } },
+      state: {
+        connectionId: { get: () => 'local', listen: () => undefined },
+        profile: { get: () => 'default', listen: () => undefined },
+        gateway: { listen: () => undefined }
+      },
       notify: () => undefined,
       notifyError: () => undefined
     }
@@ -93,9 +97,10 @@ function load(turnScript) {
     .replace(/^import .* from 'react\/jsx-runtime'\r?\n/m, '')
     .replace('export default {', 'globalThis.plugin = {')
     .concat(
-      '\nglobalThis.__gc = { sendToGroupChat, runGroupChatRounds, harvestStrandedGroupReply, resolveGroupResponders, parseGroupChatMentions, rotateGroupSpeakers, isGroupPassText, formatGroupChatLine, buildGroupChatTurnPrompt, trimGroupChatLog, disbandGroupChat, updateGroupChat, $groupChats, $groupNeedsYou, $groupChatWorkspace, $botMeta, GROUP_CHAT_MAX_ROUNDS, GROUP_CHAT_MAX_MESSAGES };\n'
+      '\nglobalThis.__gc = { sendToGroupChat, runGroupChatRounds, harvestStrandedGroupReply, resolveGroupResponders, parseGroupChatMentions, rotateGroupSpeakers, isGroupPassText, formatGroupChatLine, buildGroupChatTurnPrompt, trimGroupChatLog, disbandGroupChat, updateGroupChat, $groupChats, $groupNeedsYou, $groupChatWorkspace, $botMeta, $botMetaOwner, GROUP_CHAT_MAX_ROUNDS, GROUP_CHAT_MAX_MESSAGES };\n'
     )
   vm.runInNewContext(source, context, { filename: 'plugin.js' })
+  context.__gc.$botMetaOwner.set({ connectionId: 'local', profile: 'default' })
   const storageWrites = new Map()
   context.plugin.register({
     storage: { get: () => null, set: (key, value) => storageWrites.set(key, value) },
@@ -432,8 +437,9 @@ test('disband: a running room leaves an epoch-bumped empty tombstone so in-fligh
 
 test('source contract: workspace header offers disband behind a ConfirmDialog', () => {
   assert.match(pluginSource, /function disbandGroupChat\(/)
-  assert.match(pluginSource, /Disband group chat\?/)
-  assert.match(pluginSource, /title: `Disband the \$\{group\} group chat`/)
+  assert.match(pluginSource, /title: copy\('groups\.disbandTitle', group\)/)
+  assert.match(pluginSource, /description: copy\('groups\.disbandDescription', group, members\.length\)/)
+  assert.match(pluginSource, /message: copy\('groups\.disbandedToast', group\)/)
 })
 
 test('default profile speaks as Hermes in room transcripts, not @default', () => {
@@ -499,7 +505,7 @@ test('source contract: room messages carry the speaker avatar via the roster app
 
   // Header shows the member faces (capped) with a names tooltip.
   assert.match(workspace, /members\.slice\(0, 6\)\.map\(/)
-  assert.match(workspace, /title: members\.map\(b => displayName\(b, botRosterMeta\(b, allMeta\)\)\)\.join\(', '\)/)
+  assert.match(workspace, /title: members\.map\(b => displayName\(b, botRosterMeta\(b, allMeta, rosterOwner\)\)\)\.join\(', '\)/)
 })
 
 test('stranded harvest: a timed-out turn whose reply landed late posts into the room and clears the marker', async () => {

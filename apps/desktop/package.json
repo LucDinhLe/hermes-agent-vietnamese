@@ -2,7 +2,7 @@
   "name": "hermes",
   "productName": "Hermes",
   "private": true,
-  "version": "0.17.0",
+  "version": "0.31.0",
   "description": "Hermes Vietnamese, the MIT-licensed community desktop distribution of Hermes Agent.",
   "author": "Lê Đình Lực (LucDinhLe)",
   "license": "MIT",

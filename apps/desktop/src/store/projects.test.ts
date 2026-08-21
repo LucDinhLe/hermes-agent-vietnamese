@@ -4,13 +4,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { NO_PROJECT_ID, type SidebarProjectTree } from '@/app/chat/sidebar/projects/workspace-groups'
 import { $sidebarAgentsGrouped, setSidebarAgentsGrouped } from '@/store/layout'
 import { $activeGatewayProfile } from '@/store/profile'
-import { $currentCwd, $selectedStoredSessionId, $sessions, applyConfiguredDefaultProjectDir } from '@/store/session'
+import {
+  $connection,
+  $currentCwd,
+  $selectedStoredSessionId,
+  $sessions,
+  applyConfiguredDefaultProjectDir
+} from '@/store/session'
 
 import {
   $activeProjectId,
+  $projects,
   $projectScope,
   $projectsRpcAvailable,
   $projectTree,
+  $projectTreeOwner,
   $removedSessionIds,
   $sessionMutationsInFlight,
   $worktreeRefreshToken,
@@ -30,7 +38,8 @@ import {
   resolveNewSessionCwd,
   scanAndRecordRepos,
   startWorkInRepo,
-  tombstoneSessions
+  tombstoneSessions,
+  updateProject
 } from './projects'
 
 vi.mock('@/i18n', () => ({
@@ -83,6 +92,11 @@ const hermes = await import('@/hermes')
 const getHermesConfig = vi.mocked(hermes.getHermesConfig)
 const notifications = await import('@/store/notifications')
 const notify = vi.mocked(notifications.notify)
+
+afterEach(() => {
+  $connection.set(null)
+  $projectTreeOwner.set(null)
+})
 
 describe('project scope', () => {
   beforeEach(() => {
@@ -544,10 +558,13 @@ describe('project tree profile isolation', () => {
     let current = gatewayA
     activeGateway.mockImplementation(() => current as never)
     gatewayAtom.set(gatewayA as never)
+    $activeGatewayProfile.set('profile-a')
+    $connection.set({ connectionId: 'source-a', mode: 'remote' } as never)
 
     const pendingA = refreshProjectTree()
     current = gatewayB
     $activeGatewayProfile.set('profile-b')
+    $connection.set({ connectionId: 'source-b', mode: 'remote' } as never)
     gatewayAtom.set(gatewayB as never)
     await refreshProjectTree()
     resolveA?.({
@@ -558,6 +575,75 @@ describe('project tree profile isolation', () => {
     await pendingA
 
     expect($projectTree.get().map(project => project.id)).toEqual(['profile-b'])
+    expect($projectTreeOwner.get()).toEqual({ connectionId: 'source-b', profile: 'profile-b', scope: 'profile' })
+  })
+
+  it('retains the previous tree owner when the new source refresh fails', async () => {
+    const gatewayA = {
+      connectionState: 'open',
+      request: vi.fn().mockResolvedValue({
+        active_id: null,
+        projects: [{ id: 'project-a', label: 'A', path: '/work', repos: [], sessionCount: 0 }],
+        scoped_session_ids: []
+      })
+    }
+
+    const gatewayB = {
+      connectionState: 'open',
+      request: vi.fn().mockRejectedValue(new Error('offline'))
+    }
+
+    let current = gatewayA
+
+    activeGateway.mockImplementation(() => current as never)
+    gatewayAtom.set(gatewayA as never)
+    $activeGatewayProfile.set('profile-a')
+    $connection.set({ connectionId: 'source-a', mode: 'remote' } as never)
+    await refreshProjectTree()
+
+    current = gatewayB
+    gatewayAtom.set(gatewayB as never)
+    $activeGatewayProfile.set('profile-b')
+    $connection.set({ connectionId: 'source-b', mode: 'remote' } as never)
+    await refreshProjectTree()
+
+    expect($projectTree.get().map(project => project.id)).toEqual(['project-a'])
+    expect($projectTreeOwner.get()).toEqual({ connectionId: 'source-a', profile: 'profile-a', scope: 'profile' })
+  })
+
+  it('does not roll an old source snapshot over a new source after a rejected optimistic write', async () => {
+    let rejectUpdate: ((error: Error) => void) | undefined
+
+    const updateResult = new Promise((_resolve, reject) => {
+      rejectUpdate = reject
+    })
+
+    const gatewayA = { connectionState: 'open', request: vi.fn(() => updateResult) }
+
+    activeGateway.mockReturnValue(gatewayA as never)
+    gatewayAtom.set(gatewayA as never)
+    $activeGatewayProfile.set('profile-a')
+    $connection.set({ connectionId: 'source-a', mode: 'remote' } as never)
+    $projects.set([{ folders: [], id: 'project-a', name: 'A' }] as never)
+    $projectTree.set([{ id: 'project-a', label: 'A', path: '/a', repos: [], sessionCount: 0 }])
+    $projectTreeOwner.set({ connectionId: 'source-a', profile: 'profile-a', scope: 'profile' })
+
+    const pending = updateProject('project-a', { name: 'A edited' })
+
+    expect($projectTree.get()[0]?.label).toBe('A edited')
+
+    $activeGatewayProfile.set('profile-b')
+    $connection.set({ connectionId: 'source-b', mode: 'remote' } as never)
+    $projects.set([{ folders: [], id: 'project-b', name: 'B' }] as never)
+    $projectTreeOwner.set(null)
+    $projectTree.set([{ id: 'project-b', label: 'B', path: '/b', repos: [], sessionCount: 0 }])
+    $projectTreeOwner.set({ connectionId: 'source-b', profile: 'profile-b', scope: 'profile' })
+
+    rejectUpdate?.(new Error('source A rejected update'))
+    await expect(pending).rejects.toThrow('source A rejected update')
+
+    expect($projectTree.get().map(project => project.id)).toEqual(['project-b'])
+    expect($projectTreeOwner.get()).toEqual({ connectionId: 'source-b', profile: 'profile-b', scope: 'profile' })
   })
 })
 

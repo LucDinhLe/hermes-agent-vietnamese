@@ -6,7 +6,8 @@ import vm from 'node:vm'
 const source = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
 
 // The activeBots helper must stay a self-contained slice between the
-// liveness-window constant and the BotRow section so tests can extract it.
+// liveness-window constant and the internal roster-row section so tests can
+// extract it without evaluating the React plugin bundle.
 function loadActiveBots() {
   const start = source.indexOf('const ACTIVE_WINDOW_S')
   const end = source.indexOf('// ── bot row ─')
@@ -38,7 +39,7 @@ test('activeBots includes the gateway-busy selected profile before its first res
   assert.ok(names.includes('analyst'))
 })
 
-test('activeBots includes bots whose last message is inside the liveness window', () => {
+test('activeBots includes Agents whose last message is inside the liveness window', () => {
   const activeBots = loadActiveBots()
   const names = activeBots(roster, 'default', 'open', NOW).map(bot => bot.name)
   assert.ok(names.includes('researcher'))
@@ -50,7 +51,7 @@ test('activeBots excludes stale activity outside the window', () => {
   assert.ok(!names.includes('scribe'))
 })
 
-test('activeBots preserves roster order and never hides other bots', () => {
+test('activeBots preserves roster order and never hides other Agents', () => {
   const activeBots = loadActiveBots()
   // Mixed window: only researcher qualifies, but the output stays in input
   // order and the full roster object is untouched.
@@ -75,9 +76,10 @@ test('roster without profiles never throws', () => {
 })
 
 test('ActiveNowStrip renders above the roster, is a live region, and is click-accessible', () => {
-  // Strip is placed between the pane header and the search field.
-  const headerEnd = source.indexOf("children: 'Bots'")
-  const searchField = source.indexOf("placeholder: 'Search bots…'")
+  // Strip is placed between the localized Agents header and search field.
+  const paneStart = source.indexOf('function BotsPane')
+  const headerEnd = source.indexOf("children: copy('roster.title')", paneStart)
+  const searchField = source.indexOf("placeholder: copy('roster.searchPlaceholder')", paneStart)
   assert.ok(headerEnd >= 0 && searchField > headerEnd)
 
   const stripStart = source.indexOf('jsx(ActiveNowStrip')
@@ -85,14 +87,14 @@ test('ActiveNowStrip renders above the roster, is a live region, and is click-ac
 
   // Live region announces membership changes politely.
   assert.match(source, /'aria-live': 'polite'/)
-  // Chips are real buttons (keyboard/click accessible), reuse BotFace, and
-  // open the canonical chat via the same path as roster rows.
-  assert.match(source, /jsx\('button', \{\s*type: 'button',\s*title: `Open \$\{label\}'s chat`/)
+  // Chips are real buttons (keyboard/click accessible), reuse the legacy
+  // internal BotFace component, and localize the canonical-chat tooltip.
+  assert.match(source, /jsx\('button', \{\s*type: 'button',\s*title: copy\('sessions\.openChat', label\)/)
   // The key rides as jsx()'s third argument — the ONLY form React treats as
   // a list key; a `key:` prop leaves chips unkeyed (index identity).
   assert.match(source, /\}, botRosterKey\(bot\)\)\s*\}\)\s*\]\s*\}\)\s*\}\s*\/\*\* Assign a bot to a group/s)
   assert.match(source, /jsx\(BotFace,\s*\{[\s\S]*?mood: 'work'/)
-  assert.match(source, /let pinnedChat = botRosterMeta\(bot, allMeta\)\?\.chat/)
+  assert.match(source, /let pinnedChat = botRosterMeta\(bot, allMeta, rosterOwner\)\?\.chat/)
   assert.match(source, /await prepareBotSource\(bot, pinnedChat\)/)
-  assert.match(source, /openBotCanonicalChat\(bot\.name, pinnedChat, bot\.last_session\)/)
+  assert.match(source, /openBotCanonicalChat\(bot\.name, pinnedChat, bot\.last_session, openOwner\)/)
 })

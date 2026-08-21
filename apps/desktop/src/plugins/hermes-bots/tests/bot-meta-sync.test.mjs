@@ -4,6 +4,7 @@ import test from 'node:test'
 import vm from 'node:vm'
 
 const pluginSource = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
+const LOCAL_OWNER = { connectionId: 'local', profile: 'default' }
 
 function load() {
   const values = new Map()
@@ -30,12 +31,17 @@ function load() {
 globalThis.__botMetaSync = {
   get: () => $botMeta.get(),
   set: value => $botMeta.set(value),
+  setOwner: value => $botMetaOwner.set(value),
   mergeServerMeta,
   setPluginCtx: value => { pluginCtx = value }
 };
 `)
   vm.runInNewContext(source, context, { filename: 'plugin.js' })
-  return context.__botMetaSync
+  const sync = context.__botMetaSync
+  sync.setOwner(LOCAL_OWNER)
+  const mergeServerMeta = sync.mergeServerMeta
+  sync.mergeServerMeta = roster => mergeServerMeta(roster, LOCAL_OWNER)
+  return sync
 }
 
 test('regression: authoritative server metadata removes stale local canonical chat', () => {

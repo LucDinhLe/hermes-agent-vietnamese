@@ -133,8 +133,8 @@ machine keep working. If a migrated name collided, it was suffixed
 ## Agents across sources
 
 Every [profile](./profiles.md) on every registered connection is an *agent*.
-The union roster is what multi-source surfaces (and the built-in
-[Bot Mode](./bot-mode.md) roster) render:
+The union roster is what multi-source surfaces and the built-in
+[Agents](./bot-mode.md) control render:
 
 - When the same profile name exists on several sources, handles disambiguate
   as **`@name-device`** — `research` on your Homelab renders as
@@ -218,7 +218,7 @@ multi-source surface directly:
   (hover-intent).
 
 All four are feature-detected: on an older Desktop build they're absent and a
-plugin should fall back to the single-source `profiles.list` flow. Bot Mode's
+plugin should fall back to the single-source `profiles.list` flow. The Agents
 multi-source roster is the reference consumer.
 
 ## Troubleshooting

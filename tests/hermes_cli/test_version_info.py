@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from hermes_cli.version_info import (
@@ -16,6 +17,13 @@ from hermes_cli import __version__ as VERSION
 
 def setup_function():
     _reset_version_info_cache()
+
+
+def test_desktop_upstream_metadata_matches_imported_runtime_version():
+    metadata_path = Path(__file__).parents[2] / "apps" / "desktop" / "product-metadata.json"
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+
+    assert metadata["upstream"]["version"] == VERSION
 
 
 def test_derived_version_shows_plus_question_for_dirty_unknown_distance():
@@ -169,8 +177,6 @@ def test_get_version_info_falls_back_to_legacy_release_date_tag(tmp_path, monkey
 
 
 def test_get_version_info_unknown_when_no_stamp_and_no_git(monkeypatch):
-    from pathlib import Path
-
     monkeypatch.setattr("hermes_cli.version_info._resolve_stamp_file", lambda: None)
     monkeypatch.setattr("hermes_cli.version_info._resolve_repo_dir", lambda: None)
 

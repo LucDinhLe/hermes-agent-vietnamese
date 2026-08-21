@@ -13,6 +13,7 @@ import { selectableCardClass } from '@/lib/selectable-card'
 import { normalize } from '@/lib/text'
 import { cn } from '@/lib/utils'
 import { $backdrop, setBackdrop } from '@/store/backdrop'
+import type { BackendOwner } from '@/store/backend-owner'
 import { $composerPopoutGesturesEnabled, setComposerPopoutGesturesEnabled } from '@/store/composer-popout'
 import { $embedAllowed, $embedMode, clearEmbedAllowed, type EmbedMode, setEmbedMode } from '@/store/embed-consent'
 import { $activeGatewayProfile, $profiles, normalizeProfileKey } from '@/store/profile'
@@ -47,6 +48,8 @@ import { getBaseColors, useTheme } from '@/themes/context'
 import { installVscodeThemeFromMarketplace } from '@/themes/install'
 import type { DesktopTheme } from '@/themes/types'
 import { $marketplaceInstalls, isUserTheme, removeUserTheme } from '@/themes/user-themes'
+
+import { settingsBackendOwnerKey } from '../hooks/backend-owner-scope'
 
 import { MODE_OPTIONS } from './constants'
 import { PetSettings } from './pet-settings'
@@ -281,7 +284,7 @@ const SLIDER_STEP_KEYS = new Set([
   'PageUp'
 ])
 
-export function AppearanceSettings() {
+export function AppearanceSettings({ backendOwner = null }: { backendOwner?: BackendOwner | null }) {
   const { t, isSavingLocale } = useI18n()
   const { themeName, mode, resolvedMode, availableThemes, setTheme, setMode } = useTheme()
   const toolViewMode = useStore($toolViewMode)
@@ -498,7 +501,10 @@ export function AppearanceSettings() {
             title={a.uiScaleTitle}
           />
 
-          <TerminalFontSetting />
+          <TerminalFontSetting
+            backendOwner={backendOwner}
+            key={backendOwner ? settingsBackendOwnerKey(backendOwner) : '__ambient__'}
+          />
 
           <ListRow
             action={

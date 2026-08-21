@@ -23,6 +23,7 @@ import type { ReactNode } from 'react'
 
 import { PRIMARY_SESSION_VIEW } from '@/app/chat/session-view'
 import { openSession, type OpenSessionIntent } from '@/app/open-session'
+import { navigateToWorkspacePage } from '@/app/routes'
 import type { ClientSessionState } from '@/app/types'
 import {
   $narrowViewport,
@@ -195,6 +196,10 @@ const $activeConnectionId = computed($connection, connection => {
 })
 
 export const host = {
+  /** Core Skills/Toolsets/MCP REST and async flows accept an immutable connection scope. */
+  capabilityConnectionScoped: true,
+  /** Capability marker for bundled plugins that also run on older SDKs. */
+  deleteProfileConnectionScoped: true,
   state: {
     /** Runtime id of the active chat session (null on a fresh draft). */
     activeSessionId: readonlyAtom<null | string>($activeSessionId),
@@ -249,7 +254,9 @@ export const host = {
 
   /** Navigate the app router (hash routes, e.g. '/command-center?section=system'). */
   navigate: (path: string) => {
-    window.location.hash = path.startsWith('#') ? path : `#${path}`
+    navigateToWorkspacePage(to => {
+      window.location.hash = to.startsWith('#') ? to : `#${to}`
+    }, path)
   },
 
   /** Open a stored session the way core surfaces do (focus an existing
@@ -287,7 +294,7 @@ export const host = {
    *  entirely. When the deleted profile was the live gateway's, the app is
    *  re-homed to the default profile — same semantics as the core dialog.
    *  Rejects with the backend's error when the delete fails. */
-  deleteProfile: async (profile: string): Promise<void> => {
+  deleteProfile: async (profile: string, connectionId?: null | string): Promise<void> => {
     const name = (profile ?? '').trim()
 
     if (!name) {
@@ -301,13 +308,24 @@ export const host = {
     // Capture before the delete; re-home after so our write is the last one
     // (mirrors DeleteProfileDialog — a refreshActiveProfile racing the dying
     // backend can't clobber the pill back to the deleted profile).
-    const wasActive = normalizeProfileKey(name) === normalizeProfileKey($activeGatewayProfile.get())
+    const explicitConnectionId = connectionId == null ? null : connectionId.trim() || null
+    const activeConnectionId = $activeConnectionId.get() || 'local'
+    // Omitted source means "the live source now" for the plugin-host API.
+    // An explicit null retains the legacy unscoped escape hatch.
+    const targetConnectionId = connectionId === undefined ? activeConnectionId : explicitConnectionId
+    const wasActive =
+      targetConnectionId === activeConnectionId &&
+      normalizeProfileKey(name) === normalizeProfileKey($activeGatewayProfile.get())
 
     // A hover-warmed Bot Mode row owns a retained renderer socket. Retire it
     // before Electron stops the profile backend so the socket closure cannot
     // schedule a reconnect that resurrects the deleted profile.
-    retireLocalProfileGateways(name)
-    await deleteProfile(name)
+    // Remote registry sources own their own backend lifecycle. Retiring local
+    // sockets for a same-named profile would disrupt the wrong source.
+    if (targetConnectionId === null || targetConnectionId === 'local') {
+      retireLocalProfileGateways(name)
+    }
+    await deleteProfile(name, targetConnectionId)
 
     // The profile rail paints from the shared $profiles cache; without a
     // refresh the deleted profile's badge survives and clicking it starts a
@@ -315,7 +333,11 @@ export const host = {
     // Best-effort: the delete itself already succeeded.
     await refreshProfiles().catch(() => undefined)
 
-    if (wasActive) {
+    if (
+      wasActive &&
+      ($activeConnectionId.get() || 'local') === targetConnectionId &&
+      normalizeProfileKey($activeGatewayProfile.get()) === normalizeProfileKey(name)
+    ) {
       selectProfile('default')
       setActiveProfile('default')
     }
@@ -330,7 +352,21 @@ export const host = {
    *  and matching by profile name alone duplicates every agent when the
    *  active gateway is a registered remote. Re-read per use — it changes on
    *  profile/agent swaps. */
-  activeConnectionId: (): null | string => activeGatewayConnectionId(),
+  activeConnectionId: (): null | string => {
+    const pooledConnectionId = activeGatewayConnectionId()
+
+    if (pooledConnectionId) {
+      return pooledConnectionId
+    }
+
+    // The primary socket can itself be a registered remote. The gateway pool
+    // deliberately returns null for every primary, while the published live
+    // descriptor retains the registry identity. Do not expose that identity
+    // for a local/legacy primary merely because a stale optional field exists.
+    const connection = $connection.get()
+
+    return connection?.mode === 'remote' ? connection.connectionId?.trim() || null : null
+  },
 
   /** The registered connection list (labels, kinds, primary) — token bytes
    *  never included. Rejects on Desktop builds without the registry. */
@@ -367,9 +403,9 @@ export const host = {
   /** Activate an agent's gateway (dialing it if needed) so subsequent
    *  host.request calls hit that agent's backend. Goes through the store's
    *  serialized activation path so $connection / $activeGatewayProfile follow
-   *  and rapid switches can't land out of order. The local source falls
-   *  through to the profile path — single-source plugins keep working
-   *  against older behavior unchanged. */
+   *  and rapid switches can't land out of order. A null legacy source falls
+   *  through to the profile path; an explicit `local` registry identity stays
+   *  registry-routed so it cannot inherit whichever remote source is active. */
   ensureAgent: async (connectionId: null | string, profile: string): Promise<void> =>
     ensureGatewayAgent(connectionId, (profile ?? '').trim() || 'default'),
 
@@ -492,16 +528,26 @@ export const host = {
       throw new Error('Hermes Vietnamese connection routing unavailable')
     }
 
-    let profiles = $profiles.get()
+    let fallbackProfileNames: string[] = []
 
-    try {
-      profiles = await refreshProfiles()
-    } catch {
-      // Route inventory is a read: a transient backend failure falls back to
-      // the last cache. Electron always adds the primary Desktop profile.
+    // `$profiles` follows the active backend. Only hand its names to Electron
+    // as LOCAL enumeration fallbacks when that backend is explicitly local;
+    // otherwise a remote-only name can be fabricated into a nonexistent local
+    // route when local enumeration happens to fail.
+    if ($connection.get()?.mode === 'local') {
+      let profiles = $profiles.get()
+
+      try {
+        profiles = await refreshProfiles()
+      } catch {
+        // A transient local failure may reuse the last cache. Electron still
+        // owns source qualification and always adds the primary profile.
+      }
+
+      fallbackProfileNames = profiles.map(profile => profile.name)
     }
 
-    return getProfileRoutes(profiles.map(profile => profile.name))
+    return getProfileRoutes(fallbackProfileNames)
   },
 
   /** Gateway JSON-RPC through a credential-free route descriptor without
@@ -546,6 +592,11 @@ export {
   type ComposerAttachmentProvider,
   type ComposerMiddleware
 } from '@/app/chat/composer/contrib'
+export {
+  SESSION_AGENTS_AREA,
+  type SessionAgentsContribution,
+  type SessionAgentsSurfaceProps
+} from '@/app/chat/session-agents-contrib'
 
 // -- ui: the design language --------------------------------------------------
 
@@ -615,8 +666,10 @@ export {
 } from '@/components/ui/dialog'
 export {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSearch,
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'

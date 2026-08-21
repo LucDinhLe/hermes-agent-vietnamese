@@ -27,10 +27,12 @@ import { useI18n } from '@/i18n'
 import { AlertTriangle, Cpu, Loader2 } from '@/lib/icons'
 import { DEFAULT_REASONING_EFFORT, REASONING_EFFORT_VALUES } from '@/lib/reasoning-effort'
 import { cn } from '@/lib/utils'
+import type { BackendOwner } from '@/store/backend-owner'
 import { setMainModelAssignment } from '@/store/cron-model-impact'
 import { notifyError } from '@/store/notifications'
 import { startManualLocalEndpoint, startManualOnboarding, startManualProviderOAuth } from '@/store/onboarding'
 
+import { useBackendOwnerGuard } from '../hooks/use-backend-owner-guard'
 import { hermesConfigCacheWriter, invalidateHermesConfig, useHermesConfigRecord } from '../hooks/use-config-record'
 import { useOnProfileSwitch } from '../hooks/use-on-profile-switch'
 
@@ -180,6 +182,7 @@ function StaleAuxWarning({ applying, onReset, slots, taskLabel }: StaleAuxWarnin
 }
 
 interface ModelSettingsProps {
+  backendOwner?: BackendOwner | null
   /** Notified after the main model is applied, so live UI stores can sync. */
   onMainModelChanged?: (provider: string, model: string) => void
   /** Shared settings "Applies to" scope: a concrete profile to edit instead of
@@ -187,7 +190,7 @@ interface ModelSettingsProps {
   scopeProfile?: null | string
 }
 
-export function ModelSettings({ onMainModelChanged, scopeProfile = null }: ModelSettingsProps) {
+export function ModelSettings({ backendOwner = null, onMainModelChanged, scopeProfile = null }: ModelSettingsProps) {
   const { t } = useI18n()
   const m = t.settings.model
   const [loading, setLoading] = useState(true)
@@ -202,8 +205,11 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
   const [newMoaPresetName, setNewMoaPresetName] = useState('')
   // agent.* defaults round-trip through the shared config cache (read → write
   // back the whole record), so a save here shows in the MCP/model surfaces.
-  const { data: config } = useHermesConfigRecord(scopeProfile)
-  const setConfig = useMemo(() => hermesConfigCacheWriter(scopeProfile), [scopeProfile])
+  const apiProfile = backendOwner?.profile ?? scopeProfile ?? undefined
+  const connectionId = backendOwner?.connectionId
+  const isCurrentOwner = useBackendOwnerGuard(backendOwner)
+  const { data: config } = useHermesConfigRecord(apiProfile, connectionId)
+  const setConfig = useMemo(() => hermesConfigCacheWriter(apiProfile, connectionId), [apiProfile, connectionId])
   const [applying, setApplying] = useState(false)
   const [editingAuxTask, setEditingAuxTask] = useState<null | string>(null)
   const [auxDraft, setAuxDraft] = useState<{ model: string; provider: string }>({ model: '', provider: '' })
@@ -236,13 +242,13 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
 
       try {
         const [modelInfo, modelOptions, auxiliaryModels, moaModels] = await Promise.all([
-          getGlobalModelInfo(scopeProfile),
-          getGlobalModelOptions(undefined, scopeProfile),
-          getAuxiliaryModels(scopeProfile),
-          getMoaModels(scopeProfile).catch(() => null)
+          getGlobalModelInfo(apiProfile, connectionId),
+          getGlobalModelOptions(undefined, apiProfile, connectionId),
+          getAuxiliaryModels(apiProfile, connectionId),
+          getMoaModels(apiProfile, connectionId).catch(() => null)
         ])
 
-        if (profileEpoch.current !== epoch) {
+        if (!isCurrentOwner() || profileEpoch.current !== epoch) {
           return
         }
 
@@ -266,31 +272,46 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
 
         // The config record loads via its own shared query; a model switch can
         // change it server-side (aux slots), so nudge that cache to refetch.
-        void invalidateHermesConfig(scopeProfile)
+        void invalidateHermesConfig(apiProfile, connectionId)
       } catch (err) {
-        if (profileEpoch.current === epoch) {
+        if (isCurrentOwner() && profileEpoch.current === epoch) {
           setError(err instanceof Error ? err.message : String(err))
         }
       } finally {
-        if (profileEpoch.current === epoch) {
+        if (isCurrentOwner() && profileEpoch.current === epoch) {
           setLoading(false)
         }
       }
     },
-    [scopeProfile]
+    [apiProfile, connectionId, isCurrentOwner]
   )
 
+  // eslint-disable-next-line no-restricted-syntax -- generation strands in-flight backend work across owner changes
   useEffect(() => {
-    void refresh()
-  }, [refresh])
-
-  // A profile switch swaps the backend under the mounted panel — reload for the
-  // new profile (bumping the epoch first so any in-flight A request is discarded).
-  useOnProfileSwitch(() => {
     profileEpoch.current += 1
     // The panel stays mounted across profile switches, so clear the previous
     // profile's draft selection before loading the new profile's source of
     // truth. Ordinary same-profile refreshes still preserve in-progress edits.
+    setSelectedProvider('')
+    setSelectedModel('')
+    setApiKeyDraft('')
+    void refresh({ replaceSelection: true })
+
+    return () => {
+      profileEpoch.current += 1
+    }
+  }, [refresh])
+
+  // Keep standalone/legacy consumers (which do not provide an immutable
+  // owner) responsive to ambient source/profile switches. Settings passes a
+  // concrete owner and remounts this panel by owner key, so that path must not
+  // be restarted by the ambient hook.
+  useOnProfileSwitch(() => {
+    if (backendOwner) {
+      return
+    }
+
+    profileEpoch.current += 1
     setSelectedProvider('')
     setSelectedModel('')
     setApiKeyDraft('')
@@ -399,20 +420,20 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
       }
 
       moaSaveTimer.current = window.setTimeout(() => {
-        void saveMoaModels(next, scopeProfile)
+        void saveMoaModels(next, apiProfile, connectionId)
           .then(saved => {
-            if (moaSaveGeneration.current === generation) {
+            if (isCurrentOwner() && moaSaveGeneration.current === generation) {
               setMoa(saved)
             }
           })
           .catch(err => {
-            if (moaSaveGeneration.current === generation) {
+            if (isCurrentOwner() && moaSaveGeneration.current === generation) {
               setError(err instanceof Error ? err.message : String(err))
             }
           })
       }, 600)
     },
-    [scopeProfile]
+    [apiProfile, connectionId, isCurrentOwner]
   )
 
   const updateMoaPreset = useCallback(
@@ -468,20 +489,24 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
       setError('')
 
       try {
-        const saved = await saveMoaModels(next, scopeProfile)
+        const saved = await saveMoaModels(next, apiProfile, connectionId)
 
-        if (profileEpoch.current !== epoch) {
+        if (!isCurrentOwner() || profileEpoch.current !== epoch) {
           return
         }
 
         setMoa(saved)
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err))
+        if (isCurrentOwner() && profileEpoch.current === epoch) {
+          setError(err instanceof Error ? err.message : String(err))
+        }
       } finally {
-        setApplying(false)
+        if (isCurrentOwner() && profileEpoch.current === epoch) {
+          setApplying(false)
+        }
       }
     },
-    [scopeProfile]
+    [apiProfile, connectionId, isCurrentOwner]
   )
 
   const auxiliaryTaskLabel = useCallback((key: string) => m.tasks[key]?.label ?? key, [m.tasks])
@@ -540,13 +565,15 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
       setConfig(next)
 
       try {
-        await saveHermesConfig(next, scopeProfile ?? undefined)
+        await saveHermesConfig(next, apiProfile, connectionId)
       } catch (err) {
-        setConfig(prev)
-        notifyError(err, m.defaultsFailed)
+        if (isCurrentOwner()) {
+          setConfig(prev)
+          notifyError(err, m.defaultsFailed)
+        }
       }
     },
-    [config, m.defaultsFailed, scopeProfile, setConfig]
+    [apiProfile, config, connectionId, isCurrentOwner, m.defaultsFailed, setConfig]
   )
 
   // Paste an API key for the selected `api_key` provider, persist it, then
@@ -565,7 +592,12 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
     setError('')
 
     try {
-      await setEnvVar(keyEnv, apiKeyDraft.trim(), scopeProfile)
+      await setEnvVar(keyEnv, apiKeyDraft.trim(), apiProfile, connectionId)
+
+      if (!isCurrentOwner() || profileEpoch.current !== epoch) {
+        return
+      }
+
       setApiKeyDraft('')
 
       // Pick a sensible default for the freshly-activated provider (mirrors
@@ -574,15 +606,15 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
       let nextModel = ''
 
       try {
-        const rec = await getRecommendedDefaultModel(slug, scopeProfile)
+        const rec = await getRecommendedDefaultModel(slug, apiProfile, connectionId)
         nextModel = rec.model || ''
       } catch {
         nextModel = ''
       }
 
-      const options = await getGlobalModelOptions(undefined, scopeProfile)
+      const options = await getGlobalModelOptions(undefined, apiProfile, connectionId)
 
-      if (profileEpoch.current !== epoch) {
+      if (!isCurrentOwner() || profileEpoch.current !== epoch) {
         return
       }
 
@@ -591,11 +623,15 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
       const fallbackModel = refreshedRow?.models?.[0] ?? ''
       setSelectedModel(nextModel || fallbackModel)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      if (isCurrentOwner() && profileEpoch.current === epoch) {
+        setError(err instanceof Error ? err.message : String(err))
+      }
     } finally {
-      setActivating(false)
+      if (isCurrentOwner() && profileEpoch.current === epoch) {
+        setActivating(false)
+      }
     }
-  }, [apiKeyDraft, scopeProfile, selectedProviderRow])
+  }, [apiKeyDraft, apiProfile, connectionId, isCurrentOwner, selectedProviderRow])
 
   // OAuth / external providers can't be activated with a pasted key — hand off
   // to the shared onboarding flow scoped to this provider's real sign-in. The
@@ -603,6 +639,14 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
   // local-endpoint form (URL + optional API key) instead of being dead-ended
   // on the OAuth picker (the original "booted back to the first screen" loop).
   const startProviderSetup = useCallback(() => {
+    // The onboarding overlay's gateway leg follows the ACTIVE profile. Editing
+    // another profile through "Applies to" may still save keys/models directly,
+    // but launching OAuth here would mix the target profile with the active
+    // gateway. Fail closed until the user activates that profile.
+    if (scopeProfile != null) {
+      return
+    }
+
     const rowSlug = selectedProviderRow?.slug.trim() ?? ''
     const slug = rowSlug || selectedProvider.trim()
 
@@ -613,15 +657,15 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
     const lower = slug.toLowerCase()
 
     if (lower === 'custom' || lower === 'local' || lower.startsWith('custom:')) {
-      startManualLocalEndpoint()
+      startManualLocalEndpoint(null, backendOwner)
     } else if (rowSlug) {
-      startManualProviderOAuth(rowSlug)
+      startManualProviderOAuth(rowSlug, null, backendOwner)
     } else {
       // An absent row has no trustworthy auth metadata. Open the generic
       // provider picker instead of deep-linking an unknown or stale slug.
-      startManualOnboarding()
+      startManualOnboarding(undefined, backendOwner)
     }
-  }, [selectedProvider, selectedProviderRow])
+  }, [backendOwner, scopeProfile, selectedProvider, selectedProviderRow])
 
   const applyMainModel = useCallback(async () => {
     if (!selectedProvider || !selectedModel) {
@@ -639,10 +683,11 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
           provider: selectedProvider,
           ...(selectedProviderRow?.api_url ? { base_url: selectedProviderRow.api_url } : {})
         },
-        scopeProfile
+        apiProfile,
+        connectionId
       )
 
-      if (profileEpoch.current !== epoch) {
+      if (!isCurrentOwner() || profileEpoch.current !== epoch) {
         return
       }
 
@@ -659,11 +704,25 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
 
       await refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      if (isCurrentOwner() && profileEpoch.current === epoch) {
+        setError(err instanceof Error ? err.message : String(err))
+      }
     } finally {
-      setApplying(false)
+      if (isCurrentOwner() && profileEpoch.current === epoch) {
+        setApplying(false)
+      }
     }
-  }, [onMainModelChanged, refresh, scopeProfile, selectedModel, selectedProvider, selectedProviderRow])
+  }, [
+    apiProfile,
+    connectionId,
+    isCurrentOwner,
+    onMainModelChanged,
+    refresh,
+    scopeProfile,
+    selectedModel,
+    selectedProvider,
+    selectedProviderRow
+  ])
 
   // Sibling of the applyMainModel endpoint passthrough (#65254): auxiliary
   // assignments targeting a user-defined provider must carry that provider's
@@ -697,16 +756,26 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
             task,
             ...endpointForProvider(mainModel.provider)
           },
-          scopeProfile
+          apiProfile,
+          connectionId
         )
+
+        if (!isCurrentOwner()) {
+          return
+        }
+
         await refresh()
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err))
+        if (isCurrentOwner()) {
+          setError(err instanceof Error ? err.message : String(err))
+        }
       } finally {
-        setApplying(false)
+        if (isCurrentOwner()) {
+          setApplying(false)
+        }
       }
     },
-    [endpointForProvider, mainModel, refresh, scopeProfile]
+    [apiProfile, connectionId, endpointForProvider, isCurrentOwner, mainModel, refresh]
   )
 
   const applyAuxiliaryDraft = useCallback(
@@ -727,17 +796,27 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
             task,
             ...endpointForProvider(auxDraft.provider)
           },
-          scopeProfile
+          apiProfile,
+          connectionId
         )
+
+        if (!isCurrentOwner()) {
+          return
+        }
+
         setEditingAuxTask(null)
         await refresh()
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err))
+        if (isCurrentOwner()) {
+          setError(err instanceof Error ? err.message : String(err))
+        }
       } finally {
-        setApplying(false)
+        if (isCurrentOwner()) {
+          setApplying(false)
+        }
       }
     },
-    [auxDraft, endpointForProvider, refresh, scopeProfile]
+    [apiProfile, auxDraft, connectionId, endpointForProvider, isCurrentOwner, refresh]
   )
 
   const beginAuxiliaryEdit = useCallback(
@@ -770,16 +849,26 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
           scope: 'auxiliary',
           task: '__reset__'
         },
-        scopeProfile
+        apiProfile,
+        connectionId
       )
+
+      if (!isCurrentOwner()) {
+        return
+      }
+
       setSwitchStaleAux([])
       await refresh()
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      if (isCurrentOwner()) {
+        setError(err instanceof Error ? err.message : String(err))
+      }
     } finally {
-      setApplying(false)
+      if (isCurrentOwner()) {
+        setApplying(false)
+      }
     }
-  }, [mainModel, refresh, scopeProfile])
+  }, [apiProfile, connectionId, isCurrentOwner, mainModel, refresh])
 
   if (loading && !mainModel) {
     return <ModelSettingsSkeleton />
@@ -828,7 +917,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
                 </Button>
               </>
             ) : (
-              <Button onClick={startProviderSetup} size="sm" variant="textStrong">
+              <Button disabled={scopeProfile != null} onClick={startProviderSetup} size="sm" variant="textStrong">
                 Set up {selectedProviderRow?.name ?? 'provider'}
               </Button>
             )

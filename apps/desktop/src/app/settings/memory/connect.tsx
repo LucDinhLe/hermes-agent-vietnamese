@@ -3,8 +3,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { getMemoryProviderOAuthStatus, startMemoryProviderOAuth } from '@/hermes'
 import { Check, ExternalLink, Loader2 } from '@/lib/icons'
+import type { BackendOwner } from '@/store/backend-owner'
 import { notifyError } from '@/store/notifications'
 import type { MemoryProviderOAuthStatus } from '@/types/hermes'
+
+import { useBackendOwnerGuard } from '../../hooks/use-backend-owner-guard'
 
 const POLL_MS = 1500
 const POLL_TIMEOUT_MS = 120_000
@@ -12,7 +15,15 @@ const POLL_TIMEOUT_MS = 120_000
 // Small connect affordance rendered under the provider dropdown. Capability is
 // backend-driven: the status route 404s for providers without an oauth_flow
 // module, so non-OAuth providers render nothing.
-export function MemoryConnect({ profile = null, provider }: { profile?: null | string; provider: string }) {
+export function MemoryConnect({
+  backendOwner = null,
+  profile = null,
+  provider
+}: {
+  backendOwner?: BackendOwner | null
+  profile?: null | string
+  provider: string
+}) {
   const [capable, setCapable] = useState<'no' | 'unknown' | 'yes'>('unknown')
   const [connected, setConnected] = useState(false)
   const [auth, setAuth] = useState<MemoryProviderOAuthStatus['auth']>(null)
@@ -20,6 +31,10 @@ export function MemoryConnect({ profile = null, provider }: { profile?: null | s
   const [detail, setDetail] = useState('')
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
   const deadline = useRef(0)
+  const flowGeneration = useRef(0)
+  const isCurrentOwner = useBackendOwnerGuard(backendOwner)
+  const apiProfile = backendOwner?.profile ?? profile ?? undefined
+  const connectionId = backendOwner?.connectionId
 
   const stop = useCallback(() => {
     if (timer.current !== null) {
@@ -28,12 +43,14 @@ export function MemoryConnect({ profile = null, provider }: { profile?: null | s
     }
   }, [])
 
+  // eslint-disable-next-line no-restricted-syntax -- generation invalidates async OAuth work; it does not mirror UI/store state
   useEffect(() => {
     let active = true
+    flowGeneration.current += 1
     setCapable('unknown')
-    getMemoryProviderOAuthStatus(provider, profile)
+    getMemoryProviderOAuthStatus(provider, apiProfile, connectionId)
       .then(s => {
-        if (!active) {
+        if (!active || !isCurrentOwner()) {
           return
         }
 
@@ -42,16 +59,17 @@ export function MemoryConnect({ profile = null, provider }: { profile?: null | s
         setAuth(s.auth)
       })
       .catch(() => {
-        if (active) {
+        if (active && isCurrentOwner()) {
           setCapable('no')
         }
       })
 
     return () => {
       active = false
+      flowGeneration.current += 1
       stop()
     }
-  }, [profile, provider, stop])
+  }, [apiProfile, connectionId, isCurrentOwner, provider, stop])
 
   // An error message isn't sticky — it clears back to the steady state
   // (Connect link, plus the connected badge if a credential is stored).
@@ -69,15 +87,25 @@ export function MemoryConnect({ profile = null, provider }: { profile?: null | s
   }, [phase])
 
   const connect = useCallback(async () => {
+    const generation = flowGeneration.current + 1
+    flowGeneration.current = generation
     setPhase('pending')
 
     try {
-      await startMemoryProviderOAuth(provider, profile)
+      await startMemoryProviderOAuth(provider, apiProfile, connectionId)
     } catch (err) {
+      if (!isCurrentOwner() || flowGeneration.current !== generation) {
+        return
+      }
+
       setPhase('error')
       setDetail('Could not start the connection.')
       notifyError(err, 'Failed to start connection')
 
+      return
+    }
+
+    if (!isCurrentOwner() || flowGeneration.current !== generation) {
       return
     }
 
@@ -86,7 +114,11 @@ export function MemoryConnect({ profile = null, provider }: { profile?: null | s
     timer.current = setInterval(() => {
       void (async () => {
         try {
-          const next = await getMemoryProviderOAuthStatus(provider, profile)
+          const next = await getMemoryProviderOAuthStatus(provider, apiProfile, connectionId)
+
+          if (!isCurrentOwner() || flowGeneration.current !== generation) {
+            return
+          }
 
           if (next.state === 'pending') {
             if (Date.now() > deadline.current) {
@@ -113,9 +145,10 @@ export function MemoryConnect({ profile = null, provider }: { profile?: null | s
         }
       })()
     }, POLL_MS)
-  }, [profile, provider, stop])
+  }, [apiProfile, connectionId, isCurrentOwner, provider, stop])
 
   const cancel = useCallback(() => {
+    flowGeneration.current += 1
     stop()
     setPhase('idle')
   }, [stop])

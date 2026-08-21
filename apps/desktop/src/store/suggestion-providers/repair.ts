@@ -3,8 +3,10 @@ import { translateNow } from '@/i18n'
 import { completeMcpDesktopOAuth, McpOAuthCancelled } from '@/lib/mcp-dashboard-oauth'
 import { prettyName } from '@/lib/text'
 import { type ComposerSuggestion, offerSuggestions } from '@/store/composer-suggestions'
-import { $gateway } from '@/store/gateway'
+import { requestGatewayForAgent } from '@/store/gateway'
 import { notifyError } from '@/store/notifications'
+
+import { type BackendOwner, sameBackendOwner, sessionBackendOwner } from '../backend-owner'
 
 /**
  * Connection-repair event provider: an MCP tool call just failed with an
@@ -33,25 +35,31 @@ export const mcpServerFromToolName = (toolName: string): string | null => {
 }
 
 const failed = new Map<string, Set<string>>()
+const failedOwner = new Map<string, BackendOwner>()
 
 const keyFor = (sessionId: string | null | undefined): string => sessionId ?? ''
 
-async function reconnect(server: string, sessionId: string | null, cancelled: () => boolean): Promise<void> {
+async function reconnect(
+  server: string,
+  sessionId: string | null,
+  owner: BackendOwner,
+  cancelled: () => boolean
+): Promise<void> {
   try {
     await completeMcpDesktopOAuth({
       serverName: server,
-      start: authMcpServer,
-      status: getMcpOAuthFlow,
+      start: name => authMcpServer(name, owner.profile, owner.connectionId),
+      status: flowId => getMcpOAuthFlow(flowId, owner.profile, owner.connectionId),
       cancelled,
-      cancel: cancelMcpOAuthFlow,
+      cancel: flowId => cancelMcpOAuthFlow(flowId, owner.profile, owner.connectionId),
       openExternal: url => window.hermesDesktop.openExternal(url)
     })
 
     // Fresh tokens reach the live session before the pill claims success.
-    await $gateway
-      .get()
-      ?.request('reload.mcp', { confirm: true, session_id: sessionId ?? undefined })
-      .catch(() => {})
+    await requestGatewayForAgent(owner.connectionId, owner.profile, 'reload.mcp', {
+      confirm: true,
+      session_id: sessionId ?? undefined
+    }).catch(() => {})
 
     clearMcpFailure(sessionId, server)
   } catch (error) {
@@ -63,7 +71,7 @@ async function reconnect(server: string, sessionId: string | null, cancelled: ()
   }
 }
 
-function toSuggestion(server: string, sessionId: string | null): ComposerSuggestion {
+function toSuggestion(server: string, sessionId: string | null, owner: BackendOwner): ComposerSuggestion {
   const copy = (key: string, ...args: unknown[]) => translateNow(`composer.repairSuggestions.${key}`, ...args)
   const name = prettyName(server)
 
@@ -73,7 +81,15 @@ function toSuggestion(server: string, sessionId: string | null): ComposerSuggest
     doneTip: copy('doneTip'),
     icon: 'plug',
     id: server,
-    invoke: context => reconnect(server, context.sessionId ?? sessionId, context.cancelled),
+    invoke: context => {
+      const targetSessionId = context.sessionId ?? sessionId
+
+      if (!sameBackendOwner(sessionBackendOwner(targetSessionId), owner)) {
+        throw new Error(translateNow('composer.mcpSuggestions.sourceChanged'))
+      }
+
+      return reconnect(server, targetSessionId, owner, context.cancelled)
+    },
     label: copy('label', name),
     provider: 'repair',
     tip: copy('tip', name),
@@ -83,12 +99,14 @@ function toSuggestion(server: string, sessionId: string | null): ComposerSuggest
 }
 
 function publish(sessionId: string | null | undefined): void {
-  const servers = [...(failed.get(keyFor(sessionId)) ?? [])]
+  const key = keyFor(sessionId)
+  const servers = [...(failed.get(key) ?? [])]
+  const owner = failedOwner.get(key)
 
   offerSuggestions(
     sessionId,
     'repair',
-    servers.map(server => toSuggestion(server, sessionId ?? null))
+    owner ? servers.map(server => toSuggestion(server, sessionId ?? null, owner)) : []
   )
 }
 
@@ -112,11 +130,12 @@ export function reportMcpToolResult(
 
   const key = keyFor(sessionId)
   const sessionFailed = failed.get(key)
+  const owner = sessionBackendOwner(sessionId)
 
-  if (isError && REPAIR_RE.test(resultText)) {
+  if (isError && REPAIR_RE.test(resultText) && owner) {
     // Only offer repair for servers that are actually configured — a failure
     // from a just-removed server shouldn't pitch reconnecting it.
-    void listMcpServers()
+    void listMcpServers(owner.profile, owner.connectionId)
       .then(({ servers }) => {
         if (!servers.some(entry => entry.name === server)) {
           return
@@ -126,6 +145,7 @@ export function reportMcpToolResult(
 
         next.add(server)
         failed.set(key, next)
+        failedOwner.set(key, owner)
         publish(sessionId)
       })
       .catch(() => {

@@ -1,91 +1,37 @@
 import assert from 'node:assert/strict'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import test from 'node:test'
-import { pathToFileURL } from 'node:url'
 
-const pluginSource = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
-const OPTIONAL_CAPABILITY_EXPORTS = new Set(['McpTab', 'ToolsetConfigPanel', 'SkillsView'])
+import { loadHermesBotsPlugin } from './plugin-behavior-fixture.mjs'
 
-function sdkNamedImports(source) {
-  const match = source.match(/import\s+\{([\s\S]*?)\}\s+from '@hermes\/plugin-sdk'/)
-
-  assert.ok(match, 'plugin.js must retain the mandatory named SDK import')
-
-  return match[1]
-    .split(',')
-    .map(name => name.trim())
-    .filter(Boolean)
-    .map(name => name.split(/\s+as\s+/)[0])
-}
-
-function proxyModule(exportNames) {
-  const exports = exportNames.map(name => `  proxy as ${name}`).join(',\n')
-
-  return `const proxy = new Proxy(function () { return proxy }, {
-  apply: () => proxy,
-  get: (_target, key) => {
-    if (key === Symbol.iterator) return function * () {}
-    if (key === Symbol.toPrimitive) return () => 0
-    if (key === 'then') return undefined
-    return proxy
-  }
-})
-
-export {
-${exports}
-}
-`
-}
-
-function writeLegacySdk(root) {
-  const packageRoot = join(root, 'node_modules', '@hermes', 'plugin-sdk')
-  const exportNames = sdkNamedImports(pluginSource).filter(
-    name => !OPTIONAL_CAPABILITY_EXPORTS.has(name)
-  )
-
-  mkdirSync(packageRoot, { recursive: true })
-  writeFileSync(
-    join(packageRoot, 'package.json'),
-    `${JSON.stringify({ name: '@hermes/plugin-sdk', type: 'module', exports: './index.js' }, null, 2)}\n`
-  )
-  writeFileSync(join(packageRoot, 'index.js'), proxyModule(exportNames))
-}
-
-function writeReactStubs(root) {
-  const packageRoot = join(root, 'node_modules', 'react')
-
-  mkdirSync(packageRoot, { recursive: true })
-  writeFileSync(
-    join(packageRoot, 'package.json'),
-    `${JSON.stringify(
-      {
-        name: 'react',
-        type: 'module',
-        exports: { '.': './index.js', './jsx-runtime': './jsx-runtime.js' }
-      },
-      null,
-      2
-    )}\n`
-  )
-  writeFileSync(join(packageRoot, 'index.js'), proxyModule(['useEffect', 'useRef', 'useState']))
-  writeFileSync(join(packageRoot, 'jsx-runtime.js'), proxyModule(['jsx', 'jsxs']))
-}
-
-test('legacy SDK without optional capability exports still links Bot Mode', async t => {
-  const root = mkdtempSync(join(tmpdir(), 'hermes-bot-mode-legacy-sdk-'))
-  const pluginPath = join(root, 'plugin.js')
-
-  t.after(() => rmSync(root, { recursive: true, force: true }))
-
-  writeFileSync(join(root, 'package.json'), '{"type":"module"}\n')
-  writeFileSync(pluginPath, pluginSource)
-  writeLegacySdk(root)
-  writeReactStubs(root)
-
-  const loaded = await import(pathToFileURL(pluginPath).href)
+test('legacy SDK without optional exports imports the single-file plugin', async () => {
+  const loaded = await loadHermesBotsPlugin()
 
   assert.equal(loaded.default.id, 'hermes-bots')
+  assert.equal(loaded.default.name, 'Agents')
+  assert.equal(loaded.default.description(), 'Create and manage Agent profiles, capabilities, groups, and routines.')
   assert.equal(typeof loaded.default.register, 'function')
+})
+
+test('optional Agent surfaces register only when their SDK areas exist', async () => {
+  const api = (await loadHermesBotsPlugin()).default.__testing
+  const registered = []
+  const ctx = { register: contribution => registered.push(contribution) }
+
+  assert.deepEqual(api.registerAgentSurfaces(ctx, {}), [])
+  assert.deepEqual(registered, [])
+
+  assert.deepEqual(
+    api.registerAgentSurfaces(ctx, {
+      ROUTES_AREA: 'routes',
+      SESSION_AGENTS_AREA: 'chat.session-agents'
+    }),
+    ['session-control', 'management-page']
+  )
+  assert.deepEqual(
+    registered.map(({ area, id }) => [area, id]),
+    [
+      ['chat.session-agents', 'session-control'],
+      ['routes', 'management-page']
+    ]
+  )
 })

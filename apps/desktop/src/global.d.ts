@@ -882,6 +882,8 @@ export interface DesktopRosterAgent {
 
 export interface DesktopAgentRoster {
   agents: DesktopRosterAgent[]
+  /** Registry source whose rows are already represented by profiles.list. */
+  primaryConnectionId?: string
   sources: {
     connectionId: string
     label: string

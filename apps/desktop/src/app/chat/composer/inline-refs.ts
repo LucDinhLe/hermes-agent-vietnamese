@@ -18,6 +18,7 @@ export type InlineRefInput = string | { kind: string; label?: string; value: str
 /** A dragged sidebar session — carried in-memory by the pointer drag session
  *  (session-drag.ts); sessions never ride native DnD. */
 export interface SessionDragPayload {
+  connectionId?: string
   id: string
   profile: string
   title: string

@@ -4,6 +4,7 @@ import test from 'node:test'
 import vm from 'node:vm'
 
 const pluginSource = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
+const LOCAL_OWNER = { connectionId: 'local', profile: 'default' }
 
 function load({ sdkDeleteProfile = false } = {}) {
   const requests = []
@@ -23,7 +24,8 @@ function load({ sdkDeleteProfile = false } = {}) {
     document: { getElementById: () => null, createElement: () => ({}), head: { appendChild: () => undefined } },
     host: {
       state: {
-        profile: { listen: () => undefined },
+        connectionId: { get: () => 'local', listen: () => undefined },
+        profile: { get: () => 'default', listen: () => undefined },
         gateway: { listen: () => undefined }
       },
       ...(sdkDeleteProfile
@@ -47,7 +49,7 @@ function load({ sdkDeleteProfile = false } = {}) {
     .replace(/^import .* from 'react'\r?\n/m, '')
     .replace(/^import .* from 'react\/jsx-runtime'\r?\n/m, '')
     .replace('export default {', 'globalThis.plugin = {')
-    .concat('\nglobalThis.__delete = { deleteBot, $botMeta, $botUnread, $selectedBot };\n')
+    .concat('\nglobalThis.__delete = { deleteBot, $botMeta, $botMetaOwner, $botUnread, $selectedBot };\n')
   vm.runInNewContext(source, context, { filename: 'plugin.js' })
   context.plugin.register({
     storage: {
@@ -56,6 +58,9 @@ function load({ sdkDeleteProfile = false } = {}) {
     },
     register: () => undefined
   })
+  const deleteBot = context.__delete.deleteBot
+  context.__delete.$botMetaOwner.set(LOCAL_OWNER)
+  context.__delete.deleteBot = bot => deleteBot({ ...bot, actionOwner: LOCAL_OWNER })
   return { context, requests, sdkDeletes, invalidations, stored }
 }
 
@@ -99,10 +104,10 @@ test('integration: a deleted bot is removed from plugin-local state and the rost
   assert.equal(invalidations.length, 1)
 })
 
-test('regression: the bot context menu exposes a destructive delete action and confirmation', () => {
-  assert.match(pluginSource, /ContextMenuItem, \{[\s\S]*?variant: 'destructive'[\s\S]*?children: 'Delete'/)
+test('regression: the Agent menu exposes a localized destructive delete action and confirmation', () => {
+  assert.match(pluginSource, /ContextMenuItem, \{[\s\S]*?variant: 'destructive'[\s\S]*?children: copy\('common\.delete'\)/)
   assert.match(pluginSource, /bot\.is_default \? null : jsx\(ContextMenuSeparator/)
   assert.match(pluginSource, /ConfirmDialog/)
-  assert.match(pluginSource, /title: 'Delete bot and profile\?'/)
-  assert.match(pluginSource, /This will permanently delete the bot[\s\S]*?and its associated Hermes profile at[\s\S]*?This cannot be undone\./)
+  assert.match(pluginSource, /title: copy\('roster\.deleteTitle'\)/)
+  assert.match(pluginSource, /copy\('roster\.deleteDescriptionStart'\)[\s\S]*?copy\('roster\.deleteDescriptionMiddle'\)[\s\S]*?copy\('roster\.deleteDescriptionEnd'\)/)
 })

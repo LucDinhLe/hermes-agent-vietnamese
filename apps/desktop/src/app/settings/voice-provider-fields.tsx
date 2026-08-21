@@ -6,7 +6,7 @@ import { useI18n } from '@/i18n'
 import { notifyError } from '@/store/notifications'
 import type { HermesConfigRecord } from '@/types/hermes'
 
-import { setHermesConfigCache, useHermesConfigRecord } from '../hooks/use-config-record'
+import { hermesConfigCacheWriter, useHermesConfigRecord } from '../hooks/use-config-record'
 
 import { ConfigField } from './config-field'
 import { SECTIONS } from './constants'
@@ -30,14 +30,32 @@ export function voiceProviderKeys(section: 'tts' | 'stt', providerKey: string): 
  * Settings → Voice (shared ConfigField renderer + enum/free-input rules), with
  * the same debounced autosave through the shared config cache.
  */
-export function VoiceProviderFields({ section, providerKey }: { section: 'tts' | 'stt'; providerKey: string }) {
+interface VoiceProviderFieldsProps {
+  connectionId?: null | string
+  profile?: null | string
+  providerKey: string
+  section: 'tts' | 'stt'
+}
+
+export function VoiceProviderFields(props: VoiceProviderFieldsProps) {
+  const source = props.connectionId?.trim() || 'primary'
+  const profile = props.profile?.trim() || 'default'
+
+  return <ScopedVoiceProviderFields {...props} key={`${source}::${profile}::${props.section}::${props.providerKey}`} />
+}
+
+function ScopedVoiceProviderFields({ connectionId, profile, section, providerKey }: VoiceProviderFieldsProps) {
   const { t } = useI18n()
   const keys = useMemo(() => voiceProviderKeys(section, providerKey), [section, providerKey])
-  const { data: loadedConfig } = useHermesConfigRecord()
+  const { data: loadedConfig } = useHermesConfigRecord(profile, connectionId)
+  const setConfigCache = useMemo(
+    () => hermesConfigCacheWriter(profile, connectionId),
+    [connectionId, profile]
+  )
 
   const { data: schemaResponse } = useQuery({
-    queryKey: ['hermes-config-schema'],
-    queryFn: () => getHermesConfigSchema(),
+    queryKey: ['hermes-config-schema', connectionId?.trim() || 'primary', profile?.trim() || 'default'],
+    queryFn: () => getHermesConfigSchema(profile, connectionId),
     staleTime: 5 * 60 * 1000
   })
 
@@ -64,8 +82,8 @@ export function VoiceProviderFields({ section, providerKey }: { section: 'tts' |
     }
 
     const timeout = window.setTimeout(() => {
-      void saveHermesConfig(config)
-        .then(() => setHermesConfigCache(config))
+      void saveHermesConfig(config, profile, connectionId)
+        .then(() => setConfigCache(config))
         .catch(err => notifyError(err, t.settings.config.autosaveFailed))
     }, 550)
 
@@ -86,7 +104,7 @@ export function VoiceProviderFields({ section, providerKey }: { section: 'tts' |
 
     let cancelled = false
 
-    getElevenLabsVoices()
+    getElevenLabsVoices(profile, connectionId)
       .then(result => {
         if (cancelled || !result.available) {
           return
@@ -103,7 +121,7 @@ export function VoiceProviderFields({ section, providerKey }: { section: 'tts' |
       })
 
     return () => void (cancelled = true)
-  }, [wantsElevenLabs])
+  }, [connectionId, profile, wantsElevenLabs])
 
   if (keys.length === 0 || !config) {
     return null

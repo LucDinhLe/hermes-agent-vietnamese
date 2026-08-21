@@ -16,8 +16,10 @@ import { getHermesConfigRecord, type McpTestResult, testMcpServer } from '@/herm
 import { translateNow } from '@/i18n'
 import { classifyProbe, freshProbe, probeCache, probeKey } from '@/lib/mcp-probe-cache'
 import { notify } from '@/store/notifications'
-import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
-import { $gatewayState } from '@/store/session'
+import { $activeGatewayProfile } from '@/store/profile'
+import { $connection, $gatewayState } from '@/store/session'
+
+import { activeBackendOwner, backendOwnerKey } from './backend-owner'
 
 // A constant, not a config knob: the sweep is cheap (a handful of sequential
 // HTTP probes at most) and the notification is transition-gated below, so
@@ -52,6 +54,7 @@ let sweepEpoch = 0
 let sweepChain: Promise<void> = Promise.resolve()
 let offGatewayState: (() => void) | null = null
 let offProfile: (() => void) | null = null
+let offConnection: (() => void) | null = null
 
 // Navigation only — never auto-launch an OAuth flow from the background. The
 // server query param routes through useDeepLinkHighlight on the MCP tab, which
@@ -91,12 +94,18 @@ const isUrlServer = (server: Record<string, unknown>): boolean =>
 
 async function sweep(): Promise<void> {
   const epoch = sweepEpoch
-  const profileKey = normalizeProfileKey($activeGatewayProfile.get())
+  const owner = activeBackendOwner()
+
+  if (!owner) {
+    return
+  }
+
+  const profileKey = backendOwnerKey(owner)
 
   let config: Record<string, unknown>
 
   try {
-    config = await getHermesConfigRecord()
+    config = await getHermesConfigRecord(owner.profile, owner.connectionId)
   } catch {
     // Backend unreachable / mid-restart — the next interval tick retries.
     return
@@ -126,7 +135,7 @@ async function sweep(): Promise<void> {
 
     if (!result) {
       try {
-        result = await testMcpServer(name)
+        result = await testMcpServer(name, owner.profile, owner.connectionId)
       } catch (err) {
         result = { ok: false, error: err instanceof Error ? err.message : String(err), tools: [] } as McpTestResult
       }
@@ -193,6 +202,14 @@ export function startMcpHealthChecker(): void {
       arm()
     }
   })
+  offConnection = $connection.listen(() => {
+    sweepEpoch += 1
+    disarm()
+
+    if ($gatewayState.get() === 'open') {
+      arm()
+    }
+  })
 }
 
 export function stopMcpHealthChecker(): void {
@@ -202,5 +219,7 @@ export function stopMcpHealthChecker(): void {
   offGatewayState = null
   offProfile?.()
   offProfile = null
+  offConnection?.()
+  offConnection = null
   started = false
 }

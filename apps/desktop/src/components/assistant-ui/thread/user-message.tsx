@@ -177,6 +177,7 @@ export async function resolveAgentAvatar(handle: string): Promise<null | string>
 }
 
 const AgentMessageNote: FC<{ text: string }> = ({ text }) => {
+  const { t } = useI18n()
   const match = AGENT_MESSAGE_RE.exec(text)
   const sender = (match?.[1] || match?.[3] || 'agent').trim()
   const handle = (match?.[2] || match?.[3] || sender).trim()
@@ -215,12 +216,12 @@ const AgentMessageNote: FC<{ text: string }> = ({ text }) => {
             🤖
           </span>
         )}
-        <span className="wrap-anywhere">Message from {sender}</span>
+        <span className="wrap-anywhere">{t.assistant.thread.agentMessageFrom(sender)}</span>
       </span>
       {body && (
         <details className="self-center">
           <summary className="cursor-pointer select-none text-center text-muted-foreground/45 hover:text-muted-foreground/70">
-            show message
+            {t.assistant.thread.showAgentMessage}
           </summary>
           <div className="mt-1 max-w-[36rem] rounded-lg border border-(--ui-stroke-tertiary) px-3 py-2 text-left text-[0.75rem] leading-5 text-foreground/85">
             <UserMessageText text={body} />

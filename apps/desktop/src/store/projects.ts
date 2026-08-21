@@ -16,8 +16,15 @@ import { persistentAtom } from '@/lib/persisted'
 import { $gateway, activeGateway, ensureActiveGatewayOpen } from '@/store/gateway'
 import { setSidebarAgentsGrouped } from '@/store/layout'
 import { notify } from '@/store/notifications'
-import { $activeGatewayProfile, $profileScope, ALL_PROFILES, requestFreshSession } from '@/store/profile'
 import {
+  $activeGatewayProfile,
+  $profileScope,
+  ALL_PROFILES,
+  normalizeProfileKey,
+  requestFreshSession
+} from '@/store/profile'
+import {
+  $connection,
   $selectedStoredSessionId,
   $sessions,
   sessionMatchesStoredId,
@@ -40,6 +47,16 @@ export const $activeProjectId = atom<null | string>(null)
 // source of project membership — the desktop no longer derives it.
 export const $projectTree = atom<SidebarProjectTree[]>([])
 export const $projectTreeLoading = atom(false)
+
+export type ProjectTreeOwner =
+  | { connectionId: string; profile: string; scope: 'profile' }
+  | { scope: 'all-profiles' }
+
+// Provenance of the currently cached projects.tree snapshot. The tree is
+// deliberately retained on refresh failure, so consumers that persist data
+// must compare this owner instead of assuming the cache follows the newest
+// active gateway/profile synchronously.
+export const $projectTreeOwner = atom<ProjectTreeOwner | null>(null)
 
 // False when the connected backend predates the projects.* JSON-RPC surface
 // (same semver label, older install). Null until the first probe.
@@ -351,22 +368,48 @@ async function gatewayRequestOn<T>(
 
 interface ActiveProjectsContext {
   gateway: HermesGateway
+  owner: ProjectTreeOwner | null
   profile: string
 }
 
+function activeProfileProjectTreeOwner(profile: string): ProjectTreeOwner | null {
+  const connection = $connection.get()
+  const connectionId = connection?.connectionId?.trim() || (connection?.mode === 'local' ? 'local' : '')
+
+  return connectionId ? { connectionId, profile: normalizeProfileKey(profile), scope: 'profile' } : null
+}
+
+function sameProjectTreeOwner(a: ProjectTreeOwner | null, b: ProjectTreeOwner | null): boolean {
+  if (!a || !b) {
+    return a === b
+  }
+
+  return (
+    a.scope === b.scope &&
+    (a.scope === 'all-profiles' ||
+      (b.scope === 'profile' && a.connectionId === b.connectionId && a.profile === b.profile))
+  )
+}
+
 async function activeProjectsContext(): Promise<ActiveProjectsContext> {
-  const profile = $activeGatewayProfile.get() || 'default'
+  const profile = normalizeProfileKey($activeGatewayProfile.get())
+  const owner = activeProfileProjectTreeOwner(profile)
   let gateway = activeGateway()
 
   if (!gateway || gateway.connectionState !== 'open') {
     gateway = await ensureActiveGatewayOpen()
   }
 
-  if (!gateway || gateway !== activeGateway() || profile !== ($activeGatewayProfile.get() || 'default')) {
+  if (
+    !gateway ||
+    gateway !== activeGateway() ||
+    profile !== normalizeProfileKey($activeGatewayProfile.get()) ||
+    !sameProjectTreeOwner(owner, activeProfileProjectTreeOwner(profile))
+  ) {
     throw new Error('Active Hermes profile changed while connecting')
   }
 
-  return { gateway, profile }
+  return { gateway, owner, profile }
 }
 
 function applyPayload(payload: ProjectsPayload): void {
@@ -400,9 +443,13 @@ const PROJECT_TREE_REQUEST_TIMEOUT_MS = 60_000
 
 let projectTreeRefreshGeneration = 0
 
-function applyProjectTreePayload(res: ProjectTreePayload): void {
+function applyProjectTreePayload(res: ProjectTreePayload, owner: ProjectTreeOwner | null): void {
   const scoped = new Set(res.scoped_session_ids ?? [])
+  // Disable provenance-sensitive consumers during the snapshot swap; neither
+  // "new owner + old tree" nor "old owner + new tree" is a valid pair.
+  $projectTreeOwner.set(null)
   $projectTree.set(res.projects ?? [])
+  $projectTreeOwner.set(owner)
   $activeProjectId.set(res.active_id ?? null)
   const tombstones = $removedSessionIds.get()
 
@@ -419,7 +466,7 @@ function applyProjectTreePayload(res: ProjectTreePayload): void {
   }
 }
 
-async function refreshProjectTreeOn(gateway: HermesGateway): Promise<void> {
+async function refreshProjectTreeOn(gateway: HermesGateway, owner: ProjectTreeOwner | null): Promise<void> {
   const generation = ++projectTreeRefreshGeneration
 
   if (activeGateway() === gateway) {
@@ -431,11 +478,15 @@ async function refreshProjectTreeOn(gateway: HermesGateway): Promise<void> {
       preview_limit: PROJECT_TREE_PREVIEW_LIMIT
     })
 
-    if (generation !== projectTreeRefreshGeneration || activeGateway() !== gateway) {
+    if (
+      generation !== projectTreeRefreshGeneration ||
+      activeGateway() !== gateway ||
+      !sameProjectTreeOwner(owner, activeProfileProjectTreeOwner($activeGatewayProfile.get()))
+    ) {
       return
     }
 
-    applyProjectTreePayload(res)
+    applyProjectTreePayload(res, owner)
     markProjectsRpcSuccess()
   } catch (err) {
     if (activeGateway() === gateway) {
@@ -459,8 +510,8 @@ export async function refreshProjectTree(): Promise<void> {
   }
 
   try {
-    const { gateway } = await activeProjectsContext()
-    await refreshProjectTreeOn(gateway)
+    const { gateway, owner } = await activeProjectsContext()
+    await refreshProjectTreeOn(gateway, owner)
   } catch {
     // Backend may not be ready; keep the last known tree.
   }
@@ -486,7 +537,7 @@ async function refreshProjectTreeAcrossProfiles(): Promise<void> {
       return
     }
 
-    applyProjectTreePayload(res)
+    applyProjectTreePayload(res, { scope: 'all-profiles' })
     markProjectsRpcSuccess()
   } catch (err) {
     markProjectsRpcFailure(err)
@@ -743,17 +794,28 @@ interface ProjectsSnapshot {
   projects: ProjectInfo[]
   tree: SidebarProjectTree[]
   active: null | string
+  owner: ProjectTreeOwner | null
 }
 
 const snapshotProjects = (): ProjectsSnapshot => ({
   projects: $projects.get(),
   tree: $projectTree.get(),
-  active: $activeProjectId.get()
+  active: $activeProjectId.get(),
+  owner: $projectTreeOwner.get()
 })
 
-const restoreProjects = ({ projects, tree, active }: ProjectsSnapshot): void => {
+const restoreProjects = ({ projects, tree, active, owner }: ProjectsSnapshot): void => {
+  // The rejected write belongs to the snapshot's backend. If the user has
+  // switched source/profile meanwhile, restoring it would overwrite the new
+  // backend's tree while leaving (or falsely assigning) its owner provenance.
+  if (!sameProjectTreeOwner(owner, $projectTreeOwner.get())) {
+    return
+  }
+
   $projects.set(projects)
+  $projectTreeOwner.set(null)
   $projectTree.set(tree)
+  $projectTreeOwner.set(owner)
   $activeProjectId.set(active)
 }
 
@@ -794,6 +856,7 @@ export async function createProject(input: CreateProjectInput): Promise<ProjectI
     throw projectsStaleBackendError()
   }
 
+  const requestOwner = $projectTreeOwner.get()
   let res: { project: ProjectInfo | null }
 
   try {
@@ -837,19 +900,24 @@ export async function createProject(input: CreateProjectInput): Promise<ProjectI
       }
     }
 
-    if (!$projects.get().some(proj => proj.id === created.id)) {
-      $projects.set([...$projects.get(), created])
-    }
+    // A slow create response may return after the window switched backends.
+    // The project was created on its origin successfully, but only that
+    // origin's cache may adopt the returned row.
+    if (sameProjectTreeOwner(requestOwner, $projectTreeOwner.get())) {
+      if (!$projects.get().some(proj => proj.id === created.id)) {
+        $projects.set([...$projects.get(), created])
+      }
 
-    if (!$projectTree.get().some(node => node.id === created.id)) {
-      $projectTree.set([projectInfoToTreeNode(created), ...$projectTree.get()])
-    }
+      if (!$projectTree.get().some(node => node.id === created.id)) {
+        $projectTree.set([projectInfoToTreeNode(created), ...$projectTree.get()])
+      }
 
-    if (input.use) {
-      $activeProjectId.set(created.id)
-    }
+      if (input.use) {
+        $activeProjectId.set(created.id)
+      }
 
-    setSidebarAgentsGrouped(true)
+      setSidebarAgentsGrouped(true)
+    }
   }
 
   reconcileProjects()

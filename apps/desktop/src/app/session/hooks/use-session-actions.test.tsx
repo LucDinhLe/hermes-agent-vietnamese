@@ -20,6 +20,7 @@ import { $projectScope, $projectTree, ALL_PROJECTS } from '@/store/projects'
 import {
   $activeSessionId,
   $activeSessionStoredIdRotation,
+  $connection,
   $currentCwd,
   $currentFastMode,
   $currentModel,
@@ -1310,8 +1311,13 @@ function BranchHarness({
 }
 
 describe('branchStoredSession desktop source tagging', () => {
+  beforeEach(() => {
+    $connection.set({ connectionId: 'local', mode: 'local', profile: 'default' } as HermesConnection)
+  })
+
   afterEach(() => {
     cleanup()
+    $connection.set(null)
     setSessions([])
     $sessionTiles.set([])
     setSelectedStoredSessionId(null)
@@ -1558,7 +1564,7 @@ describe('branchStoredSession desktop source tagging', () => {
     await expect(branchStoredSession!('stored-parent')).resolves.toBe(true)
 
     expect(ensureGatewayProfile).toHaveBeenCalledWith('work')
-    expect(getAllSessionMessages).toHaveBeenCalledWith('stored-parent', 'work')
+    expect(getAllSessionMessages).toHaveBeenCalledWith('stored-parent', 'work', {}, undefined)
     // The create itself must carry the owning profile: in app-global remote
     // mode the soft gateway swap alone is not enough — an omitted profile
     // lands the branch on the launch (default) profile's state.db.

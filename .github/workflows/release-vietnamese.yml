@@ -36,6 +36,7 @@ jobs:
       tag: ${{ steps.candidate.outputs.tag }}
       commit: ${{ steps.candidate.outputs.commit }}
       release_class: ${{ steps.candidate.outputs.release_class }}
+      release_title: ${{ steps.candidate.outputs.release_title }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,7 +51,7 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
           RELEASE_CLASS: ${{ inputs.release_class || 'community-prerelease' }}
         run: |
-          node -e "import('./scripts/vietnamese-release.mjs').then(({parseVietnameseReleaseTag}) => parseVietnameseReleaseTag(process.env.RELEASE_TAG))"
+          release_title="$(node -e "import('./scripts/vietnamese-release.mjs').then(({resolveVietnameseReleaseCandidate}) => process.stdout.write(resolveVietnameseReleaseCandidate(process.env.RELEASE_TAG).releaseTitle))")"
           case "$RELEASE_CLASS" in
             community-prerelease|stable) ;;
             *) echo "::error::unsupported release class: $RELEASE_CLASS"; exit 1 ;;
@@ -64,6 +65,7 @@ jobs:
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "commit=$head_commit" >> "$GITHUB_OUTPUT"
           echo "release_class=$RELEASE_CLASS" >> "$GITHUB_OUTPUT"
+          echo "release_title=$release_title" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -90,7 +92,13 @@ jobs:
           command: uv sync --locked --python 3.11 --extra dev
 
       - name: Kiểm tra đầu vào runtime bất biến
-        run: node --test scripts/vietnamese-release.test.mjs scripts/prepare-agent-browser-native.test.mjs
+        run: >-
+          node --test
+          scripts/vietnamese-release.test.mjs
+          scripts/validate-release-evidence.test.mjs
+          scripts/validate-pilot-release-evidence.test.mjs
+          scripts/validate-public-release-contract.test.mjs
+          scripts/prepare-agent-browser-native.test.mjs
 
       - name: Kiểm toán dependency runtime
         run: |
@@ -115,8 +123,50 @@ jobs:
           electron/browser-connector/cookie-import.test.ts
           electron/browser-connector/pairing-server.test.ts
           electron/bundled-runtime.test.ts
+          electron/connection-config.test.ts
+          electron/connection-registry.test.ts
           electron/desktop-uninstall.test.ts
           electron/update-remote.test.ts
+
+      - name: Kiểm thử plugin và tương thích dữ liệu cũ
+        run: npm run --prefix apps/desktop check:test:plugins
+
+      - name: Kiểm thử bề mặt Agents cố định
+        run: >-
+          npm run --prefix apps/desktop test:ui --
+          src/app/chat/index.test.tsx
+          src/app/chat/session-advisor-bar.test.tsx
+          src/app/command-palette/contrib.test.ts
+          src/app/gateway/hooks/use-gateway-boot.test.tsx
+          src/app/hooks/use-on-profile-switch.test.tsx
+          src/app/hooks/use-config-record.test.ts
+          src/app/settings/memory/provider-config-modal.test.tsx
+          src/app/settings/memory/provider-config-panel.test.tsx
+          src/app/settings/plugins-settings.test.tsx
+          src/app/settings/providers-settings.test.tsx
+          src/app/settings/terminal-font-setting.test.tsx
+          src/app/settings/toolset-config-panel.test.tsx
+          src/app/skills/index.test.tsx
+          src/components/pane-shell/tree/legacy-agent-pane-migration.test.ts
+          src/components/ui/dropdown-menu.test.tsx
+          src/contrib/plugins-store.test.ts
+          src/hermes-profile-scope.test.ts
+          src/sdk/index.test.ts
+          src/sdk/profile-routing.test.ts
+          src/store/backend-owner.test.ts
+          src/store/gateway-agent-scope.test.ts
+          src/store/hub-actions.test.ts
+          src/store/mcp-deeplink-install.test.ts
+          src/store/mcp-health.test.ts
+          src/store/onboarding.test.ts
+          src/store/profile-share.test.ts
+          src/store/profile-agent-activation.test.ts
+          src/store/session-states-scopes.test.ts
+          src/store/starmap.test.ts
+          src/store/suggestion-providers/mcp.test.ts
+          src/store/suggestion-providers/repair.test.ts
+          src/store/suggestion-providers/skill.test.ts
+          src/store/voice-prefs.test.ts
 
       - name: Kiểm thử giao diện đã chốt
         run: >-
@@ -153,7 +203,12 @@ jobs:
           src/store/layout-connection-scope.test.ts
           src/store/projects.test.ts
           src/lib/format.test.ts
+          src/i18n/context.test.tsx
           src/i18n/languages.test.ts
+          src/i18n/plugin-i18n.test.tsx
+
+      - name: Kiểm tra lint Desktop
+        run: npm run --prefix apps/desktop lint
 
       - name: Kiểm tra kiểu dữ liệu
         run: npm run --prefix apps/desktop typecheck
@@ -165,11 +220,13 @@ jobs:
           tests/hermes_cli/test_update_channel_stable.py
           tests/hermes_cli/test_update_eject.py
           tests/hermes_cli/test_version_info.py
+          tests/test_public_release_downloads.py
           tests/agent/test_oneshot.py
           tests/agent/test_advisor.py
           tests/agent/test_usage_pricing.py
           tests/run_agent/test_advisor_checkpoints.py
           tests/tui_gateway/test_advisor_session_scope.py
+          tests/tui_gateway/test_profiles_create_credentials.py
           tests/tui_gateway/test_protocol.py
           tests/test_tui_gateway_server.py
 
@@ -486,15 +543,16 @@ jobs:
           TAG: ${{ needs.verify.outputs.tag }}
           COMMIT: ${{ needs.verify.outputs.commit }}
           RELEASE_CLASS: ${{ needs.verify.outputs.release_class }}
+          RELEASE_TITLE: ${{ needs.verify.outputs.release_title }}
         run: |
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "::error::release $TAG already exists; use a new candidate tag instead of replacing accepted bytes"
             exit 1
           fi
           if [[ "$RELEASE_CLASS" == "community-prerelease" ]]; then
-            gh release create "$TAG" --verify-tag --target "$COMMIT" --draft --prerelease --title "$TAG" --notes-file .github/release-notes-vietnamese.md
+            gh release create "$TAG" --verify-tag --target "$COMMIT" --draft --prerelease --title "$RELEASE_TITLE" --notes-file .github/release-notes-vietnamese.md
           else
-            gh release create "$TAG" --verify-tag --target "$COMMIT" --draft --title "$TAG" --notes-file .github/release-notes-vietnamese.md
+            gh release create "$TAG" --verify-tag --target "$COMMIT" --draft --title "$RELEASE_TITLE" --notes-file .github/release-notes-vietnamese.md
           fi
           gh release upload "$TAG" release-assets/*
 

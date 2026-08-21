@@ -36,7 +36,7 @@ import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { PROFILE_SWATCHES } from '@/lib/profile-color'
 import { exportSession } from '@/lib/session-export'
-import { activeGateway } from '@/store/gateway'
+import { activeGateway, requestGatewayForAgent } from '@/store/gateway'
 import { notify, notifyError } from '@/store/notifications'
 import { $projectTree, moveSessionToProject, projectIdForCwd, projectRootCwd } from '@/store/projects'
 import {
@@ -76,7 +76,9 @@ import type { SessionTitleResponse } from '../../types'
 export async function renameSessionPreferringRpc(
   storedSessionId: string,
   title: string,
-  profile?: string
+  profile?: string,
+  connectionId?: string,
+  explicitRuntimeId?: string
 ): Promise<{ title?: string }> {
   const selectedStoredSessionId = $selectedStoredSessionId.get()
 
@@ -90,15 +92,20 @@ export async function renameSessionPreferringRpc(
             sessionMatchesStoredId(session, storedSessionId) && sessionMatchesStoredId(session, selectedStoredSessionId)
         ))
 
-  const runtimeId = isActiveRow ? $activeSessionId.get() : null
+  const runtimeId = explicitRuntimeId ?? (isActiveRow ? $activeSessionId.get() : null)
   const gateway = activeGateway()
 
-  if (title && runtimeId && gateway) {
+  if (title && runtimeId && (connectionId || gateway)) {
     try {
-      const result = await gateway.request<SessionTitleResponse>('session.title', {
-        session_id: runtimeId,
-        title
-      })
+      const params = { session_id: runtimeId, title }
+      const result = connectionId
+        ? await requestGatewayForAgent<SessionTitleResponse>(
+            connectionId,
+            profile || 'default',
+            'session.title',
+            params
+          )
+        : await gateway!.request<SessionTitleResponse>('session.title', params)
 
       return { title: result?.title ?? title }
     } catch (err) {
@@ -110,16 +117,20 @@ export async function renameSessionPreferringRpc(
     }
   }
 
-  return renameSession(storedSessionId, title, profile)
+  return renameSession(storedSessionId, title, profile, connectionId)
 }
 
 interface SessionActions {
+  /** Source-blind local chrome actions are safe only for the foreground owner. */
+  ambientActionsEnabled?: boolean
+  connectionId?: string
   sessionId: string
   title: string
   pinned?: boolean
   /** Backend-derived read state — drives the Mark as unread/read label. */
   unread?: boolean
   profile?: string
+  runtimeId?: string
   onPin?: () => void
   /** Toggle the persisted read-state watermark for this row. */
   onToggleUnread?: () => void
@@ -200,11 +211,14 @@ function MoveToProjectItems({ kit, sessionId, profile }: { kit: MenuKit; session
 }
 
 function useSessionActions({
+  ambientActionsEnabled = true,
+  connectionId,
   sessionId,
   title,
   pinned = false,
   unread = false,
   profile,
+  runtimeId,
   onPin,
   onToggleUnread,
   onBranch,
@@ -229,7 +243,8 @@ function useSessionActions({
   const [deleteOpen, setDeleteOpen] = useState(false)
   const tiles = useStore($sessionTiles)
   const selectedStoredSessionId = useStore($selectedStoredSessionId)
-  const isRemote = useStore($connection)?.mode === 'remote'
+  const activeConnection = useStore($connection)
+  const isRemote = connectionId ? connectionId !== 'local' : activeConnection?.mode === 'remote'
   // The row's finished-unread dot is cleared by opening the session (main or
   // tile) — this menu item is the explicit escape hatch for the rest.
   const isUnread = useStore($unreadFinishedSessionIds).includes(sessionId)
@@ -259,7 +274,7 @@ function useSessionActions({
           })
         ]
       : []),
-    ...(canOpenSessionWindow()
+    ...(canOpenSessionWindow() && ambientActionsEnabled
       ? [
           spec({
             disabled: !sessionId,
@@ -275,7 +290,7 @@ function useSessionActions({
     // The user's OWN terminal, not the in-app pane: resumes the session in the
     // TUI. Hidden on a remote connection — the emulator we'd open runs on this
     // machine while the session (and its runtime) lives on the remote host.
-    ...(canOpenSessionInTerminal() && !isRemote
+    ...(canOpenSessionInTerminal() && !isRemote && ambientActionsEnabled
       ? [
           spec({
             disabled: !sessionId,
@@ -326,7 +341,7 @@ function useSessionActions({
     // "Mark as read" clears whichever is lit; "Mark as unread" arms the
     // persisted watermark so the dot survives restarts.
     spec({
-      disabled: !sessionId || (!onToggleUnread && !isUnread),
+      disabled: !ambientActionsEnabled || !sessionId || (!onToggleUnread && !isUnread),
       // Closed envelope = unread, open envelope = read (codicon has mail and
       // mail-read, but no mail-unread glyph — verified against the font css).
       icon: unread || isUnread ? 'mail-read' : 'mail',
@@ -371,7 +386,7 @@ function useSessionActions({
       label: r.export,
       onSelect: () => {
         triggerHaptic('selection')
-        void exportSession(sessionId, { profile, title })
+        void exportSession(sessionId, { connectionId, profile, title })
       }
     })
   ]
@@ -479,7 +494,7 @@ function useSessionActions({
       {openItems.length > 0 && <kit.Separator />}
       {identityItems.map(item => renderActionItem(kit, item))}
       <kit.Sub>
-        <kit.SubTrigger disabled={!sessionId}>
+        <kit.SubTrigger disabled={!ambientActionsEnabled || !sessionId}>
           <Codicon name="symbol-color" size="0.875rem" />
           <span>{t.sidebar.projects.menuAppearance}</span>
         </kit.SubTrigger>
@@ -500,7 +515,7 @@ function useSessionActions({
       <kit.Separator />
       {workItems.map(item => renderActionItem(kit, item))}
       <kit.Sub>
-        <kit.SubTrigger disabled={!sessionId}>
+        <kit.SubTrigger disabled={!ambientActionsEnabled || !sessionId}>
           <Codicon name="folder" size="0.875rem" />
           <span>{t.sidebar.projects.moveToProject}</span>
         </kit.SubTrigger>
@@ -538,7 +553,9 @@ function useSessionActions({
       currentTitle={title}
       onOpenChange={setRenameOpen}
       open={renameOpen}
+      connectionId={connectionId}
       profile={profile}
+      runtimeId={runtimeId}
       sessionId={sessionId}
     />
   )
@@ -650,14 +667,24 @@ export function SessionContextMenu({ children, ...actions }: SessionContextMenuP
 }
 
 interface RenameSessionDialogProps {
+  connectionId?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   sessionId: string
   currentTitle: string
   profile?: string
+  runtimeId?: string
 }
 
-function RenameSessionDialog({ open, onOpenChange, sessionId, currentTitle, profile }: RenameSessionDialogProps) {
+function RenameSessionDialog({
+  connectionId,
+  open,
+  onOpenChange,
+  sessionId,
+  currentTitle,
+  profile,
+  runtimeId
+}: RenameSessionDialogProps) {
   const { t } = useI18n()
   const r = t.sidebar.row
   const [value, setValue] = useState(currentTitle)
@@ -687,7 +714,7 @@ function RenameSessionDialog({ open, onOpenChange, sessionId, currentTitle, prof
     setSubmitting(true)
 
     try {
-      const result = await renameSessionPreferringRpc(sessionId, next, profile)
+      const result = await renameSessionPreferringRpc(sessionId, next, profile, connectionId, runtimeId)
       const finalTitle = result.title || next || ''
       setSessions(prev => prev.map(s => (s.id === sessionId ? { ...s, title: finalTitle || null } : s)))
       notify({ durationMs: 2_000, kind: 'success', message: r.renamed })

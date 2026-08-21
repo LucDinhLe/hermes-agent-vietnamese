@@ -1,41 +1,36 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-// New Agent's lazily-materialized profile (Capabilities tab / MCP setup) is a
-// DRAFT until Create Agent is pressed: cancelling the dialog must delete it so
-// preconfigure-then-back-out leaves zero residue.
+import { loadHermesBotsPlugin } from './plugin-behavior-fixture.mjs'
 
-const source = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
+test('Cancel deletes a settled draft on its captured route while finalize keeps it', async () => {
+  const api = (await loadHermesBotsPlugin()).default.__testing
+  const cleaned = []
+  const draftA = api.createAgentDraftProvenance({
+    slug: 'researcher',
+    activeConnectionId: 'gateway-a',
+    activeProfile: 'lead-a',
+    targetMode: 'remote'
+  })
+  const cancelled = api.createAgentDraftLifecycle({ cleanup: draft => cleaned.push(draft) })
 
-test('discardDraft deletes the materialized draft (deleteBot locally, remote CLI for other connections)', () => {
-  assert.match(source, /const discardDraft = \(\) => \{/)
-  assert.match(source, /: deleteBot\(\{ name: draft \}\)/)
-  // Ref cleared FIRST so a re-entrant cancel can't double-delete.
-  assert.match(source, /createdRef\.current = null\n\s*flightRef\.current = null\n\s*const discard = remoteTarget/)
+  assert.equal(await cancelled.ensure(draftA, async () => ({})), 'researcher')
+  await cancelled.cancel()
+  assert.strictEqual(cleaned[0], draftA)
+
+  const finalized = api.createAgentDraftLifecycle({ cleanup: draft => cleaned.push(draft) })
+  assert.equal(await finalized.ensure(draftA, async () => ({})), 'researcher')
+  finalized.finalize()
+  await finalized.cancel()
+  assert.equal(cleaned.length, 1, 'Create finalization must not discard the real profile')
 })
 
-test('both cancel paths discard the draft (esc/overlay + Cancel button)', () => {
-  const dialogClose = /discardDraft\(\)\s*\n\s*reset\(\)\s*\n\s*onClose\(\)/g
-  const hits = source.match(dialogClose) || []
-  assert.ok(hits.length >= 2, `expected discardDraft before reset/onClose in both cancel paths, found ${hits.length}`)
-})
+test('materialization locks the draft name and its own slug remains reusable by the lifecycle', async () => {
+  const api = (await loadHermesBotsPlugin()).default.__testing
+  const draft = api.createAgentDraftProvenance({ slug: 'researcher', activeConnectionId: 'local' })
+  const lifecycle = api.createAgentDraftLifecycle()
 
-test('successful create does NOT discard: reset clears createdRef before close', () => {
-  // reset() nulls the ref, so the dialog-close discard becomes a no-op after
-  // a real Create.
-  assert.match(source, /setError\(null\)\n\s*createdRef\.current = null\n\s*flightRef\.current = null\n\s*\}/)
-})
-
-test('renaming after materialization discards the orphaned draft', () => {
-  assert.match(source, /createdRef\.current && createdRef\.current !== slug/)
-})
-
-test("the draft's own slug does not read as taken", () => {
-  // Both branches of the target-scoped taken check exempt the draft's slug.
-  assert.match(source, /roster\.some\(b => !b\.remoteSource && b\.name === slug && b\.name !== createdRef\.current\)/)
-  assert.match(
-    source,
-    /roster\.some\(b => b\.remoteSource && b\.connectionId === targetConnection && b\.name === slug && b\.name !== createdRef\.current\)/
-  )
+  assert.equal(await lifecycle.ensure(draft, async () => ({})), 'researcher')
+  assert.equal(api.agentCreationFieldsLocked(lifecycle.current()), true)
+  assert.equal(await lifecycle.ensure(draft, async () => assert.fail('must not create twice')), 'researcher')
 })

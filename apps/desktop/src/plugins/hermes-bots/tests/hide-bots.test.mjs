@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import vm from 'node:vm'
 
+import { loadHermesBotsPlugin } from './plugin-behavior-fixture.mjs'
+
 // Per-bot Hide/Unhide: right-click → Hide Bot persists `hidden: true` in bot
 // meta (local ctx.storage + server ui_meta via saveBotMeta), hidden bots drop
 // out of the roster list, and a header eye toggle — rendered only while at
@@ -11,6 +13,7 @@ import vm from 'node:vm'
 // name-collision check keep the full roster.
 
 const pluginSource = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
+const LOCAL_OWNER = { connectionId: 'local', profile: 'default' }
 
 function load({ toastsOn = false } = {}) {
   const values = new Map()
@@ -28,6 +31,7 @@ function load({ toastsOn = false } = {}) {
     document: { getElementById: () => null, createElement: () => ({}), head: { appendChild: () => undefined } },
     host: {
       state: {
+        connectionId: { get: () => 'local', listen: () => undefined },
         profile: { get: () => 'default', listen: () => undefined },
         gateway: { get: () => 'open', listen: () => undefined }
       },
@@ -54,6 +58,7 @@ globalThis.__hide = {
   saveBotMeta,
   trackInboundActivity,
   $botMeta,
+  $botMetaOwner,
   $botUnread,
   $selectedBot,
   $lastRoster,
@@ -63,10 +68,19 @@ globalThis.__hide = {
 };
 `)
   vm.runInNewContext(source, context, { filename: 'plugin.js' })
+  context.__hide.$botMetaOwner.set(LOCAL_OWNER)
   if (toastsOn) {
     context.__hide.$activityToasts.set(true)
   }
-  return { ...context.__hide, notifications, requests }
+  const raw = context.__hide
+  return {
+    ...raw,
+    isBotHidden: (bot, meta) => raw.isBotHidden(bot, meta, LOCAL_OWNER),
+    mergeServerMeta: roster => raw.mergeServerMeta(roster, LOCAL_OWNER),
+    saveBotMeta: (name, patch, sourceMeta = null) => raw.saveBotMeta(name, patch, sourceMeta, LOCAL_OWNER),
+    notifications,
+    requests
+  }
 }
 
 test('hide: saveBotMeta persists hidden:true locally and ships it in server ui_meta', async () => {
@@ -189,9 +203,9 @@ test('activity: a hidden bot accumulates unread silently but never toasts, even 
 test('shape: roster list filters through isBotHidden unless the show-hidden toggle is on', () => {
   assert.match(
     pluginSource,
-    /const visibleRoster = showHidden \? roster : roster\.filter\(bot => !isBotHidden\(bot, allMeta\)\)/
+    /const visibleRoster = showHidden \? roster : roster\.filter\(bot => !isBotHidden\(bot, allMeta, rosterOwner\)\)/
   )
-  assert.match(pluginSource, /const filteredRoster = filterBots\(visibleRoster, allMeta, query\)/)
+  assert.match(pluginSource, /const filteredRoster = filterBots\(visibleRoster, allMeta, query, rosterOwner\)/)
 })
 
 test('shape: header eye toggle renders only when at least one bot is hidden', () => {
@@ -203,21 +217,33 @@ test('shape: revealed hidden rows are dimmed and flagged with the eye-closed gly
   const botRow = pluginSource.slice(pluginSource.indexOf('function BotRow('), pluginSource.indexOf('// ── model picker'))
   assert.match(botRow, /meta\?\.hidden && 'opacity-60'/)
   assert.match(botRow, /name: 'eye-closed'/)
-  assert.match(botRow, /children: meta\?\.hidden \? 'Unhide Bot' : 'Hide Bot'/)
-  assert.match(botRow, /saveBotMeta\(bot\.name, \{ hidden: !hidden \}\)/)
+  assert.match(botRow, /children: meta\?\.hidden \? copy\('roster\.unhide'\) : copy\('roster\.hide'\)/)
+  assert.match(botRow, /saveBotMeta\(bot\.name, \{ hidden: !hidden \}, meta, actionBot\.actionOwner\)/)
 })
 
-test('shape: hiding never filters mentions, group flows, or the meta/activity sweeps', () => {
-  // The full-roster consumers keep the FULL roster: mergeServerMeta,
-  // avatar pulls, and activity tracking all run on activeSourceRoster —
-  // which is derived from the unfiltered roster, not visibleRoster.
-  assert.match(pluginSource, /const activeSourceRoster = roster\.filter\(bot => !bot\.remoteSource\)/)
-  assert.match(pluginSource, /mergeServerMeta\(activeSourceRoster\)/)
-  assert.match(pluginSource, /trackInboundActivity\(activeSourceRoster\)/)
-  // Mention resolution never consults the hidden flag.
-  const mentions = pluginSource.slice(
-    pluginSource.indexOf('function resolveRosterMentions('),
-    pluginSource.indexOf('const REMOTE_DM_TIMEOUT_MS')
+test('hiding never filters mentions or the shared roster reconciler', async () => {
+  const api = (await loadHermesBotsPlugin()).default.__testing
+  const calls = []
+  const coordinate = api.createRosterSnapshotCoordinator({
+    setLastRoster: roster => calls.push(['last', roster.map(bot => bot.name)]),
+    mergeMeta: roster => calls.push(['meta', roster.map(bot => bot.name)]),
+    pullAvatars: roster => calls.push(['avatars', roster.map(bot => bot.name)]),
+    trackActivity: roster => calls.push(['activity', roster.map(bot => bot.name)]),
+    backfillProtocol: roster => calls.push(['protocol', roster.map(bot => bot.name)])
+  })
+  const roster = [
+    { name: 'hidden', connectionId: 'local', hidden: true },
+    { name: 'visible', connectionId: 'local' },
+    { name: 'remote', connectionId: 'mini', remoteSource: true }
+  ]
+
+  coordinate({ profiles: roster }, 'local', {})
+
+  for (const kind of ['meta', 'avatars', 'activity', 'protocol']) {
+    assert.deepEqual(calls.find(([name]) => name === kind)?.[1], ['hidden', 'visible'])
+  }
+  assert.deepEqual(
+    api.resolveRosterMentions('@hidden', roster, { name: 'visible', connectionId: 'local' }).map(bot => bot.name),
+    ['hidden']
   )
-  assert.doesNotMatch(mentions, /hidden/i)
 })

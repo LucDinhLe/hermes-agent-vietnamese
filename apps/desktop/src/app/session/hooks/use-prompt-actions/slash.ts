@@ -135,7 +135,7 @@ interface SlashCommandDeps {
   handleSkinCommand: (arg: string) => string
   handoffSession: (
     platform: string,
-    options?: { onProgress?: (state: string) => void; sessionId?: string }
+    options?: { onProgress?: (state: string) => void; requestGateway?: GatewayRequest; sessionId?: string }
   ) => Promise<{ ok: boolean; error?: string }>
   openMemoryGraph: () => void
   refreshSessions: () => Promise<void>
@@ -177,7 +177,18 @@ export function useSlashCommand(deps: SlashCommandDeps) {
   const compressInFlightRef = useRef(new Set<string>())
 
   return useCallback(
-    async (rawCommand: string, options?: { sessionId?: string; recordInput?: boolean }) => {
+    async (
+      rawCommand: string,
+      options?: {
+        connectionId?: string
+        profile?: string
+        recordInput?: boolean
+        remote?: boolean
+        requestGateway?: GatewayRequest
+        sessionId?: string
+      }
+    ) => {
+      const routedRequestGateway = options?.requestGateway ?? requestGateway
       // Resolve the session this command targets through the SHARED ladder that
       // submit.ts uses. A slash command runs backend commands against a runtime
       // session, and per-session state (`/goal`, `/usage`, `/status`) is keyed by
@@ -193,7 +204,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
           createSession: () => createBackendSessionForSend(preview),
           explicitRuntimeId: sessionHint,
           getRuntimeIdForStoredSession,
-          requestGateway,
+          requestGateway: routedRequestGateway,
           routedStoredSessionId: getRoutedStoredSessionId(),
           selectedStoredSessionId: selectedStoredSessionIdRef.current
         })
@@ -359,7 +370,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
         }
 
         try {
-          const result = await requestGateway<unknown>('slash.exec', {
+          const result = await routedRequestGateway<unknown>('slash.exec', {
             session_id: sessionId,
             command: command.replace(/^\/+/, '')
           })
@@ -395,7 +406,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
 
         try {
           const dispatch = parseCommandDispatch(
-            await requestGateway<unknown>('command.dispatch', { session_id: sessionId, name, arg })
+            await routedRequestGateway<unknown>('command.dispatch', { session_id: sessionId, name, arg })
           )
 
           if (!dispatch) {
@@ -451,7 +462,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
           // Forward the surface's declared timeout when present; the default
           // requestGateway layer keeps (30s) is too tight for RPCs that do
           // real work.
-          const result = await requestGateway<unknown>(surface.rpc, params, surface.timeoutMs)
+          const result = await routedRequestGateway<unknown>(surface.rpc, params, surface.timeoutMs)
           const body = renderRpcResult(result, ctx.name)
 
           renderSlashOutput(body || `/${ctx.name}: no output`)
@@ -530,7 +541,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
               sessionId,
               storedSessionId,
               liveId =>
-                requestGateway<SessionCompressResponse>(
+                routedRequestGateway<SessionCompressResponse>(
                   'session.compress',
                   {
                     session_id: liveId,
@@ -539,7 +550,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
                   SESSION_COMPRESS_TIMEOUT_MS
                 ),
               {
-                requestGateway,
+                requestGateway: routedRequestGateway,
                 onRecovered: recoveredId => {
                   // Move the in-flight claim onto the live id so the coalesce
                   // guard releases the right key in `finally`.
@@ -661,7 +672,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
           }
 
           try {
-            const active = await setSessionYolo(requestGateway, sid, next)
+            const active = await setSessionYolo(routedRequestGateway, sid, next)
             appendSessionTextMessage(sid, 'system', copy.yoloSystem(active))
           } catch {
             notify({ kind: 'error', title: copy.yoloTitle, message: copy.yoloToggleFailed })
@@ -688,7 +699,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
           }
 
           const status = async (): Promise<WakeStatusResponse> => {
-            const current = await requestGateway<WakeStatusResponse>('wake.status', {
+            const current = await routedRequestGateway<WakeStatusResponse>('wake.status', {
               client_capture: true,
               surface: 'gui'
             })
@@ -708,7 +719,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
             }
 
             if (action === 'on') {
-              const started = await requestGateway<WakeStartResponse>(
+              const started = await routedRequestGateway<WakeStartResponse>(
                 'wake.start',
                 { persist: true, surface: 'gui', client_capture: true },
                 WAKE_START_TIMEOUT_MS
@@ -724,7 +735,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
                 return
               }
             } else if (action === 'off') {
-              applyWakeStopResult(await requestGateway<WakeStopResponse>('wake.stop', { persist: true }))
+              applyWakeStopResult(await routedRequestGateway<WakeStopResponse>('wake.stop', { persist: true }))
             }
 
             renderSlashOutput(renderWakeStatus(await status()))
@@ -753,7 +764,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
             return
           }
 
-          const result = await handoffSession(platform, { sessionId: sid })
+          const result = await handoffSession(platform, { requestGateway: routedRequestGateway, sessionId: sid })
 
           if (!result.ok && result.error) {
             appendSessionTextMessage(sid, 'system', recordInput ? slashStatusText(command, result.error) : result.error)
@@ -774,7 +785,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
           }
 
           try {
-            const { profiles } = await getProfiles()
+            const { profiles } = await getProfiles(options?.connectionId)
             const match = profiles.find(profile => profile.name === target)
 
             if (!match) {
@@ -831,7 +842,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
           const { arg } = ctx
 
           try {
-            const result = await requestGateway<SessionTitleResponse>('session.title', {
+            const result = await routedRequestGateway<SessionTitleResponse>('session.title', {
               session_id: sessionId,
               title: arg
             })
@@ -860,7 +871,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
           const { render: renderSlashOutput, sessionId } = resolved
 
           try {
-            const catalog = await requestGateway<CommandsCatalogLike>('commands.catalog', { session_id: sessionId })
+            const catalog = await routedRequestGateway<CommandsCatalogLike>('commands.catalog', { session_id: sessionId })
 
             renderSlashOutput(renderCommandsCatalog(catalog, copy))
           } catch (err) {
@@ -908,7 +919,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
               return
             }
 
-            setPetScale(requestGateway, value)
+            setPetScale(routedRequestGateway, value)
 
             return
           }
@@ -929,7 +940,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
 
           const { render: renderSlashOutput, sessionId } = resolved
 
-          if ($connection.get()?.mode === 'remote') {
+          if (options?.remote ?? $connection.get()?.mode === 'remote') {
             renderSlashOutput(
               '/browser manages a Chromium-family browser on the gateway host — only available when connected to a local gateway.'
             )
@@ -955,7 +966,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
           }
 
           try {
-            const result = await requestGateway<BrowserManageResponse>('browser.manage', {
+            const result = await routedRequestGateway<BrowserManageResponse>('browser.manage', {
               action: cmdAction,
               session_id: sessionId,
               ...(url && { url })

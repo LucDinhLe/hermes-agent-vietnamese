@@ -16,10 +16,11 @@ import { getHermesConfigRecord, saveMcpServers } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { AlertTriangle } from '@/lib/icons'
 import { MCP_DEEPLINK_NAME_RE } from '@/lib/mcp-deeplink'
+import { activeBackendOwner, sameBackendOwner } from '@/store/backend-owner'
 import { $mcpInstallRequest } from '@/store/mcp-deeplink-install'
 import { notify, readableError } from '@/store/notifications'
 
-import { setHermesConfigCache } from '../hooks/use-config-record'
+import { hermesConfigCacheWriter } from '../hooks/use-config-record'
 
 type McpServers = Record<string, Record<string, unknown>>
 
@@ -64,7 +65,7 @@ export function McpInstallDeepLinkDialog() {
 
     let cancelled = false
 
-    getHermesConfigRecord()
+    getHermesConfigRecord(request.owner.profile, request.owner.connectionId)
       .then(config => {
         if (!cancelled) {
           setExistingNames(Object.keys(getServers(config)))
@@ -107,10 +108,14 @@ export function McpInstallDeepLinkDialog() {
     setError(null)
 
     try {
+      if (!sameBackendOwner(activeBackendOwner(), request.owner)) {
+        throw new Error(m.saveFailed)
+      }
+
       // Merge over the FRESHEST server map — saveMcpServers replaces the whole
       // `mcp_servers` document, so saving over a stale snapshot would drop
       // servers added elsewhere since the dialog opened.
-      const current = getServers(await getHermesConfigRecord())
+      const current = getServers(await getHermesConfigRecord(request.owner.profile, request.owner.connectionId))
 
       if (Object.prototype.hasOwnProperty.call(current, trimmedName)) {
         setExistingNames(Object.keys(current))
@@ -120,11 +125,16 @@ export function McpInstallDeepLinkDialog() {
       }
 
       const nextServers = { ...current, [trimmedName]: request.config }
-      await saveMcpServers(nextServers)
-      setHermesConfigCache(previous => (previous ? { ...previous, mcp_servers: nextServers } : previous))
+      await saveMcpServers(nextServers, request.owner.profile, request.owner.connectionId)
+      hermesConfigCacheWriter(request.owner.profile, request.owner.connectionId)(previous =>
+        previous ? { ...previous, mcp_servers: nextServers } : previous
+      )
       notify({ kind: 'success', title: m.savedTitle, message: m.savedMessage(trimmedName) })
       $mcpInstallRequest.set(null)
-      navigate(`/skills?tab=mcp&server=${encodeURIComponent(trimmedName)}`)
+
+      if (sameBackendOwner(activeBackendOwner(), request.owner)) {
+        navigate(`/skills?tab=mcp&server=${encodeURIComponent(trimmedName)}`)
+      }
     } catch (err) {
       setError(readableError(err, m.saveFailed).message)
     } finally {

@@ -15,11 +15,14 @@ import { sessionTitle } from '@/lib/chat-runtime'
 import { pathLeaf } from '@/lib/display-path'
 import { triggerHaptic } from '@/lib/haptics'
 import { Archive, ArchiveOff, FolderOpen, Loader2, Trash2 } from '@/lib/icons'
+import type { BackendOwner } from '@/store/backend-owner'
 import { notify, notifyError } from '@/store/notifications'
 import { untombstoneSessions } from '@/store/projects'
 import { applyConfiguredDefaultProjectDir, ensureDefaultWorkspaceCwd, setSessions } from '@/store/session'
 import { forgetSessionUnread } from '@/store/session-unread'
 import type { HermesConfigRecord, SessionInfo } from '@/types/hermes'
+
+import { useBackendOwnerGuard } from '../hooks/use-backend-owner-guard'
 
 import { EmptyState, ListRow, SectionHeading, SettingsContent, SettingsSkeleton, ToggleRow } from './primitives'
 import { useDeepLinkHighlight } from './use-deep-link-highlight'
@@ -28,25 +31,41 @@ const DEFAULT_AUTO_ARCHIVE_DAYS = 3
 
 const ARCHIVED_FETCH_LIMIT = 200
 
-export function SessionsSettings() {
+export function SessionsSettings({ backendOwner = null }: { backendOwner?: BackendOwner | null }) {
   const { t } = useI18n()
   const s = t.settings.sessions
   const [sessions, setLocalSessions] = useState<SessionInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const isCurrentOwner = useBackendOwnerGuard(backendOwner)
 
   const load = useCallback(async () => {
     setLoading(true)
 
     try {
-      const result = await listAllProfileSessions(ARCHIVED_FETCH_LIMIT, 0, 'only')
-      setLocalSessions(result.sessions)
+      const result = await listAllProfileSessions(
+        ARCHIVED_FETCH_LIMIT,
+        0,
+        'only',
+        'recent',
+        'all',
+        {},
+        backendOwner?.connectionId
+      )
+
+      if (isCurrentOwner()) {
+        setLocalSessions(result.sessions)
+      }
     } catch (err) {
-      notifyError(err, s.failedLoad)
+      if (isCurrentOwner()) {
+        notifyError(err, s.failedLoad)
+      }
     } finally {
-      setLoading(false)
+      if (isCurrentOwner()) {
+        setLoading(false)
+      }
     }
-  }, [s.failedLoad])
+  }, [backendOwner?.connectionId, isCurrentOwner, s.failedLoad])
 
   useEffect(() => {
     void load()
@@ -57,7 +76,12 @@ export function SessionsSettings() {
       setBusyId(session.id)
 
       try {
-        await setSessionArchived(session.id, false, session.profile)
+        await setSessionArchived(session.id, false, session.profile, backendOwner?.connectionId)
+
+        if (!isCurrentOwner()) {
+          return
+        }
+
         setLocalSessions(prev => prev.filter(s => s.id !== session.id))
         // Surface it again in the sidebar without waiting for a full refresh, and
         // lift any optimistic eviction so the grouped tree shows it again too.
@@ -66,12 +90,16 @@ export function SessionsSettings() {
         triggerHaptic('selection')
         notify({ durationMs: 2_000, kind: 'success', message: s.restored })
       } catch (err) {
-        notifyError(err, s.unarchiveFailed)
+        if (isCurrentOwner()) {
+          notifyError(err, s.unarchiveFailed)
+        }
       } finally {
-        setBusyId(null)
+        if (isCurrentOwner()) {
+          setBusyId(null)
+        }
       }
     },
-    [s]
+    [backendOwner?.connectionId, isCurrentOwner, s]
   )
 
   const remove = useCallback(
@@ -83,19 +111,28 @@ export function SessionsSettings() {
       setBusyId(session.id)
 
       try {
-        await deleteSession(session.id, session.profile)
+        await deleteSession(session.id, session.profile, backendOwner?.connectionId)
+
+        if (!isCurrentOwner()) {
+          return
+        }
+
         // Permanent delete bypasses removeSession, so retire the persisted
         // unread state here too rather than leaving it to rot.
         forgetSessionUnread([session.id, session._lineage_root_id], session.profile)
         setLocalSessions(prev => prev.filter(s => s.id !== session.id))
         triggerHaptic('warning')
       } catch (err) {
-        notifyError(err, s.deleteFailed)
+        if (isCurrentOwner()) {
+          notifyError(err, s.deleteFailed)
+        }
       } finally {
-        setBusyId(null)
+        if (isCurrentOwner()) {
+          setBusyId(null)
+        }
       }
     },
-    [s]
+    [backendOwner?.connectionId, isCurrentOwner, s]
   )
 
   useDeepLinkHighlight({
@@ -112,7 +149,7 @@ export function SessionsSettings() {
     <SettingsContent>
       <DefaultProjectDirSetting />
 
-      <AutoArchiveSetting />
+      <AutoArchiveSetting backendOwner={backendOwner} />
 
       <SectionHeading
         icon={Archive}
@@ -179,12 +216,13 @@ export function SessionsSettings() {
 // (sessions.auto_archive in config.yaml + SessionDB.maybe_auto_archive); this
 // just toggles the config keys, so CLI / gateway / Desktop all honour one
 // setting. Pins are exempt on the backend, so pinned chats survive regardless.
-function AutoArchiveSetting() {
+function AutoArchiveSetting({ backendOwner }: { backendOwner: BackendOwner | null }) {
   const { t } = useI18n()
   const s = t.settings.sessions
   const [config, setConfig] = useState<HermesConfigRecord | null>(null)
   const [enabled, setEnabled] = useState(false)
   const [days, setDays] = useState(DEFAULT_AUTO_ARCHIVE_DAYS)
+  const isCurrentOwner = useBackendOwnerGuard(backendOwner)
 
   useEffect(() => {
     // Config REST is only reachable through the Electron bridge; skip in
@@ -195,9 +233,9 @@ function AutoArchiveSetting() {
 
     let alive = true
 
-    void getHermesConfigRecord()
+    void getHermesConfigRecord(backendOwner?.profile, backendOwner?.connectionId)
       .then(record => {
-        if (!alive) {
+        if (!alive || !isCurrentOwner()) {
           return
         }
 
@@ -214,7 +252,7 @@ function AutoArchiveSetting() {
     return () => {
       alive = false
     }
-  }, [])
+  }, [backendOwner?.connectionId, backendOwner?.profile, isCurrentOwner])
 
   const persist = useCallback(
     async (autoArchive: boolean, archiveDays: number) => {
@@ -232,12 +270,15 @@ function AutoArchiveSetting() {
       setConfig(updated)
 
       try {
-        await saveHermesConfig(updated)
+        await saveHermesConfig(updated, backendOwner?.profile, backendOwner?.connectionId)
       } catch (err) {
-        notifyError(err, s.autoArchiveFailed)
+        if (isCurrentOwner()) {
+          setConfig(config)
+          notifyError(err, s.autoArchiveFailed)
+        }
       }
     },
-    [config, s.autoArchiveFailed]
+    [backendOwner?.connectionId, backendOwner?.profile, config, isCurrentOwner, s.autoArchiveFailed]
   )
 
   if (!config) {

@@ -36,6 +36,8 @@ import { Pill } from './primitives'
 import { VoiceProviderFields } from './voice-provider-fields'
 
 interface ToolsetConfigPanelProps {
+  /** Immutable backend source paired with `profile`. */
+  connectionId?: null | string
   toolset: string
   /** Called after a key is saved/cleared or a provider chosen, so the parent
    *  can refresh the "Configured / Needs keys" pill. */
@@ -97,6 +99,7 @@ function providerStatus(provider: ToolProvider, envState: Record<string, boolean
 }
 
 interface EnvVarFieldProps {
+  connectionId?: null | string
   envVar: ToolEnvVar
   isSet: boolean
   onSaved: (key: string) => void
@@ -104,7 +107,7 @@ interface EnvVarFieldProps {
   profile?: null | string
 }
 
-function EnvVarField({ envVar, isSet, onSaved, onCleared, profile }: EnvVarFieldProps) {
+function EnvVarField({ connectionId, envVar, isSet, onSaved, onCleared, profile }: EnvVarFieldProps) {
   const { t } = useI18n()
   const copy = t.settings.toolsets
   const navigate = useOptionalNavigate()
@@ -127,7 +130,7 @@ function EnvVarField({ envVar, isSet, onSaved, onCleared, profile }: EnvVarField
     setBusy(true)
 
     try {
-      await setEnvVar(envVar.key, value, profile)
+      await setEnvVar(envVar.key, value, profile, connectionId)
       setEditing(false)
       setValue('')
       onSaved(envVar.key)
@@ -147,7 +150,7 @@ function EnvVarField({ envVar, isSet, onSaved, onCleared, profile }: EnvVarField
     setBusy(true)
 
     try {
-      await deleteEnvVar(envVar.key, profile)
+      await deleteEnvVar(envVar.key, profile, connectionId)
       setRevealed(null)
       onCleared(envVar.key)
       notify({ kind: 'success', title: copy.removedTitle, message: copy.removedMessage(envVar.key) })
@@ -166,7 +169,7 @@ function EnvVarField({ envVar, isSet, onSaved, onCleared, profile }: EnvVarField
     }
 
     try {
-      const result = await revealEnvVar(envVar.key, profile)
+      const result = await revealEnvVar(envVar.key, profile, connectionId)
       setRevealed(result.value)
     } catch (err) {
       notifyError(err, copy.failedReveal(envVar.key))
@@ -239,6 +242,7 @@ function EnvVarField({ envVar, isSet, onSaved, onCleared, profile }: EnvVarField
 }
 
 interface PostSetupRunnerProps {
+  connectionId?: null | string
   toolset: string
   /** The provider's post_setup hook key (e.g. "camofox", "ddgs"). */
   postSetupKey: string
@@ -263,7 +267,14 @@ interface PostSetupRunnerProps {
  * "Installed" pill plus a small "Re-run setup" text button, so clicking
  * around the panel doesn't look like it keeps reinstalling.
  */
-function PostSetupRunner({ toolset, postSetupKey, installed = false, onComplete, profile }: PostSetupRunnerProps) {
+function PostSetupRunner({
+  connectionId,
+  toolset,
+  postSetupKey,
+  installed = false,
+  onComplete,
+  profile
+}: PostSetupRunnerProps) {
   const { t } = useI18n()
   const copy = t.settings.toolsets
   const [running, setRunning] = useState(false)
@@ -284,7 +295,7 @@ function PostSetupRunner({ toolset, postSetupKey, installed = false, onComplete,
     activeRef.current = true
 
     try {
-      const started = await runToolsetPostSetup(toolset, postSetupKey, profile)
+      const started = await runToolsetPostSetup(toolset, postSetupKey, profile, connectionId)
 
       // The spawn endpoint reports ok:false if it couldn't launch the action
       // (e.g. unknown key, server-side spawn failure). Don't poll a status
@@ -307,7 +318,7 @@ function PostSetupRunner({ toolset, postSetupKey, installed = false, onComplete,
           break
         }
 
-        const polled = await getActionStatus(started.name, 300, profile)
+        const polled = await getActionStatus(started.name, 300, profile, connectionId)
         last = polled
         setStatus(polled)
         upsertDesktopActionTask(polled)
@@ -340,7 +351,7 @@ function PostSetupRunner({ toolset, postSetupKey, installed = false, onComplete,
         setRunning(false)
       }
     }
-  }, [toolset, postSetupKey, onComplete, copy, profile])
+  }, [connectionId, toolset, postSetupKey, onComplete, copy, profile])
 
   return (
     <div className="grid gap-2 rounded-lg bg-background/55 p-2.5">
@@ -382,6 +393,7 @@ function PostSetupRunner({ toolset, postSetupKey, installed = false, onComplete,
 }
 
 interface ModelCatalogPickerProps {
+  connectionId?: null | string
   toolset: string
   /** The picker-row name of the provider whose catalog to show. */
   providerName: string
@@ -398,7 +410,7 @@ interface ModelCatalogPickerProps {
  * radio-card list and persists the choice to `image_gen.model` /
  * `video_gen.model`.
  */
-function ModelCatalogPicker({ toolset, providerName, isActiveBackend, profile }: ModelCatalogPickerProps) {
+function ModelCatalogPicker({ connectionId, toolset, providerName, isActiveBackend, profile }: ModelCatalogPickerProps) {
   const { t } = useI18n()
   const copy = t.settings.toolsets
   const [catalog, setCatalog] = useState<ToolsetModelsResponse | null>(null)
@@ -409,7 +421,7 @@ function ModelCatalogPicker({ toolset, providerName, isActiveBackend, profile }:
     let cancelled = false
 
     setLoading(true)
-    getToolsetModels(toolset, providerName, profile)
+    getToolsetModels(toolset, providerName, profile, connectionId)
       .then(next => {
         if (!cancelled) {
           setCatalog(next)
@@ -429,13 +441,13 @@ function ModelCatalogPicker({ toolset, providerName, isActiveBackend, profile }:
       })
 
     return () => void (cancelled = true)
-  }, [toolset, providerName, profile])
+  }, [connectionId, toolset, providerName, profile])
 
   const pick = async (modelId: string) => {
     setSaving(modelId)
 
     try {
-      await selectToolsetModel(toolset, modelId, providerName, profile)
+      await selectToolsetModel(toolset, modelId, providerName, profile, connectionId)
       setCatalog(current => (current ? { ...current, current: modelId } : current))
       notify({ kind: 'success', title: copy.modelSelectedTitle, message: copy.modelSelectedMessage(modelId) })
     } catch (err) {
@@ -511,7 +523,14 @@ function ModelCatalogPicker({ toolset, providerName, isActiveBackend, profile }:
   )
 }
 
-export function ToolsetConfigPanel({ toolset, onConfiguredChange, profile }: ToolsetConfigPanelProps) {
+export function ToolsetConfigPanel(props: ToolsetConfigPanelProps) {
+  const source = props.connectionId?.trim() || 'primary'
+  const profile = props.profile?.trim() || 'default'
+
+  return <ScopedToolsetConfigPanel {...props} key={`${source}::${profile}::${props.toolset}`} />
+}
+
+function ScopedToolsetConfigPanel({ connectionId, toolset, onConfiguredChange, profile }: ToolsetConfigPanelProps) {
   const { t } = useI18n()
   const copy = t.settings.toolsets
   const [cfg, setCfg] = useState<ToolsetConfig | null>(null)
@@ -541,7 +560,7 @@ export function ToolsetConfigPanel({ toolset, onConfiguredChange, profile }: Too
     setLoading(true)
 
     try {
-      const next = await getToolsetConfig(toolset, profile)
+      const next = await getToolsetConfig(toolset, profile, connectionId)
       setCfg(next)
       const seeded: Record<string, boolean> = {}
 
@@ -557,7 +576,7 @@ export function ToolsetConfigPanel({ toolset, onConfiguredChange, profile }: Too
     } finally {
       setLoading(false)
     }
-  }, [copy.failedLoad, toolset, profile])
+  }, [connectionId, copy.failedLoad, toolset, profile])
 
   useEffect(() => {
     void refresh()
@@ -599,7 +618,7 @@ export function ToolsetConfigPanel({ toolset, onConfiguredChange, profile }: Too
     setSelecting(provider.name)
 
     try {
-      const result = await selectToolsetProvider(toolset, provider.name, undefined, profile)
+      const result = await selectToolsetProvider(toolset, provider.name, undefined, profile, connectionId)
       // Mirror the backend write locally so dependent UI (model catalog
       // enablement) tracks the new active backend without a refetch.
       setCfg(current =>
@@ -641,7 +660,7 @@ export function ToolsetConfigPanel({ toolset, onConfiguredChange, profile }: Too
   // refetch the toolset config so is_active / status flip once entitled.
   async function signInToNousPortal() {
     try {
-      const start = await startOAuthLogin('nous', profile)
+      const start = await startOAuthLogin('nous', profile, connectionId)
 
       if (start.flow !== 'device_code') {
         notifyError(new Error(`unexpected flow: ${start.flow}`), copy.nousAuthFailed)
@@ -669,7 +688,7 @@ export function ToolsetConfigPanel({ toolset, onConfiguredChange, profile }: Too
           return
         }
 
-        const polled = await pollOAuthSession('nous', start.session_id, profile)
+        const polled = await pollOAuthSession('nous', start.session_id, profile, connectionId)
 
         if (polled.status === 'approved') {
           notify({ kind: 'success', title: copy.nousAuthDoneTitle, message: copy.nousAuthDoneMessage })
@@ -701,7 +720,7 @@ export function ToolsetConfigPanel({ toolset, onConfiguredChange, profile }: Too
     setSelecting(provider.name)
 
     try {
-      await selectToolsetProvider(toolset, provider.name, capability, profile)
+      await selectToolsetProvider(toolset, provider.name, capability, profile, connectionId)
       // Mirror the backend write locally so the Search:/Extract: badges track
       // the new per-capability backend without a refetch.
       setCfg(current =>
@@ -866,6 +885,7 @@ export function ToolsetConfigPanel({ toolset, onConfiguredChange, profile }: Too
                 ) : (
                   provider.env_vars.map(ev => (
                     <EnvVarField
+                      connectionId={connectionId}
                       envVar={ev}
                       isSet={Boolean(envState[ev.key])}
                       key={ev.key}
@@ -877,6 +897,7 @@ export function ToolsetConfigPanel({ toolset, onConfiguredChange, profile }: Too
                 )}
                 {provider.post_setup && (
                   <PostSetupRunner
+                    connectionId={connectionId}
                     installed={provider.status === 'ready'}
                     onComplete={() => void refresh()}
                     postSetupKey={provider.post_setup}
@@ -888,10 +909,16 @@ export function ToolsetConfigPanel({ toolset, onConfiguredChange, profile }: Too
                   // Voice/model settings for this backend (tts.<key>.*) —
                   // the same fields Settings → Voice renders, inline so the
                   // Capabilities panel is a complete setup surface.
-                  <VoiceProviderFields providerKey={provider.tts_provider} section="tts" />
+                  <VoiceProviderFields
+                    connectionId={connectionId}
+                    profile={profile}
+                    providerKey={provider.tts_provider}
+                    section="tts"
+                  />
                 )}
                 {MODEL_CATALOG_TOOLSETS.has(toolset) && (
                   <ModelCatalogPicker
+                    connectionId={connectionId}
                     isActiveBackend={provider.is_active || cfg?.active_provider === provider.name}
                     profile={profile}
                     providerName={provider.name}

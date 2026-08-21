@@ -3,6 +3,9 @@ import { useEffect, useState } from 'react'
 
 import { PageLoader } from '@/components/page-loader'
 import { useI18n } from '@/i18n'
+import { activeBackendOwner, backendOwnerKey } from '@/store/backend-owner'
+import { $activeGatewayProfile } from '@/store/profile'
+import { $connection } from '@/store/session'
 import { $starmapError, $starmapGraph, $starmapLoading, loadStarmapGraph } from '@/store/starmap'
 import type { StarmapGraph } from '@/types/hermes'
 
@@ -20,6 +23,10 @@ export function StarmapView({ onClose }: { onClose: () => void }) {
   const graph = useStore($starmapGraph)
   const loading = useStore($starmapLoading)
   const error = useStore($starmapError)
+  useStore($activeGatewayProfile)
+  useStore($connection)
+  const owner = activeBackendOwner()
+  const ownerSignature = owner ? backendOwnerKey(owner) : ''
 
   // A pasted share code populates the map with someone else's (or an exported)
   // graph, overriding the live profile scan. Cleared by "back to my map" and
@@ -27,8 +34,13 @@ export function StarmapView({ onClose }: { onClose: () => void }) {
   const [imported, setImported] = useState<StarmapGraph | null>(null)
 
   useEffect(() => {
-    void loadStarmapGraph()
-  }, [])
+    if (owner) {
+      void loadStarmapGraph(false, owner)
+    }
+    // The signature is the reactive dependency; owner is the immutable snapshot
+    // paired with this render and intentionally excluded.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownerSignature])
 
   // Drop a stale import when the underlying profile graph changes out from under it.
   useEffect(() => {

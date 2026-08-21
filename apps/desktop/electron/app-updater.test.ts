@@ -105,6 +105,30 @@ test('community release resolver orders base versions before community iteration
   )
 })
 
+test('vi39 upgrades to the v31 candidate without falling back to the old release line', () => {
+  const releases = [
+    {
+      tag_name: 'vi-v0.31.0-1',
+      draft: false,
+      prerelease: true,
+      assets: [{ name: 'latest.yml' }]
+    },
+    {
+      tag_name: 'vi-v0.20.4-39',
+      draft: false,
+      prerelease: true,
+      assets: [{ name: 'latest.yml' }]
+    }
+  ]
+
+  assert.deepEqual(selectCommunityUpdateRelease(releases, '0.20.4-vi.39', 'win32', 'x64'), {
+    feedUrl:
+      'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-1',
+    tag: 'vi-v0.31.0-1',
+    version: '0.31.0-vi.1'
+  })
+})
+
 test('community update feeds are pinned to an immutable GitHub release', () => {
   assert.equal(
     communityReleaseFeedUrl('vi-v0.20.4-35'),
@@ -180,6 +204,7 @@ test('feed check reports an available update when versions differ', () => {
 
 test('community app versions map back to public vi release tags', () => {
   assert.equal(releaseTagForAppVersion('0.20.0-vi.15'), 'vi-v0.20.0-15')
+  assert.equal(releaseTagForAppVersion('0.31.0-vi.1'), 'vi-v0.31.0-1')
   assert.equal(releaseTagForAppVersion('0.20.0'), 'v0.20.0')
 
   const out = describeFeedCheck('0.20.0-vi.14', { version: '0.20.0-vi.15' }, true)

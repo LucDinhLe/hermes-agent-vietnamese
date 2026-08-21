@@ -4,6 +4,7 @@ import test from 'node:test'
 import vm from 'node:vm'
 
 const pluginSource = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
+const LOCAL_OWNER = { connectionId: 'local', profile: 'default' }
 
 function load(storageGet) {
   const values = new Map()
@@ -20,7 +21,8 @@ function load(storageGet) {
     host: {
       request: async () => ({}),
       state: {
-        profile: { listen: () => undefined },
+        connectionId: { get: () => 'local', listen: () => undefined },
+        profile: { get: () => 'default', listen: () => undefined },
         gateway: { listen: () => undefined }
       }
     }
@@ -48,7 +50,7 @@ test('regression: a slow load does not wipe a pin written this session', async (
   })
   const runtime = load(() => pending)
 
-  runtime.saveBotMeta('researcher', { chat: 'sess-just-created', title: 'Research' })
+  runtime.saveBotMeta('researcher', { chat: 'sess-just-created', title: 'Research' }, null, LOCAL_OWNER)
   assert.equal(runtime.$botMeta.get().researcher.chat, 'sess-just-created')
 
   resolveStorage({ researcher: { title: 'Research' } })
@@ -67,7 +69,7 @@ test('regression: a slow load still keeps looks from disk under a new pin', asyn
   })
   const runtime = load(() => pending)
 
-  runtime.saveBotMeta('researcher', { chat: 'sess-just-created' })
+  runtime.saveBotMeta('researcher', { chat: 'sess-just-created' }, null, LOCAL_OWNER)
   resolveStorage({ researcher: { title: 'Research', shape: 'cloud', color: '#38bdf8' } })
   await pending
   await Promise.resolve()

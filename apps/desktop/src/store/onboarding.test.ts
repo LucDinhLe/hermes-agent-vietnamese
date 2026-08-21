@@ -2,15 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { $terminalInjection, $terminalTakeover } from '@/app/right-sidebar/store'
 import * as notifications from '@/store/notifications'
+import { $activeGatewayProfile } from '@/store/profile'
+import { $connection } from '@/store/session'
 import type { OAuthProvider } from '@/types/hermes'
 
 import {
   $desktopOnboarding,
+  closeManualOnboarding,
   type DesktopOnboardingState,
   type OnboardingContext,
   refreshOnboarding,
   requestDesktopOnboarding,
+  runExternalSigninCommand,
   saveOnboardingLocalEndpoint,
+  startManualOnboarding,
   startProviderOAuth,
   submitOnboardingCode
 } from './onboarding'
@@ -41,6 +46,12 @@ describe('external provider sign-in', () => {
     $terminalTakeover.set(false)
   })
 
+  afterEach(() => {
+    closeManualOnboarding()
+    $connection.set(null)
+    $activeGatewayProfile.set('default')
+  })
+
   it('opens the visible terminal with the official provider command', async () => {
     const claude = externalProvider('claude-code', 'claude auth login')
 
@@ -51,12 +62,28 @@ describe('external provider sign-in', () => {
     expect($terminalInjection.get()).toBe('claude auth login')
   })
 
+  it('keeps external CLI sign-in on a remote owner out of the local terminal', async () => {
+    const owner = { connectionId: 'remote-b', profile: 'default' }
+    $connection.set({ connectionId: owner.connectionId, mode: 'remote', profile: owner.profile } as never)
+    $activeGatewayProfile.set(owner.profile)
+    startManualOnboarding(null, owner)
+
+    const claude = externalProvider('claude-code', 'claude auth login')
+    await startProviderOAuth(claude, onboardingContext(emptyOpenRouterGateway()))
+    runExternalSigninCommand()
+
+    expect($desktopOnboarding.get().flow).toMatchObject({ status: 'external_pending', provider: claude })
+    expect($terminalTakeover.get()).toBe(false)
+    expect($terminalInjection.get()).toBeNull()
+  })
+
   it('selects an already signed-in external provider without reopening login', async () => {
     const claude = {
       ...externalProvider('claude-code', 'claude auth login'),
       name: 'Claude Pro / Max',
       status: { logged_in: true }
     }
+
     const calls: { body?: unknown; path: string }[] = []
 
     installApiMock(async ({ body, path }: { body?: unknown; path: string }) => {

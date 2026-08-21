@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Tip } from '@/components/ui/tooltip'
 import {
   authMcpServer,
+  cancelMcpOAuthFlow,
   getActionStatus,
   getLogs,
   getMcpCatalog,
@@ -57,6 +58,8 @@ type McpServers = Record<string, Record<string, unknown>>
 // README's "add this to your mcp.json" snippet pastes verbatim. Storage stays
 // the config.yaml `mcp_servers` map (CLI/TUI untouched).
 const STARTER_ENTRY = { command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem', '/path/to/dir'] }
+const MCP_DOC_EXPECTED_OBJECT = 'mcp-document-expected-object'
+const MCP_DOC_MISSING_NAME = 'mcp-document-missing-name'
 
 const pretty = (value: unknown) => JSON.stringify(value, null, 2)
 const wrapDoc = (entries: McpServers) => pretty({ mcpServers: entries })
@@ -81,13 +84,13 @@ function parseServersDoc(raw: string): McpServers {
   const parsed = JSON.parse(raw) as unknown
 
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error('Expected a JSON object')
+    throw new Error(MCP_DOC_EXPECTED_OBJECT)
   }
 
   const doc = parsed as Record<string, unknown>
 
   if (isServerShape(doc)) {
-    throw new Error('Wrap the server in {"mcpServers": {"name": …}} so it has a name')
+    throw new Error(MCP_DOC_MISSING_NAME)
   }
 
   const wrapper = doc.mcpServers ?? doc.mcp_servers
@@ -130,7 +133,11 @@ interface ServerCost {
 const MCP_USAGE_TTL_MS = 10 * 60_000
 const mcpUsageCache = new Map<string, { at: number; value: Record<string, number> }>()
 
-async function loadMcpUsage(scopeKey: string, scopeProfile: null | string): Promise<null | Record<string, number>> {
+async function loadMcpUsage(
+  scopeKey: string,
+  scopeProfile: null | string,
+  connectionId?: null | string
+): Promise<null | Record<string, number>> {
   const cached = mcpUsageCache.get(scopeKey)
 
   if (cached && Date.now() - cached.at < MCP_USAGE_TTL_MS) {
@@ -138,7 +145,7 @@ async function loadMcpUsage(scopeKey: string, scopeProfile: null | string): Prom
   }
 
   try {
-    const analytics = await getUsageAnalytics(30, scopeProfile)
+    const analytics = await getUsageAnalytics(30, scopeProfile, connectionId)
     const value = Object.fromEntries((analytics.tools ?? []).map(entry => [entry.tool, entry.count]))
     mcpUsageCache.set(scopeKey, { at: Date.now(), value })
 
@@ -367,7 +374,20 @@ function scanServerBlocks(text: string): ServerBlock[] {
   return blocks
 }
 
-export function McpTab({ gateway, profile }: { gateway: HermesGateway | null; profile?: null | string }) {
+interface McpTabProps {
+  connectionId?: null | string
+  gateway: HermesGateway | null
+  profile?: null | string
+}
+
+export function McpTab(props: McpTabProps) {
+  const source = props.connectionId?.trim() || 'primary'
+  const profile = normalizeProfileKey(props.profile)
+
+  return <ScopedMcpTab {...props} key={`${source}::${profile}`} />
+}
+
+function ScopedMcpTab({ connectionId, gateway, profile }: McpTabProps) {
   const { t } = useI18n()
   const m = t.settings.mcp
   const activeSessionId = useStore($activeSessionId)
@@ -380,6 +400,8 @@ export function McpTab({ gateway, profile }: { gateway: HermesGateway | null; pr
   // resolves to $activeGatewayProfile, so behavior is identical to before.
   const appProfile = useStore($activeGatewayProfile)
   const scopeProfileKey = normalizeProfileKey(profile ?? appProfile)
+  const sourceKey = connectionId?.trim() || 'primary'
+  const capabilityScopeKey = `${sourceKey}::${scopeProfileKey}`
 
   // Shared config cache (see use-config-record): revisiting the tab paints the
   // cached record instantly; mutations write through `setConfig` and stay
@@ -392,9 +414,9 @@ export function McpTab({ gateway, profile }: { gateway: HermesGateway | null; pr
     refetch: refetchConfig,
     dataUpdatedAt: configUpdatedAt,
     errorUpdatedAt: configErroredAt
-  } = useHermesConfigRecord(profile)
+  } = useHermesConfigRecord(profile, connectionId)
 
-  const setConfig = hermesConfigCacheWriter(profile)
+  const setConfig = hermesConfigCacheWriter(profile, connectionId)
 
   // True from a profile switch until the config query resettles for the new
   // profile. Until then `config` (and thus `servers`) still holds profile A's
@@ -457,8 +479,8 @@ export function McpTab({ gateway, profile }: { gateway: HermesGateway | null; pr
   // on switch. When no selector override is set this is the active profile,
   // identical to before.
   const catalogQuery = useQuery({
-    queryKey: [...MCP_CATALOG_KEY, scopeProfileKey],
-    queryFn: () => getMcpCatalog(profile ?? undefined),
+    queryKey: [...MCP_CATALOG_KEY, sourceKey, scopeProfileKey],
+    queryFn: () => getMcpCatalog(profile ?? undefined, connectionId),
     staleTime: 5 * 60_000
   })
 
@@ -596,11 +618,11 @@ export function McpTab({ gateway, profile }: { gateway: HermesGateway | null; pr
 
   const runProbe = async (serverName: string) => {
     const epoch = profileEpoch.current
-    const key = probeKey(serverName, servers[serverName], scopeProfileKey)
+    const key = probeKey(serverName, servers[serverName], capabilityScopeKey)
     setProbes(current => ({ ...current, [serverName]: 'probing' }))
 
     try {
-      const result = await testMcpServer(serverName, profile ?? undefined)
+      const result = await testMcpServer(serverName, profile ?? undefined, connectionId)
 
       // Drop the result if the profile changed mid-probe — it belongs to A.
       if (profileEpoch.current !== epoch) {
@@ -630,9 +652,10 @@ export function McpTab({ gateway, profile }: { gateway: HermesGateway | null; pr
 
     try {
       const flow = await completeMcpDesktopOAuth({
+        cancel: flowId => cancelMcpOAuthFlow(flowId, profile ?? undefined, connectionId),
         serverName,
-        start: name => authMcpServer(name, profile ?? undefined),
-        status: flowId => getMcpOAuthFlow(flowId, profile ?? undefined),
+        start: name => authMcpServer(name, profile ?? undefined, connectionId),
+        status: flowId => getMcpOAuthFlow(flowId, profile ?? undefined, connectionId),
         openExternal: url => window.hermesDesktop.openExternal(url)
       })
 
@@ -647,7 +670,7 @@ export function McpTab({ gateway, profile }: { gateway: HermesGateway | null; pr
       // Cache under the POST-auth fingerprint (auth: oauth) on success — that's
       // the config the mount effect will read back, so it hits this entry.
       const probedConfig = result.ok ? { ...servers[serverName], auth: 'oauth' } : servers[serverName]
-      probeCache.set(probeKey(serverName, probedConfig, scopeProfileKey), { at: Date.now(), result })
+      probeCache.set(probeKey(serverName, probedConfig, capabilityScopeKey), { at: Date.now(), result })
 
       if (result.ok) {
         // The endpoint persisted `auth: oauth` — mirror it locally.
@@ -698,7 +721,7 @@ export function McpTab({ gateway, profile }: { gateway: HermesGateway | null; pr
         continue
       }
 
-      const cached = probeCache.get(probeKey(serverName, server, scopeProfileKey))
+      const cached = probeCache.get(probeKey(serverName, server, capabilityScopeKey))
 
       if (cached && Date.now() - cached.at < PROBE_TTL_MS) {
         setProbes(current => ({ ...current, [serverName]: cached.result }))
@@ -717,12 +740,12 @@ export function McpTab({ gateway, profile }: { gateway: HermesGateway | null; pr
   useEffect(() => {
     const epoch = profileEpoch.current
 
-    void loadMcpUsage(scopeProfileKey, profile ?? appProfile ?? null).then(value => {
+    void loadMcpUsage(capabilityScopeKey, profile ?? appProfile ?? null, connectionId).then(value => {
       if (profileEpoch.current === epoch) {
         setToolCalls30d(value)
       }
     })
-  }, [scopeProfileKey, profile, appProfile])
+  }, [appProfile, capabilityScopeKey, connectionId, profile])
 
   // Overlay inputs for one server: token estimate from its (successful) probe,
   // 30-day uses from analytics. Both halves degrade to null independently.
@@ -756,7 +779,7 @@ export function McpTab({ gateway, profile }: { gateway: HermesGateway | null; pr
   // caller must skip its post-await writes.
   const persist = async (nextServers: McpServers): Promise<boolean> => {
     const epoch = profileEpoch.current
-    await saveMcpServers(nextServers, profile ?? undefined)
+    await saveMcpServers(nextServers, profile ?? undefined, connectionId)
 
     if (profileEpoch.current !== epoch) {
       return false
@@ -985,7 +1008,15 @@ export function McpTab({ gateway, profile }: { gateway: HermesGateway | null; pr
     try {
       entries = parseServersDoc(draft)
     } catch (err) {
-      notifyError(err, m.invalidJson)
+      const message =
+        err instanceof Error && err.message === MCP_DOC_EXPECTED_OBJECT
+          ? m.objectRequired
+          : err instanceof Error && err.message === MCP_DOC_MISSING_NAME
+            ? m.nameRequiredMessage
+            : err instanceof Error
+              ? err.message
+              : String(err)
+      notifyError(new Error(message), m.invalidJson)
 
       return
     }
@@ -1144,6 +1175,7 @@ export function McpTab({ gateway, profile }: { gateway: HermesGateway | null; pr
                     <span className="text-[0.72rem] font-medium text-(--ui-text-tertiary)">{m.tabCatalog}</span>
                   </div>
                   <McpCatalog
+                    connectionId={connectionId}
                     entries={availableCatalog}
                     loading={catalogQuery.isLoading}
                     onInstalled={onCatalogInstalled}
@@ -1207,7 +1239,13 @@ export function McpTab({ gateway, profile }: { gateway: HermesGateway | null; pr
             </span>
           }
         >
-          <McpLogs emptyLabel={m.noOutput} server={selected && savedEntry ? selected : null} source={logSource} />
+          <McpLogs
+            connectionId={connectionId}
+            emptyLabel={m.noOutput}
+            profile={profile}
+            server={selected && savedEntry ? selected : null}
+            source={logSource}
+          />
         </DetailPane>
       </main>
     </div>
@@ -1543,11 +1581,13 @@ function CatalogTag({ children }: { children: string }) {
 // inline prompt for any required credentials (never shows stored values). On
 // install the parent refetches config + catalog and reloads live sessions.
 function McpCatalog({
+  connectionId,
   entries,
   loading,
   onInstalled,
   profile
 }: {
+  connectionId?: null | string
   entries: McpCatalogEntry[]
   loading: boolean
   onInstalled: () => void
@@ -1579,7 +1619,7 @@ function McpCatalog({
     setInstalling(entry.name)
 
     try {
-      const res = await installMcpCatalogEntry(entry.name, draft, profile ?? undefined)
+      const res = await installMcpCatalogEntry(entry.name, draft, profile ?? undefined, connectionId)
 
       // Git-backed entries clone in the background — keep the row busy and poll
       // the action to completion before refetching / re-enabling, so a re-click
@@ -1587,7 +1627,7 @@ function McpCatalog({
       // exit is a real failure — surface it instead of a false success.
       if (res.background && res.action) {
         for (;;) {
-          const status = await getActionStatus(res.action, 1, profile ?? undefined)
+          const status = await getActionStatus(res.action, 1, profile ?? undefined, connectionId)
 
           if (!status.running) {
             if (status.exit_code !== 0) {
@@ -1729,11 +1769,15 @@ function filterStdioSections(lines: string[], server: string): string[] {
 // source controls live in the pane header. Body is the app's tool-output
 // surface: CodeCardBody typography + the floating hover-reveal copy button.
 function McpLogs({
+  connectionId,
   emptyLabel,
+  profile,
   server,
   source
 }: {
+  connectionId?: null | string
   emptyLabel: string
+  profile?: null | string
   server: null | string
   source: 'stdio' | 'agent'
 }) {
@@ -1750,8 +1794,8 @@ function McpLogs({
       try {
         const response =
           source === 'stdio'
-            ? await getLogs({ file: 'mcp', lines: 500 })
-            : await getLogs({ file: 'agent', lines: 300, search: server ?? 'mcp' })
+            ? await getLogs({ file: 'mcp', lines: 500 }, profile ?? undefined, connectionId)
+            : await getLogs({ file: 'agent', lines: 300, search: server ?? 'mcp' }, profile ?? undefined, connectionId)
 
         if (!cancelled) {
           setLines(source === 'stdio' && server ? filterStdioSections(response.lines, server) : response.lines)
@@ -1769,7 +1813,7 @@ function McpLogs({
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [server, source, activeProfile])
+  }, [activeProfile, connectionId, profile, server, source])
 
   return <LogTail emptyLabel={emptyLabel} lines={lines} />
 }

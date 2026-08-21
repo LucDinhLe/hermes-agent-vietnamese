@@ -4,6 +4,7 @@ import test from 'node:test'
 import vm from 'node:vm'
 
 const source = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
+const LOCAL_OWNER = { connectionId: 'local', profile: 'default' }
 
 function loadCanonicalCreation({ openSession, request }) {
   const start = source.indexOf('const canonicalCreations = new Map()')
@@ -11,6 +12,9 @@ function loadCanonicalCreation({ openSession, request }) {
   const saved = []
   const context = {
     host: { openSession, request },
+    normalizeRosterOwner: (connectionId, profile) => ({ connectionId, profile }),
+    rosterOwnerStillActive: () => true,
+    agentText: key => (key === 'profile.intro' ? 'Hey, tell me about yourself!' : key),
     saveBotMeta: (name, patch) => saved.push({ name, patch }),
     $hideBotChats: { get: () => false },
     window: { setTimeout: callback => callback() }
@@ -22,7 +26,11 @@ function loadCanonicalCreation({ openSession, request }) {
   assert.notEqual(start, -1, 'canonical creation section is missing')
   assert.notEqual(end, -1, 'canonical creation section delimiter is missing')
   vm.runInNewContext(section, context, { filename: 'canonical-creation.js' })
-  return { ...context.__canonical, saved }
+  return {
+    ...context.__canonical,
+    createCanonicalChat: name => context.__canonical.createCanonicalChat(name, LOCAL_OWNER),
+    saved
+  }
 }
 
 test('regression: navigation retries after the kickoff persists a new canonical chat', async () => {

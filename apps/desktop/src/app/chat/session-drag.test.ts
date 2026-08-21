@@ -15,7 +15,18 @@ import { startSessionDrag } from './session-drag'
  * the drop has to land on the tab the user can actually see.
  */
 
-vi.mock('@/store/session-states', () => ({ openSessionTile: vi.fn() }))
+vi.mock('@/store/session-states', () => ({
+  openSessionTile: vi.fn(),
+  sessionTileForStoredId: vi.fn((storedSessionId: string, owner?: { connectionId: string; profile: string }) => ({
+    ...owner,
+    storedSessionId,
+    tileId: owner ? encodeURIComponent(JSON.stringify([owner.connectionId, owner.profile, storedSessionId])) : storedSessionId
+  })),
+  sessionTileIdentity: (owner: { connectionId: string; profile: string }, storedSessionId: string) =>
+    encodeURIComponent(JSON.stringify([owner.connectionId, owner.profile, storedSessionId])),
+  sessionTilePaneId: (tile: { tileId?: string; storedSessionId: string }) =>
+    `session-tile:${tile.tileId ?? tile.storedSessionId}`
+}))
 vi.mock('./composer/focus', () => ({ requestComposerInsertRefs: vi.fn() }))
 
 const ZONE = { left: 0, top: 0, right: 1000, bottom: 800 }
@@ -61,8 +72,8 @@ function mountStackedTabs() {
 
 /** Press on `source`, drag to (x, y), release. The drag session flushes its
  *  pending move synchronously on release, so no frame wait is needed. */
-function dragTo(source: HTMLElement, x: number, y: number) {
-  startSessionDrag({ id: 'dragged', profile: 'default', title: 'Dragged chat' }, {
+function dragTo(source: HTMLElement, x: number, y: number, payload: { connectionId?: string } = {}) {
+  startSessionDrag({ id: 'dragged', profile: 'default', title: 'Dragged chat', ...payload }, {
     button: 0,
     clientX: 0,
     clientY: 0,
@@ -109,6 +120,29 @@ describe('session drop targeting across stacked tabs', () => {
 
     expect(requestComposerInsertRefs).not.toHaveBeenCalled()
     expect(openSessionTile).not.toHaveBeenCalled()
+  })
+
+  it('denies a cross-owner link whose @session grammar cannot carry the source', () => {
+    const row = mountStackedTabs()
+    const visible = document.querySelector('[data-session-anchor="session-tile:visible"]') as HTMLElement
+    visible.dataset.backendConnection = 'source-b'
+    visible.dataset.backendProfile = 'default'
+
+    dragTo(row, 500, 740, { connectionId: 'source-a' })
+
+    expect(requestComposerInsertRefs).not.toHaveBeenCalled()
+    expect(openSessionTile).not.toHaveBeenCalled()
+  })
+
+  it('keeps a split attached to the dragged session\'s immutable owner', () => {
+    const row = mountStackedTabs()
+
+    dragTo(row, 980, 400, { connectionId: 'source-a' })
+
+    expect(openSessionTile).toHaveBeenCalledWith('dragged', 'right', 'session-tile:visible', undefined, {
+      connectionId: 'source-a',
+      profile: 'default'
+    })
   })
 
   // Standing side chrome hosts no main tile, so a session has nowhere to land

@@ -101,7 +101,7 @@ test('groupLastActivity: newest room-log timestamp, 0 for silence', () => {
   assert.equal(groupLastActivity(undefined), 0)
 })
 
-test('groupChatMemberBots: seats local meta members plus stored remote descriptors, preferring live rows', () => {
+test('groupChatMemberBots: durable members are authoritative and legacy rooms retain local fallback', () => {
   const { groupChatMemberBots, $groupChats } = load()
   const roster = [
     { name: 'researcher' },
@@ -120,9 +120,25 @@ test('groupChatMemberBots: seats local meta members plus stored remote descripto
     builder: { groups: ['Ops', 'Research'], group: 'Ops' }
   })
 
-  assert.equal(JSON.stringify(members.map(m => m.name)), JSON.stringify(['researcher', 'builder', 'spark']))
+  assert.equal(JSON.stringify(members.map(m => m.name)), JSON.stringify(['spark']))
   // The LIVE roster row was preferred over the stored descriptor.
-  assert.equal(members[2], roster[2])
+  assert.equal(members[0], roster[2])
+
+  $groupChats.set({ Research: { log: [], members: [] } })
+  const localOwner = { connectionId: 'local', profile: 'default' }
+  const legacyMembers = groupChatMemberBots(
+    'Research',
+    roster,
+    {
+      researcher: { group: 'Research' },
+      builder: { groups: ['Ops', 'Research'], group: 'Ops' }
+    },
+    undefined,
+    localOwner,
+    localOwner
+  )
+
+  assert.equal(JSON.stringify(legacyMembers.map(m => m.name)), JSON.stringify(['researcher', 'builder']))
 })
 
 test('durableGroupChatMembers: retains active and remote source identities', () => {

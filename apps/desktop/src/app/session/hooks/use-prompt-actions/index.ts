@@ -506,7 +506,11 @@ export function usePromptActions({
   const handoffSession = useCallback(
     async (
       platform: string,
-      options?: { onProgress?: (state: string) => void; sessionId?: string }
+      options?: {
+        onProgress?: (state: string) => void
+        requestGateway?: typeof requestGateway
+        sessionId?: string
+      }
     ): Promise<HandoffResult> => {
       const sid = options?.sessionId || activeSessionIdRef.current
 
@@ -515,6 +519,7 @@ export function usePromptActions({
       }
 
       const target = normalize(platform)
+      const routedRequestGateway = options?.requestGateway ?? requestGateway
 
       if (!target) {
         return { error: copy.handoff.failed(''), ok: false }
@@ -522,7 +527,7 @@ export function usePromptActions({
 
       try {
         options?.onProgress?.('pending')
-        await requestGateway<HandoffRequestResponse>('handoff.request', {
+        await routedRequestGateway<HandoffRequestResponse>('handoff.request', {
           platform: target,
           session_id: sid
         })
@@ -546,7 +551,7 @@ export function usePromptActions({
         let record: HandoffStateResponse
 
         try {
-          record = await requestGateway<HandoffStateResponse>('handoff.state', { session_id: sid })
+          record = await routedRequestGateway<HandoffStateResponse>('handoff.state', { session_id: sid })
         } catch {
           continue
         }
@@ -567,7 +572,7 @@ export function usePromptActions({
         }
       }
 
-      const cleanup = await requestGateway<HandoffFailResponse>('handoff.fail', {
+      const cleanup = await routedRequestGateway<HandoffFailResponse>('handoff.fail', {
         error: copy.handoff.timedOut,
         session_id: sid
       }).catch(() => null)

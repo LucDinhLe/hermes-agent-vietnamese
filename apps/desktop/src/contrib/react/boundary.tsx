@@ -15,14 +15,18 @@ interface ContribBoundaryProps {
   variant?: 'chip' | 'pane'
 }
 
-interface ContribRenderProps {
-  render: () => ReactNode
+interface ContribRenderProps<Props extends object = Record<string, never>> {
+  props?: Props
+  render: (props: Props) => ReactNode
 }
 
 /** Mount a contribution callback as a component so its hooks and errors belong
  * to the contribution, not to whichever host surface happened to call it. */
-export function ContribRender({ render }: ContribRenderProps) {
-  return createElement(render)
+export function ContribRender<Props extends object = Record<string, never>>({
+  props,
+  render
+}: ContribRenderProps<Props>) {
+  return createElement(render, props ?? ({} as Props))
 }
 
 /**

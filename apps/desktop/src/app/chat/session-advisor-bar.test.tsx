@@ -3,10 +3,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type * as React from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { registry } from '@/contrib/registry'
 import { getAuxiliaryModels, type HermesGateway, setModelAssignment } from '@/hermes'
 import { $currentAdvisorEnabled, setCurrentAdvisorEnabled } from '@/store/session'
 
 import { SessionAdvisorBar } from './session-advisor-bar'
+import { SESSION_AGENTS_AREA, type SessionAgentsContribution } from './session-agents-contrib'
 
 beforeAll(() => {
   Element.prototype.scrollIntoView = vi.fn()
@@ -63,6 +65,63 @@ describe('SessionAdvisorBar', () => {
     expect(await screen.findByText('advisor-model')).toBeTruthy()
   })
 
+  it('mounts the session-scoped Agents control between context usage and Advisor', async () => {
+    const received: Array<Parameters<SessionAgentsContribution['render']>[0]> = []
+
+    const dispose = registry.register({
+      area: SESSION_AGENTS_AREA,
+      data: {
+        render: props => {
+          received.push(props)
+
+          return <button type="button">Agents for this session</button>
+        }
+      } satisfies SessionAgentsContribution,
+      id: 'test-agents',
+      source: 'core'
+    })
+
+    try {
+      const { container } = renderBar({
+        busy: true,
+        enabled: false,
+        gateway: null,
+        gatewayOpen: true,
+        leadConnectionId: 'homelab',
+        leadProfile: 'lead-agent',
+        model: 'working-model',
+        projectKey: 'project-42',
+        projectResolutionKnown: true,
+        provider: 'openai',
+        sessionId: 'runtime-42',
+        storedSessionId: 'stored-42'
+      })
+
+      expect(await screen.findByRole('button', { name: 'Agents for this session' })).toBeTruthy()
+      expect(received.at(-1)).toEqual({
+        busy: true,
+        leadConnectionId: 'homelab',
+        leadProfile: 'lead-agent',
+        projectKey: 'project-42',
+        projectResolutionKnown: true,
+        runtimeSessionId: 'runtime-42',
+        storedSessionId: 'stored-42'
+      })
+
+      const meter = container.querySelector('[data-session-context-meter]')
+      const agents = container.querySelector('[data-session-agents-slot]')
+      const shield = container.querySelector('.codicon-shield')
+
+      expect(meter).toBeTruthy()
+      expect(agents).toBeTruthy()
+      expect(shield).toBeTruthy()
+      expect(meter!.compareDocumentPosition(agents!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(agents!.compareDocumentPosition(shield!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    } finally {
+      dispose()
+    }
+  })
+
   it('shows every model from every connected provider and assigns the Advisor model', async () => {
     const request = vi.fn(async (method: string) => {
       if (method === 'model.options') {
@@ -94,6 +153,8 @@ describe('SessionAdvisorBar', () => {
       enabled: true,
       gateway,
       gatewayOpen: true,
+      leadConnectionId: 'source-a',
+      leadProfile: 'lead-agent',
       model: 'gpt-5.6-sol',
       provider: 'openai-codex',
       sessionId: 'runtime-42'
@@ -119,9 +180,48 @@ describe('SessionAdvisorBar', () => {
           scope: 'auxiliary',
           task: 'advisor'
         },
-        'default'
+        'lead-agent',
+        'source-a'
       )
     )
+  })
+
+  it('keeps auxiliary model cache and writes isolated by source for same-named leads', async () => {
+    vi.mocked(getAuxiliaryModels).mockImplementation(async (profile, connectionId) => ({
+      main: { model: `${connectionId}-${profile}`, provider: 'test-provider' },
+      tasks: []
+    }))
+
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    const props = {
+      busy: false,
+      enabled: true,
+      gateway: null,
+      gatewayOpen: true,
+      leadProfile: 'shared-name',
+      model: 'working-model',
+      provider: 'openai',
+      sessionId: 'runtime-42'
+    }
+
+    const view = render(
+      <QueryClientProvider client={client}>
+        <SessionAdvisorBar {...props} leadConnectionId="source-a" />
+      </QueryClientProvider>
+    )
+
+    expect(await screen.findByRole('button', { name: 'Advisor model: source-a-shared-name' })).toBeTruthy()
+
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <SessionAdvisorBar {...props} leadConnectionId="source-b" />
+      </QueryClientProvider>
+    )
+
+    expect(await screen.findByRole('button', { name: 'Advisor model: source-b-shared-name' })).toBeTruthy()
+    expect(getAuxiliaryModels).toHaveBeenCalledWith('shared-name', 'source-a')
+    expect(getAuxiliaryModels).toHaveBeenCalledWith('shared-name', 'source-b')
   })
 
   it('stores a draft toggle locally so session.create can inherit it', () => {

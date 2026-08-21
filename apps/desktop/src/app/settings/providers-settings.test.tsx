@@ -84,6 +84,13 @@ async function renderProvidersSettings() {
 }
 
 describe('ProvidersSettings', () => {
+  it('never offers a local terminal action for a remote provider owner', async () => {
+    const { providerTerminalActionAvailable } = await import('./providers-settings')
+
+    expect(providerTerminalActionAvailable({ connectionId: 'remote-b', profile: 'default' }, true)).toBe(false)
+    expect(providerTerminalActionAvailable({ connectionId: 'local', profile: 'default' }, true)).toBe(true)
+  })
+
   it('disconnects a connected provider account and refreshes the accounts list', async () => {
     await renderProvidersSettings()
 

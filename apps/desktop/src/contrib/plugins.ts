@@ -14,7 +14,7 @@
  */
 
 import { createPluginContext, type HermesPlugin } from './plugin'
-import { pluginActive, publishPlugin } from './plugins-store'
+import { pluginShouldActivate, publishPlugin } from './plugins-store'
 import { watchRuntimePlugins } from './runtime-loader'
 
 const modules = import.meta.glob<{ default: HermesPlugin }>('../plugins/*/plugin.{js,ts,tsx}', { eager: true })
@@ -48,7 +48,8 @@ export function discoverBundledPlugins(): void {
       id: plugin.id,
       name: plugin.name ?? plugin.id,
       description: plugin.description,
-      kind: 'bundled' as const
+      kind: 'bundled' as const,
+      required: plugin.required === true
     }
 
     let disposers: (() => void)[] = []
@@ -73,7 +74,7 @@ export function discoverBundledPlugins(): void {
 
     publishPlugin({ ...record, status: 'disabled' }, { activate, deactivate })
 
-    if (pluginActive(plugin.id, plugin.defaultEnabled ?? true)) {
+    if (pluginShouldActivate(plugin.id, plugin.defaultEnabled ?? true, plugin.required === true)) {
       activate()
     }
   }

@@ -72,6 +72,12 @@ class FakeWebSocket {
     this.emit('close', {})
   }
 
+  message(params: Record<string, unknown>) {
+    this.emit('message', {
+      data: JSON.stringify({ jsonrpc: '2.0', method: 'event', params })
+    })
+  }
+
   private emit(type: string, ev: unknown) {
     for (const fn of this.listeners[type] ?? []) {
       fn(ev)
@@ -132,11 +138,16 @@ function fakeDesktop() {
 
 function Harness({
   beforeConnectionSwitch = () => undefined,
+  handleGatewayEvent = () => undefined,
   refreshSessions
-}: { beforeConnectionSwitch?: () => void; refreshSessions?: () => Promise<void> } = {}) {
+}: {
+  beforeConnectionSwitch?: () => void
+  handleGatewayEvent?: Parameters<typeof useGatewayBoot>[0]['handleGatewayEvent']
+  refreshSessions?: () => Promise<void>
+} = {}) {
   useGatewayBoot({
     beforeConnectionSwitch,
-    handleGatewayEvent: () => undefined,
+    handleGatewayEvent,
     onConnectionReady: () => undefined,
     onGatewayReady: () => undefined,
     refreshHermesConfig: async () => undefined,
@@ -224,6 +235,49 @@ async function advanceBackoff() {
     await vi.advanceTimersByTimeAsync(15_000)
   })
 }
+
+describe('useGatewayBoot primary event profile ownership', () => {
+  it('labels cold-boot primary events with the adopted non-default profile', async () => {
+    const desktop = fakeDesktop()
+    desktop.profile.get.mockResolvedValue({ profile: 'writer' })
+    ;(window as { hermesDesktop?: unknown }).hermesDesktop = desktop
+    const handleGatewayEvent = vi.fn()
+
+    render(<Harness handleGatewayEvent={handleGatewayEvent} />)
+    await flushAsync()
+    FakeWebSocket.instances.at(-1)?.message({ session_id: 'runtime-writer', type: 'session.started' })
+
+    expect(handleGatewayEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ profile: 'writer', session_id: 'runtime-writer' })
+    )
+  })
+
+  it('updates primary event ownership atomically across a soft connection switch', async () => {
+    const desktop = fakeDesktop()
+    let primaryProfile = 'writer'
+    desktop.profile.get.mockImplementation(async () => ({ profile: primaryProfile }))
+    ;(window as { hermesDesktop?: unknown }).hermesDesktop = desktop
+    const handleGatewayEvent = vi.fn()
+
+    render(<Harness handleGatewayEvent={handleGatewayEvent} />)
+    await flushAsync()
+    FakeWebSocket.instances.at(-1)?.message({ session_id: 'runtime-before', type: 'session.started' })
+
+    primaryProfile = 'reviewer'
+    await act(async () => {
+      connectionApplied?.()
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    FakeWebSocket.instances.at(-1)?.message({ session_id: 'runtime-after', type: 'session.started' })
+
+    expect(handleGatewayEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ profile: 'writer', session_id: 'runtime-before' })
+    )
+    expect(handleGatewayEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ profile: 'reviewer', session_id: 'runtime-after' })
+    )
+  })
+})
 
 describe('useGatewayBoot remote reconnect loop (real hook, fake socket)', () => {
   it('INITIAL boot against a dead VPS: getConnection hangs (waitForHermes) → app sits in the connecting combo, then fails', async () => {

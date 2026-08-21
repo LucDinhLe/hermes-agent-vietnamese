@@ -101,9 +101,15 @@ export async function saveQuickEntrySettings(patch: { enabled?: boolean; shortcu
 
 /** A recent session the quick window can target (pushed by the primary). */
 export interface QuickEntrySessionOption {
+  connectionId?: string
   id: string
+  profile?: string
+  /** Immutable source-qualified picker value. Legacy senders omit it. */
+  target?: string
   title: string
 }
+
+export const quickEntrySessionTarget = (session: QuickEntrySessionOption): string => session.target || session.id
 
 /** Send into whatever chat the main window currently has in front. */
 export const QUICK_TARGET_CURRENT = 'current'
@@ -208,7 +214,7 @@ export function quickComposerReducer(state: QuickComposerState, event: QuickComp
         event.connected &&
         (state.target === QUICK_TARGET_CURRENT ||
           state.target === QUICK_TARGET_NEW ||
-          event.sessions.some(session => session.id === state.target))
+          event.sessions.some(session => quickEntrySessionTarget(session) === state.target))
 
       return {
         send: null,

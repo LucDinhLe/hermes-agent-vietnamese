@@ -18,6 +18,8 @@ import { atom } from 'nanostores'
 import type { SessionMessagesResponse } from '@/types/hermes'
 
 export interface TranscriptTailState {
+  /** Concrete registry source captured with the tail. */
+  connectionId?: null | string
   /** Offset (back from the newest row) where the next older page starts. */
   nextOffset: number
   /** The last hydration page was exactly the page limit, so older rows
@@ -32,30 +34,43 @@ export const $transcriptTailBySessionId = atom<Record<string, TranscriptTailStat
 
 type TailPage = Pick<SessionMessagesResponse, 'messages' | 'pagination'>
 
-function tailStateFromPage(page: TailPage, profile?: null | string): TranscriptTailState {
+function tailStateFromPage(
+  page: TailPage,
+  profile?: null | string,
+  connectionId?: null | string
+): TranscriptTailState {
   const pagination = page.pagination
 
   // No pagination metadata is a legacy backend that ignored the paging query
   // and returned the full transcript: nothing is truncated.
   if (!pagination || pagination.limit <= 0) {
-    return { nextOffset: page.messages.length, possiblyTruncated: false, profile }
+    return { connectionId, nextOffset: page.messages.length, possiblyTruncated: false, profile }
   }
 
   return {
     nextOffset: pagination.offset + page.messages.length,
     possiblyTruncated: page.messages.length >= pagination.limit,
+    connectionId,
     profile
   }
 }
 
 /** Record the outcome of a tail hydration (`getLatestSessionMessages`). */
-export function recordTranscriptTail(storedSessionId: string, page: TailPage, profile?: null | string): void {
+export function recordTranscriptTail(
+  storedSessionId: string,
+  page: TailPage,
+  profile?: null | string,
+  connectionId?: null | string
+): void {
   if (!storedSessionId) {
     return
   }
 
   const current = $transcriptTailBySessionId.get()
-  $transcriptTailBySessionId.set({ ...current, [storedSessionId]: tailStateFromPage(page, profile) })
+  $transcriptTailBySessionId.set({
+    ...current,
+    [storedSessionId]: tailStateFromPage(page, profile, connectionId)
+  })
 }
 
 /** Advance the bookkeeping after one older backfill page landed. */
@@ -64,7 +79,7 @@ export function recordTranscriptBackfillPage(storedSessionId: string, page: Tail
   const previous = current[storedSessionId]
   $transcriptTailBySessionId.set({
     ...current,
-    [storedSessionId]: tailStateFromPage(page, previous?.profile)
+    [storedSessionId]: tailStateFromPage(page, previous?.profile, previous?.connectionId)
   })
 }
 

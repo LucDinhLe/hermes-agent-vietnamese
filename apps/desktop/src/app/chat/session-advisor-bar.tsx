@@ -1,4 +1,3 @@
-import { useStore } from '@nanostores/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 
@@ -13,11 +12,11 @@ import { useI18n } from '@/i18n'
 import { ChevronDown } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { notifyError } from '@/store/notifications'
-import { $activeGatewayProfile } from '@/store/profile'
 import { setCurrentAdvisorEnabled } from '@/store/session'
 import { sessionTileDelegate } from '@/store/session-states'
 import type { AuxiliaryModelsResponse, UsageStats } from '@/types/hermes'
 
+import { SessionAgentsSlot } from './session-agents-contrib'
 import { SessionContextMeter } from './session-context-meter'
 
 interface SessionAdvisorBarProps {
@@ -27,11 +26,17 @@ interface SessionAdvisorBarProps {
   gatewayOpen: boolean
   model: string
   provider: string
+  leadConnectionId?: string | null
+  leadProfile?: string
+  projectKey?: string
+  projectResolutionKnown?: boolean
   sessionId: string | null
+  storedSessionId?: string | null
   usage?: UsageStats | null
 }
 
-const advisorModelQueryKey = (profile: string) => ['advisor-model', profile] as const
+const advisorModelQueryKey = (connectionId: null | string, profile: string) =>
+  ['advisor-model', connectionId || 'primary', profile] as const
 
 interface AdvisorModelSelection {
   model: string
@@ -89,21 +94,26 @@ export function SessionAdvisorBar({
   enabled,
   gateway,
   gatewayOpen,
+  leadConnectionId = null,
+  leadProfile = 'default',
   model,
+  projectKey = '',
+  projectResolutionKnown = false,
   provider,
   sessionId,
+  storedSessionId = null,
   usage
 }: SessionAdvisorBarProps) {
   const { t } = useI18n()
-  const profile = useStore($activeGatewayProfile)
+  const profile = leadProfile.trim() || 'default'
   const [pending, setPending] = useState(false)
   const [modelMenuOpen, setModelMenuOpen] = useState(false)
   const queryClient = useQueryClient()
 
   const auxiliary = useQuery({
     enabled: gatewayOpen,
-    queryFn: () => getAuxiliaryModels(profile),
-    queryKey: advisorModelQueryKey(profile),
+    queryFn: () => getAuxiliaryModels(profile, leadConnectionId),
+    queryKey: advisorModelQueryKey(leadConnectionId, profile),
     staleTime: 60_000
   })
 
@@ -156,7 +166,7 @@ export function SessionAdvisorBar({
       return false
     }
 
-    const queryKey = advisorModelQueryKey(profile)
+    const queryKey = advisorModelQueryKey(leadConnectionId, profile)
     const previous = queryClient.getQueryData<AuxiliaryModelsResponse>(queryKey)
     const next = { model, provider }
 
@@ -173,7 +183,8 @@ export function SessionAdvisorBar({
           scope: 'auxiliary',
           task: 'advisor'
         },
-        profile
+        profile,
+        leadConnectionId
       )
 
       if (result.ok !== true) {
@@ -224,6 +235,15 @@ export function SessionAdvisorBar({
           provider={provider}
           sessionId={sessionId}
           sessionUsage={usage}
+        />
+        <SessionAgentsSlot
+          busy={busy}
+          leadConnectionId={leadConnectionId}
+          leadProfile={leadProfile}
+          projectKey={projectKey}
+          projectResolutionKnown={projectResolutionKnown}
+          runtimeSessionId={sessionId}
+          storedSessionId={storedSessionId}
         />
         <Codicon
           className={cn('size-3.5 shrink-0', enabled ? 'text-primary' : 'text-(--ui-text-quaternary)')}
