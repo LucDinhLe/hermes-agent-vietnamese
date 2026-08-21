@@ -71,6 +71,21 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /src\/store\/profile-agent-activation\.test\.ts/)
   assert.match(candidate, /src\/store\/profile-share\.test\.ts/)
   assert.match(candidate, /src\/store\/session-states-scopes\.test\.ts/)
+  const fixedAgentsGate =
+    candidate.match(/- name: Kiểm thử bề mặt Agents cố định[\s\S]*?(?=\n      - name:)/)?.[0] ?? ''
+  for (const regression of [
+    'src/app/chat/session-drag.test.ts',
+    'src/app/chat/session-tile-actions.test.ts',
+    'src/app/chat/session-tile-attachments.test.tsx',
+    'src/app/chat/session-tile-row.test.ts',
+    'src/app/contrib/hooks/use-quick-entry-bridge.test.ts',
+    'src/app/contrib/hooks/use-session-tile-delegate.test.ts',
+    'src/app/session/hooks/use-session-actions.test.tsx',
+    'src/store/session-states.test.ts',
+    'src/store/session-tile-owner.test.ts'
+  ]) {
+    assert.ok(fixedAgentsGate.includes(regression), `${regression} must stay in the fixed Agents gate`)
+  }
   assert.match(candidate, /src\/app\/shell\/context-usage-panel\.test\.tsx/)
   assert.match(candidate, /src\/app\/chat\/sidebar\/project-dialog\.test\.tsx/)
   assert.match(candidate, /src\/app\/chat\/sidebar\/projects\/project-menu\.test\.tsx/)
