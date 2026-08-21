@@ -550,10 +550,10 @@ function useSessionActions({
 
   const renameDialog = (
     <RenameSessionDialog
+      connectionId={connectionId}
       currentTitle={title}
       onOpenChange={setRenameOpen}
       open={renameOpen}
-      connectionId={connectionId}
       profile={profile}
       runtimeId={runtimeId}
       sessionId={sessionId}

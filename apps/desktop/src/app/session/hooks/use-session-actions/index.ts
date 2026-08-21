@@ -10,10 +10,10 @@ import { type ChatMessage, preserveLocalAssistantErrors, toChatMessages } from '
 import { isMissingRpcMethod } from '@/lib/gateway-rpc'
 import { recoverInFlightTurnJournal } from '@/lib/inflight-turn-journal'
 import { setSessionYolo } from '@/lib/yolo-session'
+import { activeBackendOwner, sameBackendOwner } from '@/store/backend-owner'
 import { normalizeChoices, setClarifyRequest } from '@/store/clarify'
 import { migrateSessionDraft } from '@/store/composer'
 import { clearQueuedPrompts, migrateQueuedPrompts } from '@/store/composer-queue'
-import { activeBackendOwner, sameBackendOwner } from '@/store/backend-owner'
 import { requestGatewayForAgent } from '@/store/gateway'
 import { $gatewaySwitching } from '@/store/gateway-switch'
 import { $pinnedSessionIds } from '@/store/layout'
@@ -81,8 +81,8 @@ import {
   sessionTileForStoredId,
   sessionTileIdentity,
   sessionTileKey,
-  sessionTilePaneId,
   type SessionTileOwner,
+  sessionTilePaneId,
   type TileDock
 } from '@/store/session-states'
 import { broadcastSessionsChanged } from '@/store/session-sync'

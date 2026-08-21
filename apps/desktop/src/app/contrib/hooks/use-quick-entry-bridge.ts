@@ -1,14 +1,14 @@
 import { useEffect, useRef } from 'react'
 
+import { activeBackendOwner } from '@/store/backend-owner'
 import {
   initQuickEntryBridge,
   QUICK_TARGET_CURRENT,
   QUICK_TARGET_NEW,
-  quickEntrySessionTarget,
   type QuickEntrySessionOption,
+  quickEntrySessionTarget,
   setQuickEntrySubmitHandler
 } from '@/store/quick-entry'
-import { activeBackendOwner } from '@/store/backend-owner'
 import { $gatewayState, $sessions } from '@/store/session'
 import { parseSessionTileIdentity, sessionTileDelegate, sessionTileIdentity } from '@/store/session-states'
 import { isAuxiliaryWindow } from '@/store/windows'

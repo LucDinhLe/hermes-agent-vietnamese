@@ -51,10 +51,10 @@ import {
 import type { EngineZone, ZoneRect } from '@/components/pane-shell/tree/zones-engine'
 import {
   openSessionTile,
-  sessionTileIdentity,
-  sessionTilePaneId,
   sessionTileForStoredId,
+  sessionTileIdentity,
   type SessionTileOwner,
+  sessionTilePaneId,
   type TileDock
 } from '@/store/session-states'
 
@@ -202,7 +202,7 @@ export function startSessionDrag(
         // @session currently serializes profile/id, which is not unique across
         // registry sources. A cross-owner link would make B resolve A/S as B/S;
         // deny it until the backend reference grammar carries connectionId.
-        if (!sameOwner) {
+        if (!surface || !sameOwner) {
           split = null
           link = null
 

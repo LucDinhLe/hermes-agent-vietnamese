@@ -24,9 +24,9 @@ import { NEW_SESSION_TITLE, quickModelOptions, sessionTitle } from '@/lib/chat-r
 import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-store-runtime'
 import { modelOptionsQueryKey, requestModelOptions } from '@/lib/model-options'
 import { cn } from '@/lib/utils'
+import { activeBackendOwner, type BackendOwner, sameBackendOwner } from '@/store/backend-owner'
 import { migrateSessionDraft } from '@/store/composer'
 import { migrateQueuedPrompts, parkQueuedPrompts } from '@/store/composer-queue'
-import { activeBackendOwner, type BackendOwner, sameBackendOwner } from '@/store/backend-owner'
 import { $pinnedSessionIds } from '@/store/layout'
 import { $petActive } from '@/store/pet'
 import { $petOverlayActive } from '@/store/pet-overlay'
@@ -638,9 +638,9 @@ export const ChatView = memo(function ChatView({
         'relative isolate flex h-full min-w-0 flex-col overflow-hidden bg-(--ui-chat-surface-background)',
         className
       )}
-      data-chat-surface=""
       data-backend-connection={backendOwner?.connectionId || leadConnectionId || activeConnectionId || undefined}
       data-backend-profile={leadProfile}
+      data-chat-surface=""
       data-composer-target={composerScope.target}
       data-session-anchor={sessionAnchor}
     >

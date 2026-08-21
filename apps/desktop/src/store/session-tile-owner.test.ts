@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { HermesConnection } from '@/global'
+
 const V2_KEY = 'hermes.desktop.sessionTiles.v2'
 const V3_KEY = 'hermes.desktop.sessionTiles.v3'
 

@@ -17,8 +17,8 @@
 import { useStore } from '@nanostores/react'
 import { useEffect, useRef } from 'react'
 
-import { reloadPersistedDrafts, requestComposerDraftSync } from '@/store/composer'
 import { activeBackendOwner, sameBackendOwner } from '@/store/backend-owner'
+import { reloadPersistedDrafts, requestComposerDraftSync } from '@/store/composer'
 import { ensureGatewayForAgent } from '@/store/gateway'
 import { reportHudSession, watchHudState } from '@/store/hud'
 import { $selectedStoredSessionId } from '@/store/session'

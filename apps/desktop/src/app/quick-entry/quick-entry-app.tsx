@@ -8,8 +8,8 @@ import {
   QUICK_TARGET_NEW,
   type QuickComposerEvent,
   quickComposerReducer,
-  quickEntrySessionTarget,
-  type QuickComposerState
+  type QuickComposerState,
+  quickEntrySessionTarget
 } from '@/store/quick-entry'
 
 /**

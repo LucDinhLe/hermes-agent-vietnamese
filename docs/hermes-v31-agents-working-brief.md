@@ -1,7 +1,7 @@
 # Hermes Vietnamese v31.0 — Agents working brief
 
-Status: approved product direction, implementation in progress  
-Candidate contract: `vi-v0.31.0-1` / app version `0.31.0-vi.1`  
+Status: approved product direction, implementation in progress
+Candidate contract: `vi-v0.31.0-1` / app version `0.31.0-vi.1`
 Release class: community prerelease until signing and real-machine smoke satisfy the stable policy
 
 ## Outcome
