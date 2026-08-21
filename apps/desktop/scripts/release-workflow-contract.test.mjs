@@ -52,6 +52,7 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /src\/store\/reasoning-summary\.test\.ts/)
   assert.match(candidate, /src\/app\/settings\/model-settings\.test\.tsx/)
   assert.match(candidate, /src\/app\/chat\/session-advisor-bar\.test\.tsx/)
+  assert.match(candidate, /src\/app\/chat\/session-gateway-control\.test\.tsx/)
   assert.match(candidate, /src\/app\/chat\/index\.test\.tsx/)
   assert.match(candidate, /src\/app\/gateway\/hooks\/use-gateway-boot\.test\.tsx/)
   assert.match(candidate, /src\/app\/hooks\/use-config-record\.test\.ts/)
@@ -71,9 +72,12 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /src\/store\/profile-agent-activation\.test\.ts/)
   assert.match(candidate, /src\/store\/profile-share\.test\.ts/)
   assert.match(candidate, /src\/store\/session-states-scopes\.test\.ts/)
+  assert.match(candidate, /src\/store\/system-actions\.test\.ts/)
   const fixedAgentsGate =
     candidate.match(/- name: Kiểm thử bề mặt Agents cố định[\s\S]*?(?=\n      - name:)/)?.[0] ?? ''
   for (const regression of [
+    'src/app/chat/session-advisor-bar.test.tsx',
+    'src/app/chat/session-gateway-control.test.tsx',
     'src/app/chat/session-drag.test.ts',
     'src/app/chat/session-tile-actions.test.ts',
     'src/app/chat/session-tile-attachments.test.tsx',
@@ -81,8 +85,10 @@ test('candidate workflow builds the complete resident runtime on every advertise
     'src/app/contrib/hooks/use-quick-entry-bridge.test.ts',
     'src/app/contrib/hooks/use-session-tile-delegate.test.ts',
     'src/app/session/hooks/use-session-actions.test.tsx',
+    'src/hermes-profile-scope.test.ts',
     'src/store/session-states.test.ts',
-    'src/store/session-tile-owner.test.ts'
+    'src/store/session-tile-owner.test.ts',
+    'src/store/system-actions.test.ts'
   ]) {
     assert.ok(fixedAgentsGate.includes(regression), `${regression} must stay in the fixed Agents gate`)
   }
@@ -109,6 +115,7 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /tests\/tui_gateway\/test_advisor_session_scope\.py/)
   assert.match(candidate, /tests\/tui_gateway\/test_profiles_create_credentials\.py/)
   assert.match(candidate, /tests\/tui_gateway\/test_protocol\.py/)
+  assert.match(candidate, /tests\/hermes_cli\/test_web_server_profile_unification\.py/)
   assert.match(candidate, /tests\/test_public_release_downloads\.py/)
   assert.match(candidate, /tests\/test_tui_gateway_server\.py/)
   assert.match(candidate, /npm run --prefix apps\/desktop check:test:plugins/)
@@ -116,6 +123,7 @@ test('candidate workflow builds the complete resident runtime on every advertise
   for (const requiredPreDraftGate of [
     'npm run --prefix apps/desktop lint',
     'src/hermes-profile-scope.test.ts',
+    'src/app/chat/session-gateway-control.test.tsx',
     'src/app/hooks/use-config-record.test.ts',
     'src/app/skills/index.test.tsx',
     'src/app/settings/toolset-config-panel.test.tsx',
@@ -125,8 +133,10 @@ test('candidate workflow builds the complete resident runtime on every advertise
     'src/store/mcp-deeplink-install.test.ts',
     'src/store/onboarding.test.ts',
     'src/store/starmap.test.ts',
+    'src/store/system-actions.test.ts',
     'src/store/voice-prefs.test.ts',
-    'src/sdk/profile-routing.test.ts'
+    'src/sdk/profile-routing.test.ts',
+    'tests/hermes_cli/test_web_server_profile_unification.py'
   ]) {
     assert.ok(
       candidate.indexOf(requiredPreDraftGate) < candidate.indexOf('gh release create "$TAG"'),

@@ -22,11 +22,7 @@ import {
   $selectedStoredSessionId,
   $sessions
 } from '@/store/session'
-import {
-  clearAllSessionStates,
-  recordPrimarySessionEventSource,
-  recordSessionEventScope
-} from '@/store/session-states'
+import { clearAllSessionStates, recordPrimarySessionEventSource, recordSessionEventScope } from '@/store/session-states'
 
 const threadRenderCount = vi.hoisted(() => ({ current: 0 }))
 const advisorRender = vi.hoisted(() => ({ current: null as null | Record<string, unknown> }))
@@ -290,6 +286,7 @@ describe('ChatView render isolation', () => {
     )
 
     expect(advisorRender.current?.leadConnectionId).toBe('homelab')
+    expect(advisorRender.current?.gatewayConnectionId).toBe('homelab')
     expect(advisorRender.current?.leadProfile).toBe('remote-lead')
   })
 
@@ -439,5 +436,52 @@ describe('ChatView render isolation', () => {
     )
 
     expect(advisorRender.current?.leadConnectionId).toBe('local')
+    expect(advisorRender.current?.gatewayConnectionId).toBe('local')
+  })
+
+  it('keeps draft Agents unresolved while binding Gateway to the active source', () => {
+    clearAllSessionStates()
+    $activeSessionId.set(null)
+    $selectedStoredSessionId.set(null)
+    $sessions.set([])
+    $connection.set({ connectionId: 'registry-b', mode: 'remote' } as never)
+
+    const props = {
+      gateway: null,
+      maxVoiceRecordingSeconds: 120,
+      onAddContextRef: vi.fn(),
+      onAddUrl: vi.fn(),
+      onAttachDroppedItems: vi.fn(),
+      onAttachImageBlob: vi.fn(),
+      onBranchInNewChat: vi.fn(),
+      onCancel: vi.fn(),
+      onDeleteSelectedSession: vi.fn(),
+      onEdit: vi.fn(),
+      onPasteClipboardImage: vi.fn(),
+      onPickFiles: vi.fn(),
+      onPickFolders: vi.fn(),
+      onPickImages: vi.fn(),
+      onReload: vi.fn(),
+      onRemoveAttachment: vi.fn(),
+      onRetryResume: vi.fn(),
+      onSteer: vi.fn(),
+      onSubmit: vi.fn(),
+      onThreadMessagesChange: vi.fn(),
+      onToggleSelectedPin: vi.fn(),
+      onTranscribeAudio: vi.fn()
+    }
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/']}>
+          <ChatView {...props} />
+        </MemoryRouter>
+      </QueryClientProvider>
+    )
+
+    expect(advisorRender.current?.leadConnectionId).toBeNull()
+    expect(advisorRender.current?.gatewayConnectionId).toBe('registry-b')
   })
 })

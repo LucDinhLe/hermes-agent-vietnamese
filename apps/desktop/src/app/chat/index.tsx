@@ -661,6 +661,7 @@ export const ChatView = memo(function ChatView({
         busy={busy}
         enabled={advisorEnabled}
         gateway={gateway}
+        gatewayConnectionId={leadConnectionId || activeConnectionId || null}
         gatewayOpen={gatewayOpen}
         leadConnectionId={leadConnectionId}
         leadProfile={leadProfile}

@@ -39,4 +39,23 @@ describe('Vietnamese community interface', () => {
     expect(progress.advisorFinalAction).toBe('Advisor đang đối chiếu kết quả cuối')
     expect(progress.advisorFinalReason).toContain('mục tiêu ban đầu')
   })
+
+  it('localizes the per-session Gateway lifecycle menu and its safe stop boundary', () => {
+    const gateway = vi.shell.gatewayMenu
+
+    expect(gateway.gateway).toBe('Gateway')
+    expect(gateway.statusRunning).toBe('Đang chạy')
+    expect(gateway.statusStopped).toBe('Đã dừng')
+    expect(gateway.pidLabel(20756)).toBe('PID 20756')
+    expect(gateway.startGateway).toBe('Khởi động')
+    expect(gateway.restartGateway).toBe('Khởi động lại')
+    expect(gateway.stopGateway).toBe('Dừng')
+    expect(gateway.forceStopGateway).toBe('Dừng cưỡng bức')
+    expect(gateway.forceStopUnavailable).toContain('không khả dụng')
+    expect(gateway.viewLogs).toBe('Xem nhật ký')
+    expect(gateway.runDoctor).toBe('Chạy doctor')
+    expect(gateway.checkHealth).toBe('Kiểm tra sức khỏe')
+    expect(gateway.stopConfirmBody('lead-agent')).toContain('lead-agent')
+    expect(gateway.logsEmpty).toBe('Chưa có nhật ký cổng.')
+  })
 })

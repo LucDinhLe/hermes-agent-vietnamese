@@ -51,11 +51,12 @@ class TestParseReleaseTag:
         assert newer is not None and older is not None
         assert newer > older
 
-    def test_v31_candidate_is_newer_than_vi39(self):
-        candidate = _parse_release_tag("vi-v0.31.0-1")
+    def test_v31_successor_is_newer_than_the_first_candidate_and_vi39(self):
+        candidate = _parse_release_tag("vi-v0.31.0-2")
+        first_candidate = _parse_release_tag("vi-v0.31.0-1")
         vi39 = _parse_release_tag("vi-v0.20.4-39")
-        assert candidate is not None and vi39 is not None
-        assert candidate > vi39
+        assert candidate is not None and first_candidate is not None and vi39 is not None
+        assert candidate > first_candidate > vi39
 
 
 class TestLatestReleaseTagFromLsRemote:
@@ -119,12 +120,13 @@ class TestLatestPublicReleaseFromGitHub:
         ]
         assert _latest_public_release_tag_from_releases(releases) == "vi-v0.20.0-28"
 
-    def test_v31_candidate_wins_over_the_published_vi39_line(self):
+    def test_v31_successor_wins_over_the_first_candidate_and_published_vi39_line(self):
         releases = [
+            {"tag_name": "vi-v0.31.0-2", "draft": False, "prerelease": True},
             {"tag_name": "vi-v0.31.0-1", "draft": False, "prerelease": True},
             {"tag_name": "vi-v0.20.4-39", "draft": False, "prerelease": True},
         ]
-        assert _latest_public_release_tag_from_releases(releases) == "vi-v0.31.0-1"
+        assert _latest_public_release_tag_from_releases(releases) == "vi-v0.31.0-2"
 
     def test_resolver_peels_only_the_published_release_tag(self, tmp_path):
         tag = "vi-v0.20.0-28"

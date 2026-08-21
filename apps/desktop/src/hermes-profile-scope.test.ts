@@ -21,6 +21,7 @@ import {
   installSkillFromHub,
   pollOAuthSession,
   restartGateway,
+  runDoctor,
   saveHermesConfig,
   saveMcpServers,
   saveMemoryProviderConfig,
@@ -30,7 +31,9 @@ import {
   setSkillEnabled,
   setToolsetEnabled,
   speakText,
+  startGateway,
   startOAuthLogin,
+  stopGateway,
   transcribeAudio,
   updateHermes
 } from './hermes'
@@ -164,6 +167,35 @@ describe('backend action helpers are profile-scoped', () => {
 
     for (const call of api.mock.calls) {
       expect(call[0]).toMatchObject({ connectionId: 'local', profile: 'researcher' })
+    }
+  })
+
+  it('pins every gateway header request to the captured backend owner', () => {
+    setApiRequestProfile('ambient')
+    setApiRequestConnection('source-b')
+
+    void getStatus('researcher', 'source-a')
+    void getLogs({ file: 'gateway' }, 'researcher', 'source-a')
+    void startGateway('researcher', 'source-a')
+    void restartGateway('researcher', 'source-a')
+    void stopGateway('researcher', 'source-a')
+    void runDoctor('researcher', 'source-a')
+
+    expect(api.mock.calls.map(call => call[0].path)).toEqual([
+      '/api/status',
+      '/api/logs?file=gateway',
+      '/api/gateway/start',
+      '/api/gateway/restart',
+      '/api/gateway/stop',
+      '/api/ops/doctor'
+    ])
+
+    for (const call of api.mock.calls) {
+      expect(call[0]).toMatchObject({ connectionId: 'source-a', profile: 'researcher' })
+    }
+
+    for (const call of api.mock.calls.slice(2)) {
+      expect(call[0].method).toBe('POST')
     }
   })
 

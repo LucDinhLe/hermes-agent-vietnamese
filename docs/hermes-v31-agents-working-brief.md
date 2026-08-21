@@ -1,7 +1,7 @@
 # Hermes Vietnamese v31.0 — Agents working brief
 
-Status: source implementation complete, candidate verification in progress
-Candidate contract: `vi-v0.31.0-1` / app version `0.31.0-vi.1`
+Status: successor candidate preparation in progress; `vi-v0.31.0-1` remains immutable and is not promotable
+Candidate contract: `vi-v0.31.0-2` / app version `0.31.0-vi.2`; the first draft `vi-v0.31.0-1` remains preserved and unchanged
 Release class: community prerelease until signing and real-machine smoke satisfy the stable policy
 
 ## Outcome
@@ -44,10 +44,10 @@ New collaboration membership data is additive and versioned. A missing or malfor
 
 - Product version: `31.0`.
 - Technical/app base: `0.31.0`.
-- Candidate: `vi-v0.31.0-1`, app SemVer `0.31.0-vi.1`.
+- Candidate: `vi-v0.31.0-2`, app SemVer `0.31.0-vi.2`.
 - Upstream Hermes Agent version: `0.20.4`, displayed as a separate provenance field.
 - Installed identity and bootstrap/resident-runtime markers remain compatible with `0.20.4-vi.39`.
-- Updater ordering must prove `0.31.0-vi.1 > 0.20.4-vi.39` on every supported feed target.
+- Updater ordering must prove `0.31.0-vi.2 > 0.31.0-vi.1 > 0.20.4-vi.39` on every supported feed target.
 
 ## Acceptance gates
 
@@ -61,4 +61,17 @@ New collaboration membership data is additive and versioned. A missing or malfor
 
 ## Release boundary
 
-The workflow may create and publish `vi-v0.31.0-1` as a public community prerelease after the pilot gates pass. It must not rewrite `vi-v0.20.4-39`, move the stable/Latest contract, or claim stable status. Stable promotion remains blocked until platform signing/notarization and required real-machine smoke are complete.
+The workflow may create and publish `vi-v0.31.0-2` as a public community prerelease after the pilot gates pass. It must leave the tagged/draft `vi-v0.31.0-1` untouched, must not rewrite `vi-v0.20.4-39`, move the stable/Latest contract, or claim stable status. Stable promotion remains blocked until platform signing/notarization and required real-machine smoke are complete.
+
+## Post-candidate header delta
+
+The first exact-byte Windows smoke exposed that the gateway control was too far from the session-scoped collaboration controls. The next candidate therefore uses one fixed, left-to-right header contract:
+
+1. **Gateway** — the leftmost control in the session header. Its status and actions belong to the exact `connectionId + profile` that owns that chat or tile.
+2. **Agents** — lead and collaborator membership for that exact session/project.
+3. **Context** — current context/cost meter for that exact session.
+4. **Advisor** — model and enablement controls for that exact session.
+
+The Gateway trigger reuses the existing gateway status/menu behavior instead of creating a second lifecycle implementation. Logs, health, doctor, restart, stop, or any stronger stop action must be routed to the captured chat owner or fail closed when that owner cannot be proven. A background tile must never act on the ambient/foreground gateway. Destructive lifecycle actions remain visibly distinct and require the same confirmation/safety semantics as their existing implementation.
+
+Acceptance for this delta requires a behavior test that proves the exact DOM order `Gateway -> Agents -> Context -> Advisor`, a narrow-pane regression, and same-profile cross-source routing tests for every gateway mutation exposed by the menu. The tagged `vi-v0.31.0-1` draft is preserved unchanged; after these gates pass, release preparation continues as the new immutable candidate `vi-v0.31.0-2` rather than moving or rebuilding the old tag.

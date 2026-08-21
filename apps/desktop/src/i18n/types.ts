@@ -2318,11 +2318,32 @@ export interface Translations {
       connected: string
       connecting: string
       offline: string
+      statusRunning: string
+      statusStopped: string
+      statusUnknown: string
+      pidLabel: (pid: number) => string
       inferenceReady: string
       inferenceNotReady: string
       checkingInference: string
       disconnected: string
       reconnectGateway: string
+      startGateway: string
+      restartGateway: string
+      stopGateway: string
+      forceStopGateway: string
+      forceStopUnavailable: string
+      viewLogs: string
+      runDoctor: string
+      checkHealth: string
+      stopConfirmTitle: string
+      stopConfirmBody: (profile: string) => string
+      actionFailed: (action: string) => string
+      statusLoadFailed: string
+      logsEmpty: string
+      logsLoadFailed: string
+      doctorStarted: string
+      healthHealthy: string
+      healthUnhealthy: string
       openSystem: string
       connection: (label: string) => string
       recentActivity: string

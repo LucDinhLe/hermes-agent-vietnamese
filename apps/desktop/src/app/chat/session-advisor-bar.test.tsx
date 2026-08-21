@@ -65,7 +65,7 @@ describe('SessionAdvisorBar', () => {
     expect(await screen.findByText('advisor-model')).toBeTruthy()
   })
 
-  it('mounts the session-scoped Agents control between context usage and Advisor', async () => {
+  it('orders Gateway, Agents, context usage, and Advisor for the exact session', async () => {
     const received: Array<Parameters<SessionAgentsContribution['render']>[0]> = []
 
     const dispose = registry.register({
@@ -86,6 +86,7 @@ describe('SessionAdvisorBar', () => {
         busy: true,
         enabled: false,
         gateway: null,
+        gatewayConnectionId: 'homelab',
         gatewayOpen: true,
         leadConnectionId: 'homelab',
         leadProfile: 'lead-agent',
@@ -108,15 +109,25 @@ describe('SessionAdvisorBar', () => {
         storedSessionId: 'stored-42'
       })
 
-      const meter = container.querySelector('[data-session-context-meter]')
+      const gatewayControl = container.querySelector('[data-session-gateway-control]')
       const agents = container.querySelector('[data-session-agents-slot]')
+      const meter = container.querySelector('[data-session-context-meter]')
       const shield = container.querySelector('.codicon-shield')
 
+      expect(gatewayControl).toBeTruthy()
       expect(meter).toBeTruthy()
       expect(agents).toBeTruthy()
       expect(shield).toBeTruthy()
-      expect(meter!.compareDocumentPosition(agents!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-      expect(agents!.compareDocumentPosition(shield!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(gatewayControl!.compareDocumentPosition(agents!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(agents!.compareDocumentPosition(meter!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+      expect(meter!.compareDocumentPosition(shield!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+      const gatewayTrigger = container.querySelector('[data-session-gateway-trigger]')
+      expect(gatewayTrigger?.className).toContain('gap-1')
+      expect(gatewayTrigger?.querySelector('svg')).toBeTruthy()
+      const gatewayLabel = screen.getByText('Gateway')
+      expect(gatewayLabel.className).toContain('hidden')
+      expect(gatewayLabel.className).toContain('@sm:inline')
     } finally {
       dispose()
     }

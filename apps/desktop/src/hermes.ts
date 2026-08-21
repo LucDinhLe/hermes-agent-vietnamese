@@ -941,9 +941,12 @@ export function getGlobalModelInfo(profile?: null | string, connectionId?: null 
   })
 }
 
-export function getStatus(): Promise<StatusResponse> {
+export function getStatus(
+  profile?: null | string,
+  connectionId?: null | string
+): Promise<StatusResponse> {
   return window.hermesDesktop.api<StatusResponse>({
-    ...profileScoped(),
+    ...profileScoped(profile, connectionId),
     path: '/api/status'
   })
 }
@@ -2085,10 +2088,35 @@ export function setModelAssignment(
   })
 }
 
-export function restartGateway(): Promise<ActionResponse> {
+export function startGateway(
+  profile?: null | string,
+  connectionId?: null | string
+): Promise<ActionResponse> {
   return window.hermesDesktop.api<ActionResponse>({
-    ...profileScoped(),
+    ...profileScoped(profile, connectionId),
+    path: '/api/gateway/start',
+    method: 'POST'
+  })
+}
+
+export function restartGateway(
+  profile?: null | string,
+  connectionId?: null | string
+): Promise<ActionResponse> {
+  return window.hermesDesktop.api<ActionResponse>({
+    ...profileScoped(profile, connectionId),
     path: '/api/gateway/restart',
+    method: 'POST'
+  })
+}
+
+export function stopGateway(
+  profile?: null | string,
+  connectionId?: null | string
+): Promise<ActionResponse> {
+  return window.hermesDesktop.api<ActionResponse>({
+    ...profileScoped(profile, connectionId),
+    path: '/api/gateway/stop',
     method: 'POST'
   })
 }
@@ -2415,8 +2443,16 @@ export function runCurator(): Promise<ActionResponse> {
 // getActionStatus().
 // ---------------------------------------------------------------------------
 
-export function runDoctor(): Promise<ActionResponse> {
-  return window.hermesDesktop.api<ActionResponse>({ path: '/api/ops/doctor', method: 'POST', body: {} })
+export function runDoctor(
+  profile?: null | string,
+  connectionId?: null | string
+): Promise<ActionResponse> {
+  return window.hermesDesktop.api<ActionResponse>({
+    ...profileScoped(profile, connectionId),
+    path: '/api/ops/doctor',
+    method: 'POST',
+    body: {}
+  })
 }
 
 export function runSecurityAudit(): Promise<ActionResponse> {

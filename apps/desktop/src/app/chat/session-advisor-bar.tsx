@@ -18,11 +18,13 @@ import type { AuxiliaryModelsResponse, UsageStats } from '@/types/hermes'
 
 import { SessionAgentsSlot } from './session-agents-contrib'
 import { SessionContextMeter } from './session-context-meter'
+import { SessionGatewayControl } from './session-gateway-control'
 
 interface SessionAdvisorBarProps {
   busy: boolean
   enabled: boolean
   gateway: HermesGateway | null
+  gatewayConnectionId?: string | null
   gatewayOpen: boolean
   model: string
   provider: string
@@ -93,6 +95,7 @@ export function SessionAdvisorBar({
   busy,
   enabled,
   gateway,
+  gatewayConnectionId = null,
   gatewayOpen,
   leadConnectionId = null,
   leadProfile = 'default',
@@ -227,15 +230,7 @@ export function SessionAdvisorBar({
       data-session-advisor-bar=""
     >
       <div className="ml-auto flex min-w-0 max-w-full items-center justify-end gap-1.5">
-        <SessionContextMeter
-          busy={busy}
-          gateway={gateway}
-          gatewayOpen={gatewayOpen}
-          model={model}
-          provider={provider}
-          sessionId={sessionId}
-          sessionUsage={usage}
-        />
+        <SessionGatewayControl backendReady={gatewayOpen} connectionId={gatewayConnectionId} profile={profile} />
         <SessionAgentsSlot
           busy={busy}
           leadConnectionId={leadConnectionId}
@@ -244,6 +239,15 @@ export function SessionAdvisorBar({
           projectResolutionKnown={projectResolutionKnown}
           runtimeSessionId={sessionId}
           storedSessionId={storedSessionId}
+        />
+        <SessionContextMeter
+          busy={busy}
+          gateway={gateway}
+          gatewayOpen={gatewayOpen}
+          model={model}
+          provider={provider}
+          sessionId={sessionId}
+          sessionUsage={usage}
         />
         <Codicon
           className={cn('size-3.5 shrink-0', enabled ? 'text-primary' : 'text-(--ui-text-quaternary)')}

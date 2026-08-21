@@ -136,6 +136,7 @@ jobs:
           npm run --prefix apps/desktop test:ui --
           src/app/chat/index.test.tsx
           src/app/chat/session-advisor-bar.test.tsx
+          src/app/chat/session-gateway-control.test.tsx
           src/app/chat/session-drag.test.ts
           src/app/chat/session-tile-actions.test.ts
           src/app/chat/session-tile-attachments.test.tsx
@@ -172,6 +173,7 @@ jobs:
           src/store/session-states-scopes.test.ts
           src/store/session-tile-owner.test.ts
           src/store/starmap.test.ts
+          src/store/system-actions.test.ts
           src/store/suggestion-providers/mcp.test.ts
           src/store/suggestion-providers/repair.test.ts
           src/store/suggestion-providers/skill.test.ts
@@ -229,6 +231,7 @@ jobs:
           tests/hermes_cli/test_update_channel_stable.py
           tests/hermes_cli/test_update_eject.py
           tests/hermes_cli/test_version_info.py
+          tests/hermes_cli/test_web_server_profile_unification.py
           tests/test_public_release_downloads.py
           tests/agent/test_oneshot.py
           tests/agent/test_advisor.py

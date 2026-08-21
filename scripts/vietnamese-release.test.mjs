@@ -33,19 +33,25 @@ test("current Vietnamese candidate keeps product, technical, and upstream versio
   const desktopPackage = JSON.parse(
     fs.readFileSync(new URL("../apps/desktop/package.json", import.meta.url), "utf8"),
   )
+  const publicRelease = JSON.parse(
+    fs.readFileSync(new URL("../.github/public-release.json", import.meta.url), "utf8"),
+  )
   const runtime = spawnSync(
     process.env.PYTHON || "python",
     ["-c", "import hermes_cli; print(hermes_cli.__version__)"],
     { cwd: new URL("..", import.meta.url), encoding: "utf8" },
   )
-  const candidate = resolveVietnameseReleaseCandidate(
-    `vi-v${VI_PRODUCT_RELEASE.technicalVersion}-1`,
-  )
+  const expectedTag = `vi-v${VI_PRODUCT_RELEASE.technicalVersion}-2`
+  const candidate = resolveVietnameseReleaseCandidate(publicRelease.featuredCandidate.tag)
 
   assert.equal(runtime.status, 0, runtime.stderr)
+  assert.equal(publicRelease.tag, "vi-v0.20.0-25")
+  assert.equal(publicRelease.featuredCandidate.tag, expectedTag)
+  assert.equal(candidate.tag, expectedTag)
   assert.equal(candidate.productVersion, VI_PRODUCT_RELEASE.productVersion)
   assert.equal(candidate.baseVersion, VI_PRODUCT_RELEASE.technicalVersion)
-  assert.equal(candidate.appVersion, `${VI_PRODUCT_RELEASE.technicalVersion}-vi.1`)
+  assert.equal(candidate.iteration, 2)
+  assert.equal(candidate.appVersion, `${VI_PRODUCT_RELEASE.technicalVersion}-vi.2`)
   assert.equal(candidate.releaseTitle, `Hermes Vietnamese ${VI_PRODUCT_RELEASE.productVersion}`)
   assert.equal(desktopPackage.version, VI_PRODUCT_RELEASE.technicalVersion)
   assert.equal(runtime.stdout.trim(), VI_PRODUCT_RELEASE.upstreamVersion)

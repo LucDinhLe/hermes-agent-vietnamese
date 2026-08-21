@@ -421,6 +421,185 @@ class TestProfileScopedPostSetup:
 
 class TestProfileScopedGateway:
 
+    def test_lifecycle_and_doctor_target_requested_profile(
+        self, client, isolated_profiles, monkeypatch
+    ):
+        import hermes_cli.web_server as web_server
+
+        calls = []
+
+        class _FakeProc:
+            pid = 4242
+
+        def fake_spawn_action(subcommand, name):
+            calls.append((list(subcommand), name))
+            return _FakeProc()
+
+        def fake_spawn_restart(profile=None):
+            calls.append((profile, "gateway-restart"))
+            return _FakeProc(), False
+
+        monkeypatch.setattr(web_server, "_spawn_hermes_action", fake_spawn_action)
+        monkeypatch.setattr(web_server, "_spawn_gateway_restart", fake_spawn_restart)
+
+        responses = []
+        for path in (
+            "/api/gateway/start",
+            "/api/gateway/restart",
+            "/api/gateway/stop",
+            "/api/ops/doctor",
+        ):
+            response = client.post(path, params={"profile": "worker_beta"})
+            assert response.status_code == 200
+            responses.append(response)
+
+        assert [response.json()["name"] for response in responses] == [
+            "gateway-start-worker_beta",
+            "gateway-restart",
+            "gateway-stop-worker_beta",
+            "doctor-worker_beta",
+        ]
+
+        assert calls == [
+            (
+                ["-p", "worker_beta", "gateway", "start"],
+                "gateway-start-worker_beta",
+            ),
+            ("worker_beta", "gateway-restart"),
+            (
+                ["-p", "worker_beta", "gateway", "stop"],
+                "gateway-stop-worker_beta",
+            ),
+            (["-p", "worker_beta", "doctor"], "doctor-worker_beta"),
+        ]
+
+    def test_unscoped_actions_keep_legacy_registry_names(
+        self, client, isolated_profiles, monkeypatch
+    ):
+        import hermes_cli.web_server as web_server
+
+        calls = []
+
+        class _FakeProc:
+            pid = 4242
+
+        monkeypatch.setattr(
+            web_server,
+            "_spawn_hermes_action",
+            lambda subcommand, name: calls.append((list(subcommand), name))
+            or _FakeProc(),
+        )
+
+        responses = [
+            client.post("/api/gateway/start"),
+            client.post("/api/gateway/stop"),
+            client.post("/api/ops/doctor"),
+        ]
+
+        assert [response.status_code for response in responses] == [200, 200, 200]
+        assert [response.json()["name"] for response in responses] == [
+            "gateway-start",
+            "gateway-stop",
+            "doctor",
+        ]
+        assert calls == [
+            (["gateway", "start"], "gateway-start"),
+            (["gateway", "stop"], "gateway-stop"),
+            (["doctor"], "doctor"),
+        ]
+
+    def test_concurrent_profiles_use_distinct_process_and_log_registry_entries(
+        self, client, monkeypatch, tmp_path
+    ):
+        import hermes_cli.web_server as web_server
+
+        monkeypatch.setattr(web_server, "_ACTION_PROCS", {})
+        monkeypatch.setattr(web_server, "_ACTION_COMMANDS", {})
+        monkeypatch.setattr(web_server, "_ACTION_IDS", {})
+        monkeypatch.setattr(web_server, "_ACTION_RESULTS", {})
+        monkeypatch.setattr(
+            web_server,
+            "_ACTION_LOG_FILES",
+            dict(web_server._ACTION_LOG_FILES),
+        )
+        action_log_dir = tmp_path / "action-logs"
+        monkeypatch.setattr(web_server, "_ACTION_LOG_DIR", action_log_dir)
+
+        class _FakeProc:
+            def __init__(self, pid):
+                self.pid = pid
+
+            def poll(self):
+                return None
+
+        pids = iter(range(5100, 5106))
+        monkeypatch.setattr(
+            web_server.subprocess,
+            "Popen",
+            lambda *args, **kwargs: _FakeProc(next(pids)),
+        )
+
+        responses = []
+        for profile in ("default", "worker_beta"):
+            for path in (
+                "/api/gateway/start",
+                "/api/gateway/stop",
+                "/api/ops/doctor",
+            ):
+                responses.append(client.post(path, params={"profile": profile}))
+
+        assert [response.status_code for response in responses] == [200] * 6
+        action_names = [response.json()["name"] for response in responses]
+        assert len(set(action_names)) == 6
+        assert set(web_server._ACTION_PROCS) == set(action_names)
+        assert set(web_server._ACTION_COMMANDS) == set(action_names)
+
+        log_files = [web_server._ACTION_LOG_FILES[name] for name in action_names]
+        assert len(set(log_files)) == 6
+        assert all((action_log_dir / log_file).is_file() for log_file in log_files)
+
+        statuses = [
+            client.get(f"/api/actions/{action_name}/status")
+            for action_name in action_names
+        ]
+        assert [response.status_code for response in statuses] == [200] * 6
+        assert [response.json()["name"] for response in statuses] == action_names
+        assert [response.json()["pid"] for response in statuses] == list(
+            range(5100, 5106)
+        )
+        assert all(response.json()["running"] for response in statuses)
+
+        assert web_server._ACTION_COMMANDS["gateway-start-default"] == (
+            "gateway",
+            "start",
+        )
+        assert web_server._ACTION_COMMANDS["doctor-worker_beta"] == (
+            "-p",
+            "worker_beta",
+            "doctor",
+        )
+
+    def test_logs_read_requested_profile_home(
+        self, client, isolated_profiles
+    ):
+        for label, home in isolated_profiles.items():
+            logs_dir = home / "logs"
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            (logs_dir / "gateway.log").write_text(
+                f"2026-08-22 10:00:00 INFO gateway.run: {label}-only\n",
+                encoding="utf-8",
+            )
+
+        response = client.get(
+            "/api/logs",
+            params={"file": "gateway", "profile": "worker_beta"},
+        )
+
+        assert response.status_code == 200
+        lines = "\n".join(response.json()["lines"])
+        assert "worker_beta-only" in lines
+        assert "default-only" not in lines
+
     def test_status_reads_requested_profile_home(
         self, client, isolated_profiles, monkeypatch
     ):

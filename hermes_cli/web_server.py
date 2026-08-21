@@ -4542,6 +4542,28 @@ def _gateway_subcommand(profile: Optional[str], verb: str) -> List[str]:
     return _profile_cli_args(profile) + ["gateway", verb]
 
 
+def _profile_action_name(base_name: str, profile: Optional[str]) -> str:
+    """Return a profile-safe registry key while preserving legacy names.
+
+    Unscoped/current requests keep the historical action name. An explicitly
+    selected profile gets its own process, result, and Windows-safe log key so
+    concurrent actions for two profiles cannot overwrite each other.
+    """
+    requested = (profile or "").strip()
+    profile_args = _profile_cli_args(profile)
+    if not requested or requested.lower() == "current":
+        return base_name
+
+    canonical_profile = profile_args[1] if profile_args else "default"
+    action_name = f"{base_name}-{canonical_profile}"
+    base_log = Path(_ACTION_LOG_FILES[base_name])
+    _ACTION_LOG_FILES.setdefault(
+        action_name,
+        f"{base_log.stem}-{canonical_profile}{base_log.suffix}",
+    )
+    return action_name
+
+
 def _gateway_display_command(profile: Optional[str], verb: str) -> str:
     return " ".join(["hermes", *_gateway_subcommand(profile, verb)])
 
@@ -12247,13 +12269,15 @@ async def get_logs(
     level: Optional[str] = None,
     component: Optional[str] = None,
     search: Optional[str] = None,
+    profile: Optional[str] = None,
 ):
     from hermes_cli.logs import _read_tail, LOG_FILES
 
     log_name = LOG_FILES.get(file)
     if not log_name:
         raise HTTPException(status_code=400, detail=f"Unknown log file: {file}")
-    log_path = get_hermes_home() / "logs" / log_name
+    with _config_profile_scope(profile):
+        log_path = get_hermes_home() / "logs" / log_name
     if not log_path.exists():
         return {"file": file, "lines": []}
 
@@ -13672,25 +13696,31 @@ async def set_webhook_enabled(name: str, body: WebhookEnabledToggle):
 @app.post("/api/gateway/start")
 async def start_gateway(profile: Optional[str] = None):
     try:
-        proc = _spawn_hermes_action(_gateway_subcommand(profile, "start"), "gateway-start")
+        action_name = _profile_action_name("gateway-start", profile)
+        proc = _spawn_hermes_action(
+            _gateway_subcommand(profile, "start"), action_name
+        )
     except HTTPException:
         raise
     except Exception as exc:
         _log.exception("Failed to spawn gateway start")
         raise HTTPException(status_code=500, detail=f"Failed to start gateway: {exc}")
-    return {"ok": True, "pid": proc.pid, "name": "gateway-start"}
+    return {"ok": True, "pid": proc.pid, "name": action_name}
 
 
 @app.post("/api/gateway/stop")
 async def stop_gateway(profile: Optional[str] = None):
     try:
-        proc = _spawn_hermes_action(_gateway_subcommand(profile, "stop"), "gateway-stop")
+        action_name = _profile_action_name("gateway-stop", profile)
+        proc = _spawn_hermes_action(
+            _gateway_subcommand(profile, "stop"), action_name
+        )
     except HTTPException:
         raise
     except Exception as exc:
         _log.exception("Failed to spawn gateway stop")
         raise HTTPException(status_code=500, detail=f"Failed to stop gateway: {exc}")
-    return {"ok": True, "pid": proc.pid, "name": "gateway-stop"}
+    return {"ok": True, "pid": proc.pid, "name": action_name}
 
 
 # ---------------------------------------------------------------------------
@@ -13951,13 +13981,18 @@ async def reset_memory(body: MemoryReset):
 
 
 @app.post("/api/ops/doctor")
-async def run_doctor():
+async def run_doctor(profile: Optional[str] = None):
     try:
-        proc = _spawn_hermes_action(["doctor"], "doctor")
+        action_name = _profile_action_name("doctor", profile)
+        proc = _spawn_hermes_action(
+            _profile_cli_args(profile) + ["doctor"], action_name
+        )
+    except HTTPException:
+        raise
     except Exception as exc:
         _log.exception("Failed to spawn doctor")
         raise HTTPException(status_code=500, detail=f"Failed to run doctor: {exc}")
-    return {"ok": True, "pid": proc.pid, "name": "doctor"}
+    return {"ok": True, "pid": proc.pid, "name": action_name}
 
 
 @app.post("/api/ops/security-audit")
