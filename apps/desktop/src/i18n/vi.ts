@@ -2813,7 +2813,15 @@ export const vi = defineLocale({
       stopConfirmTitle: 'Dừng cổng này?',
       stopConfirmBody: profile =>
         `Các phiên đang hoạt động của hồ sơ “${profile}” có thể bị gián đoạn. Dữ liệu trò chuyện và cài đặt vẫn được giữ nguyên.`,
+      stopSharedConfirmBody:
+        'Gateway dùng chung này phục vụ nhiều hồ sơ. Các phiên đang hoạt động có thể bị gián đoạn. Dữ liệu trò chuyện và cài đặt vẫn được giữ nguyên.',
       actionFailed: action => `${action} không thành công.`,
+      actionTimedOut: 'Đã hết thời gian chờ nhưng tác vụ vẫn đang chạy. Hãy kiểm tra trạng thái trước khi thử lại.',
+      lifecycleManagedBy: profile =>
+        `Các nút điều khiển chỉ khả dụng tại hồ sơ “${profile}” vì Gateway này được dùng chung.`,
+      lifecycleOwnerUnknown: 'Không thể điều khiển vì hệ thống chưa xác định chắc chắn hồ sơ sở hữu Gateway.',
+      sharedLifecycleWarning:
+        'Gateway này được dùng chung. Khởi động lại hoặc dừng sẽ ảnh hưởng mọi hồ sơ đang được phục vụ.',
       statusLoadFailed: 'Không thể tải trạng thái cổng.',
       logsEmpty: 'Chưa có nhật ký cổng.',
       logsLoadFailed: 'Không thể tải nhật ký cổng.',

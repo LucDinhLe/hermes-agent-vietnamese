@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
+import { en } from './en'
+import { ja } from './ja'
 import { vi } from './vi'
+import { zh } from './zh'
+import { zhHant } from './zh-hant'
 
 describe('Vietnamese community interface', () => {
   it('uses the Hermes Vietnamese product name and factual attribution', () => {
@@ -56,6 +60,22 @@ describe('Vietnamese community interface', () => {
     expect(gateway.runDoctor).toBe('Chạy doctor')
     expect(gateway.checkHealth).toBe('Kiểm tra sức khỏe')
     expect(gateway.stopConfirmBody('lead-agent')).toContain('lead-agent')
+    expect(gateway.lifecycleManagedBy('default')).toContain('default')
+    expect(gateway.sharedLifecycleWarning).toContain('dùng chung')
+    expect(gateway.actionTimedOut).toContain('vẫn đang chạy')
     expect(gateway.logsEmpty).toBe('Chưa có nhật ký cổng.')
+  })
+
+  it('keeps the required desktop locales aligned for Gateway lifecycle safety', () => {
+    for (const locale of [en, ja, zh, zhHant]) {
+      const gateway = locale.shell.gatewayMenu
+
+      expect(gateway.statusRunning).toBeTruthy()
+      expect(gateway.lifecycleManagedBy('default')).toContain('default')
+      expect(gateway.lifecycleOwnerUnknown).toBeTruthy()
+      expect(gateway.sharedLifecycleWarning).toBeTruthy()
+      expect(gateway.stopSharedConfirmBody).toBeTruthy()
+      expect(gateway.actionTimedOut).toBeTruthy()
+    }
   })
 })

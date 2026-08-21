@@ -15,16 +15,21 @@ const POLL_TIMEOUT_S = 180
 // instead of a toast that vanishes or a generic "Agents running" counter.
 export const $gatewayRestarting = atom(false)
 
-// Poll a backend action to completion (or a bounded window), throwing on a
-// non-zero exit so the caller can surface the failure.
+export class HermesActionTimeoutError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'HermesActionTimeoutError'
+  }
+}
+
+// Poll a backend action to completion, throwing on a non-zero exit or when the
+// bounded window expires while the action is still running.
 export async function awaitHermesAction(
   started: ActionResponse,
   owner: BackendOwner | null = null
-): Promise<ActionStatusResponse | null> {
-  let latest: ActionStatusResponse | null = null
-
+): Promise<ActionStatusResponse> {
   for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt += 1) {
-    latest = await getActionStatus(started.name, POLL_TIMEOUT_S, owner?.profile, owner?.connectionId)
+    const latest = await getActionStatus(started.name, POLL_TIMEOUT_S, owner?.profile, owner?.connectionId)
 
     if (!latest.running) {
       if (latest.exit_code != null && latest.exit_code !== 0) {
@@ -34,10 +39,12 @@ export async function awaitHermesAction(
       return latest
     }
 
-    await new Promise(resolve => window.setTimeout(resolve, POLL_INTERVAL_MS))
+    if (attempt + 1 < POLL_ATTEMPTS) {
+      await new Promise(resolve => window.setTimeout(resolve, POLL_INTERVAL_MS))
+    }
   }
 
-  return latest
+  throw new HermesActionTimeoutError(translateNow('shell.gatewayMenu.actionTimedOut'))
 }
 
 // Restart the messaging gateway, surfacing progress in the statusbar gateway

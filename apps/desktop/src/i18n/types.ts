@@ -2337,7 +2337,12 @@ export interface Translations {
       checkHealth: string
       stopConfirmTitle: string
       stopConfirmBody: (profile: string) => string
+      stopSharedConfirmBody: string
       actionFailed: (action: string) => string
+      actionTimedOut: string
+      lifecycleManagedBy: (profile: string) => string
+      lifecycleOwnerUnknown: string
+      sharedLifecycleWarning: string
       statusLoadFailed: string
       logsEmpty: string
       logsLoadFailed: string

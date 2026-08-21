@@ -19,6 +19,28 @@ class TestServedProfilesStatus:
         finally:
             importlib.reload(status)
 
+    def test_single_start_can_clear_stale_multiplex_membership(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        import importlib
+        import gateway.status as status
+
+        importlib.reload(status)
+        try:
+            status.write_runtime_status(
+                gateway_state="running",
+                served_profiles=["default", "coder"],
+            )
+            status.write_runtime_status(
+                gateway_state="starting",
+                served_profiles=[],
+            )
+
+            assert status.read_runtime_status().get("served_profiles") == []
+        finally:
+            importlib.reload(status)
+
 
 def test_cron_profile_homes_follow_allowlist(tmp_path, monkeypatch):
     """The helper wired into in-process cron returns only selected profiles."""
@@ -100,6 +122,21 @@ class TestNamedProfileMultiplexerGuard:
         with pytest.raises(SystemExit, match="1"):
             gw._guard_named_profile_under_multiplexer(force=False)
 
+    def test_top_level_false_overrides_nested_multiplex_true(
+        self, monkeypatch, tmp_path
+    ):
+        self._fake_running_default_gateway(monkeypatch, tmp_path)
+        (tmp_path / "config.yaml").write_text(
+            "multiplex_profiles: false\n"
+            "gateway:\n"
+            "  multiplex_profiles: true\n",
+            encoding="utf-8",
+        )
+
+        from hermes_cli import gateway as gw
+
+        gw._guard_named_profile_under_multiplexer(force=False)
+
     @pytest.mark.parametrize(
         "allowlist_yaml",
         ["[]", "[worker]", "coder"],
@@ -118,5 +155,3 @@ class TestNamedProfileMultiplexerGuard:
         from hermes_cli import gateway as gw
 
         gw._guard_named_profile_under_multiplexer(force=False)
-
-

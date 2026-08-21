@@ -12255,6 +12255,10 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 gateway_state="starting",
                 exit_reason=None,
                 clear_profile_platforms=True,
+                # A previous multiplex run may have persisted a shared owner
+                # set. Clear it before this process establishes its actual
+                # topology; multiplex startup writes the fresh set below.
+                served_profiles=[],
             )
         except Exception:
             pass

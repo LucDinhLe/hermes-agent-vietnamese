@@ -2788,7 +2788,14 @@ export const en: Translations = {
       stopConfirmTitle: 'Stop this gateway?',
       stopConfirmBody: profile =>
         `Active sessions for profile “${profile}” may be interrupted. Chats and settings will be preserved.`,
+      stopSharedConfirmBody:
+        'This shared Gateway serves multiple profiles. Active sessions across them may be interrupted. Chats and settings will be preserved.',
       actionFailed: action => `${action} failed.`,
+      actionTimedOut: 'Timed out while the action is still running. Check its status before trying again.',
+      lifecycleManagedBy: profile =>
+        `Lifecycle controls are available from profile “${profile}” because this Gateway is shared.`,
+      lifecycleOwnerUnknown: 'Lifecycle controls are unavailable because this backend cannot prove Gateway ownership.',
+      sharedLifecycleWarning: 'This Gateway is shared. Restarting or stopping it affects every served profile.',
       statusLoadFailed: 'Could not load gateway status.',
       logsEmpty: 'No gateway logs yet.',
       logsLoadFailed: 'Could not load gateway logs.',

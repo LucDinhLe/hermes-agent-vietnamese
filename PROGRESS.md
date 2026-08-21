@@ -1,5 +1,28 @@
 # Tiến độ
 
+## Cập nhật 2026-08-22 — Gateway ngoài cùng bên trái trong header V31
+
+- Header của phiên và từng session tile được khóa theo thứ tự cố định
+  **Gateway → Agents → Ngữ cảnh → Advisor**. Gateway là control ngoài cùng bên
+  trái, còn Agents, context/cost và Advisor giữ nguyên phạm vi theo từng phiên.
+- Mọi thao tác Gateway trong header giữ cặp owner bất biến
+  `connectionId + profile`. Profile multiplex không sở hữu lifecycle chỉ được
+  xem chẩn đoán; owner mơ hồ hoặc backend cũ ở profile có tên sẽ fail closed,
+  không rơi về Gateway đang foreground.
+- Backend serialize start/restart/stop theo canonical lifecycle owner. Retry
+  cùng verb tái sử dụng đúng action/PID; verb xung đột trả 409; các owner khác
+  vẫn chạy độc lập. Webhook, WhatsApp và Telegram dùng chung registry này.
+- UI chặn phản hồi status cũ sau đổi owner hoặc hai lượt tải cùng owner, dành
+  60 giây cho ownership preflight, giữ thông báo timeout chuyên biệt và không
+  cung cấp force-stop/uptime giả khi backend chưa có hợp đồng an toàn.
+- Menu đã đủ EN/VI/JA/ZH/ZH-Hant cho copy mới. Candidate kế tiếp là
+  `vi-v0.31.0-2` / `0.31.0-vi.2`; draft bất biến `vi-v0.31.0-1` được giữ nguyên
+  và không được tái sử dụng artifact hay evidence.
+- Gate cuối của lát cắt đạt: 43/43 backend lifecycle/multiplex, 42/42 UI owner,
+  race, timeout và i18n, 44/44 file với 388/388 test trong batch Agents cố
+  định, plugin 296/296, Desktop typecheck, ESLint 0 lỗi, Ruff, Prettier và
+  `git diff --check`. Chưa push, tag, dựng artifact `-2` hoặc công bố.
+
 ## Cập nhật 2026-08-20 — khóa phạm vi candidate Hermes Vietnamese V31
 
 - Chủ dự án chốt tên sản phẩm công khai là **Hermes Vietnamese** và cho phép

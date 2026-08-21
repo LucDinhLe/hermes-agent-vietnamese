@@ -88,6 +88,10 @@ chuỗi trên.
     đủ `latest*.yml` theo nền tảng. Manifest dùng SHA-512 của đúng installer đã
     staging, nằm trong `SHA256SUMS.txt`, và feed trong ứng dụng phải ghim vào
     URL của một release bất biến thay vì nhánh hoặc nhãn động.
+15. **Lifecycle theo đúng nguồn:** control Gateway gắn với phiên phải giữ owner
+    `connectionId + profile` bất biến qua mọi await. Backend phải serialize
+    start/restart/stop theo canonical lifecycle owner; phản hồi muộn hoặc owner
+    mơ hồ phải fail closed, không được repaint hay điều khiển Gateway foreground.
 
 ## Cổng bắt buộc
 
@@ -102,6 +106,8 @@ chuỗi trên.
 
 - [ ] Lockfile cập nhật và khóa.
 - [ ] Typecheck, lint, unit, integration, UI và security scan phù hợp đều đạt.
+- [ ] Control đa nguồn chứng minh exact-owner routing, loại phản hồi cũ và
+      serialize các lifecycle verb xung đột theo cùng canonical owner.
 - [ ] Không còn lỗ hổng runtime nghiêm trọng chưa được chấp nhận.
 - [ ] Artifact không chứa secret, hồ sơ, database, log hoặc đường dẫn riêng tư.
 - [ ] Mọi tải xuống cần thiết đều dùng nguồn bất biến và kiểm digest.

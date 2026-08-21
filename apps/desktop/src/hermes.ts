@@ -86,6 +86,12 @@ import type {
 // global default: interactive/runtime calls and the liveness poll (/api/status)
 // keep the short default so a genuinely-dead backend is still detected fast.
 export const STARTUP_REQUEST_TIMEOUT_MS = 60_000
+// Gateway lifecycle routes run a fresh ownership preflight before mutating a
+// process. On profile-heavy installs that safety scan can legitimately take
+// 14-16 seconds, so these three mutations must not inherit Electron's shorter
+// generic request timeout and report failure while the backend is still
+// proving the target.
+export const GATEWAY_LIFECYCLE_REQUEST_TIMEOUT_MS = 60_000
 const DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS = 30_000
 const SESSION_LIST_REQUEST_TIMEOUT_MS = 60_000
 // The cron trigger endpoint intentionally waits for the whole job so its
@@ -941,10 +947,7 @@ export function getGlobalModelInfo(profile?: null | string, connectionId?: null 
   })
 }
 
-export function getStatus(
-  profile?: null | string,
-  connectionId?: null | string
-): Promise<StatusResponse> {
+export function getStatus(profile?: null | string, connectionId?: null | string): Promise<StatusResponse> {
   return window.hermesDesktop.api<StatusResponse>({
     ...profileScoped(profile, connectionId),
     path: '/api/status'
@@ -2088,36 +2091,30 @@ export function setModelAssignment(
   })
 }
 
-export function startGateway(
-  profile?: null | string,
-  connectionId?: null | string
-): Promise<ActionResponse> {
+export function startGateway(profile?: null | string, connectionId?: null | string): Promise<ActionResponse> {
   return window.hermesDesktop.api<ActionResponse>({
     ...profileScoped(profile, connectionId),
     path: '/api/gateway/start',
-    method: 'POST'
+    method: 'POST',
+    timeoutMs: GATEWAY_LIFECYCLE_REQUEST_TIMEOUT_MS
   })
 }
 
-export function restartGateway(
-  profile?: null | string,
-  connectionId?: null | string
-): Promise<ActionResponse> {
+export function restartGateway(profile?: null | string, connectionId?: null | string): Promise<ActionResponse> {
   return window.hermesDesktop.api<ActionResponse>({
     ...profileScoped(profile, connectionId),
     path: '/api/gateway/restart',
-    method: 'POST'
+    method: 'POST',
+    timeoutMs: GATEWAY_LIFECYCLE_REQUEST_TIMEOUT_MS
   })
 }
 
-export function stopGateway(
-  profile?: null | string,
-  connectionId?: null | string
-): Promise<ActionResponse> {
+export function stopGateway(profile?: null | string, connectionId?: null | string): Promise<ActionResponse> {
   return window.hermesDesktop.api<ActionResponse>({
     ...profileScoped(profile, connectionId),
     path: '/api/gateway/stop',
-    method: 'POST'
+    method: 'POST',
+    timeoutMs: GATEWAY_LIFECYCLE_REQUEST_TIMEOUT_MS
   })
 }
 
@@ -2443,10 +2440,7 @@ export function runCurator(): Promise<ActionResponse> {
 // getActionStatus().
 // ---------------------------------------------------------------------------
 
-export function runDoctor(
-  profile?: null | string,
-  connectionId?: null | string
-): Promise<ActionResponse> {
+export function runDoctor(profile?: null | string, connectionId?: null | string): Promise<ActionResponse> {
   return window.hermesDesktop.api<ActionResponse>({
     ...profileScoped(profile, connectionId),
     path: '/api/ops/doctor',

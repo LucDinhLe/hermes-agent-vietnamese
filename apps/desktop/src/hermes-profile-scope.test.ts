@@ -197,6 +197,12 @@ describe('backend action helpers are profile-scoped', () => {
     for (const call of api.mock.calls.slice(2)) {
       expect(call[0].method).toBe('POST')
     }
+
+    for (const call of api.mock.calls.slice(2, 5)) {
+      expect(call[0]).toEqual(expect.objectContaining({ timeoutMs: 60_000 }))
+    }
+
+    expect(api.mock.calls[5][0]).not.toHaveProperty('timeoutMs')
   })
 
   it('pins profile deletion to the captured registry source', () => {

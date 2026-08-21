@@ -1213,6 +1213,8 @@ export interface StatusResponse {
   env_path: string
   gateway_exit_reason: string | null
   gateway_health_url: string | null
+  gateway_lifecycle_owner_profile?: string | null
+  gateway_lifecycle_shared?: boolean
   gateway_pid: number | null
   gateway_platforms: Record<string, PlatformStatus>
   gateway_running: boolean

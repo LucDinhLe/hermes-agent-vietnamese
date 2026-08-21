@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 import { useBackendOwnerGuard } from '@/app/hooks/use-backend-owner-guard'
 import { StatusDot } from '@/components/status-dot'
@@ -13,7 +13,6 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { LogView } from '@/components/ui/log-view'
-import { Tip } from '@/components/ui/tooltip'
 import { getLogs, getStatus, restartGateway, runDoctor, startGateway, stopGateway } from '@/hermes'
 import { useI18n } from '@/i18n'
 import {
@@ -31,7 +30,7 @@ import {
 import { cn } from '@/lib/utils'
 import type { BackendOwner } from '@/store/backend-owner'
 import { notifyError } from '@/store/notifications'
-import { awaitHermesAction } from '@/store/system-actions'
+import { awaitHermesAction, HermesActionTimeoutError } from '@/store/system-actions'
 import type { ActionResponse, ActionStatusResponse, StatusResponse } from '@/types/hermes'
 
 interface SessionGatewayControlProps {
@@ -69,6 +68,8 @@ export function SessionGatewayControl({ backendReady, connectionId, profile }: S
 
   const ownerKey = owner ? ownerKeyFor(owner) : '__unresolved__'
   const isCurrentOwner = useBackendOwnerGuard(owner)
+  const ownerGenerationRef = useRef(0)
+  const statusRequestIdRef = useRef(0)
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState<StatusResponse | null>(null)
   const [statusLoading, setStatusLoading] = useState(false)
@@ -82,32 +83,45 @@ export function SessionGatewayControl({ backendReady, connectionId, profile }: S
   const [healthMessage, setHealthMessage] = useState('')
   const [stopTarget, setStopTarget] = useState<BackendOwner | null>(null)
 
+  useLayoutEffect(() => {
+    ownerGenerationRef.current += 1
+  }, [ownerKey])
+
+  const isCurrentRequest = useCallback(
+    (target: BackendOwner, generation: number) =>
+      ownerGenerationRef.current === generation && ownerKeyFor(target) === ownerKey && isCurrentOwner(),
+    [isCurrentOwner, ownerKey]
+  )
+
   const loadStatus = useCallback(
-    async (target: BackendOwner): Promise<StatusResponse | null> => {
+    async (target: BackendOwner, generation = ownerGenerationRef.current): Promise<StatusResponse | null> => {
+      const requestId = ++statusRequestIdRef.current
       setStatusLoading(true)
       setStatusError('')
 
       try {
         const next = await getStatus(target.profile, target.connectionId)
 
-        if (isCurrentOwner()) {
+        if (requestId === statusRequestIdRef.current && isCurrentRequest(target, generation)) {
           setStatus(next)
+
+          return next
         }
 
-        return next
+        return null
       } catch (error) {
-        if (isCurrentOwner()) {
+        if (requestId === statusRequestIdRef.current && isCurrentRequest(target, generation)) {
           setStatusError(copy.statusLoadFailed)
         }
 
         return null
       } finally {
-        if (isCurrentOwner()) {
+        if (requestId === statusRequestIdRef.current && isCurrentRequest(target, generation)) {
           setStatusLoading(false)
         }
       }
     },
-    [copy.statusLoadFailed, isCurrentOwner]
+    [copy.statusLoadFailed, isCurrentRequest]
   )
 
   useEffect(() => {
@@ -137,22 +151,27 @@ export function SessionGatewayControl({ backendReady, connectionId, profile }: S
     action: Exclude<PendingAction, null>,
     label: string,
     target: BackendOwner,
-    start: (profile: string, connectionId: string) => Promise<ActionResponse>
+    start: (profile: string, connectionId: string) => Promise<ActionResponse>,
+    generation = ownerGenerationRef.current
   ): Promise<ActionStatusResponse | null> {
     setPendingAction(action)
 
     try {
       const result = await awaitHermesAction(await start(target.profile, target.connectionId), target)
 
-      if (isCurrentOwner()) {
-        await loadStatus(target)
+      if (isCurrentRequest(target, generation)) {
+        await loadStatus(target, generation)
       }
 
       return result
     } catch (error) {
+      if (error instanceof HermesActionTimeoutError) {
+        throw error
+      }
+
       throw new Error(copy.actionFailed(label), { cause: error })
     } finally {
-      if (isCurrentOwner()) {
+      if (isCurrentRequest(target, generation)) {
         setPendingAction(null)
       }
     }
@@ -163,19 +182,21 @@ export function SessionGatewayControl({ backendReady, connectionId, profile }: S
     label: string,
     start: (profile: string, connectionId: string) => Promise<ActionResponse>
   ) {
-    if (!owner || pendingAction) {
+    if (!owner || pendingAction || !lifecycleTargetable) {
       return
     }
 
     const target = owner
-    void performAction(action, label, target, start).catch(error => {
-      if (isCurrentOwner()) {
+    const generation = ownerGenerationRef.current
+    void performAction(action, label, target, start, generation).catch(error => {
+      if (isCurrentRequest(target, generation)) {
         notifyError(error, copy.actionFailed(label))
       }
     })
   }
 
   async function loadLogs(target: BackendOwner) {
+    const generation = ownerGenerationRef.current
     setLogsVisible(true)
     setLogsLoading(true)
     setLogsError('')
@@ -183,15 +204,15 @@ export function SessionGatewayControl({ backendReady, connectionId, profile }: S
     try {
       const result = await getLogs({ file: 'gateway', lines: LOG_TAIL }, target.profile, target.connectionId)
 
-      if (isCurrentOwner()) {
+      if (isCurrentRequest(target, generation)) {
         setLogs(result.lines)
       }
     } catch {
-      if (isCurrentOwner()) {
+      if (isCurrentRequest(target, generation)) {
         setLogsError(copy.logsLoadFailed)
       }
     } finally {
-      if (isCurrentOwner()) {
+      if (isCurrentRequest(target, generation)) {
         setLogsLoading(false)
       }
     }
@@ -199,6 +220,19 @@ export function SessionGatewayControl({ backendReady, connectionId, profile }: S
 
   const running = status?.gateway_running === true
   const explicitlyStopped = status?.gateway_running === false
+  const lifecycleOwner = status?.gateway_lifecycle_owner_profile
+  const lifecycleOwnerKnown = lifecycleOwner !== undefined
+
+  const lifecycleTargetable = status
+    ? lifecycleOwnerKnown
+      ? lifecycleOwner === normalizedProfile
+      : normalizedProfile === 'default'
+    : false
+
+  const lifecycleShared = status?.gateway_lifecycle_shared === true
+
+  const lifecycleExplanation = lifecycleOwner ? copy.lifecycleManagedBy(lifecycleOwner) : copy.lifecycleOwnerUnknown
+
   const triggerTone = !backendReady ? 'bad' : running ? 'good' : status ? 'bad' : 'muted'
 
   const statusLabel =
@@ -222,24 +256,22 @@ export function SessionGatewayControl({ backendReady, connectionId, profile }: S
         }}
         open={open}
       >
-        <Tip label={copy.gateway}>
-          <DropdownMenuTrigger asChild>
-            <Button
-              aria-label={copy.gateway}
-              className="gap-1 text-[0.6875rem] text-(--ui-text-secondary)"
-              data-session-gateway-trigger=""
-              disabled={!backendReady || !owner}
-              size="xs"
-              type="button"
-              variant="ghost"
-            >
-              <Network className="size-3.5 shrink-0" />
-              <StatusDot className="shrink-0" tone={triggerTone} />
-              <span className="hidden shrink-0 font-medium @sm:inline">{copy.gateway}</span>
-              <ChevronDown className="size-2.5 shrink-0 opacity-60" />
-            </Button>
-          </DropdownMenuTrigger>
-        </Tip>
+        <DropdownMenuTrigger asChild>
+          <Button
+            aria-label={copy.gateway}
+            className="gap-1 text-[0.6875rem] text-(--ui-text-secondary)"
+            data-session-gateway-trigger=""
+            disabled={!backendReady || !owner}
+            size="xs"
+            type="button"
+            variant="ghost"
+          >
+            <Network className="size-3.5 shrink-0" />
+            <StatusDot className="shrink-0" tone={triggerTone} />
+            <span className="hidden shrink-0 font-medium @sm:inline">{copy.gateway}</span>
+            <ChevronDown className="size-2.5 shrink-0 opacity-60" />
+          </Button>
+        </DropdownMenuTrigger>
 
         <DropdownMenuContent align="start" className="w-72 p-0" side="bottom" sideOffset={6}>
           <div className="px-3 py-2" data-session-gateway-status="">
@@ -259,49 +291,66 @@ export function SessionGatewayControl({ backendReady, connectionId, profile }: S
             </div>
             {statusError ? <div className="mt-1 text-xs text-destructive">{statusError}</div> : null}
             {healthMessage ? <div className="mt-1 text-xs text-(--ui-text-secondary)">{healthMessage}</div> : null}
+            {status && lifecycleShared && lifecycleTargetable ? (
+              <div className="mt-1 text-xs text-(--ui-text-secondary)" data-session-gateway-shared-warning="">
+                {copy.sharedLifecycleWarning}
+              </div>
+            ) : null}
           </div>
 
           <DropdownMenuSeparator className="mx-0 my-0" />
 
-          {explicitlyStopped ? (
-            <DropdownMenuItem
-              className={dropdownMenuRow}
-              disabled={Boolean(pendingAction)}
-              onSelect={event => {
-                event.preventDefault()
-                runMenuAction('start', copy.startGateway, startGateway)
-              }}
+          {status && !lifecycleTargetable ? (
+            <div
+              className="px-3 py-2 text-xs leading-relaxed text-(--ui-text-secondary)"
+              data-session-gateway-lifecycle-unavailable=""
+              role="note"
             >
-              {pendingAction === 'start' ? <Loader2 className="animate-spin" /> : <Play />}
-              {copy.startGateway}
-            </DropdownMenuItem>
+              {lifecycleExplanation}
+            </div>
           ) : (
-            <DropdownMenuItem
-              className={dropdownMenuRow}
-              disabled={!running || Boolean(pendingAction)}
-              onSelect={event => {
-                event.preventDefault()
-                runMenuAction('restart', copy.restartGateway, restartGateway)
-              }}
-            >
-              {pendingAction === 'restart' ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-              {copy.restartGateway}
-            </DropdownMenuItem>
-          )}
+            <>
+              {explicitlyStopped ? (
+                <DropdownMenuItem
+                  className={dropdownMenuRow}
+                  disabled={Boolean(pendingAction)}
+                  onSelect={event => {
+                    event.preventDefault()
+                    runMenuAction('start', copy.startGateway, startGateway)
+                  }}
+                >
+                  {pendingAction === 'start' ? <Loader2 className="animate-spin" /> : <Play />}
+                  {copy.startGateway}
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem
+                  className={dropdownMenuRow}
+                  disabled={!running || Boolean(pendingAction)}
+                  onSelect={event => {
+                    event.preventDefault()
+                    runMenuAction('restart', copy.restartGateway, restartGateway)
+                  }}
+                >
+                  {pendingAction === 'restart' ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+                  {copy.restartGateway}
+                </DropdownMenuItem>
+              )}
 
-          <DropdownMenuItem
-            className={dropdownMenuRow}
-            disabled={!running || Boolean(pendingAction)}
-            onSelect={() => {
-              if (owner) {
-                setOpen(false)
-                setStopTarget(owner)
-              }
-            }}
-          >
-            <Square />
-            {copy.stopGateway}
-          </DropdownMenuItem>
+              <DropdownMenuItem
+                className={dropdownMenuRow}
+                disabled={!running || Boolean(pendingAction)}
+                onSelect={() => {
+                  if (owner) {
+                    setOpen(false)
+                    setStopTarget(owner)
+                  }
+                }}
+              >
+                <Square />
+                {copy.stopGateway}
+              </DropdownMenuItem>
+            </>
+          )}
 
           <DropdownMenuItem
             className={cn(dropdownMenuRow, 'text-destructive')}
@@ -350,9 +399,10 @@ export function SessionGatewayControl({ backendReady, connectionId, profile }: S
               }
 
               const target = owner
-              void performAction('doctor', copy.runDoctor, target, runDoctor)
+              const generation = ownerGenerationRef.current
+              void performAction('doctor', copy.runDoctor, target, runDoctor, generation)
                 .then(result => {
-                  if (isCurrentOwner()) {
+                  if (isCurrentRequest(target, generation)) {
                     const lines = result?.lines ?? []
                     setDoctorLines(lines)
 
@@ -362,7 +412,7 @@ export function SessionGatewayControl({ backendReady, connectionId, profile }: S
                   }
                 })
                 .catch(error => {
-                  if (isCurrentOwner()) {
+                  if (isCurrentRequest(target, generation)) {
                     notifyError(error, copy.actionFailed(copy.runDoctor))
                   }
                 })
@@ -383,8 +433,9 @@ export function SessionGatewayControl({ backendReady, connectionId, profile }: S
               }
 
               const target = owner
-              void loadStatus(target).then(next => {
-                if (next && isCurrentOwner()) {
+              const generation = ownerGenerationRef.current
+              void loadStatus(target, generation).then(next => {
+                if (next && isCurrentRequest(target, generation)) {
                   setHealthMessage(gatewayHealthy(next) ? copy.healthHealthy : copy.healthUnhealthy)
                 }
               })
@@ -413,15 +464,17 @@ export function SessionGatewayControl({ backendReady, connectionId, profile }: S
 
       <ConfirmDialog
         confirmLabel={copy.stopGateway}
-        description={copy.stopConfirmBody(stopTarget?.profile ?? normalizedProfile)}
+        description={
+          lifecycleShared ? copy.stopSharedConfirmBody : copy.stopConfirmBody(stopTarget?.profile ?? normalizedProfile)
+        }
         destructive
         onClose={() => setStopTarget(null)}
         onConfirm={async () => {
-          if (!stopTarget || !owner || ownerKeyFor(stopTarget) !== ownerKeyFor(owner)) {
+          if (!stopTarget || !owner || !lifecycleTargetable || ownerKeyFor(stopTarget) !== ownerKeyFor(owner)) {
             throw new Error(copy.actionFailed(copy.stopGateway))
           }
 
-          await performAction('stop', copy.stopGateway, stopTarget, stopGateway)
+          await performAction('stop', copy.stopGateway, stopTarget, stopGateway, ownerGenerationRef.current)
         }}
         open={Boolean(stopTarget)}
         title={copy.stopConfirmTitle}

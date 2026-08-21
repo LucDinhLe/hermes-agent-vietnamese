@@ -5391,10 +5391,14 @@ def _guard_named_profile_under_multiplexer(force: bool = False) -> None:
         else:
             if not cfg_path.exists():
                 return
-            multiplex = bool(
-                cfg.get("multiplex_profiles")
-                or (cfg.get("gateway", {}) or {}).get("multiplex_profiles")
-            )
+            gateway_cfg = cfg.get("gateway", {}) or {}
+            if "multiplex_profiles" in cfg:
+                raw_multiplex = cfg.get("multiplex_profiles")
+            else:
+                raw_multiplex = gateway_cfg.get("multiplex_profiles")
+            from gateway.config import _coerce_bool
+
+            multiplex = _coerce_bool(raw_multiplex, False)
         if not multiplex:
             return
 

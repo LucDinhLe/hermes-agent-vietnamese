@@ -3308,6 +3308,205 @@ def _collect_profile_gateway_topology() -> Dict[str, Any]:
     }
 
 
+def _canonical_gateway_profile(profile: Optional[str]) -> str:
+    """Resolve a lifecycle request to the canonical profile it names."""
+    from hermes_cli import profiles as profiles_mod
+
+    requested = (profile or "").strip()
+    if not requested or requested.lower() == "current":
+        return profiles_mod.get_active_profile_name() or "default"
+
+    canonical = profiles_mod.normalize_profile_name(requested)
+    _resolve_profile_dir(canonical)
+    return canonical
+
+
+def _read_configured_gateway_lifecycle() -> Optional[Dict[str, Any]]:
+    """Read the default profile's effective multiplex start intent.
+
+    Multiplex configuration belongs to the default profile even while the
+    gateway is stopped. Read it under an explicit default-home override so a
+    profile-scoped status request cannot accidentally consult that profile's
+    local config instead. ``load_gateway_config`` is the authoritative merge
+    point for config.yaml, gateway.json, managed scope, and environment
+    overrides.
+    """
+    from gateway.config import load_gateway_config
+    from hermes_constants import reset_hermes_home_override, set_hermes_home_override
+    from hermes_cli import profiles as profiles_mod
+
+    token = set_hermes_home_override(str(profiles_mod.get_profile_dir("default")))
+    try:
+        config = load_gateway_config()
+        multiplex = bool(getattr(config, "multiplex_profiles", False))
+        if not multiplex:
+            return {"multiplex": False, "served_profiles": frozenset()}
+
+        served_profiles = frozenset(
+            name
+            for name, _home in profiles_mod.profiles_to_serve(
+                True,
+                getattr(config, "multiplex_profile_allowlist", None),
+            )
+        )
+        return {"multiplex": True, "served_profiles": served_profiles}
+    except Exception:
+        _log.debug("gateway lifecycle configuration probe failed", exc_info=True)
+        return None
+    finally:
+        reset_hermes_home_override(token)
+
+
+_GATEWAY_LIFECYCLE_CONFIG_CACHE: Dict[str, Any] = {
+    "ts": 0.0,
+    "data": None,
+    "fn": None,
+    "loaded": False,
+}
+_GATEWAY_LIFECYCLE_CONFIG_CACHE_LOCK = threading.Lock()
+_GATEWAY_LIFECYCLE_CONFIG_CACHE_TTL = 10.0
+
+
+def _read_configured_gateway_lifecycle_cached() -> Optional[Dict[str, Any]]:
+    """Collapse stopped-gateway config reads across the one-second status poll."""
+    collector = _read_configured_gateway_lifecycle
+    now = time.monotonic()
+    with _GATEWAY_LIFECYCLE_CONFIG_CACHE_LOCK:
+        cached = _GATEWAY_LIFECYCLE_CONFIG_CACHE
+        if (
+            cached.get("fn") is collector
+            and cached.get("loaded") is True
+            and now - float(cached.get("ts") or 0.0)
+            < _GATEWAY_LIFECYCLE_CONFIG_CACHE_TTL
+        ):
+            return cached["data"]
+
+        data = collector()
+        cached.update({"ts": now, "data": data, "fn": collector, "loaded": True})
+        return data
+
+
+def _configured_gateway_lifecycle_owner(
+    target_profile: str, *, use_cache: bool
+) -> Tuple[Optional[str], bool]:
+    configured = (
+        _read_configured_gateway_lifecycle_cached()
+        if use_cache
+        else _read_configured_gateway_lifecycle()
+    )
+    if configured is None:
+        # Keep the legacy default-profile lifecycle available, but fail closed
+        # for named profiles when isolation cannot be proven.
+        return ("default", False) if target_profile == "default" else (None, False)
+
+    served_profiles = configured["served_profiles"]
+    if configured["multiplex"] and target_profile in served_profiles:
+        return "default", len(served_profiles) > 1
+    return target_profile, False
+
+
+def _gateway_lifecycle_contract(
+    profile: Optional[str],
+    topology: Optional[Dict[str, Any]] = None,
+    *,
+    use_config_cache: bool = True,
+) -> Dict[str, Any]:
+    """Identify the real profile that owns a requested gateway lifecycle.
+
+    A live runtime's ``served_profiles`` stamp wins over configuration because
+    config may have changed without restarting the gateway. When no live
+    process serves the requested profile, the default profile's effective
+    multiplex config determines which lifecycle a future start would create.
+    Ambiguous live ownership fails closed with a null owner.
+    """
+    target_profile = _canonical_gateway_profile(profile)
+    current_topology = topology if topology is not None else _collect_profile_gateway_topology()
+    owners: Dict[str, bool] = {}
+
+    for entry in current_topology.get("gateways") or []:
+        if not isinstance(entry, dict):
+            continue
+        raw_owner = str(entry.get("profile") or "").strip()
+        if not raw_owner:
+            continue
+        try:
+            from hermes_cli import profiles as profiles_mod
+
+            owner = profiles_mod.normalize_profile_name(raw_owner)
+        except (TypeError, ValueError):
+            continue
+
+        served: set[str] = set()
+        for raw_profile in entry.get("served_profiles") or []:
+            try:
+                served.add(profiles_mod.normalize_profile_name(str(raw_profile)))
+            except (TypeError, ValueError):
+                continue
+
+        if owner == target_profile or target_profile in served:
+            owners[owner] = owners.get(owner, False) or len(served) > 1
+
+    if len(owners) > 1:
+        return {
+            "requested_profile": target_profile,
+            "owner_profile": None,
+            "shared": True,
+            "runtime_owned": True,
+        }
+
+    if owners:
+        owner, runtime_shared = next(iter(owners.items()))
+        return {
+            "requested_profile": target_profile,
+            "owner_profile": owner,
+            "shared": runtime_shared,
+            "runtime_owned": True,
+        }
+
+    configured_owner, configured_shared = _configured_gateway_lifecycle_owner(
+        target_profile, use_cache=use_config_cache
+    )
+    return {
+        "requested_profile": target_profile,
+        "owner_profile": configured_owner,
+        "shared": configured_shared,
+        "runtime_owned": False,
+    }
+
+
+def _require_gateway_lifecycle_owner(profile: Optional[str]) -> Dict[str, Any]:
+    """Reject profile-qualified lifecycle mutations that target the wrong process."""
+    requested = (profile or "").strip()
+    if not requested or requested.lower() == "current":
+        # Preserve the long-standing ambient lifecycle route for callers that
+        # intentionally omit profile selection. Exact-source desktop controls
+        # always send an explicit canonical profile and take the strict path.
+        target = _canonical_gateway_profile(profile)
+        return {
+            "requested_profile": target,
+            "owner_profile": target,
+            "shared": False,
+            "runtime_owned": False,
+        }
+
+    contract = _gateway_lifecycle_contract(profile, use_config_cache=False)
+    owner = contract["owner_profile"]
+    target = contract["requested_profile"]
+    if owner != target:
+        if owner:
+            detail = (
+                f"Gateway lifecycle for profile '{target}' is owned by profile "
+                f"'{owner}' because that gateway serves it through multiplexing."
+            )
+        else:
+            detail = (
+                f"Gateway lifecycle ownership for profile '{target}' could not "
+                "be proven; refusing a potentially cross-profile action."
+            )
+        raise HTTPException(status_code=409, detail=detail)
+    return contract
+
+
 # /api/status is polled ~1/s by the desktop app while it waits for the backend
 # (and again by the dashboard badge). Each uncached call above walks 7+ profile
 # homes (yaml.safe_load with the pure-Python loader + psutil process-table
@@ -3322,6 +3521,17 @@ def _collect_profile_gateway_topology() -> Dict[str, Any]:
 _TOPOLOGY_CACHE: Dict[str, Any] = {"ts": 0.0, "data": None, "fn": None}
 _TOPOLOGY_CACHE_LOCK = threading.Lock()
 _TOPOLOGY_CACHE_TTL = 10.0
+
+
+def _invalidate_gateway_lifecycle_caches() -> None:
+    """Drop status ownership snapshots after a lifecycle child completes."""
+    with _TOPOLOGY_CACHE_LOCK:
+        _TOPOLOGY_CACHE.update({"ts": 0.0, "data": None, "fn": None})
+    with _GATEWAY_LIFECYCLE_CONFIG_CACHE_LOCK:
+        _GATEWAY_LIFECYCLE_CONFIG_CACHE.update(
+            {"ts": 0.0, "data": None, "fn": None, "loaded": False}
+        )
+
 
 # Stable install identity for /api/status. One random opaque id per physical
 # install, minted on first read and persisted under the ROOT Hermes home
@@ -3566,6 +3776,33 @@ async def get_status(profile: Optional[str] = None):
 
     try:
         current_ver, latest_ver = check_config_version()
+        # Resolve gateway ownership before reading PID/runtime state. A named
+        # profile served by the default multiplexer has no profile-local PID or
+        # gateway_state.json; its truthful process state lives with the live
+        # lifecycle owner. Both probes run off the event loop and the expensive
+        # config fallback is reached only when no live runtime claims the target.
+        topology = await asyncio.get_running_loop().run_in_executor(
+            None, _collect_profile_gateway_topology_cached
+        )
+        lifecycle_contract = await asyncio.get_running_loop().run_in_executor(
+            None,
+            functools.partial(
+                _gateway_lifecycle_contract,
+                requested_profile or None,
+                topology,
+            ),
+        )
+        runtime_profile_dir = profile_dir
+        lifecycle_owner = lifecycle_contract["owner_profile"]
+        if (
+            lifecycle_contract["runtime_owned"]
+            and lifecycle_owner
+            and lifecycle_owner != lifecycle_contract["requested_profile"]
+        ):
+            from hermes_cli import profiles as profiles_mod
+
+            runtime_profile_dir = profiles_mod.get_profile_dir(lifecycle_owner)
+
         # --- Gateway liveness detection ---
         # Delegated to the single shared ladder in gateway.status so this
         # endpoint and /api/messaging/platforms can never disagree about
@@ -3603,14 +3840,14 @@ async def get_status(profile: Optional[str] = None):
                     return False, None
 
         local_runtime = (
-            read_runtime_status(path=profile_dir / "gateway_state.json")
-            if profile_dir
+            read_runtime_status(path=runtime_profile_dir / "gateway_state.json")
+            if runtime_profile_dir
             else read_runtime_status()
         )
 
         liveness = await run_in_threadpool(
             lambda: resolve_gateway_liveness(
-                profile_dir=profile_dir,
+                profile_dir=runtime_profile_dir,
                 runtime=local_runtime,
                 health_probe=_bounded_health_probe if _GATEWAY_HEALTH_URL else None,
                 pid_probe=get_running_pid_cached,
@@ -3655,6 +3892,17 @@ async def get_status(profile: Optional[str] = None):
                 for key, value in gateway_platforms.items()
                 if _status_platform_key_allowed(key, configured_gateway_platforms)
             }
+            if (
+                lifecycle_contract["runtime_owned"]
+                and lifecycle_owner
+                and lifecycle_owner != lifecycle_contract["requested_profile"]
+            ):
+                prefix = f'{lifecycle_contract["requested_profile"]}:'
+                gateway_platforms = {
+                    key[len(prefix):]: value
+                    for key, value in gateway_platforms.items()
+                    if key.startswith(prefix)
+                }
             gateway_exit_reason = runtime.get("exit_reason")
             # Contract: gateway_updated_at is RFC3339 string | null, never a
             # number. ``runtime`` here may be the local gateway_state.json
@@ -3701,9 +3949,6 @@ async def get_status(profile: Optional[str] = None):
         # ``<profile>:<platform>`` grammar so fleet health sees them (OOF-3).
         # A ``?profile=`` request targets one profile's view and is left
         # unmerged.
-        topology = await asyncio.get_running_loop().run_in_executor(
-            None, _collect_profile_gateway_topology_cached
-        )
         if not requested_profile:
             gateway_platforms = _merge_profile_gateway_platforms(
                 gateway_platforms, topology.get("profile_platforms") or {}
@@ -3799,6 +4044,8 @@ async def get_status(profile: Optional[str] = None):
             "gateway_platforms": gateway_platforms,
             "gateway_exit_reason": gateway_exit_reason,
             "gateway_updated_at": gateway_updated_at,
+            "gateway_lifecycle_owner_profile": lifecycle_contract["owner_profile"],
+            "gateway_lifecycle_shared": lifecycle_contract["shared"],
             "active_agents": active_agents,
             "gateway_busy": gateway_busy,
             "gateway_drainable": gateway_drainable,
@@ -4385,22 +4632,31 @@ _ACTION_PROCS: Dict[str, subprocess.Popen] = {}
 _ACTION_COMMANDS: Dict[str, Tuple[str, ...]] = {}
 _ACTION_IDS: Dict[str, str] = {}
 
+# Gateway lifecycle children need a second index by the process owner, not
+# just by their verb-specific public action name. Otherwise ``stop`` can be
+# followed by a concurrent ``start``/``restart`` for the same gateway and the
+# children race over one PID/state file. The lock also protects synchronous
+# onboarding and REST call sites if they ever arrive from different threads.
+_GATEWAY_LIFECYCLE_ACTIONS: Dict[str, Tuple[str, str]] = {}
+_GATEWAY_LIFECYCLE_ACTIONS_LOCK = threading.Lock()
+_GATEWAY_LIFECYCLE_VERBS = frozenset({"start", "restart", "stop"})
+
 # ``name`` → completed synthetic action result for actions the server handled
 # without spawning a subprocess (for example, unsupported Docker updates).
 _ACTION_RESULTS: Dict[str, Dict[str, Any]] = {}
 
 
 def _terminate_desktop_managed_gateway() -> None:
-    """Stop a live gateway restart child when its Desktop backend shuts down."""
-    proc = _ACTION_PROCS.get("gateway-restart")
-    if proc is None:
-        return
-    try:
-        if proc.poll() is None:
-            proc.terminate()
-    except OSError:
-        # The child may have exited between poll() and terminate().
-        pass
+    """Stop live gateway restart children when their Desktop backend shuts down."""
+    for name, proc in list(_ACTION_PROCS.items()):
+        if name != "gateway-restart" and not name.startswith("gateway-restart-"):
+            continue
+        try:
+            if proc.poll() is None:
+                proc.terminate()
+        except OSError:
+            # The child may have exited between poll() and terminate().
+            pass
 
 
 def _record_completed_action(name: str, message: str, exit_code: int = 1) -> None:
@@ -4568,6 +4824,115 @@ def _gateway_display_command(profile: Optional[str], verb: str) -> str:
     return " ".join(["hermes", *_gateway_subcommand(profile, verb)])
 
 
+def _spawn_profile_action_once(
+    subcommand: List[str], action_name: str
+) -> Tuple[subprocess.Popen, bool]:
+    """Reuse the same live profile action instead of orphaning its registry entry."""
+    existing = _ACTION_PROCS.get(action_name)
+    if existing is not None and existing.poll() is None:
+        existing_command = _ACTION_COMMANDS.get(action_name)
+        if existing_command == tuple(subcommand):
+            return existing, True
+        raise RuntimeError(
+            f"action '{action_name}' is already running with a different command"
+        )
+    return _spawn_hermes_action(subcommand, action_name), False
+
+
+def _release_gateway_lifecycle_action(action_name: str) -> None:
+    """Release every owner index that points at a completed public action."""
+    with _GATEWAY_LIFECYCLE_ACTIONS_LOCK:
+        for owner, (_verb, registered_name) in list(
+            _GATEWAY_LIFECYCLE_ACTIONS.items()
+        ):
+            if registered_name == action_name:
+                _GATEWAY_LIFECYCLE_ACTIONS.pop(owner, None)
+
+
+def _gateway_lifecycle_action_name_for_proc(
+    verb: str, profile: Optional[str], proc: subprocess.Popen
+) -> str:
+    """Return the registry name actually reused/spawned for this owner."""
+    owner = _canonical_gateway_profile(profile)
+    with _GATEWAY_LIFECYCLE_ACTIONS_LOCK:
+        registered = _GATEWAY_LIFECYCLE_ACTIONS.get(owner)
+        if registered is not None:
+            registered_verb, registered_name = registered
+            if (
+                registered_verb == verb
+                and _ACTION_PROCS.get(registered_name) is proc
+            ):
+                return registered_name
+
+    # Test doubles and older internal shims may not populate the process
+    # registry. Preserve the public naming contract in that case.
+    return _profile_action_name(f"gateway-{verb}", profile)
+
+
+def _spawn_gateway_lifecycle_action(
+    verb: str, profile: Optional[str] = None
+) -> Tuple[subprocess.Popen, bool, str]:
+    """Serialize start/restart/stop by canonical gateway lifecycle owner.
+
+    The public action name remains ambient for an omitted profile and becomes
+    profile-qualified for explicit requests. If the same owner/verb is already
+    live, callers receive that exact action name and PID. A different live verb
+    for the same owner is a typed 409 and never spawns a second child.
+    """
+    if verb not in _GATEWAY_LIFECYCLE_VERBS:
+        raise ValueError(f"unsupported gateway lifecycle verb: {verb}")
+
+    owner = _canonical_gateway_profile(profile)
+    subcommand = _gateway_subcommand(profile, verb)
+    base_name = f"gateway-{verb}"
+    action_name = _profile_action_name(base_name, profile)
+
+    with _GATEWAY_LIFECYCLE_ACTIONS_LOCK:
+        registered = _GATEWAY_LIFECYCLE_ACTIONS.get(owner)
+        if registered is not None:
+            registered_verb, registered_name = registered
+            existing = _ACTION_PROCS.get(registered_name)
+            if existing is not None and existing.poll() is None:
+                if registered_verb == verb:
+                    return existing, True, registered_name
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"Gateway lifecycle action '{registered_verb}' for profile "
+                        f"'{owner}' is still running as '{registered_name}' "
+                        f"(pid {existing.pid}); refusing concurrent '{verb}'."
+                    ),
+                )
+            _GATEWAY_LIFECYCLE_ACTIONS.pop(owner, None)
+
+        # Two ambient requests can only collide on the legacy unqualified name
+        # if the active profile changes mid-action. Keep the first public name
+        # stable and qualify the second by its different canonical owner so the
+        # two safe, independent processes remain pollable.
+        for other_owner, (_other_verb, other_name) in list(
+            _GATEWAY_LIFECYCLE_ACTIONS.items()
+        ):
+            if other_owner == owner or other_name != action_name:
+                continue
+            other_proc = _ACTION_PROCS.get(other_name)
+            if other_proc is not None and other_proc.poll() is None:
+                action_name = _profile_action_name(base_name, owner)
+                break
+
+        if verb == "restart":
+            # Reap orphaned gateways before spawning a new restart (#77276).
+            try:
+                from hermes_cli.gateway import _reap_unsupervised_gateway_orphans
+
+                _reap_unsupervised_gateway_orphans()
+            except Exception:
+                pass  # best-effort — don't block the restart on a reap failure
+
+        proc = _spawn_hermes_action(subcommand, action_name)
+        _GATEWAY_LIFECYCLE_ACTIONS[owner] = (verb, action_name)
+        return proc, False, action_name
+
+
 # Kept in sync with the corresponding frontend validation in ChannelsPage.tsx.
 _TELEGRAM_BOT_TOKEN_RE = re.compile(r"\d+:[A-Za-z0-9_-]{30,}")
 _TELEGRAM_USER_ID_RE = re.compile(r"\d+")
@@ -4625,37 +4990,21 @@ def _validate_messaging_env_value(platform_id: str, key: str, value: str) -> Non
 
 
 def _spawn_gateway_restart(profile: Optional[str] = None) -> Tuple[subprocess.Popen, bool]:
-    """Spawn ``hermes gateway restart``, reusing an in-flight restart.
+    """Spawn ``hermes gateway restart`` through the owner lifecycle registry.
 
     Multiple dashboard paths can request a restart in quick succession
     (restart button double-click, or a stale cached frontend firing its own
     restart after the server already auto-restarted post-onboarding). Two
-    concurrent ``hermes gateway restart`` children race each other on the
-    manual kill-and-start path, so reuse the live one instead.
-
-    Before spawning, sweep for orphaned gateway processes whose parent has
-    exited (e.g. desktop-app restarts leaving a reparented gateway child
-    under launchd/PPID=1).  Without this the orphan keeps its platform
-    connection alive and the fresh gateway stacks a duplicate (#77276).
+    concurrent lifecycle children race each other on the manual PID/state
+    paths, so the common registry reuses the same owner/verb and rejects a
+    different live verb for that owner.
 
     Returns ``(proc, reused)``.
     """
-    # Reap orphaned gateways before spawning a new one (#77276).
-    try:
-        from hermes_cli.gateway import _reap_unsupervised_gateway_orphans
-
-        _reap_unsupervised_gateway_orphans()
-    except Exception:
-        pass  # best-effort — don't block the restart on a reap failure
-
-    subcommand = _gateway_subcommand(profile, "restart")
-    existing = _ACTION_PROCS.get("gateway-restart")
-    if existing is not None and existing.poll() is None:
-        existing_command = _ACTION_COMMANDS.get("gateway-restart")
-        if existing_command is None or existing_command == tuple(subcommand):
-            return existing, True
-        raise RuntimeError("gateway restart already in progress for another profile")
-    return _spawn_hermes_action(subcommand, "gateway-restart"), False
+    proc, reused, _action_name = _spawn_gateway_lifecycle_action(
+        "restart", profile
+    )
+    return proc, reused
 
 
 def _restart_gateway_after_webhook_enable(profile: Optional[str] = None) -> dict[str, Any]:
@@ -4675,7 +5024,9 @@ def _restart_gateway_after_webhook_enable(profile: Optional[str] = None) -> dict
         )
     return {
         "restart_started": True,
-        "restart_action": "gateway-restart",
+        "restart_action": _gateway_lifecycle_action_name_for_proc(
+            "restart", profile, proc
+        ),
         "restart_pid": proc.pid,
     }
 
@@ -4684,7 +5035,8 @@ def _restart_gateway_after_webhook_enable(profile: Optional[str] = None) -> dict
 async def restart_gateway(profile: Optional[str] = None):
     """Kick off a ``hermes gateway restart`` in the background."""
     try:
-        proc, _reused = _spawn_gateway_restart(profile)
+        await run_in_threadpool(_require_gateway_lifecycle_owner, profile)
+        proc, reused = _spawn_gateway_restart(profile)
     except HTTPException:
         raise
     except Exception as exc:
@@ -4693,7 +5045,10 @@ async def restart_gateway(profile: Optional[str] = None):
     return {
         "ok": True,
         "pid": proc.pid,
-        "name": "gateway-restart",
+        "name": _gateway_lifecycle_action_name_for_proc(
+            "restart", profile, proc
+        ),
+        "already_running": reused,
     }
 
 
@@ -5490,6 +5845,9 @@ async def get_action_status(name: str, lines: int = 200):
             _ACTION_PROCS.pop(name, None)
             _ACTION_COMMANDS.pop(name, None)
             _ACTION_IDS.pop(name, None)
+            _release_gateway_lifecycle_action(name)
+            if name.startswith(("gateway-start", "gateway-restart", "gateway-stop")):
+                _invalidate_gateway_lifecycle_caches()
 
     return {
         "name": name,
@@ -9523,7 +9881,9 @@ def _restart_gateway_after_whatsapp_onboarding(profile: Optional[str] = None) ->
         )
     return {
         "restart_started": True,
-        "restart_action": "gateway-restart",
+        "restart_action": _gateway_lifecycle_action_name_for_proc(
+            "restart", profile, proc
+        ),
         "restart_pid": proc.pid,
     }
 
@@ -9647,7 +10007,19 @@ async def apply_whatsapp_onboarding(
     with _whatsapp_onboarding_lock:
         _whatsapp_onboarding_sessions.pop(pairing_id, None)
 
-    restart_result = _restart_gateway_after_whatsapp_onboarding(effective_profile)
+    try:
+        await run_in_threadpool(
+            _require_gateway_lifecycle_owner, effective_profile
+        )
+    except Exception as exc:
+        restart_result = {
+            "restart_started": False,
+            "restart_error": str(exc),
+        }
+    else:
+        restart_result = _restart_gateway_after_whatsapp_onboarding(
+            effective_profile
+        )
     return {
         "ok": True,
         "platform": "whatsapp",
@@ -9951,7 +10323,9 @@ def _restart_gateway_after_telegram_onboarding(profile: Optional[str] = None) ->
         )
     return {
         "restart_started": True,
-        "restart_action": "gateway-restart",
+        "restart_action": _gateway_lifecycle_action_name_for_proc(
+            "restart", profile, proc
+        ),
         "restart_pid": proc.pid,
     }
 
@@ -10018,7 +10392,19 @@ async def apply_telegram_onboarding(
     with _telegram_onboarding_lock:
         _telegram_onboarding_pairings.pop(pairing_id, None)
 
-    restart_result = _restart_gateway_after_telegram_onboarding(effective_profile)
+    try:
+        await run_in_threadpool(
+            _require_gateway_lifecycle_owner, effective_profile
+        )
+    except Exception as exc:
+        restart_result = {
+            "restart_started": False,
+            "restart_error": str(exc),
+        }
+    else:
+        restart_result = _restart_gateway_after_telegram_onboarding(
+            effective_profile
+        )
 
     return {
         "ok": True,
@@ -13586,7 +13972,15 @@ async def enable_webhooks():
             detail="Failed to enable webhook platform.",
         ) from exc
 
-    restart_result = _restart_gateway_after_webhook_enable()
+    try:
+        await run_in_threadpool(_require_gateway_lifecycle_owner, None)
+    except Exception as exc:
+        restart_result = {
+            "restart_started": False,
+            "restart_error": str(exc),
+        }
+    else:
+        restart_result = _restart_gateway_after_webhook_enable()
     return {
         "ok": True,
         "platform": "webhook",
@@ -13696,31 +14090,41 @@ async def set_webhook_enabled(name: str, body: WebhookEnabledToggle):
 @app.post("/api/gateway/start")
 async def start_gateway(profile: Optional[str] = None):
     try:
-        action_name = _profile_action_name("gateway-start", profile)
-        proc = _spawn_hermes_action(
-            _gateway_subcommand(profile, "start"), action_name
+        await run_in_threadpool(_require_gateway_lifecycle_owner, profile)
+        proc, reused, action_name = _spawn_gateway_lifecycle_action(
+            "start", profile
         )
     except HTTPException:
         raise
     except Exception as exc:
         _log.exception("Failed to spawn gateway start")
         raise HTTPException(status_code=500, detail=f"Failed to start gateway: {exc}")
-    return {"ok": True, "pid": proc.pid, "name": action_name}
+    return {
+        "ok": True,
+        "pid": proc.pid,
+        "name": action_name,
+        "already_running": reused,
+    }
 
 
 @app.post("/api/gateway/stop")
 async def stop_gateway(profile: Optional[str] = None):
     try:
-        action_name = _profile_action_name("gateway-stop", profile)
-        proc = _spawn_hermes_action(
-            _gateway_subcommand(profile, "stop"), action_name
+        await run_in_threadpool(_require_gateway_lifecycle_owner, profile)
+        proc, reused, action_name = _spawn_gateway_lifecycle_action(
+            "stop", profile
         )
     except HTTPException:
         raise
     except Exception as exc:
         _log.exception("Failed to spawn gateway stop")
         raise HTTPException(status_code=500, detail=f"Failed to stop gateway: {exc}")
-    return {"ok": True, "pid": proc.pid, "name": action_name}
+    return {
+        "ok": True,
+        "pid": proc.pid,
+        "name": action_name,
+        "already_running": reused,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -13984,7 +14388,7 @@ async def reset_memory(body: MemoryReset):
 async def run_doctor(profile: Optional[str] = None):
     try:
         action_name = _profile_action_name("doctor", profile)
-        proc = _spawn_hermes_action(
+        proc, reused = _spawn_profile_action_once(
             _profile_cli_args(profile) + ["doctor"], action_name
         )
     except HTTPException:
@@ -13992,7 +14396,12 @@ async def run_doctor(profile: Optional[str] = None):
     except Exception as exc:
         _log.exception("Failed to spawn doctor")
         raise HTTPException(status_code=500, detail=f"Failed to run doctor: {exc}")
-    return {"ok": True, "pid": proc.pid, "name": action_name}
+    return {
+        "ok": True,
+        "pid": proc.pid,
+        "name": action_name,
+        "already_running": reused,
+    }
 
 
 @app.post("/api/ops/security-audit")
