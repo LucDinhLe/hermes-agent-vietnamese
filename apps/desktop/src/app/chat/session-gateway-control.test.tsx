@@ -118,6 +118,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  vi.useRealTimers()
 })
 
 describe('SessionGatewayControl', () => {
@@ -171,6 +172,49 @@ describe('SessionGatewayControl', () => {
     expect(stopGateway).not.toHaveBeenCalledWith('shared', 'source-a')
     expect(runDoctor).not.toHaveBeenCalledWith('shared', 'source-a')
     expect(notifyError).not.toHaveBeenCalled()
+  })
+
+  it('converges from a transient stopped restart snapshot to the replacement gateway without a manual health check', async () => {
+    vi.useFakeTimers()
+    let statusCalls = 0
+
+    vi.mocked(getStatus).mockImplementation(async () => {
+      statusCalls += 1
+
+      if (statusCalls === 1) {
+        return gatewayStatus(23424)
+      }
+
+      if (statusCalls === 2) {
+        return gatewayStatus(0, false)
+      }
+
+      return gatewayStatus(22448)
+    })
+
+    render(<SessionGatewayControl backendReady connectionId="source-a" profile="shared" />)
+    openGateway()
+
+    await act(async () => undefined)
+    expect(screen.getByText(/PID 23424/)).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Restart' }))
+    await act(async () => undefined)
+
+    expect(screen.getByText('Stopped')).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Stop' }).hasAttribute('data-disabled')).toBe(true)
+    expect(getStatus).toHaveBeenCalledTimes(2)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_500)
+    })
+
+    expect(screen.getByText('Running')).toBeTruthy()
+    expect(screen.getByText(/PID 22448/)).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Stop' }).hasAttribute('data-disabled')).toBe(false)
+    expect(screen.queryByText('Gateway is healthy.')).toBeNull()
+    expect(getStatus).toHaveBeenCalledTimes(3)
+    expect(getStatus).toHaveBeenNthCalledWith(3, 'shared', 'source-a')
   })
 
   it('strands a late status reply after the owning source changes', async () => {

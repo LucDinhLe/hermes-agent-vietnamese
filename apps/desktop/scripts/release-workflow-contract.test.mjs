@@ -176,7 +176,15 @@ test('candidate workflow builds the complete resident runtime on every advertise
 })
 
 test('candidate workflow can only create a draft and never promotes it', () => {
-  assert.match(candidate, /gh release create "\$TAG" --verify-tag --target "\$COMMIT" --draft/)
+  const exactTagBindingIndex = candidate.indexOf('test "$tag_commit" = "$head_commit"')
+  const draftCreationIndex = candidate.indexOf('gh release create "$TAG"')
+
+  assert.notEqual(exactTagBindingIndex, -1)
+  assert.notEqual(draftCreationIndex, -1)
+  assert.ok(exactTagBindingIndex < draftCreationIndex, 'exact tag binding must pass before draft creation')
+  assert.match(candidate, /ref: \$\{\{ needs\.verify\.outputs\.tag \}\}/)
+  assert.match(candidate, /gh release create "\$TAG" --verify-tag --draft/)
+  assert.doesNotMatch(candidate, /gh release create "\$TAG"[^\r\n]*--target/)
   assert.match(candidate, /release_title: \$\{\{ steps\.candidate\.outputs\.release_title \}\}/)
   assert.match(candidate, /resolveVietnameseReleaseCandidate/)
   assert.match(candidate, /--title "\$RELEASE_TITLE"/)
@@ -184,6 +192,31 @@ test('candidate workflow can only create a draft and never promotes it', () => {
   assert.doesNotMatch(candidate, /--draft=false/)
   assert.match(candidate, /--draft --prerelease/)
   assert.match(builderWrapper, /args\.push\("--publish", "never"\)/)
+})
+
+test('candidate stage rebinds the fresh tag and checkout to the verified commit before creation', () => {
+  const stage = candidate.slice(candidate.indexOf('\n  stage:\n'))
+  const checkoutIndex = stage.indexOf('ref: ${{ needs.verify.outputs.tag }}')
+  const guardIndex = stage.indexOf('- name: Khóa lại tag và commit trước staging')
+  const metadataIndex = stage.indexOf('- name: Lập metadata cập nhật theo đúng artifact đã dựng')
+  const draftCreationIndex = stage.indexOf('gh release create "$TAG"')
+  const guard = stage.slice(guardIndex, metadataIndex)
+
+  assert.notEqual(checkoutIndex, -1)
+  assert.notEqual(guardIndex, -1)
+  assert.notEqual(metadataIndex, -1)
+  assert.notEqual(draftCreationIndex, -1)
+  assert.ok(checkoutIndex < guardIndex, 'stage checkout must precede the stage-time commit guard')
+  assert.ok(guardIndex < metadataIndex, 'stage-time commit guard must pass before metadata generation')
+  assert.ok(guardIndex < draftCreationIndex, 'stage-time commit guard must pass before draft creation')
+  assert.match(guard, /TAG: \$\{\{ needs\.verify\.outputs\.tag \}\}/)
+  assert.match(guard, /EXPECTED_COMMIT: \$\{\{ needs\.verify\.outputs\.commit \}\}/)
+  assert.match(guard, /git fetch --force origin "refs\/tags\/\$TAG:refs\/tags\/\$TAG"/)
+  assert.match(guard, /head_commit="\$\(git rev-parse HEAD\)"/)
+  assert.match(guard, /tag_commit="\$\(git rev-list -n 1 "\$TAG"\)"/)
+  assert.match(guard, /test "\$head_commit" = "\$EXPECTED_COMMIT"/)
+  assert.match(guard, /test "\$tag_commit" = "\$EXPECTED_COMMIT"/)
+  assert.doesNotMatch(stage, /gh release create "\$TAG"[^\r\n]*--target/)
 })
 
 test('promotion is separate and requires exact manifest plus successful runtime smoke evidence', () => {

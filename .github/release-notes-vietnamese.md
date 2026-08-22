@@ -1,8 +1,8 @@
 ## Hermes Vietnamese v31.0 — Agents cộng tác luôn sẵn trong từng phiên
 
-Candidate bất biến: `vi-v0.31.0-4`
+Candidate bất biến: `vi-v0.31.0-5`
 
-Phiên bản kỹ thuật Desktop: `0.31.0-vi.4`
+Phiên bản kỹ thuật Desktop: `0.31.0-vi.5`
 
 Lõi upstream: **Hermes Agent 0.20.4**
 
@@ -19,18 +19,20 @@ nhầm nguồn gốc hoặc đường nâng cấp.
 > hành vẫn là community pilot `vi-v0.20.0-25` cho tới khi signing và
 > smoke máy thật đủ theo policy; bản này không được tái phân loại thành stable.
 
-> **Candidate kế nhiệm:** `vi-v0.31.0-4` thay thế candidate
-> `vi-v0.31.0-3` sau khi exact-artifact smoke trên Chrome 151 phát hiện quyền
-> host của Connector giữ cổng URL hiện tại và chỉ một scheme, làm preview báo
-> rỗng dù website đang có cookie. Tag, draft, asset và bằng chứng của
-> `vi-v0.31.0-1`, `vi-v0.31.0-2` và `vi-v0.31.0-3` vẫn được giữ nguyên; không
-> rebuild, di chuyển hoặc sửa đè candidate cũ.
+> **Candidate kế nhiệm:** `vi-v0.31.0-5` thay thế candidate
+> `vi-v0.31.0-4` bị exact-artifact smoke loại. Trong lần dựng lại Gateway
+> thật trên Windows, backend đã có PID mới và báo `overall=ok`, nhưng menu vẫn
+> hiện **Đã dừng**, cho phép **Khởi động** và vô hiệu hóa **Dừng** quá
+> 45 giây. Ảnh và quyết định NO-GO đã được ghi lại. Tag, draft,
+> asset và bằng chứng của `vi-v0.31.0-1` đến `vi-v0.31.0-4` vẫn
+> được giữ riêng tư và nguyên vẹn; không rebuild, di chuyển hoặc sửa đè
+> candidate cũ.
 
 > **Chuẩn hóa phiên bản:** `v31.0` là mốc đầu tiên dùng hợp đồng
 > phiên bản sản phẩm tách khỏi upstream. Nhãn working `v31.1` trong kế hoạch
 > candidate vi39 không phải technical/updater version và được thay bằng mốc
 > chính thức `v31.0`; đường nâng cấp vẫn tăng từ `0.20.4-vi.39` lên
-> `0.31.0-vi.4`.
+> `0.31.0-vi.5`.
 
 ### Agents: cộng tác thay vì thay người chủ trì
 
@@ -63,11 +65,25 @@ nhầm nguồn gốc hoặc đường nâng cấp.
 - Plugin ID `hermes-bots`, storage key, profile/session/group/routine schema,
   tiêu đề `Bot Chat` và marker protocol cũ tiếp tục được đọc. Chỉ lớp trình bày
   dùng Agent/Agents; v31 không rewrite dữ liệu người dùng.
-- Updater nhận `0.31.0-vi.4` là mới hơn `0.31.0-vi.3`, `0.31.0-vi.2`,
-  `0.31.0-vi.1` và
+- Updater nhận `0.31.0-vi.5` là mới hơn `0.31.0-vi.4`, `0.31.0-vi.3`,
+  `0.31.0-vi.2`, `0.31.0-vi.1` và
   `0.20.4-vi.39`. Cổng phát hành bắt buộc
   thử cài đè từ `vi-v0.20.4-39` và kiểm tra profile, session, project, group,
   routine cùng trạng thái onboarding còn nguyên.
+
+### Gateway tự hội tụ sau restart mà không cần kiểm tra thủ công
+
+- Windows có thể nhìn thấy process Gateway thay thế trước khi PID, lock và runtime
+  state mà `/api/status` đọc đã ổn định. Candidate `-4` chỉ đọc status một
+  lần sau action, nên snapshot chuyển tiếp **Đã dừng** có thể bị giữ vô hạn.
+- Khi menu mở, candidate mới làm mới status tuần tự theo đúng
+  `connectionId + profile`; lần đọc sau chỉ được lên lịch sau khi lần trước
+  kết thúc. Polling dừng khi đóng menu, đổi owner hoặc unmount; phản hồi muộn
+  vẫn bị loại theo request ID và owner generation hiện có.
+- Cổng chấp nhận phải thấy chuỗi PID cũ đang chạy → restart thành công →
+  snapshot dừng tạm thời → PID mới đang chạy; UI tự hiện **Đang chạy**, PID
+  mới và bật **Dừng** mà không bấm **Kiểm tra sức khỏe**. Mọi lần đọc
+  status vẫn phải nhận đúng owner.
 
 ### Advisor và các bề mặt v26–v39 được giữ nguyên
 
@@ -95,23 +111,38 @@ nhầm nguồn gốc hoặc đường nâng cấp.
   Exact-artifact smoke phải thử Chrome và Edge bằng profile cô lập, gồm preview,
   import, persistence, revoke và quét redaction.
 
+### Staging không yêu cầu GitHub xử lý lại target của tag
+
+- Workflow đã checkout tag, fetch tag từ origin, peel commit, buộc HEAD khớp commit
+  và buộc worktree sạch trước khi build. Job staging lại checkout output tag,
+  fetch tag mới nhất rồi buộc cả stage HEAD và tag commit mới resolve bằng commit
+  đã xác minh trước metadata/create; `gh release create` vẫn bắt buộc
+  `--verify-tag`.
+- Attempt 1 và 2 của run dựng `-4` gặp lỗi 403
+  `Resource not accessible by integration`; attempt 3 đã tạo thành công draft
+  riêng tư với 30 asset sau khi khôi phục một ref tại candidate commit.
+  Successor bỏ `--target` dư thừa để lệnh tạo draft chỉ dựa vào tag đã xác minh,
+  không còn phụ thuộc ref phụ tại commit đó. Workflow không tạo hoặc di chuyển
+  tag, không rebuild artifact đã nghiệm thu và không công khai release trong
+  job staging.
+
 ### Tệp candidate theo nền tảng
 
 Chỉ dùng các liên kết dưới đây sau khi release chuyển khỏi draft. Luôn đối chiếu
 với `SHA256SUMS.txt` nằm trong cùng release.
 
-| Máy đang dùng           | Tệp candidate                                                                                                                                             |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows 10/11 x64       | [Windows x64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-4/Hermes-Vietnamese-Windows-x64-Setup.exe)         |
-| Windows 10/11 ARM64     | [Windows ARM64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-4/Hermes-Vietnamese-Windows-arm64-Setup.exe)     |
-| Mac chip Apple M-series | [macOS Apple Silicon DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-4/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
-| Mac chip Intel          | [macOS Intel DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-4/Hermes-Vietnamese-macOS-Intel.dmg)                 |
-| Ubuntu/Debian x64       | [Linux x64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-4/Hermes-Vietnamese-Linux-x64.deb)                     |
-| Ubuntu/Debian ARM64     | [Linux ARM64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-4/Hermes-Vietnamese-Linux-arm64.deb)                 |
-| Fedora/RHEL x64         | [Linux x64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-4/Hermes-Vietnamese-Linux-x64.rpm)                     |
-| Fedora/RHEL ARM64       | [Linux ARM64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-4/Hermes-Vietnamese-Linux-arm64.rpm)                 |
-| Linux khác x64          | [Linux x64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-4/Hermes-Vietnamese-Linux-x64.AppImage)           |
-| Linux khác ARM64        | [Linux ARM64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-4/Hermes-Vietnamese-Linux-arm64.AppImage)       |
+| Máy đang dùng           | Tệp candidate                                                                                                                                            |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows 10/11 x64       | [Windows x64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-5/Hermes-Vietnamese-Windows-x64-Setup.exe)         |
+| Windows 10/11 ARM64     | [Windows ARM64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-5/Hermes-Vietnamese-Windows-arm64-Setup.exe)     |
+| Mac chip Apple M-series | [macOS Apple Silicon DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-5/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
+| Mac chip Intel          | [macOS Intel DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-5/Hermes-Vietnamese-macOS-Intel.dmg)                 |
+| Ubuntu/Debian x64       | [Linux x64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-5/Hermes-Vietnamese-Linux-x64.deb)                     |
+| Ubuntu/Debian ARM64     | [Linux ARM64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-5/Hermes-Vietnamese-Linux-arm64.deb)                 |
+| Fedora/RHEL x64         | [Linux x64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-5/Hermes-Vietnamese-Linux-x64.rpm)                     |
+| Fedora/RHEL ARM64       | [Linux ARM64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-5/Hermes-Vietnamese-Linux-arm64.rpm)                 |
+| Linux khác x64          | [Linux x64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-5/Hermes-Vietnamese-Linux-x64.AppImage)           |
+| Linux khác ARM64        | [Linux ARM64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-5/Hermes-Vietnamese-Linux-arm64.AppImage)       |
 
 ### Tình trạng nghiệm thu candidate khi được công khai
 

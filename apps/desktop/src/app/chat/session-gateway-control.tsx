@@ -42,6 +42,7 @@ interface SessionGatewayControlProps {
 type PendingAction = 'doctor' | 'restart' | 'start' | 'stop' | null
 
 const LOG_TAIL = 160
+const STATUS_POLL_MS = 2_500
 
 const ownerKeyFor = (owner: BackendOwner) => `${owner.connectionId}::${owner.profile}`
 
@@ -144,7 +145,32 @@ export function SessionGatewayControl({ backendReady, connectionId, profile }: S
       return
     }
 
-    void loadStatus(owner)
+    let cancelled = false
+    let timer: number | undefined
+
+    // A lifecycle action can finish before the replacement gateway has
+    // published the PID/lock/runtime state consumed by /api/status. Poll only
+    // while this exact-owner menu is open, scheduling the next read after the
+    // previous one settles so slow backends never accumulate overlapping
+    // requests. loadStatus's request id + owner generation still strand late
+    // replies after a source/profile switch.
+    const poll = async () => {
+      await loadStatus(owner)
+
+      if (!cancelled) {
+        timer = window.setTimeout(() => void poll(), STATUS_POLL_MS)
+      }
+    }
+
+    void poll()
+
+    return () => {
+      cancelled = true
+
+      if (timer !== undefined) {
+        window.clearTimeout(timer)
+      }
+    }
   }, [backendReady, loadStatus, open, owner])
 
   async function performAction(

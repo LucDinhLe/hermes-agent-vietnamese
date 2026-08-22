@@ -52,19 +52,28 @@ class TestParseReleaseTag:
         assert newer > older
 
     def test_v31_successor_is_newer_than_all_prior_candidates_and_vi39(self):
-        candidate = _parse_release_tag("vi-v0.31.0-4")
+        candidate = _parse_release_tag("vi-v0.31.0-5")
+        fourth_candidate = _parse_release_tag("vi-v0.31.0-4")
         third_candidate = _parse_release_tag("vi-v0.31.0-3")
         second_candidate = _parse_release_tag("vi-v0.31.0-2")
         first_candidate = _parse_release_tag("vi-v0.31.0-1")
         vi39 = _parse_release_tag("vi-v0.20.4-39")
         assert (
             candidate is not None
+            and fourth_candidate is not None
             and third_candidate is not None
             and second_candidate is not None
             and first_candidate is not None
             and vi39 is not None
         )
-        assert candidate > third_candidate > second_candidate > first_candidate > vi39
+        assert (
+            candidate
+            > fourth_candidate
+            > third_candidate
+            > second_candidate
+            > first_candidate
+            > vi39
+        )
 
 
 class TestLatestReleaseTagFromLsRemote:
@@ -130,13 +139,14 @@ class TestLatestPublicReleaseFromGitHub:
 
     def test_v31_successor_wins_over_all_prior_candidates_and_published_vi39_line(self):
         releases = [
+            {"tag_name": "vi-v0.31.0-5", "draft": False, "prerelease": True},
             {"tag_name": "vi-v0.31.0-4", "draft": False, "prerelease": True},
             {"tag_name": "vi-v0.31.0-3", "draft": False, "prerelease": True},
             {"tag_name": "vi-v0.31.0-2", "draft": False, "prerelease": True},
             {"tag_name": "vi-v0.31.0-1", "draft": False, "prerelease": True},
             {"tag_name": "vi-v0.20.4-39", "draft": False, "prerelease": True},
         ]
-        assert _latest_public_release_tag_from_releases(releases) == "vi-v0.31.0-4"
+        assert _latest_public_release_tag_from_releases(releases) == "vi-v0.31.0-5"
 
     def test_resolver_peels_only_the_published_release_tag(self, tmp_path):
         tag = "vi-v0.20.0-28"

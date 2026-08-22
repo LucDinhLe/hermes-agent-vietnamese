@@ -1,5 +1,36 @@
 # Tiến độ
 
+## Cập nhật 2026-08-23 — successor candidate V31 `vi-v0.31.0-5`
+
+- Exact-artifact Windows x64 smoke đã loại `vi-v0.31.0-4`: backend Gateway
+  thay thế đạt PID `30636`, trạng thái `running` và `overall=ok`, nhưng menu
+  vẫn hiện **Đã dừng**, cho phép **Khởi động** và vô hiệu hóa **Dừng** quá
+  45 giây. Ảnh cùng quyết định NO-GO đã được lưu; tag, draft, asset và bằng
+  chứng `-1` đến `-4` tiếp tục riêng tư, bất biến và không được promotion.
+- Successor được khóa là `vi-v0.31.0-5` / `0.31.0-vi.5`. Khi menu Gateway
+  đang mở, status được làm mới tuần tự theo đúng `connectionId + profile`, tự
+  hội tụ từ snapshot dừng chuyển tiếp sang PID mới mà không cần bấm **Kiểm tra
+  sức khỏe**. Polling dừng khi đóng menu, đổi owner hoặc unmount; request ID và
+  owner generation tiếp tục loại phản hồi muộn.
+- Run `32589995695` đã dựng đủ sáu target `-4`; attempt 1 và 2 gặp
+  `HTTP 403: Resource not accessible by integration` khi tạo release, còn
+  attempt 3 đã thành công sau khi khôi phục một ref tại candidate commit, tạo
+  draft `-4` riêng tư với 30 asset. Workflow `-5` harden đường staging bằng
+  cách giữ verify-job peeled-commit/HEAD binding và worktree-clean guard; tại
+  stage, workflow fetch lại tag rồi buộc cả stage HEAD và tag commit mới resolve
+  bằng commit đã xác minh trước metadata/create. `--verify-tag` được giữ,
+  `--target` dư thừa bị bỏ và contract test khóa cả guard mới lẫn lệnh create,
+  nên tạo draft không còn phụ thuộc ref phụ. Draft `-4` tiếp tục riêng tư và
+  bất biến.
+- Metadata, README/README.vi, release notes, working brief, updater/version
+  regression và kế hoạch `docs/release-vi-v0.31.0-5-plan.md` đã chuyển sang
+  `-5`. Latest vẫn là `vi-v0.20.0-25`; các mốc rollback hiện hành không đổi.
+- Gate cục bộ đạt: 26/26 Node release/evidence/public-contract, 23/23 Vitest
+  workflow/updater, 13/13 Vitest Gateway convergence, 19/19 Python stable
+  update-channel, JSON/YAML parse và `git diff --check`.
+- Chưa commit, push, tạo tag `vi-v0.31.0-5`, build artifact, tạo draft, chạy
+  exact-artifact smoke `-5` hoặc thực hiện hành động public.
+
 ## Cập nhật 2026-08-23 — khóa controller promotion hậu tag `vi-v0.31.0-4`
 
 - Candidate đã dựng vẫn là tag bất biến `vi-v0.31.0-4` tại commit

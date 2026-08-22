@@ -1,7 +1,7 @@
 # Hermes Vietnamese v31.0 — Agents working brief
 
-Status: third successor candidate preparation in progress; `vi-v0.31.0-1`, `vi-v0.31.0-2`, and `vi-v0.31.0-3` remain immutable and are not promotable
-Candidate contract: `vi-v0.31.0-4` / app version `0.31.0-vi.4`; all three prior drafts remain preserved and unchanged
+Status: fourth successor candidate preparation in progress; `vi-v0.31.0-1` through `vi-v0.31.0-4` remain immutable, private, and are not promotable
+Candidate contract: `vi-v0.31.0-5` / app version `0.31.0-vi.5`; all four prior tags, drafts, assets, and evidence sets remain preserved and unchanged
 Release class: community prerelease until signing and real-machine smoke satisfy the stable policy
 
 ## Outcome
@@ -44,10 +44,10 @@ New collaboration membership data is additive and versioned. A missing or malfor
 
 - Product version: `31.0`.
 - Technical/app base: `0.31.0`.
-- Candidate: `vi-v0.31.0-4`, app SemVer `0.31.0-vi.4`.
+- Candidate: `vi-v0.31.0-5`, app SemVer `0.31.0-vi.5`.
 - Upstream Hermes Agent version: `0.20.4`, displayed as a separate provenance field.
 - Installed identity and bootstrap/resident-runtime markers remain compatible with `0.20.4-vi.39`.
-- Updater ordering must prove `0.31.0-vi.4 > 0.31.0-vi.3 > 0.31.0-vi.2 > 0.31.0-vi.1 > 0.20.4-vi.39` on every supported feed target.
+- Updater ordering must prove `0.31.0-vi.5 > 0.31.0-vi.4 > 0.31.0-vi.3 > 0.31.0-vi.2 > 0.31.0-vi.1 > 0.20.4-vi.39` on every supported feed target.
 
 ## Acceptance gates
 
@@ -61,7 +61,7 @@ New collaboration membership data is additive and versioned. A missing or malfor
 
 ## Release boundary
 
-The workflow may create and publish `vi-v0.31.0-4` as a public community prerelease after the pilot gates pass. It must leave the tagged/draft `vi-v0.31.0-1`, `vi-v0.31.0-2`, and `vi-v0.31.0-3` candidates untouched, must not rewrite `vi-v0.20.4-39`, move the stable/Latest contract, or claim stable status. Stable promotion remains blocked until platform signing/notarization and required real-machine smoke are complete.
+The workflow may create and publish `vi-v0.31.0-5` as a public community prerelease after the pilot gates pass. It must leave the tagged/draft `vi-v0.31.0-1` through `vi-v0.31.0-4` candidates untouched, must not rewrite `vi-v0.20.4-39`, move the stable/Latest contract, or claim stable status. Stable promotion remains blocked until platform signing/notarization and required real-machine smoke are complete.
 
 ## Post-candidate header delta
 
@@ -87,3 +87,13 @@ This delta does not widen permissions, change the pairing protocol, persist cook
 Exact-artifact smoke of `vi-v0.31.0-3` on Chrome 151 proved that the partition-aware query alone was insufficient. The extension derived its optional host permission from `URL.origin`, retaining the fixture's explicit port and granting only the current scheme. Chromium returned zero cookies until the permission was expressed without a port. The successor therefore requests exactly `http://<hostname>/*` and `https://<hostname>/*`, keeps the explicit `{ partitionKey: {} }` query, and revokes both current patterns plus the legacy origin-with-port pattern that an older candidate may have left behind.
 
 The permission remains limited to the exact hostname selected by the user. It does not use `<all_urls>`, a subdomain wildcard, or inferred eTLD+1 scope. A parent-domain cookie viewed from a subdomain may therefore remain outside the result under Chromium's permission checks; this is an explicit limitation, not evidence that the parent cookie does not exist. Acceptance requires behavior tests for both schemes, non-default ports, IPv6, partial grants, and legacy-grant revocation, followed by exact-artifact Chrome and Edge smoke on isolated HTTP and HTTPS fixtures. `vi-v0.31.0-3` remains immutable and none of its artifacts or evidence may be reused for `vi-v0.31.0-4`.
+
+## Fourth successor Gateway convergence and staging delta
+
+Exact-artifact Windows smoke of `vi-v0.31.0-4` reproduced a live stop-to-start transition in which the replacement backend reached a new running PID and `overall=ok`, while the open Gateway menu remained **Stopped**, left **Start** enabled, and kept **Stop** disabled for more than 45 seconds. The screenshot and NO-GO result reject `-4`; its tag, draft, assets, hashes, and evidence remain private and immutable.
+
+The lifecycle action can complete before the replacement gateway has published the PID, lock, and runtime state read by `/api/status`. Candidate `-4` refreshed status only once after the action, so a valid transient stopped snapshot could remain forever. Candidate `-5` polls status sequentially only while the exact-owner menu is open. Every request keeps the captured `connectionId + profile`; the next poll is scheduled only after the previous request settles; polling stops when the menu closes, the owner changes, or the component unmounts. Existing request IDs and owner generations continue to strand late replies. The fix does not restart a gateway by itself, change lifecycle ownership, or require a manual health check.
+
+Acceptance must prove old running PID → successful restart action → transient stopped snapshot → new running PID, after which the UI converges to **Running**, shows the replacement PID, and enables **Stop** without clicking **Check health**. Every status request must remain bound to the original owner, and no overlapping requests may accumulate.
+
+Run `32589995695` built all six `-4` native artifacts. Attempts 1 and 2 received `HTTP 403: Resource not accessible by integration` when the Actions token called `gh release create`; attempt 3 succeeded after a ref at the candidate commit was restored, creating the immutable private 30-asset `-4` draft. The candidate workflow had already fetched and verified the exact tag, bound checkout HEAD to its peeled commit, and required a clean worktree. Candidate `-5` hardens staging by checking out the verified output tag, fetching that tag again, and requiring both the stage HEAD and freshly resolved tag commit to equal the verify-job commit before metadata generation or release creation. It keeps `--verify-tag` while removing the redundant `--target` argument, so draft creation relies on the verified tag instead of an auxiliary ref at the same commit. Contract tests must lock the stage-specific guard before creation and prove that no staging release command asks GitHub to create or retarget a tag. Staging remains draft-only; promotion and its exact-byte evidence gates remain separate, and the `-4` draft remains private and immutable.
