@@ -232,8 +232,12 @@ test('promotion is separate and requires exact manifest plus successful runtime 
   assert.match(promotion, /node scripts\/validate-release-evidence\.mjs/)
   assert.match(promotion, /e\.commit!==process\.env\.CANDIDATE_COMMIT/)
   assert.match(promotion, /\.conclusion.*success/)
-  assert.match(promotion, /gh release edit "\$TAG" --repo "\$GITHUB_REPOSITORY" --draft=false --prerelease=true/)
-  assert.match(promotion, /gh release edit "\$TAG" --repo "\$GITHUB_REPOSITORY" --draft=false --prerelease=false/)
+  assert.match(promotion, /expected_make_latest=false/)
+  assert.match(promotion, /\[\[ "\$RELEASE_CLASS" == "stable" \]\] && expected_make_latest=true/)
+  assert.match(
+    promotion,
+    /-F draft=false -F prerelease="\$expected_prerelease" -f make_latest="\$expected_make_latest"/
+  )
   assert.match(promotion, /releaseClass!==process\.env\.RELEASE_CLASS/)
   assert.match(promotion, /public-release\.json'\)\.tag/)
   assert.match(promotion, /public-release\.json'\)\.releaseClass/)
@@ -247,17 +251,16 @@ test('promotion is separate and requires exact manifest plus successful runtime 
   assert.match(promotion, /browser_download_url/)
   assert.match(promotion, /draft asset inventory mismatch/)
   assert.match(promotion, /rollback_publication/)
-  assert.match(promotion, /--draft=true --prerelease="\$expected_prerelease" --latest=false/)
-  assert.match(promotion, /--draft=false --prerelease=true --latest=false/)
-  assert.match(promotion, /--draft=false --prerelease=false --latest/)
+  assert.match(promotion, /-F draft=true -F prerelease="\$expected_prerelease" -f make_latest=false/)
+  assert.match(promotion, /publication-response-api\.json/)
   assert.match(promotion, /releases\/latest/)
-  assert.match(promotion, /test "\$latest_tag" != "\$TAG"/)
+  assert.match(promotion, /test "\$latest_tag" = "\$previous_latest"/)
+  assert.match(promotion, /test "\$latest_id" = "\$previous_latest_id"/)
   assert.equal((promotion.match(/^\s*validateStablePromotionOrder\(\{/gm) ?? []).length, 1)
   assert.match(promotion, /PREVIOUS_LATEST="\$previous_latest"/)
   assert.match(promotion, /previousLatestTag: process\.env\.PREVIOUS_LATEST/)
   assert.ok(
-    promotion.indexOf('validateStablePromotionOrder({') <
-      promotion.indexOf('rollback_publication'),
+    promotion.indexOf('validateStablePromotionOrder({') < promotion.indexOf('rollback_publication'),
     'stable promotion must prove monotonic Latest order before mutation'
   )
   assert.equal(
@@ -267,8 +270,8 @@ test('promotion is separate and requires exact manifest plus successful runtime 
   )
   assert.equal((promotion.match(/const candidate = resolveVietnameseReleaseCandidate/g) ?? []).length, 2)
   assert.match(promotion, /expectedBody: fs\.readFileSync\('\.github\/release-notes-vietnamese\.md', 'utf8'\)/)
-  assert.match(promotion, /--json isDraft,isPrerelease,name,body > candidate-release\.json/)
-  assert.match(promotion, /--json isDraft,isPrerelease,name,body > published-release\.json/)
+  assert.match(promotion, /release-api\.json > candidate-release\.json/)
+  assert.match(promotion, /published-release-api\.json > published-release\.json/)
   assert.equal((promotion.match(/^\s*validateFeaturedCandidatePromotion\(\{/gm) ?? []).length, 1)
   assert.equal((promotion.match(/^\s*validateVietnameseReleaseNotesForClass\(\{/gm) ?? []).length, 1)
   assert.match(promotion, /process\.env\.RELEASE_CLASS === 'community-prerelease'/)
@@ -276,18 +279,16 @@ test('promotion is separate and requires exact manifest plus successful runtime 
   assert.match(promotion, /featuredCandidate: publicRelease\.featuredCandidate/)
   assert.match(promotion, /tag: process\.env\.TAG/)
   assert.ok(
-    promotion.indexOf('validateFeaturedCandidatePromotion({') <
-      promotion.indexOf('rollback_publication'),
+    promotion.indexOf('validateFeaturedCandidatePromotion({') < promotion.indexOf('rollback_publication'),
     'general prerelease promotion must bind its exact public callout before mutation'
   )
   assert.ok(
-    promotion.indexOf('validateVietnameseReleasePresentation') <
-      promotion.indexOf('rollback_publication'),
+    promotion.indexOf('validateVietnameseReleasePresentation') < promotion.indexOf('rollback_publication'),
     'general promotion must reject a stale title/body before any publication mutation is prepared'
   )
   assert.ok(
     promotion.lastIndexOf('validateVietnameseReleasePresentation') >
-      promotion.lastIndexOf('gh release edit "$TAG"'),
+      promotion.lastIndexOf('publication-response-api.json'),
     'general promotion must recheck the title/body after publication'
   )
   assert.ok(
@@ -313,10 +314,7 @@ test('pilot promotion stays prerelease, validates every byte, and discloses miss
   assert.match(pilotPromotion, /environment: release-production/)
   assert.match(pilotPromotion, /^\s*group: hermes-vietnamese-promotion$/m)
   assert.doesNotMatch(pilotPromotion, /group: hermes-vietnamese-pilot-promotion-/)
-  assert.match(
-    pilotPromotion,
-    /controller_sha:\r?\n\s+description:.*\r?\n\s+required: true\r?\n\s+type: string/
-  )
+  assert.match(pilotPromotion, /controller_sha:\r?\n\s+description:.*\r?\n\s+required: true\r?\n\s+type: string/)
   const stepsIndex = pilotPromotion.indexOf('    steps:')
   const controllerGateIndex = pilotPromotion.indexOf('      - name: Khóa commit điều khiển promotion')
   const checkoutIndex = pilotPromotion.indexOf('      - uses: actions/checkout@')
@@ -351,8 +349,8 @@ test('pilot promotion stays prerelease, validates every byte, and discloses miss
   assert.match(pilotPromotion, /browser_download_url/)
   assert.match(pilotPromotion, /draft asset inventory mismatch/)
   assert.match(pilotPromotion, /rollback_publication/)
-  assert.match(pilotPromotion, /--draft=true --prerelease=true --latest=false/)
-  assert.match(pilotPromotion, /--draft=false --prerelease=true --latest=false/)
+  assert.match(pilotPromotion, /-F draft=true -F prerelease=true -f make_latest=false/)
+  assert.match(pilotPromotion, /-F draft=false -F prerelease=true -f make_latest=false/)
   assert.match(pilotPromotion, /releases\/latest/)
   assert.match(pilotPromotion, /releases\/download\/\$TAG\/SHA256SUMS\.txt/)
   assert.match(pilotPromotion, /head_sha/)
@@ -366,44 +364,178 @@ test('pilot promotion stays prerelease, validates every byte, and discloses miss
   )
   assert.equal((pilotPromotion.match(/const candidate = resolveVietnameseReleaseCandidate/g) ?? []).length, 2)
   assert.match(pilotPromotion, /expectedBody: fs\.readFileSync\('\.github\/release-notes-vietnamese\.md', 'utf8'\)/)
-  assert.match(pilotPromotion, /--json isDraft,isPrerelease,name,body > candidate-release\.json/)
-  assert.match(pilotPromotion, /--json isDraft,isPrerelease,url,name,body > published-release\.json/)
+  assert.match(pilotPromotion, /release-api\.json > candidate-release\.json/)
+  assert.match(pilotPromotion, /published-release-api\.json > published-release\.json/)
   assert.equal((pilotPromotion.match(/^\s*validateFeaturedCandidatePromotion\(\{/gm) ?? []).length, 1)
   assert.equal((pilotPromotion.match(/^\s*validateVietnameseReleaseNotesForClass\(\{/gm) ?? []).length, 1)
   assert.match(pilotPromotion, /releaseClass: 'community-prerelease'/)
   assert.match(pilotPromotion, /featuredCandidate: publicRelease\.featuredCandidate/)
   assert.match(pilotPromotion, /tag: process\.env\.TAG/)
-  assert.match(pilotPromotion, /committed_latest="\$\(node -p "require\('\.\/\.github\/public-release\.json'\)\.tag"\)"/)
+  assert.match(
+    pilotPromotion,
+    /committed_latest="\$\(node -p "require\('\.\/\.github\/public-release\.json'\)\.tag"\)"/
+  )
   assert.match(pilotPromotion, /test "\$previous_latest" = "\$committed_latest"/)
   assert.match(pilotPromotion, /test "\$TAG" != "\$previous_latest"/)
   assert.ok(
-    pilotPromotion.indexOf('validateFeaturedCandidatePromotion({') <
-      pilotPromotion.indexOf('rollback_publication'),
+    pilotPromotion.indexOf('validateFeaturedCandidatePromotion({') < pilotPromotion.indexOf('rollback_publication'),
     'pilot promotion must bind its exact public callout before mutation'
   )
   assert.ok(
-    pilotPromotion.indexOf('tests/test_public_release_downloads.py') <
-      pilotPromotion.indexOf('rollback_publication'),
+    pilotPromotion.indexOf('tests/test_public_release_downloads.py') < pilotPromotion.indexOf('rollback_publication'),
     'pilot promotion must validate prepared public callouts before publication'
   )
   assert.ok(
     pilotPromotion.lastIndexOf('validateVietnameseReleasePresentation') >
-      pilotPromotion.lastIndexOf('gh release edit "$TAG"'),
+      pilotPromotion.lastIndexOf('publication-response-api.json'),
     'pilot promotion must recheck the title/body after publication'
   )
   assert.ok(
     pilotPromotion.indexOf('test "$previous_latest" = "$committed_latest"') <
-      pilotPromotion.lastIndexOf('gh release edit "$TAG"'),
+      pilotPromotion.lastIndexOf('publication-response-api.json'),
     'pilot promotion must bind live Latest to the committed default before publication'
   )
   assert.doesNotMatch(pilotPromotion, /--prerelease=false/)
 })
 
+test('promotion controllers bind one private draft and defer canonical URLs until publication', () => {
+  for (const [label, workflow] of [
+    ['general', promotion],
+    ['pilot', pilotPromotion]
+  ]) {
+    const publicationIndex = workflow.indexOf('      - name: Công khai, hậu kiểm')
+    assert.notEqual(publicationIndex, -1, `${label}: publication step is missing`)
+
+    const preflight = workflow.slice(0, publicationIndex)
+    const postpublication = workflow.slice(publicationIndex)
+
+    assert.match(
+      preflight,
+      /gh api --paginate "repos\/\$GITHUB_REPOSITORY\/releases\?per_page=100" --slurp > release-pages\.json/,
+      `${label}: private drafts must be resolved through the paginated release collection`
+    )
+    assert.match(preflight, /select\(\.tag_name == \$tag\)/)
+    assert.match(preflight, /test "\$\(jq 'length' release-matches\.json\)" = "1"/)
+    assert.match(preflight, /release_id="\$\(jq -r \.id release-api\.json\)"/)
+    assert.match(preflight, /\[\[ "\$release_id" =~ \^\[1-9\]\[0-9\]\*\$ \]\]/)
+    assert.match(preflight, /test "\$\(jq -r \.tag_name release-api\.json\)" = "\$TAG"/)
+    assert.match(preflight, /test "\$\(jq -r \.draft release-api\.json\)" = "true"/)
+    if (label === 'pilot') {
+      assert.match(preflight, /test "\$\(jq -r \.prerelease release-api\.json\)" = "true"/)
+    } else {
+      assert.match(preflight, /test "\$\(jq -r \.prerelease release-api\.json\)" = "\$expected_draft_prerelease"/)
+    }
+    assert.match(preflight, /releases\/\$release_id\/assets\?per_page=100/)
+    assert.match(preflight, /createHash\('sha256'\)/)
+    assert.match(preflight, /createReadStream\(file\)/)
+    assert.match(preflight, /asset\.digest !== digest/)
+    assert.doesNotMatch(preflight, /releases\/tags\/\$TAG/)
+    assert.match(preflight, /browser_download_url/)
+    assert.match(preflight, /draft asset URL shape mismatch/)
+    assert.doesNotMatch(preflight, /browser_download_url !== prefix \+ asset\.name/)
+    assert.ok(
+      preflight.indexOf('release-matches.json') < preflight.indexOf('gh release download "$TAG"'),
+      `${label}: the unique draft binding must precede every candidate download`
+    )
+
+    assert.match(
+      postpublication,
+      /gh api "repos\/\$GITHUB_REPOSITORY\/releases\/tags\/\$TAG" > published-release-api\.json/,
+      `${label}: only the public release may be resolved through the tag endpoint`
+    )
+    assert.match(
+      postpublication,
+      /gh api "repos\/\$GITHUB_REPOSITORY\/releases\/\$release_id" > prepublish-release-api\.json/
+    )
+    assert.match(postpublication, /test "\$\(jq -r \.id prepublish-release-api\.json\)" = "\$release_id"/)
+    assert.match(postpublication, /test "\$\(jq -r \.tag_name prepublish-release-api\.json\)" = "\$TAG"/)
+    assert.match(postpublication, /test "\$\(jq -r \.draft prepublish-release-api\.json\)" = "true"/)
+    if (label === 'pilot') {
+      assert.match(postpublication, /test "\$\(jq -r \.prerelease prepublish-release-api\.json\)" = "true"/)
+    } else {
+      assert.match(
+        postpublication,
+        /test "\$\(jq -r \.prerelease prepublish-release-api\.json\)" = "\$expected_prerelease"/
+      )
+    }
+    assert.match(
+      postpublication,
+      /test "\$\(jq -r \.id published-release-api\.json\)" = "\$\(jq -r \.id release-api\.json\)"/
+    )
+    assert.match(postpublication, /test "\$\(jq -r \.tag_name published-release-api\.json\)" = "\$TAG"/)
+    assert.match(postpublication, /test "\$\(jq -r \.draft published-release-api\.json\)" = "false"/)
+    assert.match(postpublication, /https:\/\/github\.com\/\$GITHUB_REPOSITORY\/releases\/tag\/\$TAG/)
+    if (label === 'pilot') {
+      assert.match(postpublication, /test "\$\(jq -r \.prerelease published-release-api\.json\)" = "true"/)
+    } else {
+      assert.match(
+        postpublication,
+        /test "\$\(jq -r \.prerelease published-release-api\.json\)" = "\$expected_prerelease"/
+      )
+    }
+    assert.match(postpublication, /releases\/\$published_release_id\/assets\?per_page=100/)
+    assert.match(postpublication, /browser_download_url/)
+    assert.match(postpublication, /releases\/download\/\$\{process\.env\.TAG\}\//)
+    assert.match(postpublication, /asset\.digest !== staged\.digest/)
+    const trapIndex = postpublication.indexOf('trap rollback_publication ERR')
+    const publicationEditIndex = postpublication.indexOf(
+      'gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id"',
+      trapIndex
+    )
+    const publicTagLookupIndex = postpublication.indexOf('releases/tags/$TAG" > published-release-api.json')
+    assert.ok(
+      postpublication.indexOf('releases/$release_id" > prepublish-release-api.json') < publicationEditIndex,
+      `${label}: the selected release ID must still be the same draft immediately before mutation`
+    )
+    assert.ok(
+      trapIndex !== -1 && publicationEditIndex > trapIndex && publicTagLookupIndex > publicationEditIndex,
+      `${label}: the canonical tag endpoint is valid only after publication`
+    )
+  }
+})
+
+test('promotion controllers preserve the remote tag and fail closed on exact-ID rollback', () => {
+  for (const [label, workflow] of [
+    ['general', promotion],
+    ['pilot', pilotPromotion]
+  ]) {
+    const publicationIndex = workflow.indexOf('      - name: Công khai, hậu kiểm')
+    const preflight = workflow.slice(0, publicationIndex)
+    const postpublication = workflow.slice(publicationIndex)
+
+    assert.match(preflight, /git\/ref\/tags\/\$TAG/)
+    assert.match(preflight, /git\/tags\/\$tag_ref_object/)
+    assert.match(preflight, /candidate-tag-binding\.json/)
+    assert.match(preflight, /peeledCommit/)
+    assert.match(preflight, /new URL\(api\.html_url\)/)
+    assert.match(preflight, /draftPagePrefix = `\/\$\{process\.env\.REPOSITORY\}\/releases\/tag\/`/)
+    assert.match(preflight, /releaseRoute !== process\.env\.TAG/)
+    assert.match(preflight, /\^untagged-/)
+    assert.doesNotMatch(preflight, /browser_download_url !== prefix \+ asset\.name/)
+
+    assert.match(postpublication, /assert_tag_binding\(\)/)
+    assert.equal(
+      (postpublication.match(/^\s*assert_tag_binding$/gm) ?? []).length,
+      2,
+      `${label}: tag identity must be checked immediately before and after publication`
+    )
+    assert.match(postpublication, /gh api --method PATCH "repos\/\$GITHUB_REPOSITORY\/releases\/\$release_id"/)
+    assert.doesNotMatch(postpublication, /gh release edit "\$TAG"/)
+    assert.match(postpublication, /original_status=\$\?/)
+    assert.match(postpublication, /rollback-release-verify\.json/)
+    assert.match(postpublication, /rollback-latest-verify\.json/)
+    assert.match(postpublication, /releases\/\$previous_latest_id/)
+    assert.match(postpublication, /Rollback verification failed/)
+    assert.match(postpublication, /return "\$original_status"/)
+    assert.doesNotMatch(postpublication, /\|\| true/)
+  }
+})
+
 test('release verification commands identify the repository outside a checkout', () => {
-  assert.match(promotion, /gh release view "\$TAG" --repo "\$GITHUB_REPOSITORY"/)
+  assert.match(promotion, /gh api --paginate "repos\/\$GITHUB_REPOSITORY\/releases\?per_page=100"/)
   assert.match(promotion, /gh release download "\$TAG" --repo "\$GITHUB_REPOSITORY"/)
   assert.match(promotion, /gh run download "\$SMOKE_RUN_ID" --repo "\$GITHUB_REPOSITORY"/)
-  assert.match(promotion, /gh release edit "\$TAG" --repo "\$GITHUB_REPOSITORY"/)
+  assert.match(promotion, /gh api --method PATCH "repos\/\$GITHUB_REPOSITORY\/releases\/\$release_id"/)
 })
 
 test('the ordinary packaged desktop gate installs uv before invoking the build', () => {

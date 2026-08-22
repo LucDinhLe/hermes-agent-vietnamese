@@ -53,9 +53,25 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$TAG" =~ ^vi-v(0|[1-9][0-9]{0,2})\.[0-9]+\.[0-9]+-(0|[1-9][0-9]*)$ ]]
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --json isDraft,isPrerelease,name,body > candidate-release.json
-          test "$(jq -r .isDraft candidate-release.json)" = "true"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --slurp > release-pages.json
+          jq --arg tag "$TAG" '[.[][] | select(.tag_name == $tag)]' \
+            release-pages.json > release-matches.json
+          test "$(jq 'length' release-matches.json)" = "1"
+          jq '.[0]' release-matches.json > release-api.json
+          release_id="$(jq -r .id release-api.json)"
+          [[ "$release_id" =~ ^[1-9][0-9]*$ ]]
+          test "$(jq -r .tag_name release-api.json)" = "$TAG"
+          test "$(jq -r .draft release-api.json)" = "true"
+          expected_draft_prerelease=false
+          [[ "$RELEASE_CLASS" == "community-prerelease" ]] && expected_draft_prerelease=true
+          test "$(jq -r .prerelease release-api.json)" = "$expected_draft_prerelease"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" \
+            --slurp > release-asset-pages.json
+          jq --slurpfile asset_pages release-asset-pages.json \
+            '.assets = [$asset_pages[0][][]]' release-api.json > release-api-complete.json
+          mv release-api-complete.json release-api.json
+          jq '{isDraft: .draft, isPrerelease: .prerelease, name, body}' \
+            release-api.json > candidate-release.json
           TAG="$TAG" RELEASE_CLASS="$RELEASE_CLASS" \
             RELEASE_JSON_PATH=candidate-release.json node --input-type=module <<'NODE'
           import fs from 'node:fs'
@@ -89,17 +105,48 @@ jobs:
           NODE
           mkdir candidate
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir candidate
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > release-api.json
-          TAG="$TAG" REPOSITORY="$GITHUB_REPOSITORY" node <<'NODE'
-          const fs = require('fs')
-          const api = JSON.parse(fs.readFileSync('release-api.json', 'utf8'))
-          const local = fs.readdirSync('candidate').sort()
+          TAG="$TAG" REPOSITORY="$GITHUB_REPOSITORY" node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto'
+          import { createReadStream, readdirSync, statSync } from 'node:fs'
+          import { readFile } from 'node:fs/promises'
+
+          const api = JSON.parse(await readFile('release-api.json', 'utf8'))
+          const draftPage = new URL(api.html_url)
+          const draftPagePrefix = `/${process.env.REPOSITORY}/releases/tag/`
+          const draftPageRoute = decodeURIComponent(draftPage.pathname.slice(draftPagePrefix.length))
+          if (
+            draftPage.origin !== 'https://github.com' ||
+            !draftPage.pathname.startsWith(draftPagePrefix) ||
+            !/^untagged-[0-9a-f]+$/u.test(draftPageRoute)
+          ) {
+            throw new Error(`draft release page URL mismatch: ${api.html_url}`)
+          }
+          const local = readdirSync('candidate').sort()
           const remote = api.assets.map(asset => asset.name).sort()
+          if (new Set(remote).size !== remote.length) throw new Error('draft asset names are not unique')
           if (JSON.stringify(local) !== JSON.stringify(remote)) throw new Error('draft asset inventory mismatch')
-          const prefix = `https://github.com/${process.env.REPOSITORY}/releases/download/${process.env.TAG}/`
           for (const asset of api.assets) {
-            if (asset.browser_download_url !== prefix + asset.name) throw new Error(`asset URL mismatch: ${asset.name}`)
-            if (asset.size !== fs.statSync(`candidate/${asset.name}`).size) throw new Error(`asset size mismatch: ${asset.name}`)
+            const file = `candidate/${asset.name}`
+            if (asset.size !== statSync(file).size) throw new Error(`asset size mismatch: ${asset.name}`)
+            const hash = createHash('sha256')
+            for await (const chunk of createReadStream(file)) hash.update(chunk)
+            const digest = `sha256:${hash.digest('hex')}`
+            if (asset.digest !== digest) throw new Error(`asset digest mismatch: ${asset.name}`)
+            const download = new URL(asset.browser_download_url)
+            const downloadPrefix = `/${process.env.REPOSITORY}/releases/download/`
+            const downloadRoute = download.pathname.slice(downloadPrefix.length)
+            const separator = downloadRoute.indexOf('/')
+            const releaseRoute = decodeURIComponent(downloadRoute.slice(0, separator))
+            const assetRoute = decodeURIComponent(downloadRoute.slice(separator + 1))
+            if (
+              download.origin !== 'https://github.com' ||
+              !download.pathname.startsWith(downloadPrefix) ||
+              separator < 1 ||
+              (releaseRoute !== process.env.TAG && !/^untagged-[0-9a-f]+$/u.test(releaseRoute)) ||
+              assetRoute !== asset.name
+            ) {
+              throw new Error(`draft asset URL shape mismatch: ${asset.name}`)
+            }
           }
           NODE
           node scripts/release-asset-inventory.mjs candidate release-runtime-evidence.json > /dev/null
@@ -114,6 +161,26 @@ jobs:
           test "$(jq -r .conclusion <<<"$run_json")" = "success"
           candidate_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
           test "$(git rev-parse HEAD)" = "$candidate_commit"
+          tag_ref_json="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG")"
+          tag_ref_type="$(jq -r .object.type <<<"$tag_ref_json")"
+          tag_ref_object="$(jq -r .object.sha <<<"$tag_ref_json")"
+          [[ "$tag_ref_type" == "tag" || "$tag_ref_type" == "commit" ]]
+          [[ "$tag_ref_object" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$candidate_commit" =~ ^[0-9a-f]{40}$ ]]
+          if [[ "$tag_ref_type" == "tag" ]]; then
+            tag_object_json="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_ref_object")"
+            test "$(jq -r .sha <<<"$tag_object_json")" = "$tag_ref_object"
+            test "$(jq -r .object.type <<<"$tag_object_json")" = "commit"
+            test "$(jq -r .object.sha <<<"$tag_object_json")" = "$candidate_commit"
+          else
+            test "$tag_ref_object" = "$candidate_commit"
+          fi
+          jq -n \
+            --arg refType "$tag_ref_type" \
+            --arg refObject "$tag_ref_object" \
+            --arg peeledCommit "$candidate_commit" \
+            '{refType: $refType, refObject: $refObject, peeledCommit: $peeledCommit}' \
+            > candidate-tag-binding.json
           public_tag="$(node -p "require('./.github/public-release.json').tag")"
           if [[ "$RELEASE_CLASS" == "stable" ]]; then
             test "$public_tag" = "$TAG"
@@ -162,9 +229,51 @@ jobs:
           RELEASE_CLASS: ${{ inputs.release_class }}
         run: |
           set -euo pipefail
-          previous_latest="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)"
           expected_prerelease=false
           [[ "$RELEASE_CLASS" == "community-prerelease" ]] && expected_prerelease=true
+          expected_make_latest=false
+          [[ "$RELEASE_CLASS" == "stable" ]] && expected_make_latest=true
+          release_id="$(jq -r .id release-api.json)"
+          [[ "$release_id" =~ ^[1-9][0-9]*$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > prepublish-release-api.json
+          test "$(jq -r .id prepublish-release-api.json)" = "$release_id"
+          test "$(jq -r .tag_name prepublish-release-api.json)" = "$TAG"
+          test "$(jq -r .draft prepublish-release-api.json)" = "true"
+          test "$(jq -r .prerelease prepublish-release-api.json)" = "$expected_prerelease"
+
+          assert_tag_binding() {
+            local expected_ref_type expected_ref_object expected_commit
+            local current_ref_json current_ref_type current_ref_object current_commit current_tag_object
+            expected_ref_type="$(jq -r .refType candidate-tag-binding.json)"
+            expected_ref_object="$(jq -r .refObject candidate-tag-binding.json)"
+            expected_commit="$(jq -r .peeledCommit candidate-tag-binding.json)"
+            [[ "$expected_ref_type" == "tag" || "$expected_ref_type" == "commit" ]]
+            [[ "$expected_ref_object" =~ ^[0-9a-f]{40}$ ]]
+            [[ "$expected_commit" =~ ^[0-9a-f]{40}$ ]]
+            test "$(git rev-parse HEAD)" = "$expected_commit"
+            current_ref_json="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG")"
+            current_ref_type="$(jq -r .object.type <<<"$current_ref_json")"
+            current_ref_object="$(jq -r .object.sha <<<"$current_ref_json")"
+            test "$current_ref_type" = "$expected_ref_type"
+            test "$current_ref_object" = "$expected_ref_object"
+            current_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+            test "$current_commit" = "$expected_commit"
+            if [[ "$expected_ref_type" == "tag" ]]; then
+              current_tag_object="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$expected_ref_object")"
+              test "$(jq -r .sha <<<"$current_tag_object")" = "$expected_ref_object"
+              test "$(jq -r .object.type <<<"$current_tag_object")" = "commit"
+              test "$(jq -r .object.sha <<<"$current_tag_object")" = "$expected_commit"
+            else
+              test "$expected_ref_object" = "$expected_commit"
+            fi
+          }
+          assert_tag_binding
+
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > previous-latest-api.json
+          previous_latest="$(jq -r .tag_name previous-latest-api.json)"
+          previous_latest_id="$(jq -r .id previous-latest-api.json)"
+          [[ "$previous_latest_id" =~ ^[1-9][0-9]*$ ]]
+          test "$release_id" != "$previous_latest_id"
 
           if [[ "$RELEASE_CLASS" == "stable" ]]; then
             TAG="$TAG" PREVIOUS_LATEST="$previous_latest" node --input-type=module <<'NODE'
@@ -178,25 +287,92 @@ jobs:
           fi
 
           rollback_publication() {
+            local original_status=$?
+            local rollback_failed=false
             trap - ERR
             echo "::error::Public postcheck failed; returning $TAG to draft and restoring Latest=$previous_latest"
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=true --prerelease="$expected_prerelease" --latest=false || true
-            if [[ -n "$previous_latest" && "$previous_latest" != "$TAG" ]]; then
-              gh release edit "$previous_latest" --repo "$GITHUB_REPOSITORY" --latest || true
+            if ! gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+              -F draft=true -F prerelease="$expected_prerelease" -f make_latest=false \
+              > rollback-release-response.json; then
+              rollback_failed=true
+              echo "::error::Rollback PATCH failed for release id=$release_id"
             fi
-            return 1
+            if ! gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > rollback-release-verify.json; then
+              rollback_failed=true
+              echo "::error::Rollback state could not be fetched for release id=$release_id"
+            elif [[ "$(jq -r .id rollback-release-verify.json)" != "$release_id" || \
+              "$(jq -r .tag_name rollback-release-verify.json)" != "$TAG" || \
+              "$(jq -r .draft rollback-release-verify.json)" != "true" || \
+              "$(jq -r .prerelease rollback-release-verify.json)" != "$expected_prerelease" ]]; then
+              rollback_failed=true
+              echo "::error::Rollback release state verification failed for id=$release_id"
+            fi
+            if ! gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$previous_latest_id" \
+              -f make_latest=true > rollback-latest-response.json; then
+              rollback_failed=true
+              echo "::error::Latest restore PATCH failed for release id=$previous_latest_id"
+            fi
+            if ! gh api "repos/$GITHUB_REPOSITORY/releases/latest" > rollback-latest-verify.json; then
+              rollback_failed=true
+              echo "::error::Latest restore state could not be fetched"
+            elif [[ "$(jq -r .id rollback-latest-verify.json)" != "$previous_latest_id" || \
+              "$(jq -r .tag_name rollback-latest-verify.json)" != "$previous_latest" ]]; then
+              rollback_failed=true
+              echo "::error::Latest restore verification failed"
+            fi
+            if [[ "$rollback_failed" == "true" ]]; then
+              echo "::error::Rollback verification failed; manual release repair is required"
+            else
+              echo "::notice::Rollback verified for release id=$release_id and Latest=$previous_latest"
+            fi
+            return "$original_status"
           }
           trap rollback_publication ERR
 
-          if [[ "$RELEASE_CLASS" == "community-prerelease" ]]; then
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=true --latest=false
-          else
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest
-          fi
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
-            --json isDraft,isPrerelease,name,body > published-release.json
-          test "$(jq -r .isDraft published-release.json)" = "false"
-          test "$(jq -r .isPrerelease published-release.json)" = "$expected_prerelease"
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -F draft=false -F prerelease="$expected_prerelease" -f make_latest="$expected_make_latest" \
+            > publication-response-api.json
+          test "$(jq -r .id publication-response-api.json)" = "$release_id"
+          test "$(jq -r .tag_name publication-response-api.json)" = "$TAG"
+          test "$(jq -r .draft publication-response-api.json)" = "false"
+          test "$(jq -r .prerelease publication-response-api.json)" = "$expected_prerelease"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > published-release-api.json
+          test "$(jq -r .id published-release-api.json)" = "$(jq -r .id release-api.json)"
+          test "$(jq -r .tag_name published-release-api.json)" = "$TAG"
+          test "$(jq -r .draft published-release-api.json)" = "false"
+          test "$(jq -r .prerelease published-release-api.json)" = "$expected_prerelease"
+          test "$(jq -r .html_url published-release-api.json)" = \
+            "https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG"
+          assert_tag_binding
+          published_release_id="$(jq -r .id published-release-api.json)"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$published_release_id/assets?per_page=100" \
+            --slurp > published-release-asset-pages.json
+          jq --slurpfile asset_pages published-release-asset-pages.json \
+            '.assets = [$asset_pages[0][][]]' published-release-api.json > published-release-api-complete.json
+          mv published-release-api-complete.json published-release-api.json
+          jq '{isDraft: .draft, isPrerelease: .prerelease, name, body}' \
+            published-release-api.json > published-release.json
+          TAG="$TAG" REPOSITORY="$GITHUB_REPOSITORY" node <<'NODE'
+          const fs = require('fs')
+          const stagedApi = JSON.parse(fs.readFileSync('release-api.json', 'utf8'))
+          const publishedApi = JSON.parse(fs.readFileSync('published-release-api.json', 'utf8'))
+          const stagedByName = new Map(stagedApi.assets.map(asset => [asset.name, asset]))
+          const stagedNames = [...stagedByName.keys()].sort()
+          const publishedNames = publishedApi.assets.map(asset => asset.name).sort()
+          if (JSON.stringify(stagedNames) !== JSON.stringify(publishedNames)) {
+            throw new Error('published asset inventory mismatch')
+          }
+          const prefix = `https://github.com/${process.env.REPOSITORY}/releases/download/${process.env.TAG}/`
+          for (const asset of publishedApi.assets) {
+            const staged = stagedByName.get(asset.name)
+            if (!staged || asset.id !== staged.id || asset.size !== staged.size || asset.digest !== staged.digest) {
+              throw new Error(`published asset identity mismatch: ${asset.name}`)
+            }
+            if (asset.browser_download_url !== prefix + asset.name) {
+              throw new Error(`published asset URL mismatch: ${asset.name}`)
+            }
+          }
+          NODE
           TAG="$TAG" RELEASE_JSON_PATH=published-release.json node --input-type=module <<'NODE'
           import fs from 'node:fs'
           import {
@@ -230,11 +406,15 @@ jobs:
           cd public
           sha256sum --check SHA256SUMS.txt
           cd ..
-          latest_tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)"
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > postpublish-latest-api.json
+          latest_tag="$(jq -r .tag_name postpublish-latest-api.json)"
+          latest_id="$(jq -r .id postpublish-latest-api.json)"
           if [[ "$RELEASE_CLASS" == "stable" ]]; then
             test "$latest_tag" = "$TAG"
+            test "$latest_id" = "$release_id"
           else
             test "$latest_tag" = "$(node -p "require('./.github/public-release.json').tag")"
-            test "$latest_tag" != "$TAG"
+            test "$latest_tag" = "$previous_latest"
+            test "$latest_id" = "$previous_latest_id"
           fi
           trap - ERR
