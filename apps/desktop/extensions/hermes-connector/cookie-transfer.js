@@ -1,5 +1,81 @@
 export const CONNECTOR_PROTOCOL = 'hermes-cookie-transfer/1'
 
+export function cookiePermissionOrigins(url) {
+  const { hostname } = new URL(url)
+  return [`http://${hostname}/*`, `https://${hostname}/*`]
+}
+
+export function revocableCookiePermissionOrigins(url) {
+  const parsed = new URL(url)
+  return [...new Set([...cookiePermissionOrigins(parsed), `${parsed.origin}/*`])]
+}
+
+export async function hasAnyPermissionOrigin(permissionsApi, origins) {
+  const grants = await Promise.all(origins.map(origin => permissionsApi.contains({ origins: [origin] })))
+  return grants.some(Boolean)
+}
+
+export async function revokeCookiePermissions(permissionsApi, { origins, transportOrigins = [] }) {
+  let failed = false
+
+  for (const origin of origins) {
+    let present
+    try {
+      present = await permissionsApi.contains({ origins: [origin] })
+    } catch {
+      present = true
+    }
+
+    if (!present) continue
+    try {
+      await permissionsApi.remove({ origins: [origin] })
+    } catch {
+      // A concurrent revoke can still satisfy the post-condition below.
+    }
+  }
+
+  for (const origin of origins) {
+    try {
+      if (await permissionsApi.contains({ origins: [origin] })) failed = true
+    } catch {
+      failed = true
+    }
+  }
+
+  let remainingOrigins
+  try {
+    const current = await permissionsApi.getAll()
+    remainingOrigins = current.origins || []
+  } catch {
+    failed = true
+  }
+
+  if (remainingOrigins?.every(origin => transportOrigins.includes(origin))) {
+    let present
+    try {
+      present = await permissionsApi.contains({ permissions: ['cookies'] })
+    } catch {
+      present = true
+    }
+
+    if (present) {
+      try {
+        await permissionsApi.remove({ permissions: ['cookies'] })
+      } catch {
+        // A concurrent revoke can still satisfy the post-condition below.
+      }
+    }
+
+    try {
+      if (await permissionsApi.contains({ permissions: ['cookies'] })) failed = true
+    } catch {
+      failed = true
+    }
+  }
+
+  if (failed) throw new Error('COOKIE_PERMISSION_REVOKE_FAILED')
+}
+
 function toTransferCookie(cookie) {
   return {
     name: cookie.name,

@@ -1,7 +1,7 @@
 # Threat model Hermes Connector v26
 
-**Trạng thái:** đã khóa để triển khai v26<br>
-**Ngày:** 2026-08-17<br>
+**Trạng thái:** đã khóa để triển khai v26; bổ sung cổng permission cho v31<br>
+**Ngày:** 2026-08-17; cập nhật 2026-08-23<br>
 **Phạm vi:** companion Chrome/Edge chính chủ chuyển cookie của một website sang
 Browser của Hermes trên cùng máy.
 
@@ -41,10 +41,12 @@ crash upload cho connector và không chủ động tạo crash evidence chứa 
 2. Desktop hiển thị đúng hostname đích, sinh mã ghép nối một lần và mở endpoint
    loopback trong tối đa 120 giây.
 3. Người dùng mở popup extension trên tab nguồn. Extension hiển thị hostname,
-   yêu cầu quyền `cookies` và host permission cho origin hiện tại từ thao tác đó.
-4. Extension chỉ gọi `cookies.getAll({url, storeId})` cho tab hiện tại. Nó hiển
-   thị hostname, tổng số cookie, số cookie không hỗ trợ và expiry tổng hợp trước
-   khi gửi.
+   yêu cầu quyền `cookies` và đúng hai host pattern `http://<hostname>/*`,
+   `https://<hostname>/*` từ thao tác đó. Pattern không chứa cổng, wildcard
+   subdomain hoặc eTLD+1.
+4. Extension gọi `cookies.getAll({url, storeId, partitionKey: {}})` cho tab hiện
+   tại. Nó hiển thị hostname, tổng số cookie, số cookie không hỗ trợ và expiry
+   tổng hợp trước khi gửi.
 5. Người dùng nhập mã và bấm gửi. Desktop xác nhận browser/origin, hiển thị cùng
    metadata và yêu cầu xác nhận nhập lần cuối.
 6. Electron main validate và ghi cookie. Payload bị xóa khỏi RAM ngay sau import,
@@ -58,16 +60,26 @@ request lặp đều fail-closed. Không có import nền và không tự độn
 - Manifest V3, `incognito: "not_allowed"`.
 - Quyền cài mặc định chỉ đủ để mở popup và nhận tab do người dùng kích hoạt.
 - `cookies` và host pattern cho HTTP/HTTPS là optional permissions.
-- Quyền host được xin trong popup từ thao tác người dùng, chỉ cho origin hiện
-  tại. Extension không dùng `<all_urls>` như quyền mặc định.
+- Quyền host được xin trong popup từ thao tác người dùng, chỉ cho exact hostname
+  của tab, đồng thời ở hai scheme `http` và `https`, không mang cổng. Cookie là
+  dữ liệu theo host/path chứ không theo cổng; quyền một scheme không thay thế
+  quyền của scheme còn lại, đặc biệt với cookie `Secure`.
+- Extension không suy rộng lên wildcard subdomain, miền cha/eTLD+1 hoặc
+  `<all_urls>`. Cookie miền cha khi tab ở subdomain có thể không được Chromium
+  trả về dưới grant exact-host; đây là giới hạn đã biết và phải được báo thật.
 - Loopback origin được giới hạn ở `http://127.0.0.1/*`; không dùng `localhost`,
   LAN address hoặc wildcard network host.
 - Extension không enumerate profile. `storeId` được lấy từ tab hiện tại, vì vậy
   nhiều profile tách biệt theo quy tắc của Chromium.
 
-Người dùng có thể thu hồi host permission trong trình duyệt. Công tắc connector
-trong Hermes chặn toàn bộ lần ghép nối mới nhưng không thay đổi quyền của trình
-duyệt nguồn.
+Người dùng có thể thu hồi host permission trong trình duyệt. Nút thu hồi của
+extension xóa riêng cả hai pattern exact-host hiện tại và pattern
+origin-có-cổng cũ nếu candidate trước đã cấp nó, rồi kiểm tra lại từng pattern.
+Extension chỉ báo thành công khi Chrome xác nhận grant đích đã biến mất; nếu
+thu hồi lỗi, payload và mã ghép nối trong RAM bị xóa và lần ghép nối bị chặn.
+Quyền `cookies` chỉ bị xóa khi không còn origin nguồn nào khác ngoài loopback
+vận chuyển. Công tắc connector trong Hermes chặn toàn bộ lần ghép
+nối mới nhưng không thay đổi quyền của trình duyệt nguồn.
 
 ## 5. Giao thức loopback
 
@@ -104,6 +116,8 @@ memory được ghi nhận là residual risk.
 - Electron 41 không có API `partitionKey` cho `cookies.set`. Cookie partitioned
   bị bỏ qua và được tính vào mục **không hỗ trợ**; tuyệt đối không bỏ partition
   key rồi nhập thành cookie không phân vùng.
+- Kết quả rỗng dưới grant exact-host không chứng minh miền cha không có cookie;
+  candidate không tự xin wildcard/eTLD+1 để lấp khoảng trống đó.
 - Import chỉ gọi `session.fromPartition('persist:hermes-preview')`.
 - Import có thể thay cookie cùng identity đang có trong Hermes Browser. UX phải
   nói rõ trước xác nhận; v26 không giữ bản sao giá trị cũ.
@@ -142,6 +156,8 @@ memory được ghi nhận là residual risk.
 | Chuyển nhầm domain                 | Khóa hostname hai phía và validate từng cookie                  | Chặn                  |
 | Rò payload qua renderer/log        | Giá trị chỉ ở main; IPC metadata-only; redaction tests          | Chặn                  |
 | Mất partition isolation            | Bỏ qua cookie partitioned có cảnh báo                           | Chặn                  |
+| Grant giữ cổng hoặc thiếu scheme   | Hai exact-host pattern HTTP/HTTPS không cổng                    | Chặn                  |
+| Cookie thuộc miền cha              | Không tự mở wildcard/eTLD+1; công bố giới hạn                   | Residual đã chấp nhận |
 | Extension giả cục bộ               | Stable extension ID + digest/artifact review; xác nhận hai phía | Giảm thiểu            |
 | Malware/admin đọc bộ nhớ           | Ngoài threat model; TTL ngắn và zero-reference                  | Residual              |
 | Revoke xóa phiên mới cùng identity | Cảnh báo rõ; chỉ identity đã ghi                                | Residual đã chấp nhận |
@@ -154,5 +170,7 @@ Candidate không được public nếu có bất kỳ trường hợp nào sau �
 - Cookie/token xuất hiện trong log, crash evidence hay artifact không phải fixture.
 - Renderer nhận value cookie.
 - Partitioned cookie bị nhập mà mất partition key.
+- Permission pattern giữ cổng, thiếu một trong hai scheme hoặc tự mở rộng sang
+  wildcard miền cha/eTLD+1 mà chưa có threat review mới.
 - Revoke chạm cookie ngoài import ledger.
 - Extension hoạt động trước consent hoặc không có permission domain.

@@ -1,4 +1,11 @@
-import { CONNECTOR_PROTOCOL as PROTOCOL, readCookieTransferPreview } from './cookie-transfer.js'
+import {
+  CONNECTOR_PROTOCOL as PROTOCOL,
+  cookiePermissionOrigins,
+  hasAnyPermissionOrigin,
+  revocableCookiePermissionOrigins,
+  readCookieTransferPreview,
+  revokeCookiePermissions
+} from './cookie-transfer.js'
 
 const LOOPBACK_PERMISSION = 'http://127.0.0.1/*'
 const POLL_INTERVAL_MS = 500
@@ -19,7 +26,8 @@ const elements = {
 }
 
 let activeTab
-let sourcePattern
+let sourcePatterns = []
+let revocableSourcePatterns = []
 let transferCookies = []
 let transferPreview
 
@@ -46,7 +54,15 @@ function setBusy(busy) {
 
 function clearSensitiveState() {
   transferCookies = []
+  transferPreview = undefined
   elements.pairingCode.value = ''
+}
+
+function resetPreview() {
+  elements.preview.hidden = true
+  elements.pairForm.hidden = true
+  elements.previewButton.hidden = false
+  clearSensitiveState()
 }
 
 function parsePairingCode(raw) {
@@ -73,13 +89,14 @@ async function cookieStoreId(tabId) {
 }
 
 async function requestSitePermission() {
-  return chrome.permissions.request({ permissions: ['cookies'], origins: [sourcePattern] })
+  return chrome.permissions.request({ permissions: ['cookies'], origins: sourcePatterns })
 }
 
 async function previewCurrentSite() {
   setBusy(true)
   try {
     if (!(await requestSitePermission())) throw new Error('PERMISSION_DENIED')
+    elements.revokePermission.hidden = false
     const storeId = await cookieStoreId(activeTab.id)
     const summary = await readCookieTransferPreview(chrome.cookies, {
       url: activeTab.url,
@@ -104,7 +121,7 @@ async function previewCurrentSite() {
     elements.pairingCode.focus()
   } catch (error) {
     setStatus(error?.message === 'NO_IMPORTABLE_COOKIES' ? 'noCookies' : 'previewFailed', true)
-    clearSensitiveState()
+    resetPreview()
   } finally {
     setBusy(false)
   }
@@ -176,17 +193,22 @@ async function submitPairing(event) {
 
 async function revokeCurrentSitePermission() {
   setBusy(true)
+  resetPreview()
   try {
-    await chrome.permissions.remove({ origins: [sourcePattern] })
-    const current = await chrome.permissions.getAll()
-    if (!current.origins?.length) await chrome.permissions.remove({ permissions: ['cookies'] })
-    elements.preview.hidden = true
-    elements.pairForm.hidden = true
-    elements.previewButton.hidden = false
+    await revokeCookiePermissions(chrome.permissions, {
+      origins: revocableSourcePatterns,
+      transportOrigins: [LOOPBACK_PERMISSION]
+    })
     elements.revokePermission.hidden = true
-    clearSensitiveState()
     setStatus('permissionRevoked')
   } catch {
+    let hasPermission = true
+    try {
+      hasPermission = await hasAnyPermissionOrigin(chrome.permissions, revocableSourcePatterns)
+    } catch {
+      // Keep Revoke visible when Chrome cannot prove the target grants are gone.
+    }
+    elements.revokePermission.hidden = !hasPermission
     setStatus('permissionRevokeFailed', true)
   } finally {
     setBusy(false)
@@ -198,9 +220,10 @@ async function initialize() {
   try {
     const current = await currentTab()
     activeTab = current.tab
-    sourcePattern = `${current.url.origin}/*`
+    sourcePatterns = cookiePermissionOrigins(current.url)
+    revocableSourcePatterns = revocableCookiePermissionOrigins(current.url)
     elements.hostname.textContent = current.url.hostname
-    const hasPermission = await chrome.permissions.contains({ permissions: ['cookies'], origins: [sourcePattern] })
+    const hasPermission = await hasAnyPermissionOrigin(chrome.permissions, revocableSourcePatterns)
     elements.revokePermission.hidden = !hasPermission
   } catch {
     elements.previewButton.disabled = true

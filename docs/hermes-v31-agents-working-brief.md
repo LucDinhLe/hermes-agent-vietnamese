@@ -1,7 +1,7 @@
 # Hermes Vietnamese v31.0 — Agents working brief
 
-Status: second successor candidate preparation in progress; `vi-v0.31.0-1` and `vi-v0.31.0-2` remain immutable and are not promotable
-Candidate contract: `vi-v0.31.0-3` / app version `0.31.0-vi.3`; both prior drafts remain preserved and unchanged
+Status: third successor candidate preparation in progress; `vi-v0.31.0-1`, `vi-v0.31.0-2`, and `vi-v0.31.0-3` remain immutable and are not promotable
+Candidate contract: `vi-v0.31.0-4` / app version `0.31.0-vi.4`; all three prior drafts remain preserved and unchanged
 Release class: community prerelease until signing and real-machine smoke satisfy the stable policy
 
 ## Outcome
@@ -44,10 +44,10 @@ New collaboration membership data is additive and versioned. A missing or malfor
 
 - Product version: `31.0`.
 - Technical/app base: `0.31.0`.
-- Candidate: `vi-v0.31.0-3`, app SemVer `0.31.0-vi.3`.
+- Candidate: `vi-v0.31.0-4`, app SemVer `0.31.0-vi.4`.
 - Upstream Hermes Agent version: `0.20.4`, displayed as a separate provenance field.
 - Installed identity and bootstrap/resident-runtime markers remain compatible with `0.20.4-vi.39`.
-- Updater ordering must prove `0.31.0-vi.3 > 0.31.0-vi.2 > 0.31.0-vi.1 > 0.20.4-vi.39` on every supported feed target.
+- Updater ordering must prove `0.31.0-vi.4 > 0.31.0-vi.3 > 0.31.0-vi.2 > 0.31.0-vi.1 > 0.20.4-vi.39` on every supported feed target.
 
 ## Acceptance gates
 
@@ -61,7 +61,7 @@ New collaboration membership data is additive and versioned. A missing or malfor
 
 ## Release boundary
 
-The workflow may create and publish `vi-v0.31.0-3` as a public community prerelease after the pilot gates pass. It must leave the tagged/draft `vi-v0.31.0-1` and `vi-v0.31.0-2` candidates untouched, must not rewrite `vi-v0.20.4-39`, move the stable/Latest contract, or claim stable status. Stable promotion remains blocked until platform signing/notarization and required real-machine smoke are complete.
+The workflow may create and publish `vi-v0.31.0-4` as a public community prerelease after the pilot gates pass. It must leave the tagged/draft `vi-v0.31.0-1`, `vi-v0.31.0-2`, and `vi-v0.31.0-3` candidates untouched, must not rewrite `vi-v0.20.4-39`, move the stable/Latest contract, or claim stable status. Stable promotion remains blocked until platform signing/notarization and required real-machine smoke are complete.
 
 ## Post-candidate header delta
 
@@ -81,3 +81,9 @@ Acceptance for this delta requires a behavior test that proves the exact DOM ord
 Exact-byte smoke of `vi-v0.31.0-2` on Chrome 151 found that a website could create and use cookies while the extension's default `cookies.getAll({ url, storeId })` query returned an empty list; a cookie created through the extension API was visible. The successor must use the Chromium partition query contract explicitly so the preview observes both partitioned and unpartitioned cookies, normalizes an absent or `null` partition key as unpartitioned, counts a real partition-key object as unsupported, and transfers only live unpartitioned cookies.
 
 This delta does not widen permissions, change the pairing protocol, persist cookie values in the extension, or weaken partition isolation. Acceptance requires deterministic extension, import, and pairing regressions before draft creation plus isolated Chrome and Edge exact-artifact smoke covering metadata-only preview, import, persistence, revocation, and redaction. `vi-v0.31.0-2` remains immutable and its artifacts or evidence cannot be reused for `vi-v0.31.0-3`.
+
+## Third successor Connector permission delta
+
+Exact-artifact smoke of `vi-v0.31.0-3` on Chrome 151 proved that the partition-aware query alone was insufficient. The extension derived its optional host permission from `URL.origin`, retaining the fixture's explicit port and granting only the current scheme. Chromium returned zero cookies until the permission was expressed without a port. The successor therefore requests exactly `http://<hostname>/*` and `https://<hostname>/*`, keeps the explicit `{ partitionKey: {} }` query, and revokes both current patterns plus the legacy origin-with-port pattern that an older candidate may have left behind.
+
+The permission remains limited to the exact hostname selected by the user. It does not use `<all_urls>`, a subdomain wildcard, or inferred eTLD+1 scope. A parent-domain cookie viewed from a subdomain may therefore remain outside the result under Chromium's permission checks; this is an explicit limitation, not evidence that the parent cookie does not exist. Acceptance requires behavior tests for both schemes, non-default ports, IPv6, partial grants, and legacy-grant revocation, followed by exact-artifact Chrome and Edge smoke on isolated HTTP and HTTPS fixtures. `vi-v0.31.0-3` remains immutable and none of its artifacts or evidence may be reused for `vi-v0.31.0-4`.

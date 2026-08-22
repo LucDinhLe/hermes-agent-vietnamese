@@ -1,5 +1,32 @@
 # Tiến độ
 
+## Cập nhật 2026-08-23 — successor candidate V31 `vi-v0.31.0-4`
+
+- Exact-artifact smoke của `vi-v0.31.0-3` trên Chrome 151 với profile và
+  fixture cô lập đã loại candidate: truy vấn partition-aware vẫn trả preview
+  rỗng khi optional host permission giữ cổng URL hiện tại và chỉ một scheme.
+  Grant exact-host không cổng làm cookie website xuất hiện, khóa nguyên nhân ở
+  hợp đồng permission thay vì pairing hoặc fixture. `-1/-2/-3` và draft/asset/
+  evidence tương ứng tiếp tục bất biến; không candidate cũ nào được promotion.
+- Candidate kế tiếp được khóa là `vi-v0.31.0-4` / `0.31.0-vi.4`. Connector xin
+  đúng hostname ở cả HTTP/HTTPS, không mang cổng, không mở wildcard/eTLD+1; giữ
+  `{ partitionKey: {} }` và thu hồi cả hai pattern mới cùng legacy
+  origin-có-cổng. Giới hạn cookie miền cha ở subdomain được ghi rõ thay vì âm
+  thầm mở rộng permission.
+- Hợp đồng phân phối đã chuyển current candidate sang `-4` trong metadata,
+  README/README.vi, release notes, working brief và regression updater/version.
+  Kế hoạch mới nằm tại `docs/release-vi-v0.31.0-4-plan.md`; kế hoạch của ba
+  candidate trước không bị sửa. Latest mặc định vẫn là `vi-v0.20.0-25`, mốc
+  quay lui candidate vẫn là `vi-v0.20.4-39`.
+- Gate cục bộ trên diff chung đạt: 26/26 Node release/evidence/public-contract,
+  10 file/74 test Connector/import/pairing/UI/updater/workflow/distribution, 19/19
+  stable update-channel, Desktop typecheck và ESLint 0 lỗi (168 warning nền có
+  sẵn), cùng `git diff --check`. Bundle Connector dựng từ source freeze có
+  SHA-256 `8e4d7b7615b8c88a51390145a923965bdffe5d1ddd298ad9d3d1974f738407aa`.
+- Chưa commit, push, tạo tag `vi-v0.31.0-4`, build sáu artifact, tạo draft mới,
+  chạy exact-artifact smoke `-4` hoặc thực hiện hành động public. Candidate vẫn
+  NO-GO cho promotion cho tới khi các cổng đó có bằng chứng trên đúng byte.
+
 ## Cập nhật 2026-08-22 — successor candidate V31 `vi-v0.31.0-3`
 
 - Exact-byte smoke của `vi-v0.31.0-2` trên Chrome 151 cho thấy website đã tạo

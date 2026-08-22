@@ -92,11 +92,15 @@ chuỗi trên.
     `connectionId + profile` bất biến qua mọi await. Backend phải serialize
     start/restart/stop theo canonical lifecycle owner; phản hồi muộn hoặc owner
     mơ hồ phải fail closed, không được repaint hay điều khiển Gateway foreground.
-16. **Phân vùng cookie phải fail closed:** Connector Chromium phải liệt kê bằng
-    truy vấn phân vùng tường minh, coi `partitionKey` thiếu hoặc `null` là không
-    phân vùng, đếm object phân vùng thực sự là không hỗ trợ và chỉ chuyển cookie
-    không phân vùng còn hiệu lực. Không được coi truy vấn mặc định trả rỗng là
-    bằng chứng website không có cookie.
+16. **Cookie permission và phân vùng phải fail closed:** Connector Chromium
+    phải xin đúng hostname ở cả HTTP/HTTPS mà không giữ cổng hoặc tự mở rộng
+    wildcard/eTLD+1; revoke phải xóa hai pattern hiện tại cùng grant
+    origin-có-cổng cũ, kiểm tra lại hậu điều kiện và fail closed nếu quyền còn
+    tồn tại. Cookie được liệt kê bằng truy vấn phân vùng tường minh,
+    coi `partitionKey` thiếu hoặc `null` là không phân vùng, đếm object phân
+    vùng thực sự là không hỗ trợ và chỉ chuyển cookie không phân vùng còn hiệu
+    lực. Không được coi kết quả rỗng là bằng chứng website hoặc miền cha không
+    có cookie.
 
 ## Cổng bắt buộc
 
@@ -117,6 +121,11 @@ chuỗi trên.
       tạo, normalize cùng kết quả cho `partitionKey` thiếu/`null`, chỉ chuyển
       cookie không phân vùng còn hiệu lực, đếm đúng cookie phân vùng/hết hạn và
       không ghi giá trị cookie vào log hoặc evidence.
+- [ ] Permission regression chứng minh HTTP/HTTPS exact-host bỏ cổng, không
+      mở wildcard/eTLD+1, nhận partial/legacy grant và revoke đủ hai pattern mới
+      cùng origin-có-cổng cũ. Kết quả `false`, no-op, lỗi API hoặc grant chồng
+      lấp phải được kiểm tra lại; UI không được báo thành công hay giữ payload
+      ghép nối khi quyền đích còn tồn tại.
 - [ ] Không còn lỗ hổng runtime nghiêm trọng chưa được chấp nhận.
 - [ ] Artifact không chứa secret, hồ sơ, database, log hoặc đường dẫn riêng tư.
 - [ ] Mọi tải xuống cần thiết đều dùng nguồn bất biến và kiểm digest.
@@ -146,8 +155,9 @@ Chỉ dùng user/hồ sơ cô lập. Không đọc, nhập hoặc khôi phục d
 - [ ] Cài và mở bằng đường người dùng thực tế, không cần developer tools.
 - [ ] Runtime/bootstrap, gateway và onboarding đạt.
 - [ ] Tạo/đổi tên phiên, kiểm tab phiên/Browser và panel phải.
-- [ ] Connector Chrome và Edge dùng profile cô lập phải vượt preview chỉ có
-      metadata, import, persistence sau restart, revoke và quét redaction.
+- [ ] Connector Chrome và Edge dùng profile cô lập phải vượt fixture HTTP và
+      HTTPS có non-default port: preview chỉ có metadata, import, persistence
+      sau restart, revoke cả grant cũ/mới và quét redaction.
 - [ ] Chạy một tool an toàn bằng provider thử hoặc mock phù hợp.
 - [ ] Khởi động lại và xác nhận giữ trạng thái.
 - [ ] Lưu OS build, kiến trúc, log sạch và ảnh bằng chứng.

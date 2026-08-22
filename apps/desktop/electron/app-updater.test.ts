@@ -105,7 +105,7 @@ test('community release resolver orders base versions before community iteration
   )
 })
 
-test('vi39 and both superseded v31 candidates upgrade to the newest v31 successor', () => {
+test('vi39 and all superseded v31 candidates upgrade to the newest v31 successor', () => {
   const releases = [
     {
       tag_name: 'vi-v0.31.0-1',
@@ -130,22 +130,32 @@ test('vi39 and both superseded v31 candidates upgrade to the newest v31 successo
       draft: false,
       prerelease: true,
       assets: [{ name: 'latest.yml' }]
+    },
+    {
+      tag_name: 'vi-v0.31.0-4',
+      draft: false,
+      prerelease: true,
+      assets: [{ name: 'latest.yml' }]
     }
   ]
 
   assert.deepEqual(selectCommunityUpdateRelease(releases, '0.20.4-vi.39', 'win32', 'x64'), {
     feedUrl:
-      'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-3',
-    tag: 'vi-v0.31.0-3',
-    version: '0.31.0-vi.3'
+      'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-4',
+    tag: 'vi-v0.31.0-4',
+    version: '0.31.0-vi.4'
   })
   assert.equal(
     selectCommunityUpdateRelease(releases, '0.31.0-vi.1', 'win32', 'x64')?.version,
-    '0.31.0-vi.3'
+    '0.31.0-vi.4'
   )
   assert.equal(
     selectCommunityUpdateRelease(releases, '0.31.0-vi.2', 'win32', 'x64')?.version,
-    '0.31.0-vi.3'
+    '0.31.0-vi.4'
+  )
+  assert.equal(
+    selectCommunityUpdateRelease(releases, '0.31.0-vi.3', 'win32', 'x64')?.version,
+    '0.31.0-vi.4'
   )
 })
 
@@ -227,6 +237,7 @@ test('community app versions map back to public vi release tags', () => {
   assert.equal(releaseTagForAppVersion('0.31.0-vi.1'), 'vi-v0.31.0-1')
   assert.equal(releaseTagForAppVersion('0.31.0-vi.2'), 'vi-v0.31.0-2')
   assert.equal(releaseTagForAppVersion('0.31.0-vi.3'), 'vi-v0.31.0-3')
+  assert.equal(releaseTagForAppVersion('0.31.0-vi.4'), 'vi-v0.31.0-4')
   assert.equal(releaseTagForAppVersion('0.20.0'), 'v0.20.0')
 
   const out = describeFeedCheck('0.20.0-vi.14', { version: '0.20.0-vi.15' }, true)
