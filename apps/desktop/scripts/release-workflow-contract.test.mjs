@@ -280,8 +280,37 @@ test('pilot promotion stays prerelease, validates every byte, and discloses miss
   assert.match(pilotPromotion, /environment: release-production/)
   assert.match(pilotPromotion, /^\s*group: hermes-vietnamese-promotion$/m)
   assert.doesNotMatch(pilotPromotion, /group: hermes-vietnamese-pilot-promotion-/)
+  assert.match(
+    pilotPromotion,
+    /controller_sha:\r?\n\s+description:.*\r?\n\s+required: true\r?\n\s+type: string/
+  )
+  const stepsIndex = pilotPromotion.indexOf('    steps:')
+  const controllerGateIndex = pilotPromotion.indexOf('      - name: Khóa commit điều khiển promotion')
+  const checkoutIndex = pilotPromotion.indexOf('      - uses: actions/checkout@')
+  assert.notEqual(stepsIndex, -1)
+  assert.notEqual(controllerGateIndex, -1)
+  assert.notEqual(checkoutIndex, -1)
+  assert.equal(
+    pilotPromotion.indexOf('      - ', stepsIndex),
+    controllerGateIndex,
+    'controller binding must be the first promotion step'
+  )
+  assert.ok(controllerGateIndex < checkoutIndex, 'controller binding must pass before checkout')
+  const controllerGate = pilotPromotion.slice(controllerGateIndex, checkoutIndex)
+  assert.match(controllerGate, /CONTROLLER_SHA: \$\{\{ inputs\.controller_sha \}\}/)
+  assert.match(controllerGate, /DISPATCH_SHA: \$\{\{ github\.sha \}\}/)
+  assert.ok(controllerGate.includes('^([0-9a-f]{40})$') || controllerGate.includes('^[0-9a-f]{40}$'))
+  assert.match(controllerGate, /test "\$CONTROLLER_SHA" = "\$DISPATCH_SHA"/)
   assert.match(pilotPromotion, /actions\/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1/)
   assert.match(pilotPromotion, /ref: \$\{\{ inputs\.tag \}\}/)
+  assert.match(pilotPromotion, /replace\(\/\\s\+\/gu, ' '\)/)
+  assert.match(pilotPromotion, /const wrappedFixture =/)
+  assert.match(pilotPromotion, /assert\.equal\(validatePilotDisclosures\(wrappedFixture\), true\)/)
+  assert.match(pilotPromotion, /assert\.throws\(/)
+  assert.match(pilotPromotion, /wrappedFixture\.replace\('SignPath', ''\)/)
+  assert.match(pilotPromotion, /validatePilotDisclosures\(process\.env\.RELEASE_BODY\)/)
+  assert.doesNotMatch(pilotPromotion, /grep -Fq 'Windows x64: exact-artifact smoke đạt'/)
+  assert.doesNotMatch(pilotPromotion, /grep -Fq 'chưa có smoke trên máy người dùng'/)
   assert.match(pilotPromotion, /test "\$\(git rev-parse HEAD\)" = "\$candidate_commit"/)
   assert.match(pilotPromotion, /validate-pilot-release-evidence\.mjs/)
   assert.match(pilotPromotion, /Dựng và staging Hermes Vietnamese/)

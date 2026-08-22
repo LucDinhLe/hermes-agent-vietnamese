@@ -15,6 +15,10 @@ on:
         description: 'Run ID dựng/staging đã xanh trên toàn bộ artifact'
         required: true
         type: string
+      controller_sha:
+        description: 'Full commit SHA của workflow promotion được chọn bằng --ref'
+        required: true
+        type: string
 
 concurrency:
   group: hermes-vietnamese-promotion
@@ -30,6 +34,19 @@ jobs:
     runs-on: ubuntu-24.04
     environment: release-production
     steps:
+      - name: Khóa commit điều khiển promotion
+        shell: bash
+        env:
+          CONTROLLER_SHA: ${{ inputs.controller_sha }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ ]] || {
+            echo "::error::controller_sha phải là full commit SHA 40 ký tự chữ thường"
+            exit 1
+          }
+          test "$CONTROLLER_SHA" = "$DISPATCH_SHA"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
@@ -79,10 +96,39 @@ jobs:
           })
           NODE
           body="$(jq -r .body candidate-release.json)"
-          grep -Fq 'Windows x64: exact-artifact smoke đạt' <<<"$body"
-          grep -Fq 'chưa có smoke trên máy người dùng' <<<"$body"
-          grep -Fq 'SignPath' <<<"$body"
-          grep -Fq 'chưa tham gia Apple Developer Program' <<<"$body"
+          RELEASE_BODY="$body" node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict'
+
+          const requiredDisclosures = [
+            'Windows x64: exact-artifact smoke đạt',
+            'chưa có smoke trên máy người dùng',
+            'SignPath',
+            'chưa tham gia Apple Developer Program',
+          ]
+          const validatePilotDisclosures = value => {
+            const normalized = String(value ?? '').replace(/\s+/gu, ' ').trim()
+            for (const disclosure of requiredDisclosures) {
+              if (!normalized.includes(disclosure)) {
+                throw new Error(`missing pilot disclosure: ${disclosure}`)
+              }
+            }
+            return true
+          }
+
+          const wrappedFixture = [
+            'Windows x64: exact-artifact smoke đạt',
+            'chưa có smoke',
+            '  trên máy người dùng',
+            'SignPath',
+            'chưa tham gia Apple Developer Program',
+          ].join('\n')
+          assert.equal(validatePilotDisclosures(wrappedFixture), true)
+          assert.throws(
+            () => validatePilotDisclosures(wrappedFixture.replace('SignPath', '')),
+            /SignPath/
+          )
+          validatePilotDisclosures(process.env.RELEASE_BODY)
+          NODE
 
           # The immutable candidate commit deliberately describes the target
           # public state before mutation. URLs may still 404 while the release

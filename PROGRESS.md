@@ -1,5 +1,30 @@
 # Tiến độ
 
+## Cập nhật 2026-08-23 — khóa controller promotion hậu tag `vi-v0.31.0-4`
+
+- Candidate đã dựng vẫn là tag bất biến `vi-v0.31.0-4` tại commit
+  `4e8910072d83a8b728d34711922c90ae4b6768e4`; checkout trong promotion tiếp tục
+  lấy đúng `inputs.tag`, nên byte, manifest và provenance của candidate không đổi.
+- Bản sửa hậu tag được cô lập thành checkpoint **control-plane-only** riêng:
+  workflow yêu cầu `controller_sha` đủ 40 ký tự và bắt buộc nó bằng
+  `${{ github.sha }}` của ref dùng để dispatch trước khi checkout candidate.
+  Diff đang chờ commit/push bởi luồng phát hành; không được gắn lại tag `-4` vào
+  commit controller.
+- Promotion có hai nguồn gốc tách biệt và phải lưu cả hai: `head_sha` của run
+  promotion là commit controller được chọn bằng `--ref`, còn tag, checkout,
+  staging run và `candidate-provenance.json` tiếp tục trỏ commit candidate
+  `4e8910072d83a8b728d34711922c90ae4b6768e4`.
+- Kiểm tra bốn disclosure pilot đã chuyển sang validator Node chuẩn hóa khoảng
+  trắng; validator tự thử một fixture bị xuống dòng và một fixture cố ý thiếu
+  `SignPath` trước khi kiểm release body thật.
+- Xác minh cục bộ đạt: workflow-contract Vitest 7/7, YAML parse, validator
+  disclosure positive/negative/live, 26/26 Node release/evidence/public-contract
+  và `git diff --check`.
+- Lát cắt controller này không rebuild hoặc thay đổi installer/artifact, không
+  sửa tag/target/manifest/provenance/evidence, không upload asset và không thay
+  đổi trạng thái draft/public. Chưa commit, push, dispatch hoặc promotion trong
+  bước ghi nhận này.
+
 ## Cập nhật 2026-08-23 — successor candidate V31 `vi-v0.31.0-4`
 
 - Exact-artifact smoke của `vi-v0.31.0-3` trên Chrome 151 với profile và
