@@ -1,5 +1,35 @@
 # Tiến độ
 
+## Cập nhật 2026-08-22 — successor candidate V31 `vi-v0.31.0-3`
+
+- Exact-byte smoke của `vi-v0.31.0-2` trên Chrome 151 cho thấy website đã tạo
+  và đang dùng cookie nhưng truy vấn mặc định của extension trả danh sách rỗng;
+  cookie do extension API tạo mới hiện ra. `-2` chưa public và được giữ bất biến
+  cùng `-1` thay vì sửa/rebuild asset cũ.
+- Candidate kế tiếp được khóa là `vi-v0.31.0-3` / `0.31.0-vi.3`. Product
+  `v31.0`, technical base `0.31.0`, upstream `0.20.4`, app identity, data root,
+  lockfile và mười tên artifact không đổi. Latest mặc định vẫn là
+  `vi-v0.20.0-25`; rollback candidate vẫn là `vi-v0.20.4-39`.
+- Connector Chromium dùng truy vấn phân vùng tường minh để nhìn thấy cả hai
+  nhóm, chỉ chuyển cookie không phân vùng còn hiệu lực và tiếp tục fail closed
+  cho cookie phân vùng. Workflow contract khóa extension, cookie-import và
+  pairing regression trước khi tạo draft.
+- Gate cục bộ đã đạt: 31/31 release/version/evidence validator, 40/40
+  Connector/updater/workflow Vitest, 296/296 plugin, 44 file/388 test Agents,
+  12 file/70 test UI cố định, 19 file/161 test Advisor/ngôn ngữ, 18 file/310
+  test release/Electron, typecheck, lint 0 lỗi, dependency audit 0 lỗ hổng,
+  `uv lock --check`, đủ 10 URL trên README/README.vi/release notes, JSON/YAML,
+  metadata nền không đổi và `git diff --check`.
+- Windows Application Control chặn executable nằm trong `.venv`, nhưng runner
+  chuẩn đã chạy được bằng CPython 3.11 gốc được phép với đúng site-packages của
+  repo: `test_update_channel_stable.py` đạt 19/19. Toàn batch Python phát hành
+  chạy đủ 820/820 assertion đạt; riêng subprocess Windows của
+  `test_tui_gateway_server.py` không tự thoát sau khi báo 586/586 đạt và bị
+  runner cưỡng dừng ở timeout. CI Linux chính tắc vẫn là gate bắt buộc trước
+  khi tạo draft; đây là khoảng trống cleanup theo host, không phải test fail.
+- Chưa commit, push, tạo tag, build artifact, tạo draft hoặc thực hiện hành động
+  public cho `vi-v0.31.0-3`.
+
 ## Cập nhật 2026-08-22 — Gateway ngoài cùng bên trái trong header V31
 
 - Header của phiên và từng session tile được khóa theo thứ tự cố định

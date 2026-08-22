@@ -3,7 +3,12 @@ import assert from 'node:assert/strict'
 import { afterEach, test } from 'vitest'
 
 import type { TransferCookie } from './cookie-import'
-import { CONNECTOR_PROTOCOL, ConnectorPairingError, ConnectorPairingServer } from './pairing-server'
+import {
+  CONNECTOR_PROTOCOL,
+  ConnectorPairingError,
+  ConnectorPairingServer,
+  type ExtensionPreview
+} from './pairing-server'
 
 const ORIGIN = 'chrome-extension://abcdefghijklmnopabcdefghijklmnop'
 const NOW = 1_800_000_000_000
@@ -39,7 +44,7 @@ async function jsonResponse(response: Response): Promise<Record<string, unknown>
   return (await response.json()) as Record<string, unknown>
 }
 
-function preview() {
+function preview(patch: Partial<ExtensionPreview> = {}) {
   return {
     protocol: CONNECTOR_PROTOCOL,
     browser: 'chrome',
@@ -49,18 +54,19 @@ function preview() {
     expiredCount: 0,
     sessionCount: 0,
     earliestExpiry: NOW / 1000 + 3600,
-    latestExpiry: NOW / 1000 + 3600
+    latestExpiry: NOW / 1000 + 3600,
+    ...patch
   }
 }
 
-async function pair(server: ConnectorPairingServer) {
+async function pair(server: ConnectorPairingServer, previewPatch: Partial<ExtensionPreview> = {}) {
   const started = await server.start('https://app.example.com/account?private=removed')
   const { endpoint, secret } = parseCode(started.pairingCode)
 
   const response = await fetch(`${endpoint}/v1/pair`, {
     method: 'POST',
     headers: headers({ 'Content-Type': 'application/json', 'X-Hermes-Pairing-Code': secret }),
-    body: JSON.stringify(preview())
+    body: JSON.stringify(preview(previewPatch))
   })
 
   return { started, endpoint, secret, response, body: await jsonResponse(response) }
@@ -197,6 +203,53 @@ test('rejects transfer replay and a payload that differs from the approved previ
 
   assert.equal((await jsonResponse(replay)).error, 'TRANSFER_TOKEN_REPLAYED')
 })
+
+for (const fixture of [
+  {
+    name: 'partitioned',
+    preview: { unsupportedCount: 1 },
+    unsafeCookie: { ...cookie(), name: 'partitioned', partitionKey: { topLevelSite: 'https://top.example' } }
+  },
+  {
+    name: 'expired',
+    preview: { expiredCount: 1 },
+    unsafeCookie: { ...cookie(), name: 'expired', expirationDate: NOW / 1000 - 1 }
+  }
+] as const) {
+  test(`keeps ${fixture.name} counts in preview metadata but rejects that cookie from transfer`, async () => {
+    const server = new ConnectorPairingServer(new Set([ORIGIN]), () => NOW)
+    servers.push(server)
+    const paired = await pair(server, fixture.preview)
+    server.approve(paired.started.attemptId)
+
+    const status = await jsonResponse(
+      await fetch(`${paired.endpoint}/v1/status?attemptId=${paired.started.attemptId}`, {
+        headers: headers({ Authorization: `Bearer ${paired.body.receiptToken}` })
+      })
+    )
+
+    const unsafeTransfer = await fetch(`${paired.endpoint}/v1/transfer`, {
+      method: 'POST',
+      headers: headers({ Authorization: `Bearer ${status.transferToken}`, 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        protocol: CONNECTOR_PROTOCOL,
+        hostname: 'app.example.com',
+        cookies: [cookie(), fixture.unsafeCookie]
+      })
+    })
+
+    assert.equal((await jsonResponse(unsafeTransfer)).error, 'TRANSFER_PREVIEW_MISMATCH')
+
+    const filteredTransfer = await fetch(`${paired.endpoint}/v1/transfer`, {
+      method: 'POST',
+      headers: headers({ Authorization: `Bearer ${status.transferToken}`, 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ protocol: CONNECTOR_PROTOCOL, hostname: 'app.example.com', cookies: [cookie()] })
+    })
+
+    assert.equal(filteredTransfer.status, 200)
+    assert.equal((await server.waitForTransfer(paired.started.attemptId)).cookies.length, 1)
+  })
+}
 
 test('expires and closes an unfinished pairing attempt', async () => {
   const server = new ConnectorPairingServer(new Set([ORIGIN]), Date.now, 15)

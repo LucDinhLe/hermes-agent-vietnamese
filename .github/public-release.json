@@ -3,7 +3,7 @@
   "rollbackTag": "vi-v0.20.0-14",
   "releaseClass": "community-pilot",
   "featuredCandidate": {
-    "tag": "vi-v0.31.0-2",
+    "tag": "vi-v0.31.0-3",
     "productVersion": "v31.0",
     "releaseClass": "community-prerelease",
     "published": true

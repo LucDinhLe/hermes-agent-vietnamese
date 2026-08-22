@@ -92,6 +92,11 @@ chuỗi trên.
     `connectionId + profile` bất biến qua mọi await. Backend phải serialize
     start/restart/stop theo canonical lifecycle owner; phản hồi muộn hoặc owner
     mơ hồ phải fail closed, không được repaint hay điều khiển Gateway foreground.
+16. **Phân vùng cookie phải fail closed:** Connector Chromium phải liệt kê bằng
+    truy vấn phân vùng tường minh, coi `partitionKey` thiếu hoặc `null` là không
+    phân vùng, đếm object phân vùng thực sự là không hỗ trợ và chỉ chuyển cookie
+    không phân vùng còn hiệu lực. Không được coi truy vấn mặc định trả rỗng là
+    bằng chứng website không có cookie.
 
 ## Cổng bắt buộc
 
@@ -108,6 +113,10 @@ chuỗi trên.
 - [ ] Typecheck, lint, unit, integration, UI và security scan phù hợp đều đạt.
 - [ ] Control đa nguồn chứng minh exact-owner routing, loại phản hồi cũ và
       serialize các lifecycle verb xung đột theo cùng canonical owner.
+- [ ] Regression Connector chứng minh Chrome/Edge nhìn thấy cookie do website
+      tạo, normalize cùng kết quả cho `partitionKey` thiếu/`null`, chỉ chuyển
+      cookie không phân vùng còn hiệu lực, đếm đúng cookie phân vùng/hết hạn và
+      không ghi giá trị cookie vào log hoặc evidence.
 - [ ] Không còn lỗ hổng runtime nghiêm trọng chưa được chấp nhận.
 - [ ] Artifact không chứa secret, hồ sơ, database, log hoặc đường dẫn riêng tư.
 - [ ] Mọi tải xuống cần thiết đều dùng nguồn bất biến và kiểm digest.
@@ -137,6 +146,8 @@ Chỉ dùng user/hồ sơ cô lập. Không đọc, nhập hoặc khôi phục d
 - [ ] Cài và mở bằng đường người dùng thực tế, không cần developer tools.
 - [ ] Runtime/bootstrap, gateway và onboarding đạt.
 - [ ] Tạo/đổi tên phiên, kiểm tab phiên/Browser và panel phải.
+- [ ] Connector Chrome và Edge dùng profile cô lập phải vượt preview chỉ có
+      metadata, import, persistence sau restart, revoke và quét redaction.
 - [ ] Chạy một tool an toàn bằng provider thử hoặc mock phù hợp.
 - [ ] Khởi động lại và xác nhận giữ trạng thái.
 - [ ] Lưu OS build, kiến trúc, log sạch và ảnh bằng chứng.

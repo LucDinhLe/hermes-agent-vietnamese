@@ -122,6 +122,9 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /npm run --prefix apps\/desktop lint/)
   for (const requiredPreDraftGate of [
     'npm run --prefix apps/desktop lint',
+    'scripts/browser-connector-extension.test.mjs',
+    'electron/browser-connector/cookie-import.test.ts',
+    'electron/browser-connector/pairing-server.test.ts',
     'src/hermes-profile-scope.test.ts',
     'src/app/chat/session-gateway-control.test.tsx',
     'src/app/hooks/use-config-record.test.ts',

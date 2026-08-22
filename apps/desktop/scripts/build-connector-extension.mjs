@@ -10,7 +10,14 @@ export const buildDir = join(desktopRoot, 'build', 'hermes-connector')
 export const trustPath = join(desktopRoot, 'build', 'hermes-connector-trust.json')
 export const expectedExtensionId = 'jabfgpkkfcoiiegikmdccooedjoooflm'
 
-const allowedRootFiles = new Set(['README.md', 'manifest.json', 'popup.css', 'popup.html', 'popup.js'])
+const allowedRootFiles = new Set([
+  'README.md',
+  'cookie-transfer.js',
+  'manifest.json',
+  'popup.css',
+  'popup.html',
+  'popup.js'
+])
 
 async function filesUnder(root) {
   const { readdir } = await import('node:fs/promises')

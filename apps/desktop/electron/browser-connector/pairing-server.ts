@@ -218,10 +218,10 @@ function transferPreview(
 
 function previewMatches(expected: ExtensionPreview, actual: Omit<ExtensionPreview, 'browser'>): boolean {
   return (
+    actual.unsupportedCount === 0 &&
+    actual.expiredCount === 0 &&
     expected.hostname === actual.hostname &&
     expected.cookieCount === actual.cookieCount &&
-    expected.unsupportedCount === actual.unsupportedCount &&
-    expected.expiredCount === actual.expiredCount &&
     expected.sessionCount === actual.sessionCount &&
     expected.earliestExpiry === actual.earliestExpiry &&
     expected.latestExpiry === actual.latestExpiry

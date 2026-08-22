@@ -1,8 +1,8 @@
 ## Hermes Vietnamese v31.0 — Agents cộng tác luôn sẵn trong từng phiên
 
-Candidate bất biến: `vi-v0.31.0-2`
+Candidate bất biến: `vi-v0.31.0-3`
 
-Phiên bản kỹ thuật Desktop: `0.31.0-vi.2`
+Phiên bản kỹ thuật Desktop: `0.31.0-vi.3`
 
 Lõi upstream: **Hermes Agent 0.20.4**
 
@@ -19,16 +19,17 @@ nhầm nguồn gốc hoặc đường nâng cấp.
 > hành vẫn là community pilot `vi-v0.20.0-25` cho tới khi signing và
 > smoke máy thật đủ theo policy; bản này không được tái phân loại thành stable.
 
-> **Candidate kế nhiệm:** `vi-v0.31.0-2` thay thế candidate `vi-v0.31.0-1`
-> chưa được promotion sau khi exact-byte smoke phát hiện cần đưa điều khiển
-> Gateway vào đúng header và backend owner của từng phiên. Tag, draft và byte
-> của `vi-v0.31.0-1` vẫn được giữ nguyên; không rebuild hoặc sửa đè candidate cũ.
+> **Candidate kế nhiệm:** `vi-v0.31.0-3` thay thế candidate
+> `vi-v0.31.0-2` chưa được công khai sau khi exact-byte smoke trên Chrome 151
+> phát hiện Connector bỏ sót cookie do website tạo và báo sai số cookie không
+> hỗ trợ. Tag, draft, asset và bằng chứng của cả `vi-v0.31.0-1` lẫn
+> `vi-v0.31.0-2` vẫn được giữ nguyên; không rebuild hoặc sửa đè candidate cũ.
 
 > **Chuẩn hóa phiên bản:** `v31.0` là mốc đầu tiên dùng hợp đồng
 > phiên bản sản phẩm tách khỏi upstream. Nhãn working `v31.1` trong kế hoạch
 > candidate vi39 không phải technical/updater version và được thay bằng mốc
 > chính thức `v31.0`; đường nâng cấp vẫn tăng từ `0.20.4-vi.39` lên
-> `0.31.0-vi.2`.
+> `0.31.0-vi.3`.
 
 ### Agents: cộng tác thay vì thay người chủ trì
 
@@ -61,7 +62,7 @@ nhầm nguồn gốc hoặc đường nâng cấp.
 - Plugin ID `hermes-bots`, storage key, profile/session/group/routine schema,
   tiêu đề `Bot Chat` và marker protocol cũ tiếp tục được đọc. Chỉ lớp trình bày
   dùng Agent/Agents; v31 không rewrite dữ liệu người dùng.
-- Updater nhận `0.31.0-vi.2` là mới hơn cả `0.31.0-vi.1` và
+- Updater nhận `0.31.0-vi.3` là mới hơn `0.31.0-vi.2`, `0.31.0-vi.1` và
   `0.20.4-vi.39`. Cổng phát hành bắt buộc
   thử cài đè từ `vi-v0.20.4-39` và kiểm tra profile, session, project, group,
   routine cùng trạng thái onboarding còn nguyên.
@@ -74,6 +75,18 @@ nhầm nguồn gốc hoặc đường nâng cấp.
 - Browser, Projects, Usage analytics, routine catalog tiếng Việt, connector và
   runtime resident tiếp tục dùng hợp đồng đã chốt ở các candidate trước.
 
+### Connector không bỏ sót cookie website trên Chromium hiện hành
+
+- Chrome/Edge Connector liệt kê cả cookie có và không phân vùng theo hợp đồng
+  Chromium hiện hành, nhưng chỉ đưa cookie không phân vùng, còn hiệu lực vào
+  payload chuyển sang Hermes.
+- Cookie thực sự có phân vùng vẫn bị bỏ qua và được đếm đúng là không hỗ trợ;
+  cookie hết hạn được đếm riêng. Preview chỉ hiển thị metadata, không hiển thị
+  tên bí mật hoặc giá trị cookie.
+- Cổng candidate chạy regression extension/import/pairing trước khi tạo draft.
+  Exact-artifact smoke phải thử Chrome và Edge bằng profile cô lập, gồm preview,
+  import, persistence, revoke và quét redaction.
+
 ### Tệp candidate theo nền tảng
 
 Chỉ dùng các liên kết dưới đây sau khi release chuyển khỏi draft. Luôn đối chiếu
@@ -81,16 +94,16 @@ với `SHA256SUMS.txt` nằm trong cùng release.
 
 | Máy đang dùng           | Tệp candidate                                                                                                                                             |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows 10/11 x64       | [Windows x64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-2/Hermes-Vietnamese-Windows-x64-Setup.exe)         |
-| Windows 10/11 ARM64     | [Windows ARM64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-2/Hermes-Vietnamese-Windows-arm64-Setup.exe)     |
-| Mac chip Apple M-series | [macOS Apple Silicon DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-2/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
-| Mac chip Intel          | [macOS Intel DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-2/Hermes-Vietnamese-macOS-Intel.dmg)                 |
-| Ubuntu/Debian x64       | [Linux x64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-2/Hermes-Vietnamese-Linux-x64.deb)                     |
-| Ubuntu/Debian ARM64     | [Linux ARM64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-2/Hermes-Vietnamese-Linux-arm64.deb)                 |
-| Fedora/RHEL x64         | [Linux x64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-2/Hermes-Vietnamese-Linux-x64.rpm)                     |
-| Fedora/RHEL ARM64       | [Linux ARM64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-2/Hermes-Vietnamese-Linux-arm64.rpm)                 |
-| Linux khác x64          | [Linux x64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-2/Hermes-Vietnamese-Linux-x64.AppImage)           |
-| Linux khác ARM64        | [Linux ARM64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-2/Hermes-Vietnamese-Linux-arm64.AppImage)       |
+| Windows 10/11 x64       | [Windows x64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-3/Hermes-Vietnamese-Windows-x64-Setup.exe)         |
+| Windows 10/11 ARM64     | [Windows ARM64 Setup](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-3/Hermes-Vietnamese-Windows-arm64-Setup.exe)     |
+| Mac chip Apple M-series | [macOS Apple Silicon DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-3/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
+| Mac chip Intel          | [macOS Intel DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-3/Hermes-Vietnamese-macOS-Intel.dmg)                 |
+| Ubuntu/Debian x64       | [Linux x64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-3/Hermes-Vietnamese-Linux-x64.deb)                     |
+| Ubuntu/Debian ARM64     | [Linux ARM64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-3/Hermes-Vietnamese-Linux-arm64.deb)                 |
+| Fedora/RHEL x64         | [Linux x64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-3/Hermes-Vietnamese-Linux-x64.rpm)                     |
+| Fedora/RHEL ARM64       | [Linux ARM64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-3/Hermes-Vietnamese-Linux-arm64.rpm)                 |
+| Linux khác x64          | [Linux x64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-3/Hermes-Vietnamese-Linux-x64.AppImage)           |
+| Linux khác ARM64        | [Linux ARM64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-3/Hermes-Vietnamese-Linux-arm64.AppImage)       |
 
 ### Tình trạng nghiệm thu candidate khi được công khai
 

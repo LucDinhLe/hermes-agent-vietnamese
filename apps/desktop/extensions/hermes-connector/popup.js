@@ -1,4 +1,5 @@
-const PROTOCOL = 'hermes-cookie-transfer/1'
+import { CONNECTOR_PROTOCOL as PROTOCOL, readCookieTransferPreview } from './cookie-transfer.js'
+
 const LOOPBACK_PERMISSION = 'http://127.0.0.1/*'
 const POLL_INTERVAL_MS = 500
 const PAIR_TIMEOUT_MS = 120_000
@@ -71,48 +72,6 @@ async function cookieStoreId(tabId) {
   return store.id
 }
 
-function toTransferCookie(cookie) {
-  return {
-    name: cookie.name,
-    value: cookie.value,
-    domain: cookie.domain,
-    hostOnly: cookie.hostOnly,
-    path: cookie.path,
-    secure: cookie.secure,
-    httpOnly: cookie.httpOnly,
-    session: cookie.session,
-    ...(cookie.expirationDate === undefined ? {} : { expirationDate: cookie.expirationDate }),
-    sameSite: cookie.sameSite,
-    storeId: cookie.storeId,
-    ...(cookie.partitionKey === undefined ? {} : { partitionKey: cookie.partitionKey })
-  }
-}
-
-function summarizeCookies(cookies) {
-  const now = Date.now() / 1000
-  const unsupported = cookies.filter(item => item.partitionKey !== undefined)
-  const expired = cookies.filter(item => item.partitionKey === undefined && !item.session && item.expirationDate <= now)
-  const importable = cookies.filter(
-    item => (item.session || item.expirationDate > now) && item.partitionKey === undefined
-  )
-  const expiries = importable.filter(item => !item.session).map(item => item.expirationDate)
-
-  return {
-    cookies,
-    importable,
-    preview: {
-      protocol: PROTOCOL,
-      browser: navigator.userAgent.includes('Edg/') ? 'edge' : 'chrome',
-      hostname: new URL(activeTab.url).hostname.toLowerCase(),
-      cookieCount: importable.length,
-      unsupportedCount: unsupported.length,
-      expiredCount: expired.length,
-      sessionCount: importable.filter(item => item.session).length,
-      ...(expiries.length > 0 ? { earliestExpiry: Math.min(...expiries), latestExpiry: Math.max(...expiries) } : {})
-    }
-  }
-}
-
 async function requestSitePermission() {
   return chrome.permissions.request({ permissions: ['cookies'], origins: [sourcePattern] })
 }
@@ -122,11 +81,14 @@ async function previewCurrentSite() {
   try {
     if (!(await requestSitePermission())) throw new Error('PERMISSION_DENIED')
     const storeId = await cookieStoreId(activeTab.id)
-    const sourceCookies = await chrome.cookies.getAll({ url: activeTab.url, storeId })
-    const summary = summarizeCookies(sourceCookies.map(toTransferCookie))
+    const summary = await readCookieTransferPreview(chrome.cookies, {
+      url: activeTab.url,
+      storeId,
+      userAgent: navigator.userAgent
+    })
     if (summary.importable.length === 0) throw new Error('NO_IMPORTABLE_COOKIES')
 
-    transferCookies = summary.cookies
+    transferCookies = summary.importable
     transferPreview = summary.preview
     elements.cookieCount.textContent = String(summary.preview.cookieCount)
     elements.sessionCount.textContent = String(summary.preview.sessionCount)
