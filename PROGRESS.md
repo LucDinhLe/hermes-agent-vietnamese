@@ -1,5 +1,33 @@
 # Tiến độ
 
+## Cập nhật 2026-08-23 — successor candidate V31 `vi-v0.31.0-7`
+
+- Exact-artifact Windows x64 gate đã loại `vi-v0.31.0-6` trước nút gỡ cuối.
+  Installer per-user đăng ký đúng app tại
+  `C:\Users\HermesSmokeV31\AppData\Local\Programs\Hermes`, nhưng registry thật
+  dùng khóa `48ae4bdc-0f8d-5252-af1e-bf7c0a8c3649`; detached cleanup `-6` lại
+  dùng nhầm `0a5f5eba-85bf-50cc-a4b2-3c1cbe76f61a`. Vì vậy không thể chứng minh
+  mục gỡ cài đặt thật sẽ được xóa. Màn hình xác nhận đã bị hủy, chưa xóa app hay
+  dữ liệu; tag/draft/asset `-6` tiếp tục riêng tư và bất biến.
+- Biên nhận trước gỡ đã khóa đúng commit `bdf7a24e…`, phiên bản
+  `0.31.0-vi.6`, 26.098 file app, 40 file profile và 91 file userData. Biên nhận
+  registry riêng xác minh `InstallLocation`, `UninstallString` và
+  `DisplayVersion` dưới đúng tài khoản smoke.
+- Successor cục bộ là `vi-v0.31.0-7` / `0.31.0-vi.7`. Cleanup đã chuyển sang
+  khóa electron-builder thật; regression mới tự tính UUID v5 từ
+  `build.appId=com.nousresearch.hermes` với namespace electron-builder để phát
+  hiện mọi lệch identity trong tương lai.
+- Source gate cục bộ đạt: 31/31 Node release/evidence/public-contract, 18 file/
+  333 test Electron release/runtime, 296/296 plugin, ba nhóm UI 389/389,
+  70/70 và 161/161, cùng 15 file/829 test Python phát hành và GUI uninstall
+  (1 skip theo nền tảng). Desktop typecheck, ESLint 0 lỗi (168 cảnh báo nền),
+  Prettier cho implementation/docs đổi, dependency audit 0 lỗ hổng,
+  `uv lock --check`, dependency pin, JSON/YAML, secret-pattern scan và
+  `git diff --check` đều đạt; test updater giữ style gốc để tránh reformat
+  ngoài phạm vi.
+- Commit, push, tag, native build, draft và exact-artifact smoke `-7` vẫn đang
+  chờ. Chưa có hành động public nào cho candidate `-7`.
+
 ## Cập nhật 2026-08-23 — successor candidate V31 `vi-v0.31.0-6`
 
 - Exact-artifact keep-data uninstall đã loại `vi-v0.31.0-5`: current per-user

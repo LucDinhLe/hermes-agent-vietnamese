@@ -1,7 +1,7 @@
 # Hermes Vietnamese v31.0 — Agents working brief
 
-Status: fifth successor candidate preparation in progress; `vi-v0.31.0-1` through `vi-v0.31.0-5` remain immutable, private, and are not promotable
-Candidate contract: `vi-v0.31.0-6` / app version `0.31.0-vi.6`; all five prior tags, drafts, assets, and evidence sets remain preserved and unchanged
+Status: sixth successor candidate preparation in progress; `vi-v0.31.0-1` through `vi-v0.31.0-6` remain immutable, private, and are not promotable
+Candidate contract: `vi-v0.31.0-7` / app version `0.31.0-vi.7`; all six prior tags, drafts, assets, and evidence sets remain preserved and unchanged
 Release class: community prerelease until signing and real-machine smoke satisfy the stable policy
 
 ## Outcome
@@ -44,10 +44,10 @@ New collaboration membership data is additive and versioned. A missing or malfor
 
 - Product version: `31.0`.
 - Technical/app base: `0.31.0`.
-- Candidate: `vi-v0.31.0-6`, app SemVer `0.31.0-vi.6`.
+- Candidate: `vi-v0.31.0-7`, app SemVer `0.31.0-vi.7`.
 - Upstream Hermes Agent version: `0.20.4`, displayed as a separate provenance field.
 - Installed identity and bootstrap/resident-runtime markers remain compatible with `0.20.4-vi.39`.
-- Updater ordering must prove `0.31.0-vi.6 > 0.31.0-vi.5 > 0.31.0-vi.4 > 0.31.0-vi.3 > 0.31.0-vi.2 > 0.31.0-vi.1 > 0.20.4-vi.39` on every supported feed target.
+- Updater ordering must prove `0.31.0-vi.7 > 0.31.0-vi.6 > 0.31.0-vi.5 > 0.31.0-vi.4 > 0.31.0-vi.3 > 0.31.0-vi.2 > 0.31.0-vi.1 > 0.20.4-vi.39` on every supported feed target.
 
 ## Acceptance gates
 
@@ -61,7 +61,7 @@ New collaboration membership data is additive and versioned. A missing or malfor
 
 ## Release boundary
 
-The workflow may create and publish `vi-v0.31.0-6` as a public community prerelease after the pilot gates pass. It must leave the tagged/draft `vi-v0.31.0-1` through `vi-v0.31.0-5` candidates untouched, must not rewrite `vi-v0.20.4-39`, move the stable/Latest contract, or claim stable status. Stable promotion remains blocked until platform signing/notarization and required real-machine smoke are complete.
+The workflow may create and publish `vi-v0.31.0-7` as a public community prerelease after the pilot gates pass. It must leave the tagged/draft `vi-v0.31.0-1` through `vi-v0.31.0-6` candidates untouched, must not rewrite `vi-v0.20.4-39`, move the stable/Latest contract, or claim stable status. Stable promotion remains blocked until platform signing/notarization and required real-machine smoke are complete.
 
 ## Post-candidate header delta
 
@@ -124,3 +124,22 @@ installer must then repeat repair, keep-data uninstall and delete-data uninstall
 with before/after snapshots. Both uninstall choices must remove the current app
 and its own registration, must not touch the unrelated all-users installation,
 and must respectively preserve or delete only the documented data roots.
+
+## Sixth successor exact NSIS identity delta
+
+Exact-artifact preparation for `vi-v0.31.0-6` installed the Windows x64
+candidate per-user and captured its real HKCU registration before the final
+keep-data uninstall click. Electron-builder derived the stable NSIS key
+`48ae4bdc-0f8d-5252-af1e-bf7c0a8c3649` from
+`build.appId=com.nousresearch.hermes`, while the detached cleanup used the
+incorrect hard-coded key `0a5f5eba-85bf-50cc-a4b2-3c1cbe76f61a`. The gate was
+stopped and the UI confirmation was cancelled before deleting anything.
+Candidate `-6` is rejected, private, and immutable.
+
+Candidate `-7` uses the exact electron-builder-derived identity and locks it
+with a regression that recomputes UUID v5 from the package `build.appId` and
+electron-builder namespace. Exact-artifact smoke must prove that both real HKCU
+keys exist before uninstall, disappear after uninstall, and that the unrelated
+all-users tree and HKLM registration remain byte-for-byte and value-for-value
+unchanged. The same requirements apply independently to keep-data and full
+delete-data lanes.

@@ -15,6 +15,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { UUID } from 'builder-util-runtime'
 import { test } from 'vitest'
 
 import {
@@ -30,6 +31,13 @@ import {
   userDataPathForUninstallMode,
   WINDOWS_NSIS_APP_KEY
 } from './desktop-uninstall'
+
+test('Windows NSIS app key matches electron-builder derivation from build.appId', () => {
+  const packageJson = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  const electronBuilderNamespace = UUID.parse('50e065bc-3134-11e6-9bab-38c9862bdaf3')
+
+  assert.equal(WINDOWS_NSIS_APP_KEY, UUID.v5(packageJson.build.appId, electronBuilderNamespace))
+})
 
 // --- uninstallArgsForMode ---
 
@@ -342,10 +350,10 @@ test('buildWindowsCleanupScript waits (bounded) for PID, runs uninstall, rmdir b
   assert.match(script, /if %userdata_tries% geq 10 goto rmuserdatadone/)
   // Remove only this per-user NSIS registration. A sibling HKLM install or a
   // differently located HKCU install must not match the exact InstallLocation.
-  assert.match(script, /HKCU\\Software\\0a5f5eba-85bf-50cc-a4b2-3c1cbe76f61a/)
+  assert.match(script, /HKCU\\Software\\48ae4bdc-0f8d-5252-af1e-bf7c0a8c3649/)
   assert.match(
     script,
-    /HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\0a5f5eba-85bf-50cc-a4b2-3c1cbe76f61a/
+    /HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\48ae4bdc-0f8d-5252-af1e-bf7c0a8c3649/
   )
   assert.match(script, /reg query "%HERMES_INSTALL_KEY%" \/v InstallLocation/)
   assert.match(
