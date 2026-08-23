@@ -1,5 +1,36 @@
 # Tiến độ
 
+## Cập nhật 2026-08-23 — successor candidate V31 `vi-v0.31.0-6`
+
+- Exact-artifact keep-data uninstall đã loại `vi-v0.31.0-5`: current per-user
+  app bị xóa và 0 tiến trình còn lại; 40/40 tệp profile cùng 88/88 tệp Electron
+  userData cô lập giữ đúng SHA-256. Tuy nhiên registry gỡ cài đặt HKCU còn trỏ
+  đến `Uninstall Hermes.exe` đã mất, còn Python cleanup quét nhầm bản all-users
+  `C:\Program Files\Hermes` và thử xóa. Không có pre-snapshot của bản ngoài
+  phạm vi nên không thể loại trừ xóa một phần. `-5` tiếp tục riêng tư, bất biến
+  và không được promotion.
+- Successor được khóa là `vi-v0.31.0-6` / `0.31.0-vi.6`. Desktop handoff nay
+  buộc Python phase bỏ qua packaged app locations; detached cleanup là owner
+  duy nhất của exact app path lấy từ executable đang chạy.
+- Windows cleanup chỉ xóa hai key NSIS HKCU khi `InstallLocation` khớp chính
+  xác current app path. Sibling path và bản all-users HKLM không đủ điều kiện
+  bị đụng tới. App tree hiện tại vẫn được retry xóa sau teardown.
+- Regression đã được viết trước và đạt: 26/26 Electron desktop-uninstall cùng
+  9 test đạt/1 skip trong Python GUI uninstall. Kế hoạch mới nằm tại
+  `docs/release-vi-v0.31.0-6-plan.md`.
+- Metadata candidate, README/README.vi, release notes, working brief và updater
+  ordering đã chuyển sang `-6`. Latest vẫn là `vi-v0.20.0-25`; rollback
+  candidate vẫn là `vi-v0.20.4-39`.
+- Source gate cục bộ đạt: 31/31 Node release/evidence/public-contract, 18 file/
+  332 test Electron release/runtime, 296/296 plugin, ba nhóm UI 389/389,
+  70/70 và 161/161, cùng 14 file/820 test Python phát hành. Desktop typecheck,
+  ESLint 0 lỗi (168 cảnh báo nền), Prettier cho implementation/docs đổi,
+  dependency audit 0 lỗ hổng, `uv lock --check`, dependency pin, JSON/YAML,
+  secret-pattern scan và `git diff --check` đều đạt; hai test legacy giữ nguyên
+  style gốc để tránh reformat ngoài phạm vi.
+- Chưa commit, push, tạo tag `vi-v0.31.0-6`, build native, tạo draft, chạy
+  exact-artifact smoke `-6` hoặc thực hiện hành động public.
+
 ## Cập nhật 2026-08-23 — successor candidate V31 `vi-v0.31.0-5`
 
 - Exact-artifact Windows x64 smoke đã loại `vi-v0.31.0-4`: backend Gateway

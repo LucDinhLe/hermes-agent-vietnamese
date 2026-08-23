@@ -135,9 +135,10 @@ import {
   modeRemovesUserData,
   resolveRemovableAppPath,
   selectUninstallPython,
-    shouldRemoveAppBundle,
-    uninstallArgsForMode,
-    userDataPathForUninstallMode
+  shouldRemoveAppBundle,
+  uninstallArgsForMode,
+  userDataPathForUninstallMode,
+  WINDOWS_NSIS_APP_KEY
 } from './desktop-uninstall'
 import { describeDevCdpDecision, resolveDevCdpPort } from './dev-cdp'
 import { installEmbedReferer } from './embed-referer'
@@ -15317,9 +15318,14 @@ async function getUninstallSummary() {
 
 async function runDesktopUninstall(mode) {
   let uninstallArgs
+  const appPath = resolveRemovableAppPath(process.execPath, process.platform, process.env)
+  const removeBundle = shouldRemoveAppBundle(IS_PACKAGED, appPath) ? appPath : null
 
   try {
-    uninstallArgs = uninstallArgsForMode(mode)
+    // The detached cleanup owns the exact running app path. The Python phase
+    // must not scan standard locations and touch a sibling per-machine or
+    // per-user installation.
+    uninstallArgs = uninstallArgsForMode(mode, { skipPackagedApps: true })
   } catch (error) {
     return { ok: false, error: 'invalid-mode', message: error.message }
   }
@@ -15377,9 +15383,6 @@ async function runDesktopUninstall(mode) {
     }
   }
 
-  const appPath = resolveRemovableAppPath(process.execPath, process.platform, process.env)
-  const removeBundle = shouldRemoveAppBundle(IS_PACKAGED, appPath) ? appPath : null
-
   // CRITICAL (Windows): tear down every backend the desktop owns and wait for
   // the venv shim to unlock BEFORE the cleanup script runs. lite/full delete
   // the venv, and even gui-only removes the install tree's GUI artifacts — a
@@ -15400,7 +15403,8 @@ async function runDesktopUninstall(mode) {
     uninstallArgs,
     appPath: removeBundle,
     userDataPath: userDataPathForUninstallMode(mode, app.getPath('userData')),
-    hermesHome: HERMES_HOME
+    hermesHome: HERMES_HOME,
+    windowsNsisAppKey: IS_WINDOWS && removeBundle ? WINDOWS_NSIS_APP_KEY : null
   }
 
   let scriptPath

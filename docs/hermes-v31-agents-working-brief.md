@@ -1,7 +1,7 @@
 # Hermes Vietnamese v31.0 — Agents working brief
 
-Status: fourth successor candidate preparation in progress; `vi-v0.31.0-1` through `vi-v0.31.0-4` remain immutable, private, and are not promotable
-Candidate contract: `vi-v0.31.0-5` / app version `0.31.0-vi.5`; all four prior tags, drafts, assets, and evidence sets remain preserved and unchanged
+Status: fifth successor candidate preparation in progress; `vi-v0.31.0-1` through `vi-v0.31.0-5` remain immutable, private, and are not promotable
+Candidate contract: `vi-v0.31.0-6` / app version `0.31.0-vi.6`; all five prior tags, drafts, assets, and evidence sets remain preserved and unchanged
 Release class: community prerelease until signing and real-machine smoke satisfy the stable policy
 
 ## Outcome
@@ -44,10 +44,10 @@ New collaboration membership data is additive and versioned. A missing or malfor
 
 - Product version: `31.0`.
 - Technical/app base: `0.31.0`.
-- Candidate: `vi-v0.31.0-5`, app SemVer `0.31.0-vi.5`.
+- Candidate: `vi-v0.31.0-6`, app SemVer `0.31.0-vi.6`.
 - Upstream Hermes Agent version: `0.20.4`, displayed as a separate provenance field.
 - Installed identity and bootstrap/resident-runtime markers remain compatible with `0.20.4-vi.39`.
-- Updater ordering must prove `0.31.0-vi.5 > 0.31.0-vi.4 > 0.31.0-vi.3 > 0.31.0-vi.2 > 0.31.0-vi.1 > 0.20.4-vi.39` on every supported feed target.
+- Updater ordering must prove `0.31.0-vi.6 > 0.31.0-vi.5 > 0.31.0-vi.4 > 0.31.0-vi.3 > 0.31.0-vi.2 > 0.31.0-vi.1 > 0.20.4-vi.39` on every supported feed target.
 
 ## Acceptance gates
 
@@ -61,7 +61,7 @@ New collaboration membership data is additive and versioned. A missing or malfor
 
 ## Release boundary
 
-The workflow may create and publish `vi-v0.31.0-5` as a public community prerelease after the pilot gates pass. It must leave the tagged/draft `vi-v0.31.0-1` through `vi-v0.31.0-4` candidates untouched, must not rewrite `vi-v0.20.4-39`, move the stable/Latest contract, or claim stable status. Stable promotion remains blocked until platform signing/notarization and required real-machine smoke are complete.
+The workflow may create and publish `vi-v0.31.0-6` as a public community prerelease after the pilot gates pass. It must leave the tagged/draft `vi-v0.31.0-1` through `vi-v0.31.0-5` candidates untouched, must not rewrite `vi-v0.20.4-39`, move the stable/Latest contract, or claim stable status. Stable promotion remains blocked until platform signing/notarization and required real-machine smoke are complete.
 
 ## Post-candidate header delta
 
@@ -97,3 +97,30 @@ The lifecycle action can complete before the replacement gateway has published t
 Acceptance must prove old running PID → successful restart action → transient stopped snapshot → new running PID, after which the UI converges to **Running**, shows the replacement PID, and enables **Stop** without clicking **Check health**. Every status request must remain bound to the original owner, and no overlapping requests may accumulate.
 
 Run `32589995695` built all six `-4` native artifacts. Attempts 1 and 2 received `HTTP 403: Resource not accessible by integration` when the Actions token called `gh release create`; attempt 3 succeeded after a ref at the candidate commit was restored, creating the immutable private 30-asset `-4` draft. The candidate workflow had already fetched and verified the exact tag, bound checkout HEAD to its peeled commit, and required a clean worktree. Candidate `-5` hardens staging by checking out the verified output tag, fetching that tag again, and requiring both the stage HEAD and freshly resolved tag commit to equal the verify-job commit before metadata generation or release creation. It keeps `--verify-tag` while removing the redundant `--target` argument, so draft creation relies on the verified tag instead of an auxiliary ref at the same commit. Contract tests must lock the stage-specific guard before creation and prove that no staging release command asks GitHub to create or retarget a tag. Staging remains draft-only; promotion and its exact-byte evidence gates remain separate, and the `-4` draft remains private and immutable.
+
+## Fifth successor uninstall isolation and Windows registration delta
+
+Exact-artifact keep-data uninstall of `vi-v0.31.0-5` preserved all 40 isolated
+profile files and all 88 isolated Electron userData files byte-for-byte, removed
+the current per-user app tree and left zero Hermes processes. It nevertheless
+failed the release gate: the HKCU **Hermes Vietnamese** uninstall entry remained
+and pointed to a missing `Uninstall Hermes.exe`. The same cleanup also scanned
+the unrelated `C:\Program Files\Hermes` installation and attempted to delete it,
+receiving access denied. Because that all-users tree had no pre-snapshot, partial
+deletion could not be excluded. Candidate `-5` is therefore rejected, private,
+and immutable.
+
+Candidate `-6` makes the Desktop handoff authoritative for the exact running app
+path. Its Python phase removes source/runtime artifacts but receives an explicit
+instruction not to scan standard packaged-app locations; the detached cleanup
+removes only the resolved current bundle. On Windows, it deletes the stable NSIS
+install and uninstall keys only when the registered `InstallLocation` exactly
+matches that resolved bundle. A sibling per-user path and the HKLM all-users
+installation are not eligible for deletion.
+
+Acceptance requires behavior tests for the scoped Python path, the Desktop
+handoff flag, and the exact-match registry guard. The exact `-6` Windows x64
+installer must then repeat repair, keep-data uninstall and delete-data uninstall
+with before/after snapshots. Both uninstall choices must remove the current app
+and its own registration, must not touch the unrelated all-users installation,
+and must respectively preserve or delete only the documented data roots.

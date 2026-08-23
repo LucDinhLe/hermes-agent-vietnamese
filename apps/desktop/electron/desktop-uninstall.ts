@@ -29,6 +29,10 @@
 import path from 'node:path'
 
 const UNINSTALL_MODES = ['gui', 'lite', 'full']
+// electron-builder derives this stable NSIS key from
+// build.appId=com.nousresearch.hermes. It is the per-user install identity,
+// not a release-version key, and must remain stable across upgrades.
+const WINDOWS_NSIS_APP_KEY = '0a5f5eba-85bf-50cc-a4b2-3c1cbe76f61a'
 
 /**
  * Map an uninstall mode to the `python -m hermes_cli.uninstall` argv (after the
@@ -37,12 +41,18 @@ const UNINSTALL_MODES = ['gui', 'lite', 'full']
  * lite/full delete — see the Finding-3 note in buildWindowsCleanupScript.
  * Throws on an unknown mode so a typo can't silently become a full wipe.
  */
-function uninstallArgsForMode(mode) {
+function uninstallArgsForMode(mode, { skipPackagedApps = false } = {}) {
   if (!UNINSTALL_MODES.includes(mode)) {
     throw new Error(`Unknown uninstall mode: ${mode}`)
   }
 
-  return ['-m', 'hermes_cli.uninstall', '--mode', mode]
+  const args = ['-m', 'hermes_cli.uninstall', '--mode', mode]
+
+  if (skipPackagedApps) {
+    args.push('--skip-packaged-apps')
+  }
+
+  return args
 }
 
 /** True when `mode` removes the agent (lite/full), false for gui-only. */
@@ -263,7 +273,8 @@ function buildWindowsCleanupScript({
   uninstallArgs,
   appPath,
   userDataPath = null,
-  hermesHome
+  hermesHome,
+  windowsNsisAppKey = null
 }) {
   const pid = Number(desktopPid) || 0
   // cmd.exe has no string escaping inside quotes; strip embedded quotes (paths
@@ -319,6 +330,23 @@ function buildWindowsCleanupScript({
   }
 
   if (appPath) {
+    if (windowsNsisAppKey) {
+      const installKey = `HKCU\\Software\\${windowsNsisAppKey}`
+      const uninstallKey = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${windowsNsisAppKey}`
+
+      lines.push(
+        'rem Delete registration only when it belongs to this exact app path.',
+        `set "HERMES_INSTALL_KEY=${installKey}"`,
+        `set "HERMES_UNINSTALL_KEY=${uninstallKey}"`,
+        'set "REGISTERED_INSTALL="',
+        'for /f "tokens=2,*" %%A in (\'reg query "%HERMES_INSTALL_KEY%" /v InstallLocation 2^>nul ^| findstr /i /c:"InstallLocation"\') do set "REGISTERED_INSTALL=%%B"',
+        `if /i not "%REGISTERED_INSTALL%"==${q(appPath)} goto registry_cleanup_done`,
+        'reg delete "%HERMES_UNINSTALL_KEY%" /f >nul 2>&1',
+        'reg delete "%HERMES_INSTALL_KEY%" /f >nul 2>&1',
+        ':registry_cleanup_done'
+      )
+    }
+
     lines.push(
       'rem Leave the app tree before removing it. Windows cannot delete the',
       'rem current working directory of this cleanup cmd process.',
@@ -352,5 +380,6 @@ export {
   shouldRemoveAppBundle,
   UNINSTALL_MODES,
   uninstallArgsForMode,
-  userDataPathForUninstallMode
+  userDataPathForUninstallMode,
+  WINDOWS_NSIS_APP_KEY
 }

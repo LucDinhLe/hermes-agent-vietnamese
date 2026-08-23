@@ -27,7 +27,8 @@ import {
   shouldRemoveAppBundle,
   UNINSTALL_MODES,
   uninstallArgsForMode,
-  userDataPathForUninstallMode
+  userDataPathForUninstallMode,
+  WINDOWS_NSIS_APP_KEY
 } from './desktop-uninstall'
 
 // --- uninstallArgsForMode ---
@@ -41,6 +42,18 @@ test('uninstallArgsForMode maps each mode to the module-runner argv', () => {
 test('uninstallArgsForMode throws on an unknown mode (no silent full wipe)', () => {
   assert.throws(() => uninstallArgsForMode('nuke'), /Unknown uninstall mode/)
   assert.throws(() => uninstallArgsForMode(''), /Unknown uninstall mode/)
+})
+
+test('every desktop handoff tells Python not to scan packaged app locations', () => {
+  for (const mode of UNINSTALL_MODES) {
+    assert.deepEqual(uninstallArgsForMode(mode, { skipPackagedApps: true }), [
+      '-m',
+      'hermes_cli.uninstall',
+      '--mode',
+      mode,
+      '--skip-packaged-apps'
+    ])
+  }
 })
 
 test('UNINSTALL_MODES lists exactly the three supported modes', () => {
@@ -305,7 +318,8 @@ test('buildWindowsCleanupScript waits (bounded) for PID, runs uninstall, rmdir b
     uninstallArgs: ['-m', 'hermes_cli.uninstall', '--mode', 'full'],
     appPath: 'C:\\Users\\x\\AppData\\Local\\Programs\\Hermes',
     userDataPath: 'C:\\Users\\x\\AppData\\Roaming\\Hermes',
-    hermesHome: 'C:\\Users\\x\\AppData\\Local\\hermes'
+    hermesHome: 'C:\\Users\\x\\AppData\\Local\\hermes',
+    windowsNsisAppKey: WINDOWS_NSIS_APP_KEY
   })
 
   assert.match(script, /@echo off/)
@@ -326,6 +340,20 @@ test('buildWindowsCleanupScript waits (bounded) for PID, runs uninstall, rmdir b
   assert.match(script, /:rmuserdataloop/)
   assert.match(script, /rmdir \/s \/q "C:\\Users\\x\\AppData\\Roaming\\Hermes" >nul 2>&1/)
   assert.match(script, /if %userdata_tries% geq 10 goto rmuserdatadone/)
+  // Remove only this per-user NSIS registration. A sibling HKLM install or a
+  // differently located HKCU install must not match the exact InstallLocation.
+  assert.match(script, /HKCU\\Software\\0a5f5eba-85bf-50cc-a4b2-3c1cbe76f61a/)
+  assert.match(
+    script,
+    /HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\0a5f5eba-85bf-50cc-a4b2-3c1cbe76f61a/
+  )
+  assert.match(script, /reg query "%HERMES_INSTALL_KEY%" \/v InstallLocation/)
+  assert.match(
+    script,
+    /if \/i not "%REGISTERED_INSTALL%"=="C:\\Users\\x\\AppData\\Local\\Programs\\Hermes" goto registry_cleanup_done/
+  )
+  assert.match(script, /reg delete "%HERMES_UNINSTALL_KEY%" \/f >nul 2>&1/)
+  assert.match(script, /reg delete "%HERMES_INSTALL_KEY%" \/f >nul 2>&1/)
   assert.match(script, /:rmapploop/)
   assert.match(script, /rmdir \/s \/q "C:\\Users\\x\\AppData\\Local\\Programs\\Hermes" >nul 2>&1/)
   assert.match(script, /if %app_tries% geq 10 goto rmapdone/)

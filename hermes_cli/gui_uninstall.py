@@ -173,12 +173,13 @@ def agent_is_installed(hermes_home: Path) -> bool:
     return False
 
 
-def gui_is_installed(hermes_home: Path) -> bool:
+def gui_is_installed(hermes_home: Path, *, packaged_paths: "list[Path] | None" = None) -> bool:
     """Return True when any desktop GUI artifact exists (built or packaged)."""
     for p in source_built_gui_artifacts(hermes_home):
         if p.exists():
             return True
-    for p in packaged_gui_app_paths():
+    candidates = packaged_gui_app_paths() if packaged_paths is None else packaged_paths
+    for p in candidates:
         if p.exists():
             return True
     if desktop_userdata_dir().exists():
@@ -186,7 +187,11 @@ def gui_is_installed(hermes_home: Path) -> bool:
     return False
 
 
-def gui_install_summary(hermes_home: "Path | None" = None) -> dict:
+def gui_install_summary(
+    hermes_home: "Path | None" = None,
+    *,
+    packaged_paths: "list[Path] | None" = None,
+) -> dict:
     """Structured snapshot of what's installed, for the desktop UI to render.
 
     Returns JSON-serializable primitives so the Electron main process can
@@ -196,13 +201,14 @@ def gui_install_summary(hermes_home: "Path | None" = None) -> dict:
     home: Path = hermes_home if hermes_home is not None else get_hermes_home()
 
     source_artifacts = [p for p in source_built_gui_artifacts(home) if p.exists()]
-    packaged = [p for p in packaged_gui_app_paths() if p.exists()]
+    packaged_candidates = packaged_gui_app_paths() if packaged_paths is None else packaged_paths
+    packaged = [p for p in packaged_candidates if p.exists()]
     userdata = desktop_userdata_dir()
 
     return {
         "hermes_home": str(home),
         "agent_installed": agent_is_installed(home),
-        "gui_installed": gui_is_installed(home),
+        "gui_installed": gui_is_installed(home, packaged_paths=packaged_candidates),
         "source_built_artifacts": [str(p) for p in source_artifacts],
         "packaged_app_paths": [str(p) for p in packaged],
         "userdata_dir": str(userdata),
@@ -230,13 +236,18 @@ def _remove_path(path: Path) -> bool:
     return False
 
 
-def uninstall_gui(hermes_home: "Path | None" = None, *, remove_userdata: bool = True) -> "list[Path]":
+def uninstall_gui(
+    hermes_home: "Path | None" = None,
+    *,
+    remove_userdata: bool = True,
+    packaged_app_paths: "list[Path] | None" = None,
+) -> "list[Path]":
     """Remove the desktop GUI's artifacts, leaving the agent + user data intact.
 
     Removes:
       - source-built GUI artifacts (dist/release/node_modules/build-stamp)
-      - the packaged app bundle / install dir (best-effort; deb/rpm need the
-        system package manager and are reported, not force-removed)
+      - the packaged app bundle / install dir selected by ``packaged_app_paths``
+        (all standard locations when omitted; none when an empty list is passed)
       - the Electron ``userData`` directory (unless ``remove_userdata=False``)
 
     Never touches ``hermes-agent/hermes_cli`` (agent source), ``venv/``, or any
@@ -256,7 +267,8 @@ def uninstall_gui(hermes_home: "Path | None" = None, *, remove_userdata: bool = 
 
     log_info("Removing installed desktop app...")
     found_packaged = False
-    for path in packaged_gui_app_paths():
+    packaged_candidates = packaged_gui_app_paths() if packaged_app_paths is None else packaged_app_paths
+    for path in packaged_candidates:
         if path.exists():
             found_packaged = True
             if _remove_path(path):
