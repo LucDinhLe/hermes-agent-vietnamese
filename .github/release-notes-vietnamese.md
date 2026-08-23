@@ -2,12 +2,16 @@
   <img src="https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/70b2418fdb2b35a714d4a813c6894cdbbec0a370/assets/banner.png" alt="Hermes Vietnamese" width="100%">
 </p>
 
-## Hermes Vietnamese v31.0 — Agents cộng tác cho công việc AI có kiểm soát
+## Hermes Vietnamese
 
-Hermes Vietnamese v31.0 là ứng dụng AI agent chạy trên máy tính, dành cho người
-muốn giao việc cho AI bằng giao diện trực quan, có tiếng Việt, có khả năng làm
-việc với tệp, Terminal, trình duyệt, dự án, lịch tự động và nhiều Agent trong
-cùng một phiên.
+**Một Agent chủ trì, nhiều Agent chuyên trách cùng làm việc trong từng phiên.**
+
+Hermes Vietnamese v31.0 là ứng dụng AI agent chạy trên máy tính. Người dùng có
+thể giao một công việc cho Agent chủ trì, rồi mời thêm các Agent chuyên trách
+cùng nghiên cứu, viết, phản biện hoặc kiểm tra kết quả. Các Agent chỉ tham gia
+trong phiên hoặc dự án được chọn, nên người dùng vẫn kiểm soát model, dữ liệu,
+công cụ và chi phí. Ứng dụng cũng tích hợp tệp, Terminal, trình duyệt, dự án và
+lịch tự động trong một giao diện tiếng Việt.
 
 Bản phát hành này do
 [Lê Đình Lực (LucDinhLe)](https://github.com/LucDinhLe) phát triển và duy trì
@@ -320,5 +324,6 @@ chi phí dịch vụ trước khi cho Agent thực hiện thao tác quan trọng
 ---
 
 **Cập nhật metadata ngày 24/08/2026:** bổ sung phần giới thiệu, so sánh, ảnh
-hướng dẫn Windows và hướng dẫn sử dụng. Tag, commit, 31 asset, kích thước và
-checksum của bản phát hành không thay đổi.
+hướng dẫn Windows và hướng dẫn sử dụng; rút gọn tiêu đề hiển thị và làm rõ cách
+Agents cộng tác trong từng phiên. Tag, commit, 31 asset, kích thước và checksum
+của bản phát hành không thay đổi.
