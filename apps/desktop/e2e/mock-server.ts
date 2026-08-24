@@ -620,14 +620,23 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
         heldCompletionCount: () => heldCompletionCount,
         close: () =>
           new Promise((resolveClose, rejectClose) => {
-            server.close((err) => {
+            // `server.close()` waits for every live keep-alive connection.
+            // The resident backend can retain one briefly after Electron has
+            // exited, which otherwise leaves Playwright teardown hung even
+            // though the test and app shutdown both completed. No caller can
+            // use the mock after cleanup begins. Stop accepting connections
+            // first, then close all test-only sockets so a reconnect cannot
+            // race into the gap between those two operations.
+            server.close(err => {
               if (err) {
                 rejectClose(err)
               } else {
                 resolveClose()
               }
             })
-          }),
+            server.closeAllConnections?.()
+            server.unref()
+          })
       })
     })
   })

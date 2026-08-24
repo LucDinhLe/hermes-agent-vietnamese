@@ -397,7 +397,12 @@ export async function setupMockBackend(options: MockBackendOptions = {}): Promis
     mockUrl: mock.url,
     sandbox,
     cleanup: async () => {
+      const electronProcess = app.process()
       await app.close().catch(() => undefined)
+      electronProcess.stdin?.destroy()
+      electronProcess.stdout?.destroy()
+      electronProcess.stderr?.destroy()
+      electronProcess.unref()
       await mock.close()
       sandbox.cleanup()
     }
@@ -749,20 +754,24 @@ export async function waitForAppReady(
   // interactions (click, screenshot) don't hit a hidden surface.
   if (app) {
     const deadline = Date.now() + timeoutMs
+    let windowVisible = false
 
     while (Date.now() < deadline) {
-      const visible = await app
-        .evaluate(({ BrowserWindow }) => {
-          const w = BrowserWindow.getAllWindows()[0]
-
-          return w ? w.isVisible() : false
-        })
-        .catch(() => false)
+      // Query the exact renderer page Playwright will interact with. Looking
+      // up BrowserWindow[0] is ambiguous once Electron creates hidden helper
+      // windows, and swallowing an Electron evaluate error turns readiness
+      // into a silent full-timeout wait.
+      const visible = await page.evaluate(() => document.visibilityState === 'visible')
 
       if (visible) {
+        windowVisible = true
         break
       }
       await page.waitForTimeout(500)
+    }
+
+    if (!windowVisible) {
+      throw new Error(`Desktop window did not become visible within ${timeoutMs}ms`)
     }
   }
 }

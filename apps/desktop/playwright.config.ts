@@ -15,22 +15,24 @@ import { defineConfig, type ReporterDescription } from '@playwright/test'
  * To update baselines after an intentional UI change:
  *   npx playwright test --update-snapshots
  */
-const reporters: ReporterDescription[] = [
-  ['list'],
-  ['html', { open: 'never', outputFolder: 'playwright-report' }],
-]
+const reporters: ReporterDescription[] = [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]]
 
 if (process.env.CI) {
   reporters.push(['json', { outputFile: 'playwright-report/results.json' }])
 }
 
+// A cold Windows release host can spend more than 90 s in the isolated mock
+// backend + Electron boot hooks before the test body starts. Keep the normal
+// timeout elsewhere, but leave enough Windows headroom for the 120 s readiness
+// probe and the actual pointer/assertion work that follows it.
+const e2eTestTimeout = process.platform === 'win32' ? 240_000 : 90_000
+
 export default defineConfig({
   /* Test files live under e2e/ so they never collide with the vitest suite
    * under src/ or the node:test files under electron/. */
   testDir: './e2e',
-  /* The desktop app can take a while to bootstrap on cold CI runners — 90 s
-   * per test gives us headroom without masking real hangs. */
-  timeout: 90_000,
+  /* Includes fixture hooks as well as the test body. */
+  timeout: e2eTestTimeout,
   retries: process.env.CI ? 1 : 0,
   /* Each test gets its own worker so the Electron process is fully isolated. */
   fullyParallel: false,
@@ -46,8 +48,8 @@ export default defineConfig({
     // or overlay at a transient opacity because the text-content check fires
     // before the visual transition finishes.
     contextOptions: {
-      reducedMotion: 'reduce',
-    },
+      reducedMotion: 'reduce'
+    }
   },
   expect: {
     toHaveScreenshot: {
@@ -57,7 +59,7 @@ export default defineConfig({
       animations: 'disabled',
       caret: 'hide',
       // Per-channel threshold for "close enough" — anti-aliasing differences.
-      threshold: 0.2,
-    },
-  },
+      threshold: 0.2
+    }
+  }
 })
