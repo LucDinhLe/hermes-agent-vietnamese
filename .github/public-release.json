@@ -3,10 +3,10 @@
   "rollbackTag": "vi-v0.20.4-39",
   "releaseClass": "community-pilot",
   "featuredCandidate": {
-    "tag": "vi-v0.31.0-7",
-    "productVersion": "v31.0",
+    "tag": "vi-v0.32.0-1",
+    "productVersion": "v32.0",
     "releaseClass": "community-prerelease",
-    "published": true
+    "published": false
   },
   "windowsX64": {
     "filename": "Hermes-Vietnamese-Windows-x64-Setup.exe",
