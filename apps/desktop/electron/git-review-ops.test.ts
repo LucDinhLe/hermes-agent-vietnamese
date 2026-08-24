@@ -12,7 +12,7 @@ const tempDirs: string[] = []
 
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) {
-    fs.rmSync(dir, { force: true, recursive: true })
+    fs.rmSync(dir, { force: true, recursive: true, maxRetries: 5, retryDelay: 50 })
   }
 })
 

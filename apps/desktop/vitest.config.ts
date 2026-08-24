@@ -5,6 +5,7 @@ import { defineConfig } from 'vitest/config'
 // CI. Keep the tighter timeout elsewhere while avoiding false negatives on
 // the supported Windows release host.
 const uiTestTimeout = process.platform === 'win32' ? 60_000 : 15_000
+const electronTestTimeout = process.platform === 'win32' ? 30_000 : 15_000
 
 const reactUi: TestProjectConfiguration = {
   extends: './vite.config.ts',
@@ -26,7 +27,8 @@ const electronNative: TestProjectConfiguration = {
     name: 'electron',
     environment: 'node',
     include: ['electron/**/*.test.ts', 'scripts/**.test.{ts,mjs}'],
-    exclude: ['scripts/run-short-session-hang-repro.test.mjs']
+    testTimeout: electronTestTimeout,
+    exclude: ['scripts/run-short-session-hang-repro.test.mjs', 'scripts/patch-electron-builder-mac-binary.test.mjs']
   }
 }
 

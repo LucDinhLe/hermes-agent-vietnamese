@@ -74,7 +74,7 @@ test('ensureGitRepo: inits a plain dir with a root commit so worktrees branch', 
     await ensureGitRepo('git', dir)
     assert.equal(git('rev-list', '--count', 'HEAD'), '1')
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true })
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
   }
 })
 
@@ -164,7 +164,7 @@ test('listBranches: empty on a non-repo path', async () => {
   try {
     assert.deepEqual(await listBranches(dir, 'git'), [])
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true })
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
   }
 })
 

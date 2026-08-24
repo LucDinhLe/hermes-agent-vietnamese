@@ -20,6 +20,12 @@ function withTempDir(run) {
   }
 }
 
+function assertOwnerOnlyMode(filePath: string) {
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(filePath).mode & 0o777, 0o600)
+  }
+}
+
 test('parseInstallationId accepts only a version-4 UUID record', () => {
   assert.equal(parseInstallationId(JSON.stringify({ installationId: ID_A.toUpperCase() })), ID_A)
   assert.equal(parseInstallationId(JSON.stringify({ installationId: 'not-an-id' })), '')
@@ -38,7 +44,8 @@ test('loadOrCreateInstallationId persists and reuses one installation ID', () =>
       loadOrCreateInstallationId(filePath, () => ID_B),
       ID_A
     )
-    assert.equal(fs.statSync(filePath).mode & 0o777, 0o600)
+
+    assertOwnerOnlyMode(filePath)
   }))
 
 test('loadOrCreateInstallationId tightens an existing identity file', () =>
@@ -50,9 +57,7 @@ test('loadOrCreateInstallationId tightens an existing identity file', () =>
       ID_A
     )
 
-    if (process.platform !== 'win32') {
-      assert.equal(fs.statSync(filePath).mode & 0o777, 0o600)
-    }
+    assertOwnerOnlyMode(filePath)
   }))
 
 test('loadOrCreateInstallationId replaces a malformed existing record', () =>
