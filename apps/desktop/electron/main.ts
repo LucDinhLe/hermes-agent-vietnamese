@@ -31,7 +31,15 @@ import {
 import nodePty from 'node-pty'
 
 import { classifyActiveRuntime, shouldRefreshManagedRuntime } from './active-runtime-state'
-import { applyAppUpdate, checkAppUpdate, COMMUNITY_RELEASES_API_URL, shouldUseAppUpdater } from './app-updater'
+import {
+  applyAppUpdate,
+  checkAppUpdate,
+  COMMUNITY_RELEASES_API_URL,
+  decideDesktopUpdateRoute,
+  type DesktopUpdateRoute,
+  dispatchDesktopUpdateRoute,
+  selectInstallStampCandidates
+} from './app-updater'
 import { stopBackendChild as stopBackendChildImpl, stopBackendTreesForUpdate } from './backend-child'
 import { dashboardFallbackArgs, sourceDeclaresServe } from './backend-command'
 import { createBackendConnectionState } from './backend-connection-state'
@@ -67,6 +75,7 @@ import {
   findResidentPython,
   latestPublicReleaseTag,
   latestReleaseFromLsRemote,
+  RESIDENT_RUNTIME_ITEMS,
   resolveChannel,
   resolvePayload
 } from './bundled-runtime'
@@ -630,10 +639,11 @@ function loadInstallStamp() {
   // dev/local build output (apps/desktop/build/install-stamp.json) so
   // someone running `npm run start` after a local `npm run build` also
   // sees a stamp without needing a packaged build.
-  const candidates = [
+  const candidates = selectInstallStampCandidates(
     process.resourcesPath ? path.join(process.resourcesPath, 'install-stamp.json') : null,
-    path.join(APP_ROOT, 'build', 'install-stamp.json')
-  ].filter(Boolean)
+    path.join(APP_ROOT, 'build', 'install-stamp.json'),
+    app.isPackaged
+  )
 
   for (const p of candidates) {
     try {
@@ -663,13 +673,15 @@ function loadInstallStamp() {
           // Bundled desktop builds: payload marks the artifact as carrying
           // offline agent payloads, tag pins the release they came from.
           // bundled-runtime.ts and the app updater key on these two.
-          payload: parsed.payload === true,
-          tag: typeof parsed.tag === 'string' && parsed.tag ? parsed.tag : null,
-          releaseClass: typeof parsed.releaseClass === 'string' ? parsed.releaseClass : null,
-          updateChannel: typeof parsed.updateChannel === 'string' ? parsed.updateChannel : null,
-          // Absence is false by design: an old or malformed candidate stamp
-          // must not silently join the stable feed.
-          updateFeedEnabled: parsed.updateFeedEnabled === true,
+          // Keep the raw policy fields. The updater validates their exact
+          // types and cross-field coherence as one tuple; coercing a malformed
+          // value such as "false" here would make corrupt provenance look
+          // indistinguishable from an intentional community policy.
+          payload: parsed.payload,
+          tag: parsed.tag,
+          releaseClass: parsed.releaseClass,
+          updateChannel: parsed.updateChannel,
+          updateFeedEnabled: parsed.updateFeedEnabled,
           path: p
         })
       }
@@ -2879,53 +2891,59 @@ async function checkStableChannelUpdates() {
   }
 }
 
-async function checkUpdates() {
-  if (bundledUpdateFeedBlocked()) {
+async function checkBundledUpdates() {
+  // checkForUpdates rejects on any network/feed failure. Map that to the
+  // structured shape the git paths return, so the renderer never sees a
+  // raw IPC rejection on an offline check.
+  try {
+    const response = await electronNet.fetch(COMMUNITY_RELEASES_API_URL, {
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'hermes-desktop-update' }
+    })
+
+    if (!response.ok) {
+      throw new Error(`GitHub Releases returned HTTP ${response.status}`)
+    }
+
+    const releases = await response.json()
+
+    if (!Array.isArray(releases)) {
+      throw new Error('GitHub Releases returned an invalid response.')
+    }
+
+    return await checkAppUpdate(app.getVersion(), releases)
+  } catch (error) {
     return {
-      supported: false,
-      mechanism: 'disabled-community-prerelease',
-      updateAvailable: false,
-      message: 'Updates are disabled for this unsigned community prerelease build.',
-      releaseClass: INSTALL_STAMP?.releaseClass || 'community-prerelease',
+      supported: true,
+      mechanism: 'app-updater',
+      channel: 'stable',
+      error: 'fetch-failed',
+      message: firstLine(error instanceof Error ? error.message : String(error)) || 'Update feed check failed.',
       fetchedAt: Date.now()
     }
   }
+}
 
-  // Bundled installs update through the app updater (GitHub Releases feed),
-  // not through git. The gate reads the install manifest, so an ejected
-  // checkout falls through to the git paths below.
-  if (bundledUpdaterActive()) {
-    // checkForUpdates rejects on any network/feed failure. Map that to the
-    // structured shape the git paths return, so the renderer never sees a
-    // raw IPC rejection on an offline check.
-    try {
-      const response = await electronNet.fetch(COMMUNITY_RELEASES_API_URL, {
-        headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'hermes-desktop-update' }
-      })
+async function checkUpdates() {
+  const route = desktopUpdateRoute()
 
-      if (!response.ok) {
-        throw new Error(`GitHub Releases returned HTTP ${response.status}`)
-      }
+  return dispatchDesktopUpdateRoute(route, {
+    appUpdater: () => checkBundledUpdates(),
+    blocked: blocked => ({
+      supported: false,
+      mechanism:
+        blocked.reason === 'community-feed-disabled'
+          ? 'disabled-community-prerelease'
+          : 'disabled-invalid-bundle-provenance',
+      updateAvailable: false,
+      message: blockedUpdateMessage(blocked),
+      releaseClass: blocked.releaseClass,
+      fetchedAt: Date.now()
+    }),
+    git: () => checkGitUpdates()
+  })
+}
 
-      const releases = await response.json()
-
-      if (!Array.isArray(releases)) {
-        throw new Error('GitHub Releases returned an invalid response.')
-      }
-
-      return await checkAppUpdate(app.getVersion(), releases)
-    } catch (error) {
-      return {
-        supported: true,
-        mechanism: 'app-updater',
-        channel: 'stable',
-        error: 'fetch-failed',
-        message: firstLine(error instanceof Error ? error.message : String(error)) || 'Update feed check failed.',
-        fetchedAt: Date.now()
-      }
-    }
-  }
-
+async function checkGitUpdates() {
   // Source install on the stable channel (an ejected bundled install, or a
   // manual channel switch): compare against the newest release tag, not
   // against the tip of main. A commits-behind-main count is meaningless
@@ -3653,56 +3671,64 @@ async function applyUpdates(opts: { stopSafeBlockers?: boolean } = {}) {
     throw new Error('An update is already in progress.')
   }
 
-  if (bundledUpdateFeedBlocked()) {
-    throw new Error('Updates are disabled for this unsigned community prerelease build.')
-  }
+  const route = desktopUpdateRoute()
 
+  return dispatchDesktopUpdateRoute(route, {
+    appUpdater: () => applyBundledUpdate(),
+    blocked: blocked => {
+      throw new Error(blockedUpdateMessage(blocked))
+    },
+    git: () => applyGitUpdate(opts)
+  })
+}
+
+async function applyBundledUpdate() {
   // Bundled installs: download the new app from the GitHub Releases feed,
   // then quit and install. After the relaunch, the marker-tag mismatch
   // triggers the offline agent rebuild — no git, no venv mutation while
   // the app runs, and the Windows setup-binary handoff is unnecessary.
-  if (bundledUpdaterActive()) {
-    updateInFlight = true
-    let installerHandoffStarted = false
+  updateInFlight = true
+  let installerHandoffStarted = false
 
-    try {
-      const result = await applyAppUpdate(
-        percent => emitUpdateProgress({ stage: 'download', message: 'Downloading the app update…', percent }),
-        () => {
-          // electron-updater closes every window before quitAndInstall returns.
-          // Mark this as a hand-off first so the active-work prompt and macOS
-          // keep-alive convention cannot strand the installer waiting for us.
-          installerHandoffStarted = true
-          isQuittingForHandoff = true
-          rememberLog('[updates] downloaded full app artifact; handing off to the platform installer')
-        }
-      )
-
-      if (installerHandoffStarted) {
-        // A wedged renderer/backend must not leave NSIS/ShipIt waiting forever
-        // for the old process. Graceful before-quit teardown gets 30 seconds;
-        // afterwards the platform installer already owns recovery + relaunch.
-        const forceExitTimer = setTimeout(() => {
-          rememberLog('[updates] installer hand-off did not exit in 30s; forcing process exit')
-          app.exit(0)
-        }, 30_000)
-
-        forceExitTimer.unref()
+  try {
+    const result = await applyAppUpdate(
+      percent => emitUpdateProgress({ stage: 'download', message: 'Downloading the app update…', percent }),
+      () => {
+        // electron-updater closes every window before quitAndInstall returns.
+        // Mark this as a hand-off first so the active-work prompt and macOS
+        // keep-alive convention cannot strand the installer waiting for us.
+        installerHandoffStarted = true
+        isQuittingForHandoff = true
+        rememberLog('[updates] downloaded full app artifact; handing off to the platform installer')
       }
+    )
 
-      return result
-    } catch (error) {
-      // A thrown quitAndInstall means no platform hand-off owns recovery.
-      // Keep the working app usable instead of suppressing future quit guards.
-      installerHandoffStarted = false
-      isQuittingForHandoff = false
+    if (installerHandoffStarted) {
+      // A wedged renderer/backend must not leave NSIS/ShipIt waiting forever
+      // for the old process. Graceful before-quit teardown gets 30 seconds;
+      // afterwards the platform installer already owns recovery + relaunch.
+      const forceExitTimer = setTimeout(() => {
+        rememberLog('[updates] installer hand-off did not exit in 30s; forcing process exit')
+        app.exit(0)
+      }, 30_000)
 
-      throw error
-    } finally {
-      updateInFlight = false
+      forceExitTimer.unref()
     }
-  }
 
+    return result
+  } catch (error) {
+    // A thrown quitAndInstall means no platform hand-off owns recovery.
+    // Keep the working app usable instead of suppressing future quit guards.
+    installerHandoffStarted = false
+    isQuittingForHandoff = false
+
+    throw error
+  } finally {
+    updateInFlight = false
+  }
+}
+
+async function applyGitUpdate(opts: { stopSafeBlockers?: boolean } = {}) {
   updateInFlight = true
 
   try {
@@ -4390,34 +4416,49 @@ function residentRuntimeDecision() {
 }
 
 /**
- * True when app updates go through electron-updater instead of git.
- * Reads the manifest on every call. An eject flips the manifest to source
- * mode, and the next check must honor that without an app restart.
+ * Resolve one updater route from one filesystem snapshot.
  *
- * A resident launch is bundled BY CONSTRUCTION: the code came from the
- * app's own resources, so the checkout manifest (which may not even
- * exist) has no say.
+ * This runs before check/apply performs any feed or git I/O. An explicit
+ * source manifest wins because eject transfers ownership back to the checkout.
+ * Every other packaged bundle state must carry a complete payload and a
+ * coherent release-policy tuple or stop locally.
  */
-function bundledUpdaterActive(): boolean {
-  const stamp = INSTALL_STAMP
+function desktopUpdateRoute(): DesktopUpdateRoute {
+  const payload = resolvePayload(process.resourcesPath)
+  const manifest = readJson(INSTALL_MANIFEST_PATH) as any
 
-  const manifest = residentRuntimeDecision().resident
-    ? { installMode: 'bundled' }
-    : (readJson(INSTALL_MANIFEST_PATH) as any)
+  const resident = decideResidentRuntimeFromState({
+    payload,
+    checkoutExists: directoryExists(ACTIVE_HERMES_ROOT),
+    checkoutManifest: manifest,
+    bootstrapMarker: readBootstrapMarker() as any,
+    bootstrapMarkerSchemaVersion: BOOTSTRAP_MARKER_SCHEMA_VERSION
+  })
 
-  return shouldUseAppUpdater({
-    stampHasPayload: Boolean(stamp && stamp.payload),
-    stampAllowsUpdates: Boolean(stamp && stamp.updateFeedEnabled),
-    installMode: manifest && typeof manifest.installMode === 'string' ? manifest.installMode : null,
+  const installMode = resident.resident
+    ? 'bundled'
+    : typeof manifest?.installMode === 'string'
+      ? manifest.installMode
+      : null
+
+  const bundledPayloadComplete = Boolean(
+    payload &&
+    payload.schemaVersion === 2 &&
+    RESIDENT_RUNTIME_ITEMS.every(item => payload.items[item]?.status === 'staged')
+  )
+
+  return decideDesktopUpdateRoute({
+    installStamp: INSTALL_STAMP,
+    bundledPayloadComplete,
+    installMode,
     isPackaged: app.isPackaged
   })
 }
 
-/** Unsigned community bundles carry a resident payload but no update feed. */
-function bundledUpdateFeedBlocked(): boolean {
-  const stamp = INSTALL_STAMP
-
-  return Boolean(app.isPackaged && stamp && stamp.payload && stamp.updateFeedEnabled !== true)
+function blockedUpdateMessage(route: Extract<DesktopUpdateRoute, { mechanism: 'blocked' }>): string {
+  return route.reason === 'community-feed-disabled'
+    ? 'Updates are disabled for this unsigned community prerelease build.'
+    : 'Updates are disabled because this bundled release is missing valid update provenance.'
 }
 
 // Marker-independent: is the canonical install at ACTIVE_HERMES_ROOT actually

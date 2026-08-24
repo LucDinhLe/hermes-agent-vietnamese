@@ -4,13 +4,16 @@ import { test } from 'vitest'
 
 import {
   beginAppUpdateInstall,
+  classifyBundledUpdateStamp,
   communityReleaseFeedUrl,
   configureAutoUpdater,
   configureCommunityReleaseFeed,
+  decideDesktopUpdateRoute,
   describeFeedCheck,
+  dispatchDesktopUpdateRoute,
   releaseTagForAppVersion,
   selectCommunityUpdateRelease,
-  shouldUseAppUpdater
+  selectInstallStampCandidates
 } from './app-updater'
 
 test('packaged updates download the complete promoted artifact', () => {
@@ -74,8 +77,7 @@ test('community release resolver selects the newest published release with this 
   ]
 
   assert.deepEqual(selectCommunityUpdateRelease(releases, '0.20.4-vi.34', 'win32', 'x64'), {
-    feedUrl:
-      'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-36',
+    feedUrl: 'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.4-36',
     tag: 'vi-v0.20.4-36',
     version: '0.20.4-vi.36'
   })
@@ -99,10 +101,7 @@ test('community release resolver orders base versions before community iteration
     { tag_name: 'vi-v0.21.0-1', draft: false, assets: [{ name: 'latest.yml' }] }
   ]
 
-  assert.equal(
-    selectCommunityUpdateRelease(releases, '0.20.4-vi.34', 'win32', 'x64')?.version,
-    '0.21.0-vi.1'
-  )
+  assert.equal(selectCommunityUpdateRelease(releases, '0.20.4-vi.34', 'win32', 'x64')?.version, '0.21.0-vi.1')
 })
 
 test('vi39 and all superseded v31 candidates upgrade to the newest v31 successor', () => {
@@ -158,35 +157,16 @@ test('vi39 and all superseded v31 candidates upgrade to the newest v31 successor
   ]
 
   assert.deepEqual(selectCommunityUpdateRelease(releases, '0.20.4-vi.39', 'win32', 'x64'), {
-    feedUrl:
-      'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7',
+    feedUrl: 'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7',
     tag: 'vi-v0.31.0-7',
     version: '0.31.0-vi.7'
   })
-  assert.equal(
-    selectCommunityUpdateRelease(releases, '0.31.0-vi.1', 'win32', 'x64')?.version,
-    '0.31.0-vi.7'
-  )
-  assert.equal(
-    selectCommunityUpdateRelease(releases, '0.31.0-vi.2', 'win32', 'x64')?.version,
-    '0.31.0-vi.7'
-  )
-  assert.equal(
-    selectCommunityUpdateRelease(releases, '0.31.0-vi.3', 'win32', 'x64')?.version,
-    '0.31.0-vi.7'
-  )
-  assert.equal(
-    selectCommunityUpdateRelease(releases, '0.31.0-vi.4', 'win32', 'x64')?.version,
-    '0.31.0-vi.7'
-  )
-  assert.equal(
-    selectCommunityUpdateRelease(releases, '0.31.0-vi.5', 'win32', 'x64')?.version,
-    '0.31.0-vi.7'
-  )
-  assert.equal(
-    selectCommunityUpdateRelease(releases, '0.31.0-vi.6', 'win32', 'x64')?.version,
-    '0.31.0-vi.7'
-  )
+  assert.equal(selectCommunityUpdateRelease(releases, '0.31.0-vi.1', 'win32', 'x64')?.version, '0.31.0-vi.7')
+  assert.equal(selectCommunityUpdateRelease(releases, '0.31.0-vi.2', 'win32', 'x64')?.version, '0.31.0-vi.7')
+  assert.equal(selectCommunityUpdateRelease(releases, '0.31.0-vi.3', 'win32', 'x64')?.version, '0.31.0-vi.7')
+  assert.equal(selectCommunityUpdateRelease(releases, '0.31.0-vi.4', 'win32', 'x64')?.version, '0.31.0-vi.7')
+  assert.equal(selectCommunityUpdateRelease(releases, '0.31.0-vi.5', 'win32', 'x64')?.version, '0.31.0-vi.7')
+  assert.equal(selectCommunityUpdateRelease(releases, '0.31.0-vi.6', 'win32', 'x64')?.version, '0.31.0-vi.7')
 })
 
 test('community update feeds are pinned to an immutable GitHub release', () => {
@@ -196,10 +176,9 @@ test('community update feeds are pinned to an immutable GitHub release', () => {
   )
 
   const calls: unknown[] = []
-  configureCommunityReleaseFeed(
-    { setFeedURL: value => calls.push(value) } as any,
-    { feedUrl: communityReleaseFeedUrl('vi-v0.20.4-35') }
-  )
+  configureCommunityReleaseFeed({ setFeedURL: value => calls.push(value) } as any, {
+    feedUrl: communityReleaseFeedUrl('vi-v0.20.4-35')
+  })
   assert.deepEqual(calls, [
     {
       channel: 'latest',
@@ -209,48 +188,201 @@ test('community update feeds are pinned to an immutable GitHub release', () => {
   ])
 })
 
-// ── shouldUseAppUpdater ─────────────────────────────────────────────
+// ── bundled updater policy ──────────────────────────────────────────
 
-test('app updater runs only for packaged bundled installs with payloads', () => {
-  assert.equal(
-    shouldUseAppUpdater({ stampHasPayload: true, stampAllowsUpdates: true, installMode: 'bundled', isPackaged: true }),
-    true
+const stableStamp = {
+  schemaVersion: 2,
+  commit: 'a'.repeat(40),
+  payload: true,
+  tag: 'vi-v0.32.0-1',
+  releaseClass: 'stable',
+  updateChannel: 'stable',
+  updateFeedEnabled: true
+}
+
+const communityStamp = {
+  ...stableStamp,
+  releaseClass: 'community-prerelease',
+  updateChannel: 'community-prerelease',
+  updateFeedEnabled: false
+}
+
+const thinStamp = {
+  schemaVersion: 2,
+  commit: 'b'.repeat(40),
+  payload: false,
+  tag: null,
+  releaseClass: null,
+  updateChannel: null,
+  updateFeedEnabled: false
+}
+
+test('packaged apps never fall back from their resident stamp to a development stamp', () => {
+  assert.deepEqual(selectInstallStampCandidates('resources/install-stamp.json', 'build/install-stamp.json', true), [
+    'resources/install-stamp.json'
+  ])
+  assert.deepEqual(selectInstallStampCandidates(null, 'build/install-stamp.json', true), [])
+  assert.deepEqual(selectInstallStampCandidates('resources/install-stamp.json', 'build/install-stamp.json', false), [
+    'resources/install-stamp.json',
+    'build/install-stamp.json'
+  ])
+})
+
+test('only the two exact release-policy tuples are accepted', () => {
+  assert.deepEqual(classifyBundledUpdateStamp(stableStamp), {
+    kind: 'stable-enabled',
+    releaseClass: 'stable'
+  })
+  assert.deepEqual(classifyBundledUpdateStamp(communityStamp), {
+    kind: 'community-disabled',
+    releaseClass: 'community-prerelease'
+  })
+
+  for (const installStamp of [
+    { ...stableStamp, releaseClass: 'community-prerelease' },
+    { ...stableStamp, updateChannel: 'community-prerelease' },
+    { ...stableStamp, updateFeedEnabled: false },
+    { ...communityStamp, updateChannel: 'stable' },
+    { ...communityStamp, updateFeedEnabled: true },
+    { ...communityStamp, updateFeedEnabled: 'false' },
+    { ...stableStamp, commit: 'A'.repeat(40) },
+    { payload: false },
+    { schemaVersion: 2, commit: 'b'.repeat(40), payload: false, updateFeedEnabled: false },
+    { ...thinStamp, schemaVersion: 1 },
+    { payload: true },
+    null
+  ]) {
+    assert.equal(classifyBundledUpdateStamp(installStamp).kind, 'invalid')
+  }
+})
+
+test('stable packaged bundles are the only route to electron-updater', () => {
+  assert.deepEqual(
+    decideDesktopUpdateRoute({
+      installStamp: stableStamp,
+      bundledPayloadComplete: true,
+      installMode: 'bundled',
+      isPackaged: true
+    }),
+    { mechanism: 'app-updater', reason: 'stable-feed-enabled', releaseClass: 'stable' }
   )
 })
 
-test('a thin build never uses the app updater', () => {
-  assert.equal(
-    shouldUseAppUpdater({ stampHasPayload: false, stampAllowsUpdates: true, installMode: 'bundled', isPackaged: true }),
-    false
+test('community, missing, old, and contradictory bundled stamps fail closed', () => {
+  const stamps = [
+    communityStamp,
+    null,
+    { ...stableStamp, schemaVersion: 1 },
+    { ...stableStamp, commit: 'a'.repeat(7) },
+    { ...stableStamp, tag: 'v0.32.0' },
+    { ...stableStamp, updateChannel: 'community-prerelease' },
+    { ...communityStamp, updateFeedEnabled: true }
+  ]
+
+  for (const installStamp of stamps) {
+    for (const installMode of ['bundled', null]) {
+      assert.equal(
+        decideDesktopUpdateRoute({
+          installStamp,
+          bundledPayloadComplete: true,
+          installMode,
+          isPackaged: true
+        }).mechanism,
+        'blocked'
+      )
+    }
+  }
+})
+
+test('a stamp claiming a missing payload fails closed instead of reaching git', () => {
+  assert.deepEqual(
+    decideDesktopUpdateRoute({
+      installStamp: stableStamp,
+      bundledPayloadComplete: false,
+      installMode: 'bundled',
+      isPackaged: true
+    }),
+    { mechanism: 'blocked', reason: 'missing-bundled-payload', releaseClass: 'stable' }
   )
 })
 
-test('a source or ejected checkout keeps the git update path', () => {
-  // Eject writes installMode: source. The gate must fall through to git.
+test('explicit ejected and source installs keep the git route regardless of the bundle stamp', () => {
+  for (const installStamp of [stableStamp, communityStamp, { payload: true }, null]) {
+    assert.equal(
+      decideDesktopUpdateRoute({
+        installStamp,
+        bundledPayloadComplete: true,
+        installMode: 'source',
+        isPackaged: true
+      }).mechanism,
+      'git'
+    )
+  }
+})
+
+test('thin builds, dev runs, and coherent legacy source checkouts keep the git route', () => {
   assert.equal(
-    shouldUseAppUpdater({ stampHasPayload: true, stampAllowsUpdates: true, installMode: 'source', isPackaged: true }),
-    false
+    decideDesktopUpdateRoute({
+      installStamp: thinStamp,
+      bundledPayloadComplete: false,
+      installMode: null,
+      isPackaged: true
+    }).mechanism,
+    'git'
   )
-  // No manifest at all: a legacy checkout. Adoption may run later, but the
-  // updater gate stays closed until the manifest says bundled.
   assert.equal(
-    shouldUseAppUpdater({ stampHasPayload: true, stampAllowsUpdates: true, installMode: null, isPackaged: true }),
-    false
+    decideDesktopUpdateRoute({
+      installStamp: communityStamp,
+      bundledPayloadComplete: true,
+      installMode: 'bundled',
+      isPackaged: false
+    }).mechanism,
+    'git'
+  )
+  assert.deepEqual(
+    decideDesktopUpdateRoute({
+      installStamp: stableStamp,
+      bundledPayloadComplete: true,
+      installMode: null,
+      isPackaged: true
+    }),
+    { mechanism: 'git', reason: 'legacy-source-checkout', releaseClass: 'stable' }
   )
 })
 
-test('dev runs never use the app updater', () => {
-  assert.equal(
-    shouldUseAppUpdater({ stampHasPayload: true, stampAllowsUpdates: true, installMode: 'bundled', isPackaged: false }),
-    false
-  )
-})
+test('blocked bundle dispatch cannot call either network updater or git handler', async () => {
+  const calls: string[] = []
 
-test('unsigned community payloads fail closed even when packaged and bundled', () => {
-  assert.equal(
-    shouldUseAppUpdater({ stampHasPayload: true, stampAllowsUpdates: false, installMode: 'bundled', isPackaged: true }),
-    false
-  )
+  for (const installStamp of [communityStamp, null, { ...stableStamp, updateChannel: 'community-prerelease' }]) {
+    const route = decideDesktopUpdateRoute({
+      installStamp,
+      bundledPayloadComplete: true,
+      installMode: null,
+      isPackaged: true
+    })
+
+    const result = await dispatchDesktopUpdateRoute(route, {
+      appUpdater: async () => {
+        calls.push('electron-updater')
+
+        return 'network'
+      },
+      blocked: async () => {
+        calls.push('blocked')
+
+        return 'stopped'
+      },
+      git: async () => {
+        calls.push('git')
+
+        return 'network'
+      }
+    })
+
+    assert.equal(result, 'stopped')
+  }
+
+  assert.deepEqual(calls, ['blocked', 'blocked', 'blocked'])
 })
 
 // ── describeFeedCheck ───────────────────────────────────────────────

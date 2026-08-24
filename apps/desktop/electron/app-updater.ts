@@ -15,8 +15,7 @@
 
 import type { AppUpdater } from 'electron-updater'
 
-const COMMUNITY_RELEASE_DOWNLOAD_ROOT =
-  'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download'
+const COMMUNITY_RELEASE_DOWNLOAD_ROOT = 'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download'
 
 export const COMMUNITY_RELEASES_API_URL =
   'https://api.github.com/repos/LucDinhLe/hermes-agent-vietnamese/releases?per_page=100'
@@ -32,39 +31,199 @@ export interface CommunityUpdateRelease {
   version: string
 }
 
-export interface UpdaterGateFacts {
-  stampHasPayload: boolean
-  stampAllowsUpdates: boolean
-  installMode: string | null // from .hermes-install.json; null = no manifest
+export type BundledUpdateStampPolicy =
+  | { kind: 'community-disabled'; releaseClass: 'community-prerelease' }
+  | { kind: 'invalid'; releaseClass: string | null }
+  | { kind: 'stable-enabled'; releaseClass: 'stable' }
+  | { kind: 'thin'; releaseClass: null }
+
+export type DesktopUpdateRoute =
+  | { mechanism: 'app-updater'; reason: 'stable-feed-enabled'; releaseClass: 'stable' }
+  | {
+      mechanism: 'blocked'
+      reason: 'community-feed-disabled' | 'invalid-bundled-provenance' | 'missing-bundled-payload'
+      releaseClass: string | null
+    }
+  | {
+      mechanism: 'git'
+      reason: 'explicit-source' | 'legacy-source-checkout' | 'not-packaged' | 'thin-build'
+      releaseClass: string | null
+    }
+
+export interface DesktopUpdateRouteFacts {
+  /** Parsed install-stamp fields. null also represents a missing/unreadable stamp. */
+  installStamp: unknown
+  /** True only when the packaged agent-payload manifest resolves completely. */
+  bundledPayloadComplete: boolean
+  /** Effective runtime mode; explicit `source` always keeps the documented git path. */
+  installMode: string | null
   isPackaged: boolean
 }
 
+/** Packaged apps trust only the stamp next to their bundled payload. */
+export function selectInstallStampCandidates(
+  packagedPath: string | null,
+  developmentPath: string,
+  isPackaged: boolean
+): string[] {
+  const candidates = packagedPath ? [packagedPath] : []
+
+  if (!isPackaged) {
+    candidates.push(developmentPath)
+  }
+
+  return candidates
+}
+
+function stampRecord(stamp: unknown): Record<string, unknown> | null {
+  return stamp !== null && typeof stamp === 'object' ? (stamp as Record<string, unknown>) : null
+}
+
+const FULL_COMMIT_RE = /^[0-9a-f]{40}$/
+const VI_RELEASE_TAG_RE = /^vi-v(?:0|[1-9]\d{0,2})\.\d+\.\d+-(?:0|[1-9]\d*)$/
+
 /**
- * True when this launch must use electron-updater for app updates.
+ * Validate the release policy as one indivisible tuple.
  *
- * All four conditions are necessary:
- * - the build carries payloads (a thin build has no matching feed artifacts),
- * - release provenance explicitly enables a feed (unsigned community
- *   candidates fail closed; only stable candidates generate update metadata),
- * - the checkout opted into desktop management (installMode bundled) — an
- *   ejected or source checkout keeps the git update path,
- * - the app is packaged (dev runs have no app-update.yml).
+ * Checking only `updateFeedEnabled === true` is unsafe: a corrupt or edited
+ * stamp could claim a stable feed while still identifying itself as an
+ * unsigned community candidate. Only these exact tuples are meaningful:
+ *
+ * - stable / stable / true
+ * - community-prerelease / community-prerelease / false
  */
-export function shouldUseAppUpdater(facts: UpdaterGateFacts): boolean {
-  return (
-    facts.stampHasPayload === true &&
-    facts.stampAllowsUpdates === true &&
-    facts.installMode === 'bundled' &&
-    facts.isPackaged === true
-  )
+export function classifyBundledUpdateStamp(stamp: unknown): BundledUpdateStampPolicy {
+  const parsed = stampRecord(stamp)
+  const releaseClass = typeof parsed?.releaseClass === 'string' ? parsed.releaseClass : null
+
+  if (!parsed) {
+    return { kind: 'invalid', releaseClass }
+  }
+
+  if (
+    parsed.schemaVersion === 2 &&
+    typeof parsed.commit === 'string' &&
+    FULL_COMMIT_RE.test(parsed.commit) &&
+    parsed.payload === false &&
+    parsed.tag === null &&
+    parsed.releaseClass === null &&
+    parsed.updateChannel === null &&
+    parsed.updateFeedEnabled === false
+  ) {
+    return { kind: 'thin', releaseClass: null }
+  }
+
+  const bundledIdentityIsValid =
+    parsed.schemaVersion === 2 &&
+    typeof parsed.commit === 'string' &&
+    FULL_COMMIT_RE.test(parsed.commit) &&
+    typeof parsed.tag === 'string' &&
+    VI_RELEASE_TAG_RE.test(parsed.tag) &&
+    parsed.payload === true
+
+  if (
+    bundledIdentityIsValid &&
+    releaseClass === 'stable' &&
+    parsed.updateChannel === 'stable' &&
+    parsed.updateFeedEnabled === true
+  ) {
+    return { kind: 'stable-enabled', releaseClass }
+  }
+
+  if (
+    bundledIdentityIsValid &&
+    releaseClass === 'community-prerelease' &&
+    parsed.updateChannel === 'community-prerelease' &&
+    parsed.updateFeedEnabled === false
+  ) {
+    return { kind: 'community-disabled', releaseClass }
+  }
+
+  return { kind: 'invalid', releaseClass }
+}
+
+/**
+ * Pick exactly one update mechanism before any network or git side effect.
+ *
+ * A packaged resident payload is bundle-owned even when its stamp is missing,
+ * old, or malformed, so those states stop locally. The one deliberate escape
+ * is `installMode: source`: eject writes that value and transfers update
+ * ownership back to the checkout, including for an unsigned community shell.
+ */
+export function decideDesktopUpdateRoute(facts: DesktopUpdateRouteFacts): DesktopUpdateRoute {
+  const policy = classifyBundledUpdateStamp(facts.installStamp)
+
+  if (!facts.isPackaged) {
+    return { mechanism: 'git', reason: 'not-packaged', releaseClass: policy.releaseClass }
+  }
+
+  if (facts.installMode === 'source') {
+    return { mechanism: 'git', reason: 'explicit-source', releaseClass: policy.releaseClass }
+  }
+
+  if (policy.kind === 'thin' && !facts.bundledPayloadComplete && facts.installMode !== 'bundled') {
+    return { mechanism: 'git', reason: 'thin-build', releaseClass: policy.releaseClass }
+  }
+
+  if (!facts.bundledPayloadComplete && policy.kind !== 'invalid') {
+    return {
+      mechanism: 'blocked',
+      reason: 'missing-bundled-payload',
+      releaseClass: policy.releaseClass
+    }
+  }
+
+  if (policy.kind === 'community-disabled') {
+    return {
+      mechanism: 'blocked',
+      reason: 'community-feed-disabled',
+      releaseClass: policy.releaseClass
+    }
+  }
+
+  if (policy.kind !== 'stable-enabled') {
+    return {
+      mechanism: 'blocked',
+      reason: 'invalid-bundled-provenance',
+      releaseClass: policy.releaseClass
+    }
+  }
+
+  if (facts.installMode !== 'bundled') {
+    return {
+      mechanism: 'git',
+      reason: 'legacy-source-checkout',
+      releaseClass: policy.releaseClass
+    }
+  }
+
+  return { mechanism: 'app-updater', reason: 'stable-feed-enabled', releaseClass: 'stable' }
+}
+
+/** Dispatch a precomputed route without evaluating a second, drifting gate. */
+export function dispatchDesktopUpdateRoute<AppResult, BlockedResult, GitResult>(
+  route: DesktopUpdateRoute,
+  handlers: {
+    appUpdater: (route: Extract<DesktopUpdateRoute, { mechanism: 'app-updater' }>) => AppResult
+    blocked: (route: Extract<DesktopUpdateRoute, { mechanism: 'blocked' }>) => BlockedResult
+    git: (route: Extract<DesktopUpdateRoute, { mechanism: 'git' }>) => GitResult
+  }
+): AppResult | BlockedResult | GitResult {
+  if (route.mechanism === 'app-updater') {
+    return handlers.appUpdater(route)
+  }
+
+  if (route.mechanism === 'blocked') {
+    return handlers.blocked(route)
+  }
+
+  return handlers.git(route)
 }
 
 export function releaseTagForAppVersion(version: string): string {
   const community = /^(0|[1-9]\d{0,2})\.(\d+)\.(\d+)-vi\.(0|[1-9]\d*)$/.exec(version)
 
-  return community
-    ? `vi-v${community[1]}.${community[2]}.${community[3]}-${community[4]}`
-    : `v${version}`
+  return community ? `vi-v${community[1]}.${community[2]}.${community[3]}-${community[4]}` : `v${version}`
 }
 
 function parseCommunityReleaseTag(tag: string): CommunityVersion | null {
@@ -170,7 +329,7 @@ export function selectCommunityUpdateRelease(
     return null
   }
 
-  let best: CommunityUpdateRelease & { key: CommunityVersion['key'] } | null = null
+  let best: (CommunityUpdateRelease & { key: CommunityVersion['key'] }) | null = null
 
   for (const value of releases) {
     if (!value || typeof value !== 'object' || (value as { draft?: unknown }).draft === true) {
@@ -286,10 +445,7 @@ export function configureAutoUpdater(updater: ConfigurableAutoUpdater): void {
  * assisted NSIS first-install pages from appearing again during an update.
  * `beforeInstall` lets main.ts disarm its normal quit guard first.
  */
-export function beginAppUpdateInstall(
-  updater: Pick<AppUpdater, 'quitAndInstall'>,
-  beforeInstall?: () => void
-): void {
+export function beginAppUpdateInstall(updater: Pick<AppUpdater, 'quitAndInstall'>, beforeInstall?: () => void): void {
   beforeInstall?.()
   updater.quitAndInstall(true, true)
 }
