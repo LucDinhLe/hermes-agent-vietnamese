@@ -15,18 +15,20 @@ Defense against context-window overflow operates at three levels:
    file path reference. The model can read_file to access the full output
    on any backend.
 
-3. **Per-turn aggregate budget** (enforce_turn_budget): After all tool
-   results in a single assistant turn are collected, if the total exceeds
-   MAX_TURN_BUDGET_CHARS (200K), the largest non-persisted results are
-   spilled to disk until the aggregate is under budget. This catches cases
-   where many medium-sized results combine to overflow context.
+3. **Per-turn aggregate budget** (enforce_turn_budget): After all textual tool
+   results in a single assistant turn are collected, the largest
+   non-persisted results are spilled until the configured UTF-8 byte budget is
+   satisfied. This catches many medium-sized results combining into a large
+   context injection.
 """
 
 import hashlib
 import logging
 import os
+from pathlib import Path
 import re
 import shlex
+import tempfile
 import uuid
 
 from tools.budget_config import (
@@ -55,10 +57,28 @@ def _resolve_storage_dir(env) -> str:
             except Exception as exc:
                 logger.debug("Could not resolve env temp dir: %s", exc)
             else:
-                if temp_dir:
+                if isinstance(temp_dir, str) and temp_dir:
                     temp_dir = temp_dir.rstrip("/") or "/"
                     return f"{temp_dir}/hermes-results"
     return STORAGE_DIR
+
+
+def _local_storage_dir() -> Path:
+    """Private host-side fallback used when no execution environment exists."""
+    return Path(tempfile.gettempdir()) / "hermes-results"
+
+
+def _utf8_size(content: str) -> int:
+    return len(content.encode("utf-8"))
+
+
+def _truncate_utf8(content: str, max_bytes: int) -> tuple[str, bool]:
+    """Return a valid UTF-8 prefix no larger than ``max_bytes``."""
+    encoded = content.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return content, False
+    prefix = encoded[: max(0, max_bytes)].decode("utf-8", errors="ignore")
+    return prefix, True
 
 
 def _safe_result_filename(tool_use_id: str) -> str:
@@ -80,12 +100,15 @@ def _safe_result_filename(tool_use_id: str) -> str:
 
 
 def generate_preview(content: str, max_chars: int = DEFAULT_PREVIEW_SIZE_CHARS) -> tuple[str, bool]:
-    """Truncate at last newline within max_chars. Returns (preview, has_more)."""
-    if len(content) <= max_chars:
-        return content, False
-    truncated = content[:max_chars]
+    """Return a newline-friendly preview bounded by UTF-8 bytes.
+
+    ``max_chars`` keeps the legacy keyword spelling but is a byte budget.
+    """
+    truncated, has_more = _truncate_utf8(content, max_chars)
+    if not has_more:
+        return truncated, False
     last_nl = truncated.rfind("\n")
-    if last_nl > max_chars // 2:
+    if last_nl > len(truncated) // 2:
         truncated = truncated[:last_nl + 1]
     return truncated, True
 
@@ -121,19 +144,28 @@ def _build_persisted_message(
     has_more: bool,
     original_size: int,
     file_path: str,
+    *,
+    original_bytes: int | None = None,
+    sha256: str | None = None,
 ) -> str:
     """Build the <persisted-output> replacement block."""
-    size_kb = original_size / 1024
+    byte_size = original_size if original_bytes is None else original_bytes
+    size_kb = byte_size / 1024
     if size_kb >= 1024:
         size_str = f"{size_kb / 1024:.1f} MB"
     else:
         size_str = f"{size_kb:.1f} KB"
 
     msg = f"{PERSISTED_OUTPUT_TAG}\n"
-    msg += f"This tool result was too large ({original_size:,} characters, {size_str}).\n"
+    msg += (
+        f"This tool result was too large ({original_size:,} characters, "
+        f"{byte_size:,} bytes, {size_str}).\n"
+    )
     msg += f"Full output saved to: {file_path}\n"
+    if sha256:
+        msg += f"SHA-256: {sha256}\n"
     msg += "Use the read_file tool with offset and limit to access specific sections of this output.\n\n"
-    msg += f"Preview (first {len(preview)} chars):\n"
+    msg += f"Preview (first {_utf8_size(preview)} bytes):\n"
     msg += preview
     if has_more:
         msg += "\n..."
@@ -171,31 +203,60 @@ def maybe_persist_tool_result(
     if effective_threshold == float("inf"):
         return content
 
-    if len(content) <= effective_threshold:
+    content_bytes = content.encode("utf-8")
+    content_size = len(content_bytes)
+    if content_size <= effective_threshold:
         return content
 
     storage_dir = _resolve_storage_dir(env)
     remote_path = f"{storage_dir}/{_safe_result_filename(tool_use_id)}"
     preview, has_more = generate_preview(content, max_chars=config.preview_size)
+    digest = hashlib.sha256(content_bytes).hexdigest()
 
     if env is not None:
         try:
             if _write_to_sandbox(content, remote_path, env):
                 logger.info(
                     "Persisted large tool result: %s (%s, %d chars -> %s)",
-                    tool_name, tool_use_id, len(content), remote_path,
+                    tool_name, tool_use_id, content_size, remote_path,
                 )
-                return _build_persisted_message(preview, has_more, len(content), remote_path)
+                return _build_persisted_message(
+                    preview,
+                    has_more,
+                    len(content),
+                    remote_path,
+                    original_bytes=content_size,
+                    sha256=digest,
+                )
         except Exception as exc:
             logger.warning("Sandbox write failed for %s: %s", tool_use_id, exc)
 
+    if env is None:
+        try:
+            from tools.spill_safety import ensure_spill_dir, write_text_exclusive
+
+            local_dir = _local_storage_dir()
+            ensure_spill_dir(local_dir, private=True)
+            local_path = local_dir / _safe_result_filename(tool_use_id)
+            write_text_exclusive(local_path, content, private=True, overwrite=True)
+            return _build_persisted_message(
+                preview,
+                has_more,
+                len(content),
+                str(local_path),
+                original_bytes=content_size,
+                sha256=digest,
+            )
+        except Exception as exc:
+            logger.warning("Local artifact write failed for %s: %s", tool_use_id, exc)
+
     logger.info(
         "Inline-truncating large tool result: %s (%d chars, no sandbox write)",
-        tool_name, len(content),
+        tool_name, content_size,
     )
     return (
         f"{preview}\n\n"
-        f"[Truncated: tool response was {len(content):,} chars. "
+        f"[Truncated: tool response was {len(content):,} chars / {content_size:,} bytes. "
         f"Full output could not be saved to sandbox.]"
     )
 
@@ -217,7 +278,12 @@ def enforce_turn_budget(
     total_size = 0
     for i, msg in enumerate(tool_messages):
         content = msg.get("content", "")
-        size = len(content)
+        # Vision tool results use structured content parts and are handled by
+        # the model adapter plus the DB's text-summary persistence path.  The
+        # raw-output byte budget applies to textual tool payloads only.
+        if not isinstance(content, str):
+            continue
+        size = _utf8_size(content)
         total_size += size
         if PERSISTED_OUTPUT_TAG not in content:
             candidates.append((i, size))
@@ -244,7 +310,7 @@ def enforce_turn_budget(
         )
         if replacement != content:
             total_size -= size
-            total_size += len(replacement)
+            total_size += _utf8_size(replacement)
             tool_messages[idx]["content"] = replacement
             logger.info(
                 "Budget enforcement: persisted tool result %s (%d chars)",

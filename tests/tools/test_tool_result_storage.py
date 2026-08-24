@@ -1,5 +1,6 @@
 """Tests for tools/tool_result_storage.py -- 3-layer tool result persistence."""
 
+import hashlib
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -180,6 +181,51 @@ class TestMaybePersistToolResult:
         )
         assert result == content
 
+    def test_multibyte_content_is_capped_by_utf8_bytes(self):
+        env = MagicMock()
+        env.execute.return_value = {"output": "", "returncode": 0}
+        content = "🦞" * 2_500  # 10,000 UTF-8 bytes, only 2,500 characters
+        result = maybe_persist_tool_result(
+            content=content,
+            tool_name="terminal",
+            tool_use_id="tc_utf8",
+            env=env,
+        )
+        assert PERSISTED_OUTPUT_TAG in result
+        assert len(result.encode("utf-8")) < 10 * 1024
+
+    def test_pointer_contains_bytes_and_sha256(self):
+        env = MagicMock()
+        env.execute.return_value = {"output": "", "returncode": 0}
+        content = "result\n" * 4_000
+        result = maybe_persist_tool_result(
+            content=content,
+            tool_name="terminal",
+            tool_use_id="tc_digest",
+            env=env,
+            threshold=1,
+        )
+        assert f"SHA-256: {hashlib.sha256(content.encode('utf-8')).hexdigest()}" in result
+        assert f"{len(content.encode('utf-8')):,} bytes" in result
+
+    def test_no_env_uses_recoverable_local_artifact(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            "tools.tool_result_storage._local_storage_dir",
+            lambda: tmp_path,
+        )
+        content = "recover me\n" * 2_000
+        result = maybe_persist_tool_result(
+            content=content,
+            tool_name="terminal",
+            tool_use_id="tc_local",
+            env=None,
+            threshold=1,
+        )
+        artifact = tmp_path / "tc_local.txt"
+        assert artifact.read_text(encoding="utf-8") == content
+        assert str(artifact) in result
+        assert "Full output could not be saved" not in result
+
     def test_above_threshold_with_env_persists(self):
         env = MagicMock()
         env.execute.return_value = {"output": "", "returncode": 0}
@@ -288,6 +334,16 @@ class TestEnforceTurnBudget:
         result = enforce_turn_budget([], env=None, config=BudgetConfig(turn_budget=200_000))
         assert result == []
 
+    def test_turn_budget_counts_utf8_bytes(self):
+        env = MagicMock()
+        env.execute.return_value = {"output": "", "returncode": 0}
+        msgs = [
+            {"role": "tool", "tool_call_id": "t1", "content": "🦞" * 2_000},
+            {"role": "tool", "tool_call_id": "t2", "content": "🦞" * 2_000},
+        ]
+        enforce_turn_budget(msgs, env=env, config=BudgetConfig(turn_budget=10_000))
+        assert any(PERSISTED_OUTPUT_TAG in m["content"] for m in msgs)
+
 
 # ── Per-tool threshold integration ────────────────────────────────────
 
@@ -299,16 +355,16 @@ class TestPerToolThresholds:
         assert hasattr(registry, "get_max_result_size")
 
 
-    def test_read_file_registry_cap_is_100k(self):
-        """Regression test: read_file must have a 100_000 char registry cap (Layer 2 safety net)."""
+    def test_read_file_registry_value_is_capped_by_v32_budget(self):
+        """Legacy registry metadata cannot exempt read_file from the 10 KiB cap."""
         from tools.registry import registry
         try:
             import tools.file_tools  # noqa: F401
             val = registry.get_max_result_size("read_file")
             assert val == 100_000, (
-                f"read_file registry cap must be 100_000, got {val!r}. "
-                "float('inf') is not allowed — it disables the Layer 2 result-size guard."
+                f"registry metadata changed unexpectedly: {val!r}"
             )
+            assert BudgetConfig().resolve_threshold("read_file") == DEFAULT_RESULT_SIZE_CHARS
         except ImportError:
             pytest.skip("file_tools not importable in test env")
 

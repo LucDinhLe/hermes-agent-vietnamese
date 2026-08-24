@@ -35,6 +35,8 @@ from agent.agent_runtime_helpers import sanitize_api_messages
 from agent.tool_executor import execute_tool_calls_segmented
 from hermes_state import SessionDB
 from run_agent import AIAgent
+from tools.budget_config import BudgetConfig
+from tools.tool_result_storage import PERSISTED_OUTPUT_TAG
 
 
 def _make_tool_defs(*names: str) -> list:
@@ -614,3 +616,82 @@ def test_execute_tool_calls_concurrent_flushes_each_tool_result_in_order():
     # production flush call breaks one of these assertions.
     assert flushed_tool_ids == ["c1", "c2"]
     assert flush_lengths == [1, 2]
+
+
+def test_aggregate_budget_rewrite_is_identical_after_cold_resume(
+    tmp_path,
+    monkeypatch,
+):
+    """Post-batch spill must replace the already-durable tool row in place."""
+    agent = _make_agent()
+    db_path = tmp_path / "state.db"
+    session_id = "aggregate-budget-cold-resume"
+    db = _attach_real_session_db(agent, db_path, session_id)
+    tool_calls = [
+        _mock_tool_call(call_id="budget-c1"),
+        _mock_tool_call(call_id="budget-c2"),
+    ]
+    messages = [
+        {"role": "user", "content": "collect both results"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": call.id,
+                    "type": "function",
+                    "function": {"name": "web_search", "arguments": "{}"},
+                }
+                for call in tool_calls
+            ],
+        },
+    ]
+    agent._flush_messages_to_session_db(messages)
+
+    budget = BudgetConfig(
+        default_result_size=9_500,
+        turn_budget=7_000,
+        preview_size=128,
+    )
+    monkeypatch.setattr(
+        "tools.tool_result_storage._local_storage_dir",
+        lambda: tmp_path / "tool-artifacts",
+    )
+    dispatch_results = iter(["A" * 6_000, "B" * 6_000])
+    assistant_message = SimpleNamespace(content="", tool_calls=tool_calls)
+    try:
+        with (
+            patch(
+                "agent.tool_executor._budget_for_agent",
+                return_value=budget,
+            ),
+            patch(
+                "run_agent.handle_function_call",
+                side_effect=lambda *_args, **_kwargs: next(dispatch_results),
+            ),
+        ):
+            agent._execute_tool_calls_sequential(
+                assistant_message,
+                messages,
+                "task-1",
+            )
+    finally:
+        db.close()
+
+    live_tools = [message for message in messages if message.get("role") == "tool"]
+    assert len(live_tools) == 2
+    assert PERSISTED_OUTPUT_TAG in live_tools[0]["content"]
+    assert sum(len(message["content"].encode("utf-8")) for message in live_tools) <= 7_000
+
+    durable_tools = [
+        message
+        for message in _durable_messages(db_path, session_id)
+        if message.get("role") == "tool"
+    ]
+    assert [message["tool_call_id"] for message in durable_tools] == [
+        "budget-c1",
+        "budget-c2",
+    ]
+    assert [message["content"] for message in durable_tools] == [
+        message["content"] for message in live_tools
+    ]

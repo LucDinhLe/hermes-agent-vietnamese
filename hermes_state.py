@@ -9489,6 +9489,78 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
             _do, patience_s=self._TRANSCRIPT_WRITE_PATIENCE_S
         )
 
+    def rewrite_active_tool_message_contents(
+        self,
+        session_id: str,
+        replacements: List[tuple[str, Any]],
+        *,
+        compression_lock_holder: Optional[str] = None,
+        turn_lease_holder: Optional[str] = None,
+        turn_lease_ttl_seconds: float = 300.0,
+    ) -> int:
+        """Rewrite freshly persisted tool rows after aggregate budget spill.
+
+        Tool execution persists each result before projecting completion to the
+        UI so a process-terminating tool cannot erase its own transcript.  The
+        aggregate turn budget runs after the batch is collected and can replace
+        one or more of those already-durable contents with bounded artifact
+        pointers.  This targeted update keeps cold-resume history byte-aligned
+        with the in-memory/model-fed conversation without re-appending rows or
+        perturbing message/tool counters.
+
+        ``replacements`` contains ``(tool_call_id, content)`` pairs.  Only the
+        latest active ``role='tool'`` row for each call id in ``session_id`` is
+        eligible.  The normal transcript admission guards and FTS UPDATE
+        triggers remain in force.  ``api_content`` is cleared because a tool
+        row's canonical bounded content must also be its replay content.
+        Returns the number of rows updated.
+        """
+        if not replacements:
+            return 0
+
+        normalized: List[tuple[str, Any]] = []
+        seen: set[str] = set()
+        for tool_call_id, content in replacements:
+            call_id = str(tool_call_id or "").strip()
+            if not call_id or call_id in seen:
+                continue
+            seen.add(call_id)
+            normalized.append((call_id, self._encode_content(content)))
+        if not normalized:
+            return 0
+
+        def _do(conn):
+            self._check_transcript_write_guards(
+                conn,
+                session_id,
+                compression_lock_holder,
+                turn_lease_holder=turn_lease_holder,
+                turn_lease_ttl_seconds=turn_lease_ttl_seconds,
+            )
+            updated = 0
+            for tool_call_id, stored_content in normalized:
+                row = conn.execute(
+                    "SELECT id FROM messages "
+                    "WHERE session_id = ? AND role = 'tool' "
+                    "AND tool_call_id = ? AND active = 1 "
+                    "ORDER BY id DESC LIMIT 1",
+                    (session_id, tool_call_id),
+                ).fetchone()
+                if row is None:
+                    continue
+                row_id = row["id"] if hasattr(row, "keys") else row[0]
+                cursor = conn.execute(
+                    "UPDATE messages SET content = ?, api_content = NULL "
+                    "WHERE id = ?",
+                    (stored_content, row_id),
+                )
+                updated += max(0, int(cursor.rowcount or 0))
+            return updated
+
+        return self._execute_write(
+            _do, patience_s=self._TRANSCRIPT_WRITE_PATIENCE_S
+        )
+
     def set_latest_matching_message_display_kind(
         self, session_id: str, *, role: str, content: str, display_kind: str,
         display_metadata: Optional[Dict[str, Any]] = None,

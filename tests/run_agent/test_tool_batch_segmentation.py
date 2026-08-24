@@ -28,6 +28,7 @@ from agent.tool_dispatch_helpers import (
 )
 from agent.prompt_builder import STEER_MARKER_OPEN
 from tools.budget_config import BudgetConfig
+from tools.tool_result_storage import PERSISTED_OUTPUT_TAG
 
 
 def _tc(name="web_search", arguments="{}", call_id=None):
@@ -594,7 +595,7 @@ class TestSegmentedDispatchIntegration:
             agent._execute_tool_calls(msg, messages, "task-1")
 
         large_result_index = next(i for i, call in enumerate(calls) if call.id.endswith("large"))
-        assert "Truncated:" in messages[large_result_index]["content"]
+        assert PERSISTED_OUTPUT_TAG in messages[large_result_index]["content"]
         steer_messages = [m for m in messages if STEER_MARKER_OPEN in m["content"]]
         assert steer_messages == [messages[-1]]
         assert "preserve this steer after budget enforcement" in steer_messages[0]["content"]
@@ -622,7 +623,7 @@ class TestSegmentedDispatchIntegration:
             agent._execute_tool_calls(msg, messages, "task-1")
 
         assert len(messages) == 1
-        assert "Truncated:" in messages[0]["content"]
+        assert PERSISTED_OUTPUT_TAG in messages[0]["content"]
         assert messages[0]["content"].count(STEER_MARKER_OPEN) == 1
         assert "preserve malformed-call steer after budget enforcement" in messages[0]["content"]
 
@@ -668,7 +669,12 @@ class TestPathCanonicalization:
         target.touch()
 
         alias_dir = tmp_path / "alias"
-        alias_dir.symlink_to(real_dir)
+        try:
+            alias_dir.symlink_to(real_dir)
+        except OSError as exc:
+            if getattr(exc, "winerror", None) == 1314:
+                pytest.skip("Windows runner lacks symlink privilege")
+            raise
 
         real_path = _canonical_path(str(target))
         alias_path = _canonical_path(str(alias_dir / "config.json"))

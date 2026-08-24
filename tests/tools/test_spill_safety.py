@@ -20,6 +20,10 @@ from tools.spill_safety import (
 )
 
 posix_only = pytest.mark.skipif(sys.platform == "win32", reason="POSIX perms/symlinks")
+symlink_only = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Windows runner may lack SeCreateSymbolicLinkPrivilege",
+)
 
 
 def test_write_creates_file_with_content(tmp_path):
@@ -43,6 +47,7 @@ def test_private_dir_is_0700_and_tightened(tmp_path):
     assert stat.S_IMODE(os.lstat(d).st_mode) == 0o700
 
 
+@symlink_only
 def test_ensure_spill_dir_refuses_symlinked_leaf(tmp_path):
     victim = tmp_path / "victim-dir"
     victim.mkdir()
@@ -52,6 +57,7 @@ def test_ensure_spill_dir_refuses_symlinked_leaf(tmp_path):
         ensure_spill_dir(link)
 
 
+@symlink_only
 def test_refuses_planted_symlink(tmp_path):
     """The core attack: symlink at the spill path must fail, not redirect."""
     victim = tmp_path / "victim.txt"
@@ -63,6 +69,7 @@ def test_refuses_planted_symlink(tmp_path):
     assert victim.read_text() == "original"
 
 
+@symlink_only
 def test_refuses_dangling_symlink(tmp_path):
     target = tmp_path / "spill.txt"
     target.symlink_to(tmp_path / "does-not-exist.txt")
@@ -71,6 +78,7 @@ def test_refuses_dangling_symlink(tmp_path):
     assert not (tmp_path / "does-not-exist.txt").exists()
 
 
+@symlink_only
 def test_overwrite_removes_symlink_not_its_target(tmp_path):
     victim = tmp_path / "victim.txt"
     victim.write_text("original")

@@ -6,7 +6,6 @@ and the PINNED_THRESHOLDS escape-hatch for read_file.
 """
 
 import dataclasses
-import math
 from unittest.mock import patch
 
 import pytest
@@ -31,22 +30,21 @@ class TestModuleConstants:
     """Verify documented default values haven't drifted."""
 
     def test_default_result_size(self):
-        assert DEFAULT_RESULT_SIZE_CHARS == 100_000
+        assert DEFAULT_RESULT_SIZE_CHARS == 9_500
+
+    def test_default_turn_budget(self):
+        assert DEFAULT_TURN_BUDGET_CHARS == 38_000
 
 
     def test_default_preview_size(self):
-        assert DEFAULT_PREVIEW_SIZE_CHARS == 1_500
+        assert DEFAULT_PREVIEW_SIZE_CHARS == 1_024
 
 
 class TestPinnedThresholds:
     """PINNED_THRESHOLDS – tools whose values must never be overridden."""
 
-    def test_read_file_is_inf(self):
-        assert PINNED_THRESHOLDS["read_file"] == float("inf")
-        assert math.isinf(PINNED_THRESHOLDS["read_file"])
-
-    def test_pinned_is_not_empty(self):
-        assert len(PINNED_THRESHOLDS) >= 1
+    def test_read_file_is_not_exempt(self):
+        assert "read_file" not in PINNED_THRESHOLDS
 
 
 # ---------------------------------------------------------------------------
@@ -116,11 +114,11 @@ class TestBudgetConfigCustom:
 class TestResolveThreshold:
     """Priority: pinned > tool_overrides > registry > default."""
 
-    def test_pinned_wins_over_override(self):
-        """Even if tool_overrides contains read_file, pinned value wins."""
-        cfg = BudgetConfig(tool_overrides={"read_file": 1})
-        result = cfg.resolve_threshold("read_file")
-        assert result == float("inf")
+    @patch("tools.registry.registry")
+    def test_read_file_registry_cap_cannot_bypass_default(self, mock_registry):
+        mock_registry.get_max_result_size.return_value = 100_000
+        cfg = BudgetConfig()
+        assert cfg.resolve_threshold("read_file") == 9_500
 
     def test_tool_override_wins_over_default(self):
         """tool_overrides should be returned before falling back to registry."""
@@ -142,11 +140,11 @@ class TestResolveThreshold:
 
 
     @patch("tools.registry.registry")
-    def test_default_budget_unchanged_for_100k_tool(self, mock_registry):
-        """Default budget keeps 100K registry tools at 100K (no behavior change)."""
+    def test_default_budget_caps_legacy_100k_tool(self, mock_registry):
+        """V32 caps legacy registry values below the parent-context 10 KiB ceiling."""
         mock_registry.get_max_result_size.return_value = 100_000
-        cfg = BudgetConfig()  # default_result_size == 100_000
-        assert cfg.resolve_threshold("web_search") == 100_000
+        cfg = BudgetConfig()
+        assert cfg.resolve_threshold("web_search") == 9_500
 
 
 # ---------------------------------------------------------------------------

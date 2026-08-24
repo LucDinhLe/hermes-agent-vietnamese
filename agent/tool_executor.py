@@ -205,6 +205,81 @@ def _flush_session_db_after_tool_progress(
         return False
 
 
+def _enforce_turn_budget_and_persist(
+    agent,
+    tool_messages: list[dict],
+    *,
+    env,
+    config: BudgetConfig,
+    stage: str,
+) -> bool:
+    """Apply aggregate spill and mirror changed durable rows into state.db.
+
+    Individual tool results are flushed before UI projection for crash
+    resilience. Aggregate enforcement necessarily runs later, once the whole
+    batch is known, so it may replace a row that already carries the intrinsic
+    ``_db_persisted`` marker. Rewriting those exact rows keeps cold-resume
+    history identical to the bounded conversation sent to the provider.
+    """
+    before = {id(message): message.get("content") for message in tool_messages}
+    enforce_turn_budget(tool_messages, env=env, config=config)
+    changed = [
+        message
+        for message in tool_messages
+        if message.get("role") == "tool"
+        and message.get("_db_persisted")
+        and message.get("tool_call_id")
+        and message.get("content") != before.get(id(message))
+    ]
+    if not changed:
+        return True
+
+    session_db = getattr(agent, "_session_db", None)
+    session_id = getattr(agent, "session_id", None)
+    if (
+        getattr(agent, "_persist_disabled", False)
+        or session_db is None
+        or not session_id
+    ):
+        return True
+
+    try:
+        updated = session_db.rewrite_active_tool_message_contents(
+            session_id,
+            [
+                (message["tool_call_id"], message.get("content"))
+                for message in changed
+            ],
+            compression_lock_holder=getattr(
+                agent, "_active_compression_lock_holder", None
+            ),
+            turn_lease_holder=getattr(
+                agent, "_active_session_turn_lease_holder", None
+            ),
+            turn_lease_ttl_seconds=getattr(
+                agent, "_active_session_turn_lease_ttl_seconds", 300.0
+            )
+            or 300.0,
+        )
+        if updated != len(changed):
+            raise RuntimeError(
+                "aggregate tool budget rewrite updated "
+                f"{updated}/{len(changed)} durable rows"
+            )
+        return True
+    except Exception as exc:
+        agent._incremental_persistence_failed = True
+        from hermes_state import classify_persistence_error
+
+        agent._last_persistence_error_cause = classify_persistence_error(exc)
+        logger.warning(
+            "Incremental tool-call persistence failed after %s: %s",
+            stage,
+            exc,
+        )
+        return False
+
+
 def _image_generate_parallel_limit() -> int:
     """Return the configured image-generation parallelism cap.
 
@@ -1757,14 +1832,6 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
         agent._touch_activity(f"tool completed: {name} ({tool_duration:.1f}s){_status_suffix}")
 
         display_function_result = function_result
-        function_result = maybe_persist_tool_result(
-            content=function_result,
-            tool_name=name,
-            tool_use_id=tc.id,
-            env=get_active_env(effective_task_id),
-            config=_tool_budget,
-        ) if not _is_multimodal_tool_result(function_result) else function_result
-
         subdir_hints = agent._subdirectory_hints.check_tool_call(name, args)
         if subdir_hints:
             if _is_multimodal_tool_result(function_result):
@@ -1773,6 +1840,17 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
                 _append_subdir_hint_to_multimodal(function_result, subdir_hints)
             else:
                 function_result += subdir_hints
+
+        # Enforce the byte ceiling on the final text that enters context.  The
+        # subdirectory hint is part of that payload, so append it before the
+        # cap instead of allowing it to grow an already-bounded result.
+        function_result = maybe_persist_tool_result(
+            content=function_result,
+            tool_name=name,
+            tool_use_id=tc.id,
+            env=get_active_env(effective_task_id),
+            config=_tool_budget,
+        ) if not _is_multimodal_tool_result(function_result) else function_result
 
         # Unwrap _multimodal dicts to an OpenAI-style content list so any
         # vision-capable provider receives [{type:text},{type:image_url}]
@@ -1859,7 +1937,14 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
     num_tools = len(parsed_calls)
     if finalize and num_tools > 0:
         turn_tool_msgs = messages[-num_tools:]
-        enforce_turn_budget(turn_tool_msgs, env=get_active_env(effective_task_id), config=_tool_budget)
+        if not _enforce_turn_budget_and_persist(
+            agent,
+            turn_tool_msgs,
+            env=get_active_env(effective_task_id),
+            config=_tool_budget,
+            stage="parallel aggregate tool budget",
+        ):
+            return
 
     # ── /steer injection ──────────────────────────────────────────────
     # Append any pending user steer text to the last tool result so the
@@ -2596,14 +2681,6 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
             logging.debug("Tool result (%d chars): %s", len(_log_result), _log_result)
 
         display_function_result = function_result
-        function_result = maybe_persist_tool_result(
-            content=function_result,
-            tool_name=function_name,
-            tool_use_id=tool_call.id,
-            env=get_active_env(effective_task_id),
-            config=_tool_budget,
-        ) if not _is_multimodal_tool_result(function_result) else function_result
-
         # Discover subdirectory context files from tool arguments
         subdir_hints = agent._subdirectory_hints.check_tool_call(function_name, function_args)
         if subdir_hints:
@@ -2611,6 +2688,16 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                 _append_subdir_hint_to_multimodal(function_result, subdir_hints)
             else:
                 function_result += subdir_hints
+
+        # Include runtime-added hints inside the same UTF-8 byte ceiling as
+        # the raw result that precedes them.
+        function_result = maybe_persist_tool_result(
+            content=function_result,
+            tool_name=function_name,
+            tool_use_id=tool_call.id,
+            env=get_active_env(effective_task_id),
+            config=_tool_budget,
+        ) if not _is_multimodal_tool_result(function_result) else function_result
 
         # Unwrap _multimodal dicts to an OpenAI-style content list
         # (see parallel path for rationale). String results pass through.
@@ -2708,7 +2795,14 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
     # be discarded when aggregate budget enforcement replaces a tool result.
     num_tools_seq = len(assistant_message.tool_calls)
     if finalize and num_tools_seq > 0:
-        enforce_turn_budget(messages[-num_tools_seq:], env=get_active_env(effective_task_id), config=_tool_budget)
+        if not _enforce_turn_budget_and_persist(
+            agent,
+            messages[-num_tools_seq:],
+            env=get_active_env(effective_task_id),
+            config=_tool_budget,
+            stage="sequential aggregate tool budget",
+        ):
+            return
 
     # ── /steer injection ──────────────────────────────────────────────
     # See _execute_tool_calls_parallel for the rationale. Same hook,
@@ -2771,11 +2865,14 @@ def execute_tool_calls_segmented(agent, assistant_message, messages: list, effec
     total_tools = len(assistant_message.tool_calls)
     if total_tools > 0:
         _tool_budget = _budget_for_agent(agent)
-        enforce_turn_budget(
+        if not _enforce_turn_budget_and_persist(
+            agent,
             messages[-total_tools:],
             env=get_active_env(effective_task_id),
             config=_tool_budget,
-        )
+            stage="segmented aggregate tool budget",
+        ):
+            return
         agent._apply_pending_steer_to_tool_results(messages, total_tools)
 
 
