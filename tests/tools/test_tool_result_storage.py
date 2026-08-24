@@ -181,6 +181,17 @@ class TestMaybePersistToolResult:
         )
         assert result == content
 
+    def test_json_object_is_normalized_before_byte_accounting(self):
+        result = maybe_persist_tool_result(
+            content={"z": 2, "message": "ổn"},
+            tool_name="plugin_tool",
+            tool_use_id="tc_object",
+            env=None,
+            threshold=float("inf"),
+        )
+        assert result == '{"message":"ổn","z":2}'
+        assert isinstance(result, str)
+
     def test_multibyte_content_is_capped_by_utf8_bytes(self):
         env = MagicMock()
         env.execute.return_value = {"output": "", "returncode": 0}

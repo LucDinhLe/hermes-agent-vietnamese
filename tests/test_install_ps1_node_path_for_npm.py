@@ -29,10 +29,13 @@ def test_install_ps1_defines_ensure_node_exe_on_path_helper() -> None:
 
 def test_test_node_prepends_node_dir_before_success() -> None:
     text = _install_ps1()
+    assert "$EnsurePath = { Ensure-NodeExeOnPath }" in text
+    assert "if (-not (Test-NodeVersionOk $Version))" in text
+    assert "& $EnsurePath | Out-Null" in text
     assert re.search(
-        r"if \(Test-NodeVersionOk \$version\) \{[\s\S]{0,200}?Ensure-NodeExeOnPath",
+        r"function Test-Node \{[\s\S]{0,400}?Confirm-NodeVersionAndPath \$version",
         text,
-    ), "Test-Node must call Ensure-NodeExeOnPath when a system Node passes the version floor"
+    ), "Test-Node must use the shared version-and-PATH verifier"
 
 
 def test_install_node_deps_prepends_node_dir_before_npm() -> None:

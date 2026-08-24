@@ -91,6 +91,10 @@ class TestPreToolCheck:
         # for any attribute access, which would short-circuit the interrupt
         # skip path before any cancelled-tool messages are appended.
         agent._incremental_persistence_failed = False
+        # A real AIAgent initializes this explicitly.  Bare MagicMock would
+        # otherwise fabricate a governor and deny the batch before the
+        # interrupt pre-flight path can emit its cancelled results.
+        agent._active_turn_governor = None
 
         # Import and call the method
         import types

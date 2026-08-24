@@ -23,6 +23,7 @@ Defense against context-window overflow operates at three levels:
 """
 
 import hashlib
+import json
 import logging
 import os
 from pathlib import Path
@@ -30,6 +31,7 @@ import re
 import shlex
 import tempfile
 import uuid
+from typing import Any
 
 from tools.budget_config import (
     DEFAULT_PREVIEW_SIZE_CHARS,
@@ -45,6 +47,29 @@ HEREDOC_MARKER = "HERMES_PERSIST_EOF"
 _BUDGET_TOOL_NAME = "__budget_enforcement__"
 _UNSAFE_RESULT_FILENAME_CHARS = re.compile(r"[^A-Za-z0-9_.-]+")
 _MAX_RESULT_FILENAME_STEM = 120
+
+
+def normalize_tool_result_content(content: Any) -> str:
+    """Return deterministic text for every non-multimodal tool result.
+
+    Tool implementations are expected to return strings, but plugin and test
+    tools can legitimately hand back JSON-compatible objects.  Normalize at
+    the context-budget boundary so byte accounting, persistence, guardrails,
+    and provider messages all see the same stable representation instead of
+    crashing on ``.encode()`` or string concatenation.
+    """
+    if isinstance(content, str):
+        return content
+    try:
+        return json.dumps(
+            content,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+        )
+    except Exception:
+        return str(content)
 
 
 def _resolve_storage_dir(env) -> str:
@@ -174,7 +199,7 @@ def _build_persisted_message(
 
 
 def maybe_persist_tool_result(
-    content: str,
+    content: Any,
     tool_name: str,
     tool_use_id: str,
     env=None,
@@ -188,7 +213,8 @@ def maybe_persist_tool_result(
     if write fails or no env is available.
 
     Args:
-        content: Raw tool result string.
+        content: Raw tool result. Non-string JSON-compatible values are
+            deterministically serialized before byte accounting.
         tool_name: Name of the tool (used for threshold lookup).
         tool_use_id: Unique ID for this tool call (used as filename).
         env: The active BaseEnvironment instance, or None.
@@ -198,6 +224,7 @@ def maybe_persist_tool_result(
     Returns:
         Original content if small, or <persisted-output> replacement.
     """
+    content = normalize_tool_result_content(content)
     effective_threshold = threshold if threshold is not None else config.resolve_threshold(tool_name)
 
     if effective_threshold == float("inf"):

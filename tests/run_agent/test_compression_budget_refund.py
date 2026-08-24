@@ -25,6 +25,7 @@ import pytest
 
 from agent.conversation_loop import _should_rearm_compression_budget
 from run_agent import AIAgent
+from tools.budget_config import BudgetConfig
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +153,10 @@ def _coherent_compressor() -> MagicMock:
     compressor._verify_compaction_cleared_threshold = False
     compressor.awaiting_real_usage_after_compression = False
     compressor.should_compress.side_effect = lambda t=None: (t or 0) >= THRESHOLD
+    compressor.should_compress_info.side_effect = lambda t=None: (
+        (t or 0) >= THRESHOLD,
+        None,
+    )
     compressor.should_defer_preflight_to_real_usage.return_value = False
     compressor.get_active_compression_failure_cooldown.return_value = None
 
@@ -169,6 +174,7 @@ def agent():
     with (
         patch("run_agent.get_tool_definitions", return_value=_make_tool_defs("web_search")),
         patch("run_agent.check_toolset_requirements", return_value={}),
+        patch("tools.tool_search.resolve_session_tool_profile", return_value="full"),
         patch("run_agent.OpenAI"),
     ):
         a = AIAgent(
@@ -219,6 +225,16 @@ def _run_marathon_turn(
         return compacted, "compressed prompt"
 
     with (
+        # This suite isolates compaction rearming. Keep its synthetic 60K tool
+        # payload inline instead of letting v32's separate 9.5K result-spill
+        # guard remove the pressure before the compression gate sees it.
+        patch(
+            "agent.tool_executor._budget_for_agent",
+            return_value=BudgetConfig(
+                default_result_size=100_000,
+                turn_budget=1_000_000,
+            ),
+        ),
         patch.object(agent, "_compress_context", side_effect=_fake_compress),
         patch.object(agent, "_persist_session"),
         patch.object(agent, "_save_trajectory"),

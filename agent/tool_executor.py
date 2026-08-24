@@ -48,6 +48,7 @@ from tools.thread_context import propagate_context_to_thread
 from tools.tool_result_storage import (
     maybe_persist_tool_result,
     enforce_turn_budget,
+    normalize_tool_result_content,
 )
 from tools.budget_config import BudgetConfig, DEFAULT_BUDGET, budget_for_context_window
 
@@ -1473,6 +1474,8 @@ def execute_tool_calls_concurrent(agent, assistant_message, messages: list, effe
             except Exception as tool_error:
                 result = f"Error executing tool '{function_name}': {tool_error}"
                 logger.error("_invoke_tool raised for %s: %s", function_name, tool_error, exc_info=True)
+            if not _is_multimodal_tool_result(result):
+                result = normalize_tool_result_content(result)
             duration = time.time() - start
             if not blocked and not dispatched:
                 _emit_terminal_post_tool_call(
@@ -2623,6 +2626,9 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                 function_result = f"Error executing tool '{function_name}': {tool_error}"
                 logger.error("handle_function_call raised for %s: %s", function_name, tool_error, exc_info=True)
             tool_duration = time.time() - tool_start_time
+
+        if not _is_multimodal_tool_result(function_result):
+            function_result = normalize_tool_result_content(function_result)
 
         _execution_timed_out = isinstance(
             function_result, (_ToolTimeoutResult, _ToolCancelledResult)
