@@ -82,3 +82,15 @@ def test_vietnamese_release_workflow_uses_node_26() -> None:
 
     assert configured_majors, "release workflow has no setup-node runtime"
     assert set(configured_majors) == {str(NODE_FLOOR_MAJOR)}
+
+
+def test_nix_surfaces_provision_node_26_and_invalidate_node_22_state() -> None:
+    module = _read("nix/nixosModules.nix")
+    sandbox = _read("nix/sandbox.nix")
+
+    assert "https://deb.nodesource.com/node_26.x" in module
+    assert "/var/lib/hermes-tools-provisioned-node26" in module
+    assert "schema = 5;" in module
+    assert "node_22.x" not in module
+    assert "nodejs_26" in sandbox
+    assert "nodejs_22" not in sandbox
