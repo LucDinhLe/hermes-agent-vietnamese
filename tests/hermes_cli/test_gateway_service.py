@@ -901,10 +901,22 @@ class TestSystemUnitHermesHome:
         monkeypatch.setattr(gateway_cli, "get_hermes_home", lambda: root_hermes)
         monkeypatch.setattr(gateway_cli, "_build_service_path_dirs", lambda: [])
 
-        monkeypatch.setattr(gateway_cli.shutil, "which", lambda name: "/root/bin/node")
+        # Scope the mock to Node. On WSL the unit generator also probes
+        # powershell.exe/cmd.exe for Windows interop; returning the Node path
+        # for every executable would inject a synthetic caller-specific path
+        # through that independent code path and invalidate this regression.
+        monkeypatch.setattr(
+            gateway_cli.shutil,
+            "which",
+            lambda name: "/root/bin/node" if name == "node" else None,
+        )
         root_unit = gateway_cli.generate_systemd_unit(system=True, run_as_user="alice")
 
-        monkeypatch.setattr(gateway_cli.shutil, "which", lambda name: "/home/alice/.local/bin/node")
+        monkeypatch.setattr(
+            gateway_cli.shutil,
+            "which",
+            lambda name: "/home/alice/.local/bin/node" if name == "node" else None,
+        )
         user_unit = gateway_cli.generate_systemd_unit(system=True, run_as_user="alice")
 
         assert root_unit == user_unit
