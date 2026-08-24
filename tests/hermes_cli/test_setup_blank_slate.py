@@ -74,6 +74,7 @@ class TestBlankSlateMinimizeConfig:
         assert cfg["checkpoints"]["enabled"] is False
         assert cfg["smart_model_routing"]["enabled"] is False
         assert cfg["session_reset"]["mode"] == "none"
+        assert cfg["agent"]["max_turns"] == 50
 
 
 class TestBlankSlateFork:

@@ -43,7 +43,10 @@ DEFAULT_CONFIG = {
         "terminal_continue": True,
     },
     "agent": {
-        "max_turns": 500,
+        # Last-resort loop failsafe. The per-user-turn governor (12 model / 20
+        # tool calls) is the primary guard; this lower legacy ceiling protects
+        # out-of-turn and compatibility paths that do not enter a governed run.
+        "max_turns": 50,
         # Inactivity timeout for gateway agent execution (seconds).
         # The agent can run indefinitely as long as it's actively calling
         # tools or receiving API responses.  Only fires when the agent has

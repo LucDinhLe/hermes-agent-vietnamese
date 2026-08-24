@@ -49,6 +49,18 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
+def _bedrock_live_context_probe_enabled() -> bool:
+    """Return whether the explicitly costly Bedrock inference probe is opted in.
+
+    A tier can be accepted and process roughly 1.3M input tokens, so model
+    metadata resolution must use the curated table by default.  Operators who
+    knowingly want live discovery can opt in for one process; the request is
+    still governed when it happens inside a user turn.
+    """
+    value = str(os.getenv("HERMES_BEDROCK_LIVE_CONTEXT_PROBE", "") or "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _resolve_requests_verify(base_url: str = "") -> bool | str:
     """Resolve SSL verify setting for `requests` calls.
 
@@ -2969,12 +2981,10 @@ def get_model_context_length(
         except ImportError:
             pass  # boto3 not installed — fall through to generic resolution
         else:
-            # Bedrock does not expose the context window via any metadata API,
-            # so get_bedrock_context_length() probes the live endpoint (one
-            # fast, pre-inference length rejection) to read the real window.
-            # Cache the probe result per model so we pay that cost once, not
-            # every turn — keyed by base_url when present, else a synthetic
-            # bedrock:// key so display/offline paths share the entry.
+            # Bedrock does not expose the context window via a metadata API.
+            # The curated table is the safe default: a live oversized Converse
+            # probe can be ACCEPTED and process ~1.3M input tokens. Operators
+            # must opt in with HERMES_BEDROCK_LIVE_CONTEXT_PROBE=1.
             cache_key_url = base_url or "bedrock://"
             cached = get_cached_context_length(model, cache_key_url)
             if cached is not None:
@@ -2991,11 +3001,11 @@ def get_model_context_length(
                     region = resolve_bedrock_region()
                 except Exception:
                     region = ""
-            ctx = get_bedrock_context_length(model, region=region, probe=bool(region))
-            if ctx and region:
-                # Only persist probe-derived values (region present); a pure
-                # table fallback shouldn't poison the cache against a later
-                # successful probe.
+            live_probe = bool(region) and _bedrock_live_context_probe_enabled()
+            ctx = get_bedrock_context_length(model, region=region, probe=live_probe)
+            if ctx and live_probe:
+                # Only persist an explicitly requested live result; a static
+                # fallback must not mask a later opt-in probe.
                 save_context_length(model, cache_key_url, ctx)
             return ctx
 

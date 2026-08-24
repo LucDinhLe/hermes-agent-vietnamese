@@ -76,7 +76,7 @@ class TestMaxTurnsResolution:
     def test_default_max_turns_is_integer(self):
         cli = _make_cli()
         assert isinstance(cli.max_turns, int)
-        assert cli.max_turns == 500
+        assert cli.max_turns == 50
 
     def test_explicit_max_turns_honored(self):
         cli = _make_cli(max_turns=25)
@@ -670,6 +670,5 @@ class TestRootLevelProviderOverride:
         })
         assert result["model"]["default"] == "flat-default-model"
         assert result["model"]["provider"] == "auto"
-
 
 

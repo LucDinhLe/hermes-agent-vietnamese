@@ -1105,6 +1105,58 @@ class TestBedrockContextResolution:
         assert ctx == 1_000_000
         mock_fetch.assert_not_called()
 
+    def test_bedrock_live_probe_is_opt_in_not_an_automatic_million_token_request(
+        self, monkeypatch, tmp_path
+    ):
+        from agent import bedrock_adapter
+
+        cache_file = tmp_path / "context_length_cache.yaml"
+        resolved = []
+
+        def fake_get(model, *, region="", probe=True):
+            resolved.append((model, region, probe))
+            return 1_000_000
+
+        monkeypatch.delenv("HERMES_BEDROCK_LIVE_CONTEXT_PROBE", raising=False)
+        monkeypatch.setattr(
+            "agent.model_metadata._get_context_cache_path", lambda: cache_file
+        )
+        monkeypatch.setattr(bedrock_adapter, "get_bedrock_context_length", fake_get)
+        monkeypatch.setattr(
+            bedrock_adapter, "resolve_bedrock_region", lambda: "us-east-1"
+        )
+
+        assert (
+            get_model_context_length(
+                "us.anthropic.claude-sonnet-4-6",
+                provider="bedrock",
+                base_url="https://bedrock-runtime.us-east-1.amazonaws.com",
+            )
+            == 1_000_000
+        )
+        assert resolved[-1] == (
+            "us.anthropic.claude-sonnet-4-6",
+            "us-east-1",
+            False,
+        )
+        assert not cache_file.exists()
+
+        monkeypatch.setenv("HERMES_BEDROCK_LIVE_CONTEXT_PROBE", "1")
+        assert (
+            get_model_context_length(
+                "us.anthropic.claude-sonnet-5",
+                provider="bedrock",
+                base_url="https://bedrock-runtime.us-east-1.amazonaws.com",
+            )
+            == 1_000_000
+        )
+        assert resolved[-1] == (
+            "us.anthropic.claude-sonnet-5",
+            "us-east-1",
+            True,
+        )
+        assert cache_file.exists()
+
 
     @patch("agent.model_metadata.fetch_endpoint_model_metadata")
     def test_non_bedrock_url_still_probes(self, mock_fetch):

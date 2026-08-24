@@ -7200,7 +7200,7 @@ def _make_agent(
     _pr = _load_provider_routing()
     agent = AIAgent(
         model=model,
-        max_iterations=_cfg_max_turns(cfg, 500),
+        max_iterations=_cfg_max_turns(cfg, 50),
         provider=runtime.get("provider"),
         base_url=runtime.get("base_url"),
         api_key=runtime.get("api_key"),

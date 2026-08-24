@@ -946,10 +946,10 @@ skills:
 # Agent Behavior
 # =============================================================================
 agent:
-  # Maximum tool-calling iterations per conversation (default: 500)
-  # Higher = more room for complex tasks, but costs more tokens
-  # Recommended: 20-30 for focused tasks, 50-100 for open exploration
-  max_turns: 500
+  # Last-resort tool-loop failsafe (default: 50). The per-user-turn governor
+  # is the primary guard at 12 model calls / 20 tool calls; send "continue"
+  # to begin a fresh governed turn for longer work.
+  max_turns: 50
 
   # Inactivity timeout for gateway agent runs (seconds, 0 = unlimited).
   # The agent can run indefinitely when actively calling tools or receiving

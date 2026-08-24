@@ -474,7 +474,9 @@ def load_cli_config() -> Dict[str, Any]:
             "min_tail_user_messages": 1,  # Real user messages guaranteed in the tail (1 = existing single anchor)
         },
         "agent": {
-            "max_turns": 500,  # Default max tool-calling iterations (shared with subagents)
+            # Last-resort loop failsafe. TurnGovernor is the primary per-turn
+            # model/tool-call boundary; keep this finite for legacy paths.
+            "max_turns": 50,
             "verbose": False,
             "system_prompt": "",
             "prefill_messages_file": "",
@@ -4874,7 +4876,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             reasoning: Reasoning effort override for this run (none|minimal|low|medium|high|xhigh|max|ultra). Wins over config.
             api_key: API key (default: from environment)
             base_url: API base URL (default: OpenRouter)
-            max_turns: Maximum tool-calling iterations shared with subagents (default: 500)
+            max_turns: Last-resort tool-calling loop failsafe (default: 50;
+                TurnGovernor is the primary per-turn boundary)
             verbose: Enable verbose logging
             compact: Use compact display mode
             resume: Session ID to resume (restores conversation history from SQLite)
@@ -5121,9 +5124,9 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             try:
                 self.max_turns = int(os.getenv("HERMES_MAX_ITERATIONS", ""))
             except (TypeError, ValueError):
-                self.max_turns = 500
+                self.max_turns = 50
         else:
-            self.max_turns = 500
+            self.max_turns = 50
         
         # Parse and validate toolsets
         self.enabled_toolsets = toolsets
@@ -16161,8 +16164,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
             # Notify when iteration budget was hit
             if result and not result.get("completed") and not result.get("interrupted"):
                 _api_calls = result.get("api_calls", 0)
-                if _api_calls >= getattr(self.agent, "max_iterations", 500):
-                    _max_iter = getattr(self.agent, "max_iterations", 500)
+                if _api_calls >= getattr(self.agent, "max_iterations", 50):
+                    _max_iter = getattr(self.agent, "max_iterations", 50)
                     _cprint(
                         f"\n{_DIM}⚠ Iteration budget reached "
                         f"({_api_calls}/{_max_iter}) — "

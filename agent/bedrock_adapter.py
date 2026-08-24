@@ -1518,13 +1518,11 @@ def probe_bedrock_context_length(model_id: str, region: str) -> Optional[int]:
         "The model returned the following errors: prompt is too long:
          1300032 tokens > 1000000 maximum"
 
-    Length validation happens *before* inference, so an oversized request is
-    rejected immediately and cheaply — no tokens are generated and no input is
-    actually processed.  We pad a request just past each tier in
-    ``_BEDROCK_PROBE_TIERS`` and parse the reported ``maximum``.  Tiers exist
-    because (a) a *wildly* oversized payload makes Bedrock fail with an opaque
-    InternalServerException instead of a clean length error, and (b) stepping
-    up discovers larger windows without over-padding smaller ones.
+    Most models reject an oversized request during validation, but a larger
+    window can accept the first tier and process roughly 1.3M input tokens.
+    For that reason normal metadata resolution does not call this function
+    unless the operator explicitly opts in. We pad just past each tier and
+    parse a reported ``maximum`` when the request is rejected.
 
     Returns the detected window, or ``None`` if the probe could not run
     (missing credentials, network error, or no parseable limit) so the caller
