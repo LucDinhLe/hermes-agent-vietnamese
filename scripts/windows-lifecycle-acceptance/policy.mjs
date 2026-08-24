@@ -1,0 +1,333 @@
+const SHA256_RE = /^[0-9a-f]{64}$/
+const COMMIT_RE = /^[0-9a-f]{40}$/
+
+export const V32_CANDIDATE_TAG = 'vi-v0.32.0-1'
+export const V31_SOURCE_TAG = 'vi-v0.31.0-7'
+export const ROLLBACK_TAG = 'vi-v0.20.4-39'
+export const V31_SOURCE_COMMIT = '70b2418fdb2b35a714d4a813c6894cdbbec0a370'
+export const V31_SOURCE_SHA256 = 'cca0f3c0255e5e8736676a4d7ccb52c6e1b75eb73b94b8d1c3ca5dc91e57e840'
+export const V31_SOURCE_SIZE = 340_302_846
+export const ROLLBACK_COMMIT = 'd270974d2651e72f169fffe34c955eeae7977458'
+export const ROLLBACK_SHA256 = 'e4e0b60d7821b0e72af7b79e745b723c035f588c49bb11782778214a3e0c6d31'
+export const ROLLBACK_SIZE = 340_105_286
+
+export const REQUIRED_LIFECYCLE_GATES = Object.freeze([
+  'isolatedGuest',
+  'networkDisabled',
+  'exactInputs',
+  'noCredentialInheritance',
+  'freshInstall',
+  'onboarding',
+  'packagedMockRuntime',
+  'packagedSessionRelaunch',
+  'uxMessagingBack',
+  'uxNewSessionPointer',
+  'uxContextMeter',
+  'compaction',
+  'safeTool',
+  'v31ToV32Update',
+  'repair',
+  'uninstallKeepData',
+  'uninstallDeleteData',
+  'rollbackVi39',
+  'noResidualProcesses'
+])
+
+function requireString(value, label) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(`${label} is required`)
+  }
+  return value.trim()
+}
+
+function validateArtifact(
+  artifact,
+  label,
+  expectedTag,
+  {
+    expectedCommit = null,
+    expectedSha256 = null,
+    expectedSize = null,
+    identitySource = null,
+    requireCommit = false
+  } = {}
+) {
+  if (!artifact || typeof artifact !== 'object') {
+    throw new Error(`${label} artifact descriptor is required`)
+  }
+
+  const tag = requireString(artifact.tag, `${label}.tag`)
+  const fileName = requireString(artifact.fileName, `${label}.fileName`)
+  const sha256 = requireString(artifact.sha256, `${label}.sha256`).toLowerCase()
+  const size = Number(artifact.size)
+
+  if (tag !== expectedTag) {
+    throw new Error(`${label}.tag must be ${expectedTag}, got ${tag}`)
+  }
+  if (!SHA256_RE.test(sha256)) {
+    throw new Error(`${label}.sha256 must be a lowercase 64-character SHA-256`)
+  }
+  if (!Number.isSafeInteger(size) || size <= 0) {
+    throw new Error(`${label}.size must be a positive integer`)
+  }
+  if (!fileName.toLowerCase().endsWith('.exe') || /[\\/]/.test(fileName)) {
+    throw new Error(`${label}.fileName must be one Windows installer basename`)
+  }
+  if (expectedSha256 && sha256 !== expectedSha256) {
+    throw new Error(`${label}.sha256 does not match the pinned ${expectedTag} Windows x64 installer`)
+  }
+  if (expectedSize && size !== expectedSize) {
+    throw new Error(`${label}.size does not match the pinned ${expectedTag} Windows x64 installer`)
+  }
+
+  const normalized = { fileName, sha256, size, tag }
+  if (requireCommit || expectedCommit) {
+    const commit = requireString(artifact.commit, `${label}.commit`)
+    if (!COMMIT_RE.test(commit)) {
+      throw new Error(`${label}.commit must be a full lowercase 40-character commit SHA`)
+    }
+    if (expectedCommit && commit !== expectedCommit) {
+      throw new Error(`${label}.commit does not match the pinned ${expectedTag} source commit`)
+    }
+    normalized.commit = commit
+  }
+  if (identitySource) normalized.identitySource = identitySource
+
+  return Object.freeze(normalized)
+}
+
+export function validateLifecycleDescriptor(descriptor) {
+  if (!descriptor || typeof descriptor !== 'object') {
+    throw new Error('lifecycle descriptor is required')
+  }
+  if (descriptor.schemaVersion !== 1) {
+    throw new Error('lifecycle descriptor schemaVersion must be 1')
+  }
+  if (descriptor.releaseClass !== 'community-prerelease') {
+    throw new Error('v32 lifecycle acceptance requires releaseClass=community-prerelease')
+  }
+
+  const runId = requireString(descriptor.runId, 'runId')
+  if (!/^[0-9a-f-]{20,64}$/.test(runId)) {
+    throw new Error('runId must be a generated lowercase identifier')
+  }
+
+  const candidate = validateArtifact(descriptor.candidate, 'candidate', V32_CANDIDATE_TAG, {
+    requireCommit: true
+  })
+  const previous = validateArtifact(descriptor.previous, 'previous', V31_SOURCE_TAG, {
+    expectedCommit: V31_SOURCE_COMMIT,
+    expectedSha256: V31_SOURCE_SHA256,
+    expectedSize: V31_SOURCE_SIZE,
+    identitySource: 'v32-task-baseline'
+  })
+  const rollback = validateArtifact(descriptor.rollback, 'rollback', ROLLBACK_TAG, {
+    expectedCommit: ROLLBACK_COMMIT,
+    expectedSha256: ROLLBACK_SHA256,
+    expectedSize: ROLLBACK_SIZE,
+    identitySource: 'verified-v31-release-audit'
+  })
+  if (new Set([candidate.sha256, previous.sha256, rollback.sha256]).size !== 3) {
+    throw new Error('candidate, previous and rollback installers must be three distinct byte streams')
+  }
+
+  return Object.freeze({
+    candidate,
+    previous,
+    releaseClass: descriptor.releaseClass,
+    rollback,
+    runId,
+    schemaVersion: 1
+  })
+}
+
+export function assertSupportedWindowsSandboxHost({ arch, nodeVersion, platform, sandboxExecutableExists }) {
+  if (platform !== 'win32' || arch !== 'x64') {
+    throw new Error(`Windows x64 lifecycle acceptance requires win32/x64, got ${platform}/${arch}`)
+  }
+  const major = Number(
+    String(nodeVersion || '')
+      .replace(/^v/, '')
+      .split('.')[0]
+  )
+  if (!Number.isInteger(major) || major < 26) {
+    throw new Error(`Windows lifecycle acceptance requires Node 26+, got ${nodeVersion || '(missing)'}`)
+  }
+  if (!sandboxExecutableExists) {
+    throw new Error('Windows Sandbox is unavailable; lifecycle acceptance cannot run safely on this host')
+  }
+  return true
+}
+
+export function xmlEscape(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;')
+}
+
+function mappedFolder(hostFolder, sandboxFolder, readOnly) {
+  return `    <MappedFolder>
+      <HostFolder>${xmlEscape(hostFolder)}</HostFolder>
+      <SandboxFolder>${xmlEscape(sandboxFolder)}</SandboxFolder>
+      <ReadOnly>${readOnly ? 'true' : 'false'}</ReadOnly>
+    </MappedFolder>`
+}
+
+export function buildWindowsSandboxConfig({ evidenceDir, inputDir, nodeRuntimeDir, repoSnapshotDir }) {
+  for (const [label, value] of Object.entries({
+    evidenceDir,
+    inputDir,
+    nodeRuntimeDir,
+    repoSnapshotDir
+  })) {
+    requireString(value, label)
+  }
+
+  const folders = [
+    mappedFolder(inputDir, 'C:\\HermesHarness\\Input', true),
+    mappedFolder(repoSnapshotDir, 'C:\\HermesHarness\\Repo', true),
+    mappedFolder(nodeRuntimeDir, 'C:\\HermesHarness\\Node', true),
+    mappedFolder(evidenceDir, 'C:\\HermesHarness\\Evidence', false)
+  ].join('\n')
+
+  const command =
+    'powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass ' +
+    '-File "C:\\HermesHarness\\Input\\guest.ps1" ' +
+    '-ManifestPath "C:\\HermesHarness\\Input\\manifest.json"'
+
+  return `<?xml version="1.0" encoding="utf-8"?>
+<Configuration>
+  <VGpu>Disable</VGpu>
+  <Networking>Disable</Networking>
+  <AudioInput>Disable</AudioInput>
+  <VideoInput>Disable</VideoInput>
+  <PrinterRedirection>Disable</PrinterRedirection>
+  <ClipboardRedirection>Disable</ClipboardRedirection>
+  <ProtectedClient>Enable</ProtectedClient>
+  <MemoryInMB>8192</MemoryInMB>
+  <MappedFolders>
+${folders}
+  </MappedFolders>
+  <LogonCommand>
+    <Command>${xmlEscape(command)}</Command>
+  </LogonCommand>
+</Configuration>
+`
+}
+
+function assertSameArtifact(actual, expected, label) {
+  for (const field of ['tag', 'fileName', 'sha256', 'size', 'identitySource']) {
+    if (actual?.[field] !== expected[field]) {
+      throw new Error(`${label}.${field} mismatch; expected ${expected[field]}, got ${actual?.[field]}`)
+    }
+  }
+  if (expected.commit && actual?.commit !== expected.commit) {
+    throw new Error(`${label}.commit mismatch; expected ${expected.commit}, got ${actual?.commit}`)
+  }
+}
+
+function normalizeRelativeEvidencePath(value, label) {
+  const relativePath = requireString(value, label).replaceAll('\\', '/')
+  if (
+    pathLooksAbsolute(relativePath) ||
+    relativePath.split('/').some(segment => segment === '' || segment === '.' || segment === '..')
+  ) {
+    throw new Error(`${label} must be a normalized relative evidence path`)
+  }
+  return relativePath
+}
+
+function validateEvidenceManifest(manifest) {
+  if (!Array.isArray(manifest) || manifest.length === 0) {
+    throw new Error('lifecycle receipt must contain a non-empty evidence manifest')
+  }
+
+  const paths = new Set()
+  for (const [index, entry] of manifest.entries()) {
+    const label = `evidenceManifest[${index}]`
+    const relativePath = normalizeRelativeEvidencePath(entry?.path, `${label}.path`)
+    const sha256 = requireString(entry?.sha256, `${label}.sha256`).toLowerCase()
+    const size = Number(entry?.size)
+    if (!SHA256_RE.test(sha256)) throw new Error(`${label}.sha256 must be a lowercase SHA-256`)
+    if (!Number.isSafeInteger(size) || size < 0) throw new Error(`${label}.size must be a non-negative integer`)
+    if (paths.has(relativePath)) throw new Error(`duplicate evidence manifest path: ${relativePath}`)
+    paths.add(relativePath)
+  }
+
+  return manifest
+}
+
+function pathLooksAbsolute(value) {
+  return value.startsWith('/') || /^[a-zA-Z]:/.test(value)
+}
+
+export function validateLifecycleReceipt(receipt, descriptor) {
+  const expected = validateLifecycleDescriptor(descriptor)
+  if (!receipt || typeof receipt !== 'object') {
+    throw new Error('lifecycle result receipt is required')
+  }
+  if (receipt.schemaVersion !== 1 || receipt.runId !== expected.runId) {
+    throw new Error('lifecycle result does not belong to this run')
+  }
+  if (receipt.status !== 'passed') {
+    throw new Error(`lifecycle result is not passed: ${receipt.status || '(missing)'}`)
+  }
+  if (receipt.isolation?.mechanism !== 'windows-sandbox') {
+    throw new Error('lifecycle result did not prove Windows Sandbox isolation')
+  }
+  if (receipt.isolation?.guestUser !== 'WDAGUtilityAccount') {
+    throw new Error('lifecycle result did not run as the Windows Sandbox guest account')
+  }
+  if (receipt.isolation?.networkDisabled !== true || receipt.isolation?.hostRegistryReachable !== false) {
+    throw new Error('lifecycle result did not prove the required network/registry boundary')
+  }
+  if (
+    receipt.isolation?.registryProbe?.kind !== 'loaded-user-hives-and-volatile-profile' ||
+    receipt.isolation?.registryProbe?.currentHiveMatchesGuestSid !== true ||
+    receipt.isolation?.registryProbe?.foreignInteractiveUserHiveCount !== 0 ||
+    receipt.isolation?.registryProbe?.volatileProfileIsDisposableGuest !== true
+  ) {
+    throw new Error('lifecycle result did not include the active guest-registry isolation probe')
+  }
+
+  assertSameArtifact(receipt.artifacts?.candidate, expected.candidate, 'candidate')
+  assertSameArtifact(receipt.artifacts?.previous, expected.previous, 'previous')
+  assertSameArtifact(receipt.artifacts?.rollback, expected.rollback, 'rollback')
+  const evidenceManifest = validateEvidenceManifest(receipt.evidenceManifest)
+  const evidencePaths = evidenceManifest.map(entry => entry.path.replaceAll('\\', '/'))
+
+  for (const gateName of REQUIRED_LIFECYCLE_GATES) {
+    const gate = receipt.gates?.[gateName]
+    if (!gate || gate.status !== 'passed') {
+      throw new Error(`required lifecycle gate ${gateName} is not passed`)
+    }
+    if (!Array.isArray(gate.evidence) || gate.evidence.length === 0) {
+      throw new Error(`required lifecycle gate ${gateName} has no evidence`)
+    }
+    if (
+      (gateName === 'v31ToV32Update' || gateName === 'rollbackVi39') &&
+      gate.detail?.sameRegisteredInstallDir !== true
+    ) {
+      throw new Error(`required lifecycle gate ${gateName} did not prove an in-place registered install transition`)
+    }
+    for (const [index, rawPath] of gate.evidence.entries()) {
+      const evidencePath = normalizeRelativeEvidencePath(rawPath, `${gateName}.evidence[${index}]`)
+      const isReceipt = evidencePath === 'lifecycle-result.json'
+      const isManifestFileOrDirectory = evidencePaths.some(
+        candidate => candidate === evidencePath || candidate.startsWith(`${evidencePath}/`)
+      )
+      if (!isReceipt && !isManifestFileOrDirectory) {
+        throw new Error(`required lifecycle gate ${gateName} references unsealed evidence ${evidencePath}`)
+      }
+    }
+  }
+  const nonPassed = Object.entries(receipt.gates || {}).find(([, gate]) => gate?.status !== 'passed')
+  if (nonPassed) {
+    throw new Error(`lifecycle receipt contains non-passed gate ${nonPassed[0]}`)
+  }
+
+  return Object.freeze({ descriptor: expected, receipt })
+}
