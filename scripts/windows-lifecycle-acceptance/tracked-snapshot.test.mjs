@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { stageTrackedSnapshot } from './tracked-snapshot.mjs'
+import { fingerprintSnapshot, stagePlaywrightDependencies, stageTrackedSnapshot } from './tracked-snapshot.mjs'
 
 function git(repo, args) {
   const result = spawnSync('git', ['-C', repo, ...args], { encoding: 'utf8', windowsHide: true })
@@ -47,5 +47,72 @@ test('mapped source snapshot contains tracked HEAD only, never ignored credentia
   assert.equal(
     fs.readdirSync(snapshot, { recursive: true }).some(name => String(name).includes('REAL_SECRET_MUST_NOT_MAP')),
     false
+  )
+})
+
+function writePlaywrightFixture(root, { integrity = 'sha512-fixture', payload = 'trusted payload\n' } = {}) {
+  const packageName = 'playwright-fixture'
+  const version = '1.2.3'
+  const packageRoot = path.join(root, 'node_modules', packageName)
+  fs.mkdirSync(packageRoot, { recursive: true })
+  fs.writeFileSync(path.join(packageRoot, 'package.json'), `${JSON.stringify({ name: packageName, version })}\n`)
+  fs.writeFileSync(path.join(packageRoot, 'index.js'), payload)
+  const fingerprint = fingerprintSnapshot(packageRoot)
+  const destinationRepo = path.join(root, 'repo-snapshot')
+  fs.mkdirSync(destinationRepo, { recursive: true })
+  fs.writeFileSync(
+    path.join(destinationRepo, 'package-lock.json'),
+    `${JSON.stringify({ packages: { [`node_modules/${packageName}`]: { integrity, version } } })}\n`
+  )
+  return {
+    destinationRepo,
+    nodeModulesRoot: path.join(root, 'node_modules'),
+    packageRoot,
+    spec: { ...fingerprint, integrity, packageName, version }
+  }
+}
+
+test('offline Playwright staging binds lock integrity, version and exact installed tree', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-playwright-snapshot-test-'))
+  t.after(() => fs.rmSync(root, { force: true, recursive: true }))
+  const fixture = writePlaywrightFixture(root)
+
+  const staged = stagePlaywrightDependencies({
+    destinationRepo: fixture.destinationRepo,
+    nodeModulesRoot: fixture.nodeModulesRoot,
+    specs: [fixture.spec]
+  })
+
+  assert.deepEqual(staged, [fixture.spec])
+  assert.deepEqual(
+    fingerprintSnapshot(path.join(fixture.destinationRepo, 'node_modules', fixture.spec.packageName)),
+    fingerprintSnapshot(fixture.packageRoot)
+  )
+})
+
+test('offline Playwright staging rejects a tampered installed tree or lock entry', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-playwright-tamper-test-'))
+  t.after(() => fs.rmSync(root, { force: true, recursive: true }))
+  const treeFixture = writePlaywrightFixture(path.join(root, 'tree'))
+  fs.writeFileSync(path.join(treeFixture.packageRoot, 'index.js'), 'tampered payload\n')
+  assert.throws(
+    () =>
+      stagePlaywrightDependencies({
+        destinationRepo: treeFixture.destinationRepo,
+        nodeModulesRoot: treeFixture.nodeModulesRoot,
+        specs: [treeFixture.spec]
+      }),
+    /fingerprint mismatch/
+  )
+
+  const lockFixture = writePlaywrightFixture(path.join(root, 'lock'), { integrity: 'sha512-wrong' })
+  assert.throws(
+    () =>
+      stagePlaywrightDependencies({
+        destinationRepo: lockFixture.destinationRepo,
+        nodeModulesRoot: lockFixture.nodeModulesRoot,
+        specs: [{ ...lockFixture.spec, integrity: 'sha512-expected' }]
+      }),
+    /package-lock provenance mismatch/
   )
 })

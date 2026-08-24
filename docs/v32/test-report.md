@@ -56,6 +56,7 @@ acceptance cuối và không được cộng lại vì có test trùng nhau.
 | Desktop pointer E2E | Playwright 1/1 đạt | Gắn trace/video/screenshot của exact candidate source |
 | Desktop typecheck/build | Đã đạt ở checkpoint | Chạy lại sau freeze |
 | Desktop ESLint | 0 lỗi ở checkpoint | Ghi warnings và command cuối |
+| Windows lifecycle harness provenance | Node signed-SHASUM + Playwright lock/tree gate 8/8 đạt | Chạy lại trên exact candidate trước Sandbox |
 
 `[PARENT: thay mọi receipt tóm tắt bằng command, timestamp, exit code và đường
 dẫn log của lượt chạy cuối. Giữ lại checkpoint history nếu cần điều tra.]`

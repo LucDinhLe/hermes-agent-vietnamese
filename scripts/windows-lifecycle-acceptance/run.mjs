@@ -13,6 +13,8 @@ import {
   V31_SOURCE_COMMIT,
   V31_SOURCE_TAG,
   V32_CANDIDATE_TAG,
+  WINDOWS_LIFECYCLE_NODE_SHA256,
+  WINDOWS_LIFECYCLE_NODE_VERSION,
   assertSupportedWindowsSandboxHost,
   buildWindowsSandboxConfig,
   validateLifecycleDescriptor,
@@ -260,6 +262,15 @@ async function main() {
   }
   const portableVersion = runChecked(portableNode, ['--version'])
   const portablePlatform = runChecked(portableNode, ['-p', 'process.platform + "/" + process.arch'])
+  const portableSha256 = sha256(portableNode)
+  if (portableVersion !== WINDOWS_LIFECYCLE_NODE_VERSION) {
+    throw new Error(`pinned Node runtime must be ${WINDOWS_LIFECYCLE_NODE_VERSION}, got ${portableVersion}`)
+  }
+  if (portableSha256 !== WINDOWS_LIFECYCLE_NODE_SHA256) {
+    throw new Error(
+      `pinned Node runtime SHA-256 mismatch; expected ${WINDOWS_LIFECYCLE_NODE_SHA256}, got ${portableSha256}`
+    )
+  }
   if (portablePlatform !== 'win32/x64') {
     throw new Error(`pinned Node runtime must be Windows x64, got ${portablePlatform}`)
   }
@@ -363,7 +374,11 @@ async function main() {
     writeJsonAtomic(expectedPath, descriptor)
     writeJsonAtomic(hostLaunchPath, {
       candidate: descriptor.candidate,
-      nodeVersion: portableVersion,
+      nodeRuntime: {
+        sha256: portableSha256,
+        source: 'official-signed-shasums256',
+        version: portableVersion
+      },
       previous: descriptor.previous,
       releaseClass: descriptor.releaseClass,
       rollback: descriptor.rollback,

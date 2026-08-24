@@ -25,6 +25,16 @@ enter the guest through the source mapping. The guest runner additionally
 requires all of the
 following before it touches an installer:
 
+- the portable Node runtime matches `v26.5.1`, `win32/x64`, and the
+  `win-x64/node.exe` SHA-256 from the official
+  [signed SHASUMS256](https://nodejs.org/dist/v26.5.1/SHASUMS256.txt.asc):
+  `b48b0224081224cda1f49374e2fc63d143041ade51754f0cc6608fe8510ba29e`;
+- the three offline test packages `@playwright/test`, `playwright`, and
+  `playwright-core` match both package-lock version/integrity and the exact
+  post-`npm ci` file-tree fingerprint;
+- any changed dependency byte stops the harness before the guest mapping; the
+  verified fingerprints are sealed into `host-launch.json`;
+
 - the `WDAGUtilityAccount` identity, profile, SID class, and a virtualized
   machine boundary;
 - an HKCU isolation probe showing the current hive belongs to the guest SID,

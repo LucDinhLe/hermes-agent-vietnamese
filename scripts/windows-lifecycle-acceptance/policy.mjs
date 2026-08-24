@@ -10,6 +10,11 @@ export const V31_SOURCE_SIZE = 340_302_846
 export const ROLLBACK_COMMIT = 'd270974d2651e72f169fffe34c955eeae7977458'
 export const ROLLBACK_SHA256 = 'e4e0b60d7821b0e72af7b79e745b723c035f588c49bb11782778214a3e0c6d31'
 export const ROLLBACK_SIZE = 340_105_286
+// Official Node.js v26.5.1 signed SHASUMS256.txt entry for win-x64/node.exe.
+// The lifecycle guest executes this host-mapped binary, so version/arch alone
+// are not a sufficient provenance boundary.
+export const WINDOWS_LIFECYCLE_NODE_VERSION = 'v26.5.1'
+export const WINDOWS_LIFECYCLE_NODE_SHA256 = 'b48b0224081224cda1f49374e2fc63d143041ade51754f0cc6608fe8510ba29e'
 
 export const REQUIRED_LIFECYCLE_GATES = Object.freeze([
   'isolatedGuest',

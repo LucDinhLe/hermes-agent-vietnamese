@@ -19,6 +19,10 @@
   Đây là checkpoint source, chưa thay thế final exact-candidate receipt.
 - Chủ dự án cho phép đúng **một build retry ngoại lệ** trên commit cuối đã sửa.
   Retry vẫn chưa dùng; chỉ được chạy sau khi toàn bộ source/pre-build gate xanh.
+- Gia cố Windows lifecycle harness: Node portable phải khớp exact signed
+  SHASUMS256 của `v26.5.1`; Playwright packages phải khớp package-lock
+  version/integrity và exact tree fingerprint. Regression đạt 8/8; kiểm trực
+  tiếp cây dependency hiện tại đạt cả ba package.
 - GitHub Latest vẫn là v31. Không tag, push, draft hay promotion công khai ở mốc
   này.
 

@@ -9,6 +9,8 @@ import {
   V31_SOURCE_COMMIT,
   V31_SOURCE_SHA256,
   V31_SOURCE_SIZE,
+  WINDOWS_LIFECYCLE_NODE_SHA256,
+  WINDOWS_LIFECYCLE_NODE_VERSION,
   assertSupportedWindowsSandboxHost,
   buildWindowsSandboxConfig,
   validateLifecycleDescriptor,
@@ -68,6 +70,8 @@ test('descriptor binds the three exact lifecycle installers and rejects byte reu
 })
 
 test('host gate never degrades an unsupported machine into a skipped acceptance', () => {
+  assert.equal(WINDOWS_LIFECYCLE_NODE_VERSION, 'v26.5.1')
+  assert.equal(WINDOWS_LIFECYCLE_NODE_SHA256, 'b48b0224081224cda1f49374e2fc63d143041ade51754f0cc6608fe8510ba29e')
   assert.equal(
     assertSupportedWindowsSandboxHost({
       arch: 'x64',
