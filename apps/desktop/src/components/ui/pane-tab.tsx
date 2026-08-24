@@ -291,7 +291,7 @@ export function PaneStripGlyph({ active, disabled, icon, label, onSelect }: Omit
         aria-label={label}
         aria-pressed={active ?? undefined}
         className={cn(
-          'self-center bg-transparent select-none',
+          'self-center bg-transparent select-none active:scale-95 active:bg-(--chrome-action-hover)',
           active ? 'text-(--ui-text-primary)' : 'text-(--ui-text-secondary) hover:text-(--ui-text-primary)'
         )}
         disabled={disabled}

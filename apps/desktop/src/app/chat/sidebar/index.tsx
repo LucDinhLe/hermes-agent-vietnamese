@@ -120,6 +120,7 @@ import {
   $messagingPlatformTotals,
   $messagingSessions,
   $messagingTruncated,
+  $selectedStoredSessionId,
   $sessionProfilesTruncated,
   $sessions,
   $sessionsLoading,
@@ -141,6 +142,7 @@ import {
   CRON_ROUTE,
   MESSAGING_ROUTE,
   PROJECTS_ROUTE,
+  sidebarActiveSessionId as resolveActiveSidebarSessionId,
   SIDEBAR_NAV_AREA,
   type SidebarNavContribution,
   SKILLS_ROUTE,
@@ -385,6 +387,9 @@ export function ChatSidebar({
   // The sidebar highlight tracks the FOCUSED session — the interacted tile's
   // tab, else the main selection — so it stays 1:1 with whatever tab is active.
   const selectedSessionId = useStore($focusedStoredSessionId)
+  // Workspace pages preserve the durable primary selection even though no
+  // chat tile owns focus. Messaging's Back action returns to this exact row.
+  const primarySelectedSessionId = useStore($selectedStoredSessionId)
   const sessions = useStore($sessions)
   const cronSessions = useStore($cronSessions)
   const cronJobs = useStore($cronJobs)
@@ -476,7 +481,7 @@ export function ChatSidebar({
     }
   }, [])
 
-  const activeSidebarSessionId = currentView === 'chat' ? selectedSessionId : null
+  const activeSidebarSessionId = resolveActiveSidebarSessionId(currentView, selectedSessionId, primarySelectedSessionId)
 
   const dndSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),

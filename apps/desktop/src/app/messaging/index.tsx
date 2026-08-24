@@ -1,10 +1,12 @@
 import { useStore } from '@nanostores/react'
 import type * as React from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router'
 
 import { PageLoader } from '@/components/page-loader'
 import { StatusDot, type StatusTone } from '@/components/status-dot'
 import { Button } from '@/components/ui/button'
+import { Codicon } from '@/components/ui/codicon'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { DisclosureCaret } from '@/components/ui/disclosure-caret'
 import { ErrorBanner } from '@/components/ui/error-state'
@@ -28,6 +30,7 @@ import { normalize } from '@/lib/text'
 import { cn } from '@/lib/utils'
 import { $changeEventsAvailable, $pairingChangeTick, $platformsChangeTick } from '@/store/live-sync'
 import { notify, notifyError } from '@/store/notifications'
+import { $selectedStoredSessionId } from '@/store/session'
 import { $settingsScopeOverride } from '@/store/settings-scope'
 import { runGatewayRestart } from '@/store/system-actions'
 
@@ -35,6 +38,7 @@ import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
 import { DetailColumn, ListColumn, MasterDetail } from '../master-detail'
 import { PageSearchShell } from '../page-search-shell'
+import { workspaceChatReturnRoute } from '../routes'
 import { CREDENTIAL_CONTROL_CLASS } from '../settings/credential-key-ui'
 import { ListRow } from '../settings/primitives'
 import { SettingsProfileScope } from '../settings/profile-scope'
@@ -128,6 +132,8 @@ function fieldCopy(field: MessagingEnvVarInfo, m: Translations['messaging']) {
 export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, ...props }: MessagingViewProps) {
   const { t } = useI18n()
   const m = t.messaging
+  const navigate = useNavigate()
+  const selectedStoredSessionId = useStore($selectedStoredSessionId)
   // Shared settings "Applies to" scope: configure another profile's gateway
   // platforms/pairing without switching the whole app (null → active profile).
   const scopeProfile = useStore($settingsScopeOverride)
@@ -424,6 +430,18 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   return (
     <PageSearchShell
       {...props}
+      leadingAction={
+        <Button
+          className="shrink-0 gap-1.5"
+          onClick={() => navigate(workspaceChatReturnRoute(selectedStoredSessionId))}
+          size="sm"
+          type="button"
+          variant="ghost"
+        >
+          <Codicon aria-hidden name="arrow-left" />
+          <span>{m.backToSession}</span>
+        </Button>
+      }
       onSearchChange={setQuery}
       searchHidden={(platforms?.length ?? 0) === 0}
       searchHints={platforms?.slice(0, 5).map(platform => t.common.tryHint(platform.name.toLowerCase()))}

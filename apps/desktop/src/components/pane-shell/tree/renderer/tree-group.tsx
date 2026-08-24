@@ -582,6 +582,7 @@ export function TreeGroup({
                 // first, or the tab opens in whichever zone was last clicked.
                 // (pointerdown's own focus tracking would land after the click
                 // handler reads the anchor.)
+                data-session-tab-plus=""
                 onPointerDownCapture={() => noteActiveTreeGroup(node.id)}
               >
                 <PaneStripGlyph

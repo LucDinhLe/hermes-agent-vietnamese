@@ -8,7 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/compon
 import { Tip } from '@/components/ui/tooltip'
 import type { HermesGateway } from '@/hermes'
 import { useI18n } from '@/i18n'
-import { compactNumber, formatUsdCost } from '@/lib/format'
+import { compactNumber, formatPercentOf, formatUsdCost, percentOf } from '@/lib/format'
 import type { UsageStats } from '@/types/hermes'
 
 interface SessionContextMeterProps {
@@ -36,7 +36,7 @@ export function SessionContextMeter({
   sessionId,
   sessionUsage
 }: SessionContextMeterProps) {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const copy = t.shell.statusbar
 
   const requestGateway = useCallback(
@@ -60,7 +60,8 @@ export function SessionContextMeter({
 
   const contextMax = breakdown?.published_context_max ?? breakdown?.context_max ?? 0
   const contextUsed = breakdown?.context_used ?? 0
-  const contextPercent = contextMax > 0 ? Math.max(0, Math.min(100, Math.round((contextUsed / contextMax) * 100))) : 0
+  const contextPercentValue = percentOf(contextUsed, contextMax)
+  const contextPercent = formatPercentOf(contextUsed, contextMax, locale)
   const estimated = breakdown?.context_measurement === 'estimated'
 
   const fraction =
@@ -71,7 +72,16 @@ export function SessionContextMeter({
   const billedKnown = sessionUsage?.cost_status === 'actual' || sessionUsage?.cost_status === 'estimated'
   const displayedCost = included && referenceKnown ? sessionUsage?.reference_cost_usd : sessionUsage?.cost_usd
   const costKnown = (included && referenceKnown) || billedKnown
-  const costLabel = costKnown ? formatUsdCost(displayedCost, included || sessionUsage?.cost_status === 'estimated') : ''
+
+  const formattedCost = costKnown
+    ? formatUsdCost(displayedCost, included || sessionUsage?.cost_status === 'estimated')
+    : ''
+
+  const costLabel =
+    formattedCost && included && referenceKnown
+      ? copy.contextUsagePanel.costReferenceCompact(formattedCost)
+      : formattedCost
+
   const titleParts = [contextMax > 0 ? `${copy.contextUsage}: ${fraction} (${contextPercent}%)` : copy.contextUsage]
 
   if (costLabel) {
@@ -85,13 +95,13 @@ export function SessionContextMeter({
       calls: sessionUsage?.calls ?? 0,
       ...sessionUsage,
       context_max: contextMax,
-      context_percent: contextPercent,
+      context_percent: contextPercentValue,
       context_used: contextUsed,
       input: sessionUsage?.input ?? 0,
       output: sessionUsage?.output ?? 0,
       total: sessionUsage?.total ?? 0
     }),
-    [contextMax, contextPercent, contextUsed, sessionUsage]
+    [contextMax, contextPercentValue, contextUsed, sessionUsage]
   )
 
   return (

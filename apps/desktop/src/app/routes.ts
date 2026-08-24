@@ -193,6 +193,23 @@ export function sessionRoute(sessionId: string): string {
   return `${SESSION_ROUTE_PREFIX}${encodeURIComponent(sessionId)}`
 }
 
+/** Return from a workspace page to the durable primary chat selection.
+ *  With no selection, Home is the existing draft surface; this helper never
+ *  creates a backend session as a side effect of navigation. */
+export function workspaceChatReturnRoute(selectedStoredSessionId: string | null): string {
+  return selectedStoredSessionId ? sessionRoute(selectedStoredSessionId) : NEW_CHAT_ROUTE
+}
+
+/** Session row highlighted for the visible workspace. Messaging preserves the
+ *  primary row because its Back action returns there; chat follows tile focus. */
+export function sidebarActiveSessionId(
+  view: AppView,
+  focusedStoredSessionId: string | null,
+  primaryStoredSessionId: string | null
+): string | null {
+  return view === 'messaging' ? primaryStoredSessionId : view === 'chat' ? focusedStoredSessionId : null
+}
+
 export function appViewForPath(pathname: string): AppView {
   const path = routePathname(pathname)
 

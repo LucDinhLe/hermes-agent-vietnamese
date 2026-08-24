@@ -28,6 +28,8 @@ interface PageSearchShellProps extends React.ComponentProps<'section'> {
   searchValue: string
   /** Hide the search field when there's nothing to search (empty dataset). */
   searchHidden?: boolean
+  /** Left-most page action, before search (for example returning to chat). */
+  leadingAction?: ReactNode
   /** Right-aligned control in the header's trailing cell (e.g. a refresh button)
    *  so mouse users get a visible affordance for the refresh hotkey. */
   searchTrailingAction?: ReactNode
@@ -64,6 +66,7 @@ export function PageSearchShell({
   searchHints,
   searchValue,
   searchHidden = false,
+  leadingAction,
   searchTrailingAction,
   ...props
 }: PageSearchShellProps) {
@@ -90,9 +93,10 @@ export function PageSearchShell({
         (see app-shell.tsx), so window dragging still works here.
       */}
       <div className="shrink-0">
-        {(hasTabs || !searchHidden) && (
+        {(hasTabs || !searchHidden || leadingAction) && (
           <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-3 px-3 pb-2 pt-[calc(var(--titlebar-height)+0.5rem)]">
-            <div className="flex min-w-0 items-center justify-start">
+            <div className="flex min-w-0 items-center justify-start gap-2">
+              {leadingAction}
               {!searchHidden && (
                 <SearchField
                   containerClassName="max-w-[45vw]"

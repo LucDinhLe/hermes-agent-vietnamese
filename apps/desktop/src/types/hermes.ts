@@ -763,8 +763,17 @@ export interface ContextUsageCategory {
   tokens: number
 }
 
+/** Optional provider quota metadata. Older gateways omit this whole object. */
+export interface ContextQuota {
+  available: boolean
+  provider?: string
+  remaining_percent?: number
+  reset_at?: string
+}
+
 export interface ContextBreakdown {
   categories: ContextUsageCategory[]
+  compaction_count?: number
   compact_recommended?: boolean
   compact_threshold_percent?: number
   compact_threshold_tokens?: number
@@ -772,14 +781,18 @@ export interface ContextBreakdown {
   context_measurement?: 'estimated' | 'measured'
   context_percent: number
   context_used: number
+  conversation_tokens?: number
   effective_remaining_tokens?: number
   estimated_total: number
+  logical_history_tokens?: number
   model?: string
   published_context_max?: number
   published_context_percent?: number
   published_context_reference?: string
   published_context_source?: 'anthropic' | 'openai' | 'runtime'
+  quota?: ContextQuota
   remaining_tokens?: number
+  system_background_tokens?: number
   tokens_until_compact?: number
 }
 

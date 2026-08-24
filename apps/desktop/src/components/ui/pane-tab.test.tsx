@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { setRuntimeI18nLocale } from '@/i18n'
 
-import { PaneTab, PaneTabLabel } from './pane-tab'
+import { PaneStripGlyph, PaneTab, PaneTabLabel } from './pane-tab'
 
 afterEach(() => {
   cleanup()
@@ -160,5 +160,46 @@ describe('PaneTab visible close button', () => {
     )
 
     expect(screen.queryByRole('button', { name: 'Close tab' })).toBeNull()
+  })
+})
+
+describe('PaneStripGlyph pointer contract', () => {
+  it('claims pointerdown before the parent strip and selects exactly once', () => {
+    const onParentPointerDown = vi.fn()
+    const onSelect = vi.fn()
+
+    render(
+      <div onPointerDown={onParentPointerDown}>
+        <PaneStripGlyph icon={<span aria-hidden>+</span>} label="New session tab" onSelect={onSelect} />
+      </div>
+    )
+
+    const button = screen.getByRole('button', { name: 'New session tab' })
+    fireEvent.pointerDown(button)
+    fireEvent.click(button)
+
+    expect(onParentPointerDown).not.toHaveBeenCalled()
+    expect(onSelect).toHaveBeenCalledTimes(1)
+  })
+
+  it('exposes pressed state, keyboard focus, hover, focus, and transient press styling', () => {
+    render(<PaneStripGlyph active icon={<span aria-hidden>+</span>} label="New session tab" onSelect={vi.fn()} />)
+
+    const button = screen.getByRole('button', { name: 'New session tab' })
+    button.focus()
+
+    expect(button.ownerDocument.activeElement).toBe(button)
+    expect(button.getAttribute('aria-pressed')).toBe('true')
+    expect(button.className).toContain('hover:bg-(--chrome-action-hover)')
+    expect(button.className).toContain('focus-visible:ring')
+    expect(button.className).toContain('active:scale-95')
+  })
+
+  it('does not select while disabled', () => {
+    const onSelect = vi.fn()
+    render(<PaneStripGlyph disabled icon={<span aria-hidden>+</span>} label="New session tab" onSelect={onSelect} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'New session tab' }))
+    expect(onSelect).not.toHaveBeenCalled()
   })
 })

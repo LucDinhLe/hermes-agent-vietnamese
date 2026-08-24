@@ -9,9 +9,9 @@ import { useContextBreakdown } from './hooks/use-context-breakdown'
 
 const usage: UsageStats = {
   calls: 1,
-  context_max: 272_000,
-  context_percent: 47,
-  context_used: 128_200,
+  context_max: 1_050_000,
+  context_percent: 23,
+  context_used: 241_400,
   cost_status: 'included',
   cost_usd: 0,
   cache_read: 80_000,
@@ -134,14 +134,61 @@ describe('useContextBreakdown', () => {
 })
 
 describe('ContextUsagePanel', () => {
-  it('renders the usage it is handed, so the popover matches the bar', () => {
+  it('renders one-decimal active/effective occupancy and an explicit API-equivalent disclaimer', () => {
     render(<ContextUsagePanel breakdown={breakdown} loading={false} usage={usage} />)
 
-    expect(screen.getByText('47% Full')).toBeTruthy()
+    expect(screen.getByText('23.0% of published context')).toBeTruthy()
     expect(screen.getByText('Published capacity: 1.05M · OpenAI')).toBeTruthy()
-    expect(screen.getByText('API-equivalent value: ~$1.23 USD')).toBeTruthy()
+    expect(screen.getByText('Current route limit: 272k · 88.8% used')).toBeTruthy()
+    expect(screen.getByText('API-equivalent value: ~$1.23 USD — reference only, not billed')).toBeTruthy()
     expect(screen.getByText('Included in the current subscription')).toBeTruthy()
     expect(screen.getByText('Conversation')).toBeTruthy()
+  })
+
+  it('keeps active and effective percentages distinct and marks absent contract fields unavailable', () => {
+    const lowUsage = { ...usage, context_percent: 2, context_used: 17_300 }
+
+    const lowBreakdown = {
+      ...breakdown,
+      categories: [
+        { color: 'gray', id: 'system_prompt', label: 'System prompt', tokens: 16_800 },
+        { color: 'teal', id: 'conversation', label: 'Conversation', tokens: 500 }
+      ],
+      context_used: 17_300,
+      remaining_tokens: 1_032_700
+    }
+
+    render(<ContextUsagePanel breakdown={lowBreakdown} loading={false} usage={lowUsage} />)
+
+    expect(screen.getByText('1.6% of published context')).toBeTruthy()
+    expect(screen.getByText('Current route limit: 272k · 6.4% used')).toBeTruthy()
+    expect(screen.getByText('System + background: 16.8k')).toBeTruthy()
+    expect(screen.getByText('Conversation context: 500')).toBeTruthy()
+    expect(screen.getByText('Logical history: Unavailable')).toBeTruthy()
+    expect(screen.getByText('Compactions: Unavailable')).toBeTruthy()
+    expect(screen.getByText('Provider quota: unavailable')).toBeTruthy()
+  })
+
+  it('renders future optional logical, compaction, and provider quota fields when present', () => {
+    render(
+      <ContextUsagePanel
+        breakdown={{
+          ...breakdown,
+          compaction_count: 2,
+          conversation_tokens: 10_000,
+          logical_history_tokens: 480_000,
+          quota: { available: true, provider: 'OpenAI', remaining_percent: 98, reset_at: '2026-08-25' },
+          system_background_tokens: 231_400
+        }}
+        loading={false}
+        usage={usage}
+      />
+    )
+
+    expect(screen.getByText('Logical history: 480k')).toBeTruthy()
+    expect(screen.getByText('Compactions: 2')).toBeTruthy()
+    expect(screen.getByText('Provider quota (OpenAI): 98.0% remaining')).toBeTruthy()
+    expect(screen.getByText('Quota resets: 2026-08-25')).toBeTruthy()
   })
 
   it('says so when there is no breakdown rather than painting an empty bar', () => {

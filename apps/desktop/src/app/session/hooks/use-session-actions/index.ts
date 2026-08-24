@@ -2,6 +2,7 @@ import { useStore } from '@nanostores/react'
 import { type MutableRefObject, useCallback, useEffect, useRef } from 'react'
 import type { NavigateFunction } from 'react-router'
 
+import { requestComposerFocus } from '@/app/chat/composer/focus'
 import { graftRefreshedTailOntoBackfill } from '@/app/chat/transcript-backfill'
 import { revealTreePane } from '@/components/pane-shell/tree/store'
 import { deleteSession, getAllSessionMessages, getLatestSessionMessages, setSessionArchived } from '@/hermes'
@@ -299,6 +300,7 @@ export function useSessionActions({
   const { t } = useI18n()
   const copy = t.desktop
   const resumeRequestRef = useRef(0)
+  const newSessionTileRequestRef = useRef(false)
 
   // Follow auto-compression's stored-id rotation only while the exact runtime,
   // selection, and route intent still belong to the rotating conversation.
@@ -577,6 +579,18 @@ export function useSessionActions({
   const openNewSessionTile = useCallback(
     async (dir: TileDock = 'right', options?: { cwd?: null | string; listed?: boolean }) => {
       const listed = options?.listed ?? true
+      const singleFlight = !listed
+
+      // The strip plus and its keyboard equivalent can overlap while the
+      // gateway is still creating the draft. Treat that unlisted request as
+      // one interaction; listed split/project creates remain independent.
+      if (singleFlight && newSessionTileRequestRef.current) {
+        return
+      }
+
+      if (singleFlight) {
+        newSessionTileRequestRef.current = true
+      }
 
       try {
         // Fresh tile → the caller's workspace when one was named (the sidebar
@@ -617,8 +631,13 @@ export function useSessionActions({
         const opened = sessionTileForStoredId(stored, owner)
 
         if (opened) {
-          patchSessionTile(sessionTileKey(opened), { runtimeId: created.session_id })
+          const tileId = sessionTileKey(opened)
+          patchSessionTile(tileId, { runtimeId: created.session_id })
           revealTreePane(sessionTilePaneId(opened))
+
+          if (dir === 'center' && typeof window !== 'undefined') {
+            window.requestAnimationFrame(() => requestComposerFocus(`tile:${tileId}`))
+          }
         }
 
         if (owner) {
@@ -635,6 +654,10 @@ export function useSessionActions({
         }
       } catch (error) {
         notifyError(error, copy.createSessionFailed)
+      } finally {
+        if (singleFlight) {
+          newSessionTileRequestRef.current = false
+        }
       }
     },
     [copy, requestGateway, updateSessionState]

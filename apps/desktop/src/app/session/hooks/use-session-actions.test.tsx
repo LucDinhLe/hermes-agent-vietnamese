@@ -4,6 +4,7 @@ import type { MutableRefObject } from 'react'
 import { useEffect, useRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { requestComposerFocus } from '@/app/chat/composer/focus'
 import { $terminalTakeover, setTerminalTakeover } from '@/app/right-sidebar/store'
 import { noteActiveTreeGroup, revealTreePane } from '@/components/pane-shell/tree/store'
 import type { HermesConnection } from '@/global'
@@ -16,6 +17,7 @@ import {
 } from '@/hermes'
 import { createClientSessionState } from '@/lib/chat-runtime'
 import { clearSessionDraft, stashSessionDraft, takeSessionDraft } from '@/store/composer'
+import { notifyError } from '@/store/notifications'
 import { $activeGatewayProfile, $newChatProfile, ensureGatewayProfile } from '@/store/profile'
 import { $projectScope, $projectTree, ALL_PROJECTS } from '@/store/projects'
 import {
@@ -36,6 +38,7 @@ import {
   setActiveSessionStoredIdRotation,
   setAwaitingResponse,
   setBusy,
+  setConnection,
   setCurrentAdvisorEnabled,
   setCurrentCwd,
   setCurrentFastMode,
@@ -80,21 +83,30 @@ vi.mock('@/components/pane-shell/tree/store', async importOriginal => ({
   revealTreePane: vi.fn()
 }))
 
+vi.mock('@/app/chat/composer/focus', () => ({ requestComposerFocus: vi.fn() }))
+
+vi.mock('@/store/notifications', async importOriginal => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  notifyError: vi.fn()
+}))
+
 const RUNTIME_SESSION_ID = 'rt-new-001'
 
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
 
-  const promise = new Promise<T>(done => {
+  const promise = new Promise<T>((done, fail) => {
     resolve = done
+    reject = fail
   })
 
-  return { promise, resolve }
+  return { promise, reject, resolve }
 }
 
 type HarnessHandle = Pick<
   ReturnType<typeof useSessionActions>,
-  'createBackendSessionForSend' | 'selectSidebarItem' | 'startFreshSessionDraft'
+  'createBackendSessionForSend' | 'openNewSessionTile' | 'selectSidebarItem' | 'startFreshSessionDraft'
 >
 
 function storedSession(overrides: Partial<SessionInfo> = {}): SessionInfo {
@@ -432,6 +444,81 @@ async function createWith(
 
   return createParams
 }
+
+describe('openNewSessionTile tab-strip contract', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    $sessionTiles.set([])
+    setConnection({ connectionId: 'local', mode: 'local', profile: 'default' } as HermesConnection)
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback: FrameRequestCallback) => {
+      callback(0)
+
+      return 1
+    })
+  })
+
+  afterEach(() => {
+    cleanup()
+    $sessionTiles.set([])
+    setConnection(null)
+    vi.restoreAllMocks()
+  })
+
+  it('single-flights an unlisted plus request, selects one tile, and focuses its composer', async () => {
+    const pending = deferred<{
+      info: Record<string, never>
+      session_id: string
+      stored_session_id: string
+    }>()
+
+    const requestGateway = vi.fn((method: string) =>
+      method === 'session.create' ? pending.promise : Promise.resolve({})
+    )
+
+    let handle: HarnessHandle | null = null
+
+    render(<Harness onReady={value => (handle = value)} requestGateway={requestGateway as never} />)
+
+    await waitFor(() => expect(handle).not.toBeNull())
+
+    let first!: Promise<void>
+    let second!: Promise<void>
+
+    act(() => {
+      first = handle!.openNewSessionTile('center', { listed: false })
+      second = handle!.openNewSessionTile('center', { listed: false })
+    })
+
+    await waitFor(() => expect(requestGateway).toHaveBeenCalledTimes(1))
+
+    await act(async () => {
+      pending.resolve({ info: {}, session_id: 'runtime-plus', stored_session_id: 'stored-plus' })
+      await Promise.all([first, second])
+    })
+
+    const [tile] = $sessionTiles.get()
+    expect(tile?.storedSessionId).toBe('stored-plus')
+    expect(revealTreePane).toHaveBeenCalledTimes(1)
+    expect(requestComposerFocus).toHaveBeenCalledWith(`tile:${tile?.tileId}`)
+  })
+
+  it('surfaces create failures and releases the guard for a retry', async () => {
+    const requestGateway = vi.fn().mockRejectedValue(new Error('mock create failed'))
+    let handle: HarnessHandle | null = null
+
+    render(<Harness onReady={value => (handle = value)} requestGateway={requestGateway as never} />)
+    await waitFor(() => expect(handle).not.toBeNull())
+
+    await act(async () => {
+      await handle!.openNewSessionTile('center', { listed: false })
+      await handle!.openNewSessionTile('center', { listed: false })
+    })
+
+    expect(requestGateway).toHaveBeenCalledTimes(2)
+    expect(notifyError).toHaveBeenCalledTimes(2)
+    expect(notifyError).toHaveBeenLastCalledWith(expect.any(Error), expect.any(String))
+  })
+})
 
 describe('startFreshSessionDraft', () => {
   afterEach(() => cleanup())

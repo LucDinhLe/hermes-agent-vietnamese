@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 
 import { useI18n } from '@/i18n'
 import { ExternalLink } from '@/lib/external-link'
-import { compactNumber, formatUsdCost } from '@/lib/format'
+import { compactNumber, formatPercentOf, formatUsdCost } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { ContextBreakdown, ContextUsageCategory, UsageStats } from '@/types/hermes'
 
@@ -18,11 +18,13 @@ interface ContextUsagePanelProps {
  *  merged figure — measured occupancy when the backend has it, the estimate
  *  otherwise — so the header and the bar can never disagree. */
 export function ContextUsagePanel({ breakdown, loading, usage }: ContextUsagePanelProps) {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const copy = t.shell.statusbar.contextUsagePanel
-  const contextMax = usage.context_max ?? 0
-  const contextUsed = usage.context_used ?? 0
-  const contextPercent = Math.max(0, Math.min(100, Math.round(usage.context_percent ?? 0)))
+  const publishedMax = breakdown?.published_context_max ?? breakdown?.context_max ?? usage.context_max ?? 0
+  const effectiveMax = breakdown?.context_max ?? usage.context_max ?? 0
+  const contextUsed = breakdown?.context_used ?? usage.context_used ?? 0
+  const activePercent = formatPercentOf(contextUsed, publishedMax, locale)
+  const effectivePercent = formatPercentOf(contextUsed, effectiveMax, locale)
   const measurement = breakdown?.context_measurement === 'measured' ? copy.measured : copy.estimated
 
   const source =
@@ -32,8 +34,6 @@ export function ContextUsagePanel({ breakdown, loading, usage }: ContextUsagePan
         ? copy.sourceAnthropic
         : copy.sourceRuntime
 
-  const publishedMax = breakdown?.published_context_max ?? breakdown?.context_max ?? 0
-  const effectiveMax = breakdown?.context_max ?? 0
   const remaining = breakdown?.remaining_tokens ?? Math.max(0, publishedMax - contextUsed)
   const summaryUsed = `${breakdown?.context_measurement === 'estimated' ? '~' : ''}${compactNumber(contextUsed)}`
   const included = usage.cost_status === 'included'
@@ -64,6 +64,22 @@ export function ContextUsagePanel({ breakdown, loading, usage }: ContextUsagePan
   )
 
   const segmentTotal = categories.reduce((sum, category) => sum + category.tokens, 0) || contextUsed || 1
+  const hasCategoryBreakdown = categories.length > 0
+
+  const conversationTokens =
+    breakdown?.conversation_tokens ??
+    (hasCategoryBreakdown ? (categories.find(category => category.id === 'conversation')?.tokens ?? 0) : null)
+
+  const systemBackgroundTokens =
+    breakdown?.system_background_tokens ??
+    (hasCategoryBreakdown
+      ? categories.reduce((sum, category) => sum + (category.id === 'conversation' ? 0 : category.tokens), 0)
+      : null)
+
+  const quota = breakdown?.quota
+
+  const quotaKnown =
+    quota?.available === true && Number.isFinite(quota.remaining_percent) && quota.remaining_percent !== undefined
 
   return (
     <div className="flex w-72 flex-col gap-3 p-3 text-[0.75rem]" data-slot="context-usage-panel">
@@ -71,12 +87,12 @@ export function ContextUsagePanel({ breakdown, loading, usage }: ContextUsagePan
         <p className="font-medium text-foreground">{copy.title}</p>
 
         <span className="text-[0.6875rem] text-muted-foreground">
-          {copy.tokenSummary(summaryUsed, compactNumber(contextMax, 2))}
+          {copy.tokenSummary(summaryUsed, compactNumber(publishedMax, 2))}
         </span>
       </div>
 
       <div className="flex items-center justify-between gap-2 text-[0.6875rem]">
-        <p className="text-foreground">{copy.percentFull(contextPercent)}</p>
+        <p className="text-foreground">{copy.percentFull(activePercent)}</p>
         <span className="rounded-full bg-(--ui-bg-elevated) px-1.5 py-0.5 text-muted-foreground">{measurement}</span>
       </div>
 
@@ -96,10 +112,39 @@ export function ContextUsagePanel({ breakdown, loading, usage }: ContextUsagePan
               )}
             </div>
           )}
-          {effectiveMax > 0 && effectiveMax !== publishedMax && (
-            <div>{copy.effectiveCapacity(compactNumber(effectiveMax, 2))}</div>
-          )}
+          {effectiveMax > 0 && <div>{copy.effectiveCapacity(compactNumber(effectiveMax, 2), effectivePercent)}</div>}
           {publishedMax > 0 && <div>{copy.remaining(compactNumber(remaining, 2))}</div>}
+          <div>
+            {copy.systemBackground(
+              systemBackgroundTokens === null ? copy.unavailable : compactNumber(systemBackgroundTokens, 2)
+            )}
+          </div>
+          <div>
+            {copy.conversationContext(
+              conversationTokens === null ? copy.unavailable : compactNumber(conversationTokens, 2)
+            )}
+          </div>
+          <div>
+            {copy.logicalHistory(
+              breakdown.logical_history_tokens === undefined
+                ? copy.unavailable
+                : compactNumber(breakdown.logical_history_tokens, 2)
+            )}
+          </div>
+          <div>
+            {copy.compactionCount(
+              breakdown.compaction_count === undefined ? copy.unavailable : String(breakdown.compaction_count)
+            )}
+          </div>
+          <div>
+            {quotaKnown
+              ? copy.quotaRemaining(
+                  quota?.provider?.trim() || copy.sourceRuntime,
+                  formatPercentOf(quota?.remaining_percent, 100, locale)
+                )
+              : copy.quotaUnavailable}
+          </div>
+          {quotaKnown && quota?.reset_at && <div>{copy.quotaReset(quota.reset_at)}</div>}
           {(breakdown.compact_threshold_tokens ?? 0) > 0 && (
             <div className={cn(breakdown.compact_recommended && 'font-medium text-amber-600 dark:text-amber-400')}>
               {breakdown.compact_recommended

@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { NEW_CHAT_ROUTE, primaryRouteSelectedSessionId, sessionRoute, SETTINGS_ROUTE } from './routes'
+import {
+  NEW_CHAT_ROUTE,
+  primaryRouteSelectedSessionId,
+  sessionRoute,
+  SETTINGS_ROUTE,
+  sidebarActiveSessionId,
+  workspaceChatReturnRoute
+} from './routes'
 
 const SESS_A = 'sess-a'
 const SESS_B = 'sess-b'
@@ -26,5 +33,26 @@ describe('primaryRouteSelectedSessionId', () => {
 
   it('returns null on a non-chat route with no store selection', () => {
     expect(primaryRouteSelectedSessionId(SETTINGS_ROUTE, null)).toBeNull()
+  })
+})
+
+describe('workspaceChatReturnRoute', () => {
+  it('returns to the selected durable session', () => {
+    expect(workspaceChatReturnRoute('stored/session')).toBe('/stored%2Fsession')
+  })
+
+  it('falls back to Home without inventing a session', () => {
+    expect(workspaceChatReturnRoute(null)).toBe(NEW_CHAT_ROUTE)
+  })
+})
+
+describe('sidebarActiveSessionId', () => {
+  it('keeps Messaging highlighted on the durable session its Back action targets', () => {
+    expect(sidebarActiveSessionId('messaging', 'focused-tile', 'primary-session')).toBe('primary-session')
+  })
+
+  it('continues following tile focus in chat and clears selection on unrelated pages', () => {
+    expect(sidebarActiveSessionId('chat', 'focused-tile', 'primary-session')).toBe('focused-tile')
+    expect(sidebarActiveSessionId('skills', 'focused-tile', 'primary-session')).toBeNull()
   })
 })

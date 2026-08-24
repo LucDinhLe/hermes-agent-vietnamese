@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router'
+import { MemoryRouter, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { $selectedStoredSessionId } from '@/store/session'
 import type { MessagingPlatformInfo } from '@/types/hermes'
 
 const getMessagingPlatforms = vi.fn()
@@ -62,23 +63,50 @@ function platform(patch: Partial<MessagingPlatformInfo> = {}): MessagingPlatform
 }
 
 beforeEach(() => {
+  $selectedStoredSessionId.set(null)
+  getMessagingPlatforms.mockResolvedValue({ platforms: [] })
   updateMessagingPlatform.mockResolvedValue({ ok: true, platform: 'teams' })
   getPairing.mockResolvedValue({ approved: [], pending: [] })
 })
 
 afterEach(() => {
   cleanup()
+  $selectedStoredSessionId.set(null)
   vi.clearAllMocks()
 })
 
-async function renderMessaging() {
+function RouteProbe() {
+  return <output data-testid="route-probe">{useLocation().pathname}</output>
+}
+
+async function renderMessaging(initialEntries = ['/messaging']) {
   const { MessagingView } = await import('./index')
+
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={initialEntries}>
       <MessagingView />
+      <RouteProbe />
     </MemoryRouter>
   )
 }
+
+describe('MessagingView back navigation', () => {
+  it('returns to the selected stored session through an accessible leading action', async () => {
+    $selectedStoredSessionId.set('stored/session')
+
+    await renderMessaging()
+    fireEvent.click(await screen.findByRole('button', { name: 'Back to session' }))
+
+    expect(screen.getByTestId('route-probe').textContent).toBe('/stored%2Fsession')
+  })
+
+  it('returns Home when no stored session is selected', async () => {
+    await renderMessaging()
+    fireEvent.click(await screen.findByRole('button', { name: 'Back to session' }))
+
+    expect(screen.getByTestId('route-probe').textContent).toBe('/')
+  })
+})
 
 describe('MessagingView setup-guide link', () => {
   it('hides the setup-guide button for a plugin platform with no docs URL', async () => {

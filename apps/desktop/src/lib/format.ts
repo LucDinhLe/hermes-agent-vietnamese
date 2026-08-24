@@ -24,6 +24,30 @@ export function compactNumber(value: null | number | undefined, maximumFractionD
   return `${Math.round(num)}`
 }
 
+/** Raw occupancy percentage, clamped to a progress-meter range. */
+export function percentOf(value: null | number | undefined, maximum: null | number | undefined): number {
+  const numerator = Number(value ?? 0)
+  const denominator = Number(maximum ?? 0)
+
+  if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || denominator <= 0) {
+    return 0
+  }
+
+  return Math.max(0, Math.min(100, (numerator / denominator) * 100))
+}
+
+/** Locale-aware one-decimal percentage without the percent sign. */
+export function formatPercentOf(
+  value: null | number | undefined,
+  maximum: null | number | undefined,
+  locale = 'en'
+): string {
+  return new Intl.NumberFormat(locale, {
+    maximumFractionDigits: 1,
+    minimumFractionDigits: 1
+  }).format(percentOf(value, maximum))
+}
+
 /** Honest USD formatter for model-usage estimates.
  *
  * Keeps sub-cent values visible instead of rounding them to a fake $0.00.

@@ -1355,6 +1355,7 @@ export interface Translations {
   }
 
   messaging: {
+    backToSession: string
     search: string
     loading: string
     loadFailed: string
@@ -2434,29 +2435,38 @@ export interface Translations {
         }
         compactAt: (tokens: string, percent: number) => string
         compactNow: string
+        compactionCount: (count: string) => string
         costActual: (amount: string) => string
         costDisclaimer: string
         costEstimated: (amount: string) => string
         costIncluded: string
         costReference: (amount: string) => string
+        costReferenceCompact: (amount: string) => string
         costTitle: string
         costTokens: (input: string, output: string, cache: string) => string
         costUnknown: string
-        effectiveCapacity: (tokens: string) => string
+        conversationContext: (tokens: string) => string
+        effectiveCapacity: (tokens: string, percent: string) => string
         empty: string
         estimated: string
         loading: string
         measured: string
         modelLabel: (model: string) => string
-        percentFull: (percent: number) => string
+        logicalHistory: (tokens: string) => string
+        percentFull: (percent: string) => string
         publishedCapacity: (tokens: string, source: string) => string
+        quotaRemaining: (provider: string, percent: string) => string
+        quotaReset: (value: string) => string
+        quotaUnavailable: string
         remaining: (tokens: string) => string
         sourceAnthropic: string
         sourceOpenAI: string
         sourceRuntime: string
+        systemBackground: (tokens: string) => string
         title: string
         tokenSummary: (used: string, max: string) => string
         tokensUntilCompact: (tokens: string) => string
+        unavailable: string
       }
       session: string
       yoloOn: string
