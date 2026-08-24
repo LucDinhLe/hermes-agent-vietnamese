@@ -44,6 +44,7 @@ class AccountingContext:
     turn_id: Optional[str] = None
     governor: Any = None
     role: Optional[str] = None
+    agent: Any = None
 
 
 _accounting: ContextVar[Optional[AccountingContext]] = ContextVar(
@@ -62,6 +63,7 @@ def set_accounting_context(
     turn_id: Optional[str] = None,
     governor: Any = None,
     role: Optional[str] = None,
+    agent: Any = None,
 ):
     """Publish the active session's accounting handles for aux usage recording.
 
@@ -89,6 +91,7 @@ def set_accounting_context(
             turn_id=str(turn_id) if turn_id else None,
             governor=governor,
             role=str(role) if role else None,
+            agent=agent,
         )
     )
 
@@ -137,10 +140,22 @@ def reserve_aux_model_attempt(
     if governor is None:
         return None
     effective_role = role or (context.role if context is not None else None)
-    return governor.reserve_model_attempt(
-        task=task or "auxiliary",
-        role=effective_role or "auxiliary",
-    )
+    try:
+        reservation = governor.reserve_model_attempt(
+            task=task or "auxiliary",
+            role=effective_role or "auxiliary",
+        )
+    except Exception as exc:
+        from agent.turn_budget import TurnBudgetExceeded, publish_turn_budget
+
+        if isinstance(exc, TurnBudgetExceeded) and context is not None and context.agent is not None:
+            publish_turn_budget(context.agent, exc.reservation)
+        raise
+    if context is not None and context.agent is not None:
+        from agent.turn_budget import publish_turn_budget
+
+        publish_turn_budget(context.agent, reservation)
+    return reservation
 
 
 def record_aux_usage(
@@ -214,6 +229,10 @@ def record_aux_usage(
                 reasoning_tokens=usage.reasoning_tokens,
                 estimated_cost_usd=estimated_cost,
             )
+            if context is not None and context.agent is not None:
+                from agent.turn_budget import publish_turn_budget
+
+                publish_turn_budget(context.agent)
 
         if (
             context is not None

@@ -771,8 +771,51 @@ def run_codex_app_server_turn(
     # return reaches us. Do NOT append again — that would duplicate.
 
     try:
+        from agent.turn_budget import reserve_agent_model_attempt
+
+        reserve_agent_model_attempt(agent, task="codex_app_server")
         turn = agent._codex_session.run_turn(user_input=user_message)
     except Exception as exc:
+        from agent.turn_budget import (
+            TurnBudgetExceeded,
+            governor_for_agent,
+            turn_budget_pause_message,
+        )
+
+        if isinstance(exc, TurnBudgetExceeded):
+            from agent.message_metadata import append_message
+
+            governor = governor_for_agent(agent)
+            final_response = turn_budget_pause_message(
+                governor.snapshot() if governor else None
+            )
+            agent._turn_budget_paused = True
+            agent._turn_budget_pause_reason = "model_hard_limit"
+            append_message(
+                messages, {"role": "assistant", "content": final_response}
+            )
+            try:
+                agent._persist_session(messages, [])
+            except Exception:
+                logger.warning(
+                    "codex app-server budget pause persistence failed",
+                    exc_info=True,
+                )
+            return {
+                "final_response": final_response,
+                "messages": messages,
+                "api_calls": int(
+                    (governor.snapshot().get("model_calls") if governor else 0)
+                    or 0
+                ),
+                "completed": False,
+                "paused": True,
+                "partial": False,
+                "interrupted": False,
+                "failed": False,
+                "turn_exit_reason": "turn_budget_paused",
+                "turn_budget": governor.snapshot() if governor else None,
+            }
         logger.exception("codex app-server turn failed")
         # Crash → unconditionally drop the session so the next turn
         # respawns from scratch instead of reusing a dead client.
@@ -1365,7 +1408,11 @@ def run_codex_stream(agent, api_kwargs: dict, client: Any = None, on_first_delta
 
         def _open_codex_stream(next_api_kwargs: dict[str, Any]):
             stream_kwargs = dict(next_api_kwargs)
+            budget_task = stream_kwargs.pop("__turn_budget_task__", None)
             stream_kwargs["stream"] = True
+            from agent.turn_budget import reserve_agent_model_attempt
+
+            reserve_agent_model_attempt(agent, task=budget_task)
             return active_client.responses.create(**stream_kwargs)
 
         def _codex_stream_created(_raw_stream: Any) -> None:

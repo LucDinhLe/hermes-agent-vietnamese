@@ -6409,6 +6409,7 @@ class TurnRunner:
                 "error": result.get("error"),
                 "compression_exhausted": result.get("compression_exhausted", False),
                 "compression_deferred": result.get("compression_deferred", False),
+                "turn_budget": result.get("turn_budget"),
                 "tools": ctx.tools_holder[0] or [],
                 "history_offset": _effective_history_offset,
                 "compacted_in_place": _compacted_in_place,
@@ -6490,6 +6491,9 @@ class TurnRunner:
             "compression_deferred": (
                 ctx.result_holder[0].get("compression_deferred", False)
                 if ctx.result_holder[0] else False
+            ),
+            "turn_budget": (
+                ctx.result_holder[0].get("turn_budget") if ctx.result_holder[0] else None
             ),
             "tools": ctx.tools_holder[0] or [],
             "history_offset": _effective_history_offset,

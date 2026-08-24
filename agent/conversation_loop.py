@@ -46,6 +46,7 @@ from agent.turn_context import (
     reanchor_current_turn_user_idx,
 )
 from agent.turn_retry_state import TurnRetryState
+from agent.turn_budget import TurnBudgetExceeded
 from agent.runtime_cwd import resolve_agent_cwd
 from agent.message_sanitization import (
     close_interrupted_tool_sequence,
@@ -4144,6 +4145,33 @@ def run_conversation(
                     agent.session_cost_status = cost_result.status
                     agent.session_cost_source = cost_result.source
 
+                    # Per-call cost delta = aggregator cost + MoA advisor
+                    # cost.  Compute it outside the persistence branch so an
+                    # ephemeral session still gets a complete live governor
+                    # meter even when there is no SessionDB row.
+                    _cost_delta = None
+                    if cost_result.amount_usd is not None:
+                        _cost_delta = float(cost_result.amount_usd)
+                    if _moa_ref_cost is not None:
+                        try:
+                            _cost_delta = (_cost_delta or 0.0) + float(_moa_ref_cost)
+                        except (TypeError, ValueError):  # pragma: no cover
+                            pass
+                    try:
+                        from agent.turn_budget import record_agent_model_usage
+
+                        record_agent_model_usage(
+                            agent,
+                            input_tokens=canonical_usage.input_tokens,
+                            output_tokens=canonical_usage.output_tokens,
+                            cache_read_tokens=canonical_usage.cache_read_tokens,
+                            cache_write_tokens=canonical_usage.cache_write_tokens,
+                            reasoning_tokens=canonical_usage.reasoning_tokens,
+                            estimated_cost_usd=_cost_delta,
+                        )
+                    except Exception:
+                        logger.debug("Turn-governor usage update failed", exc_info=True)
+
                     # Persist token counts to session DB for /insights.
                     # Do this for every platform with a session_id so non-CLI
                     # sessions (gateway, cron, delegated runs) cannot lose
@@ -4161,18 +4189,6 @@ def run_conversation(
                             # affects 0 rows without error).
                             if not agent._session_db_created:
                                 agent._ensure_db_session()
-                            # Per-call cost delta = aggregator cost + MoA
-                            # advisor cost (each priced at its own rate). Folded
-                            # here so state.db's estimated_cost_usd includes the
-                            # full MoA spend, matching the folded token counts.
-                            _cost_delta = None
-                            if cost_result.amount_usd is not None:
-                                _cost_delta = float(cost_result.amount_usd)
-                            if _moa_ref_cost is not None:
-                                try:
-                                    _cost_delta = (_cost_delta or 0.0) + float(_moa_ref_cost)
-                                except (TypeError, ValueError):  # pragma: no cover
-                                    pass
                             # Enqueued, not written: the background writer
                             # applies the delta off the turn thread (a cold
                             # state.db UPDATE here stalled the tool loop for
@@ -4295,6 +4311,15 @@ def run_conversation(
                     thinking_spinner = None
                 if agent.thinking_callback:
                     agent.thinking_callback("")
+
+                # The aggregate turn governor is a control-flow boundary, not
+                # a provider failure.  Never feed it into unicode/auth/rate-
+                # limit retry or model-fallback logic: doing so would let the
+                # very recovery machinery being governed bypass the hard cap.
+                from agent.turn_budget import TurnBudgetExceeded
+
+                if isinstance(api_error, TurnBudgetExceeded):
+                    raise
 
                 # -----------------------------------------------------------
                 # UnicodeEncodeError recovery.  Two common causes:
@@ -7429,6 +7454,28 @@ def run_conversation(
                     failed = True
                     break
 
+                if getattr(agent, "_turn_budget_paused", False):
+                    from agent.turn_budget import (
+                        governor_for_agent,
+                        turn_budget_pause_message,
+                    )
+
+                    _governor = governor_for_agent(agent)
+                    _budget_snapshot = _governor.snapshot() if _governor else None
+                    _turn_exit_reason = "turn_budget_paused"
+                    final_response = turn_budget_pause_message(_budget_snapshot)
+                    agent._emit_status(final_response)
+                    append_message(
+                        messages, {"role": "assistant", "content": final_response}
+                    )
+                    if agent.stream_delta_callback:
+                        try:
+                            agent.stream_delta_callback(final_response)
+                            agent.stream_delta_callback(None)
+                        except Exception:
+                            pass
+                    break
+
                 if agent._tool_guardrail_halt_decision is not None:
                     decision = agent._tool_guardrail_halt_decision
                     _turn_exit_reason = "guardrail_halt"
@@ -8478,6 +8525,32 @@ def run_conversation(
                     agent._safe_print(f"🎉 Conversation completed after {api_call_count} OpenAI-compatible API call(s)")
                 break
             
+        except TurnBudgetExceeded:
+            # No provider I/O occurred for the denied attempt, so keep the
+            # legacy ``api_calls`` count aligned with physical requests.
+            api_call_count = max(0, api_call_count - 1)
+            agent._api_call_count = api_call_count
+            from agent.turn_budget import (
+                governor_for_agent,
+                turn_budget_pause_message,
+            )
+
+            _governor = governor_for_agent(agent)
+            _budget_snapshot = _governor.snapshot() if _governor else None
+            agent._turn_budget_paused = True
+            agent._turn_budget_pause_reason = "model_hard_limit"
+            _turn_exit_reason = "turn_budget_paused"
+            final_response = turn_budget_pause_message(_budget_snapshot)
+            agent._emit_status(final_response)
+            append_message(messages, {"role": "assistant", "content": final_response})
+            if agent.stream_delta_callback:
+                try:
+                    agent.stream_delta_callback(final_response)
+                    agent.stream_delta_callback(None)
+                except Exception:
+                    pass
+            break
+
         except Exception as e:
             # Phase-aware error classification. The huge outer try/except spans
             # both the actual API request and all local post-processing of the

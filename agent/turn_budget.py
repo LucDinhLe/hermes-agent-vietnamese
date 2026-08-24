@@ -15,9 +15,10 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 import threading
 from typing import Any, Dict, Iterator, Optional
+import weakref
 
 
 DEFAULT_MODEL_WARN_LIMIT = 6
@@ -133,6 +134,18 @@ class TurnGovernor:
         }
         self._by_task: Dict[str, Dict[str, Any]] = {}
         self._by_role: Dict[str, Dict[str, Any]] = {}
+        self._root_agent_ref: Optional[weakref.ReferenceType[Any]] = None
+
+    def bind_root_agent(self, agent: Any) -> None:
+        """Bind the top-level UI/event observer without extending its lifetime."""
+        try:
+            self._root_agent_ref = weakref.ref(agent)
+        except TypeError:
+            self._root_agent_ref = None
+
+    def root_agent(self) -> Any:
+        ref = self._root_agent_ref
+        return ref() if ref is not None else None
 
     @staticmethod
     def _validate_limits(kind: str, warn_limit: int, hard_limit: int) -> tuple[int, int]:
@@ -400,6 +413,154 @@ def get_turn_governor() -> Optional[TurnGovernor]:
     return _turn_governor.get()
 
 
+def agent_turn_role(agent: Any) -> str:
+    """Return the stable governor role label for an agent instance."""
+    platform = str(getattr(agent, "platform", "") or "").strip().lower()
+    depth = getattr(agent, "_delegate_depth", 0)
+    if (
+        platform == "subagent"
+        or getattr(agent, "is_subagent", False) is True
+        or (
+            isinstance(depth, int)
+            and not isinstance(depth, bool)
+            and depth > 0
+        )
+    ):
+        return "subagent"
+    return "main"
+
+
+def governor_for_agent(agent: Any) -> Optional[TurnGovernor]:
+    """Resolve the explicitly-bound governor, then the ambient one."""
+    governor = getattr(agent, "_active_turn_governor", None)
+    return governor if governor is not None else get_turn_governor()
+
+
+def publish_turn_budget(
+    agent: Any,
+    reservation: Optional[BudgetReservation] = None,
+) -> Optional[Dict[str, Any]]:
+    """Publish a live meter update without letting UI plumbing break a turn.
+
+    Every admitted/denied reservation emits ``turn:budget`` so Desktop and
+    gateway surfaces can update while a turn is running.  User-visible prose
+    is deliberately limited to the one-shot warning transition; the
+    controlled pause itself is rendered by the conversation loop after it has
+    repaired/persisted the transcript.
+    """
+    governor = governor_for_agent(agent)
+    if governor is None:
+        return None
+    snapshot = governor.snapshot()
+    root_agent = governor.root_agent()
+    for target in (agent, root_agent):
+        if target is None:
+            continue
+        try:
+            target._last_turn_budget_snapshot = snapshot
+        except Exception:
+            pass
+    try:
+        event_agent = root_agent or agent
+        callback = getattr(event_agent, "event_callback", None)
+        if callback:
+            callback(
+                "turn:budget",
+                {
+                    "platform": getattr(agent, "platform", None) or "",
+                    "session_id": getattr(agent, "session_id", None) or "",
+                    "turn_budget": snapshot,
+                    "reservation": asdict(reservation) if reservation else None,
+                },
+            )
+    except Exception:
+        pass
+
+    if reservation is not None and reservation.warning:
+        noun = "mô hình" if reservation.kind == "model" else "công cụ"
+        try:
+            agent._emit_warning(
+                f"⚠️ Lượt này đã dùng {reservation.total}/"
+                f"{reservation.hard_limit} lần gọi {noun}. Hermes sẽ đánh "
+                "giá lại chiến lược và gom các thao tác còn lại."
+            )
+        except Exception:
+            pass
+    return snapshot
+
+
+def reserve_agent_model_attempt(
+    agent: Any,
+    *,
+    task: Optional[str] = None,
+    role: Optional[str] = None,
+) -> Optional[BudgetReservation]:
+    """Reserve one physical main-path request immediately before provider I/O.
+
+    Auxiliary requests use :func:`agent.aux_accounting.reserve_aux_model_attempt`;
+    this helper is the matching chokepoint for the main transports.  Outside a
+    governed user turn it remains a compatibility no-op.
+    """
+    governor = governor_for_agent(agent)
+    if governor is None:
+        return None
+    task_name = task or getattr(agent, "_active_turn_budget_task_id", None) or "main"
+    try:
+        reservation = governor.reserve_model_attempt(
+            task=str(task_name),
+            role=role or agent_turn_role(agent),
+        )
+    except TurnBudgetExceeded as exc:
+        publish_turn_budget(agent, exc.reservation)
+        raise
+    publish_turn_budget(agent, reservation)
+    return reservation
+
+
+def record_agent_model_usage(
+    agent: Any,
+    *,
+    task: Optional[str] = None,
+    input_tokens: int = 0,
+    output_tokens: int = 0,
+    cache_read_tokens: int = 0,
+    cache_write_tokens: int = 0,
+    reasoning_tokens: int = 0,
+    estimated_cost_usd: Optional[float] = None,
+) -> Optional[Dict[str, Any]]:
+    """Fold one successful main response into the live per-turn meter."""
+    governor = governor_for_agent(agent)
+    if governor is None:
+        return None
+    snapshot = governor.update_usage(
+        task=task or getattr(agent, "_active_turn_budget_task_id", None) or "main",
+        role=agent_turn_role(agent),
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=cache_write_tokens,
+        reasoning_tokens=reasoning_tokens,
+        estimated_cost_usd=estimated_cost_usd,
+    )
+    publish_turn_budget(agent)
+    return snapshot
+
+
+def turn_budget_pause_message(snapshot: Optional[Dict[str, Any]]) -> str:
+    """Return the deterministic Vietnamese recovery copy for a safe pause."""
+    data = snapshot or {}
+    model = data.get("model") or {}
+    tool = data.get("tool") or {}
+    return (
+        "⏸️ Hermes đã tạm dừng lượt này ở giới hạn an toàn "
+        f"({int(model.get('count') or 0)}/{int(model.get('hard_limit') or DEFAULT_MODEL_HARD_LIMIT)} "
+        "lần gọi mô hình; "
+        f"{int(tool.get('count') or 0)}/{int(tool.get('hard_limit') or DEFAULT_TOOL_HARD_LIMIT)} "
+        "lần gọi công cụ). Không có yêu cầu vượt ngân sách nào được gửi đi. "
+        "Hãy gửi “tiếp tục” để bắt đầu một lượt mới, hoặc điều chỉnh yêu cầu."
+    )
+
+
 @contextmanager
 def bind_turn_governor(governor: Optional[TurnGovernor]) -> Iterator[Optional[TurnGovernor]]:
     token = set_turn_governor(governor)
@@ -417,8 +578,14 @@ __all__ = [
     "DEFAULT_TOOL_WARN_LIMIT",
     "TurnBudgetExceeded",
     "TurnGovernor",
+    "agent_turn_role",
     "bind_turn_governor",
     "get_turn_governor",
+    "governor_for_agent",
+    "publish_turn_budget",
+    "record_agent_model_usage",
     "reset_turn_governor",
+    "reserve_agent_model_attempt",
     "set_turn_governor",
+    "turn_budget_pause_message",
 ]

@@ -2466,6 +2466,13 @@ export interface Translations {
         title: string
         tokenSummary: (used: string, max: string) => string
         tokensUntilCompact: (tokens: string) => string
+        turnBudgetApiEquivalent: (amount: string) => string
+        turnBudgetCalls: (model: number, modelLimit: number, tools: number, toolLimit: number) => string
+        turnBudgetNearLimit: string
+        turnBudgetNormal: string
+        turnBudgetPaused: string
+        turnBudgetTitle: string
+        turnBudgetTokens: (input: string, cacheRead: string, output: string) => string
         unavailable: string
       }
       session: string

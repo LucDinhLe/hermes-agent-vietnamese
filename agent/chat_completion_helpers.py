@@ -939,6 +939,15 @@ def _dispatch_nonstreaming_api_request(agent, api_kwargs: dict, *, make_client):
     interrupt, abort, cancellation, and close semantics stay in the callers —
     this helper only issues the request.
     """
+    # Codex Responses reserves inside its own per-attempt stream opener (it
+    # has an internal retry loop); MoA reserves each concrete advisor and
+    # aggregator request in auxiliary_client. Every other branch below maps
+    # one dispatch to one physical provider request, so reserve here.
+    if agent.api_mode != "codex_responses" and agent.provider != "moa":
+        from agent.turn_budget import reserve_agent_model_attempt
+
+        reserve_agent_model_attempt(agent)
+
     if agent.api_mode == "codex_responses":
         request_client = make_client("codex_stream_request")
         return agent._run_codex_stream(
@@ -2854,9 +2863,15 @@ def handle_max_iterations(agent, messages: list, api_call_count: int) -> str:
     def _managed_summary_call(request, callback, *, retry_count: int):
         from agent import relay_llm
 
+        def _budgeted_callback(payload):
+            from agent.turn_budget import reserve_agent_model_attempt
+
+            reserve_agent_model_attempt(agent, task="iteration_summary")
+            return callback(payload)
+
         return relay_llm.execute_current(
             request,
-            callback,
+            _budgeted_callback,
             name=str(getattr(agent, "provider", "") or "provider"),
             model_name=str(getattr(agent, "model", "") or ""),
             metadata={
@@ -2995,6 +3010,7 @@ def handle_max_iterations(agent, messages: list, api_call_count: int) -> str:
         if agent.api_mode == "codex_responses":
             codex_kwargs = agent._build_api_kwargs(api_messages)
             codex_kwargs.pop("tools", None)
+            codex_kwargs["__turn_budget_task__"] = "iteration_summary"
             summary_response = agent._run_codex_stream(codex_kwargs)
             _ct_sum = agent._get_transport()
             _cnr_sum = _ct_sum.normalize_response(summary_response)
@@ -3110,6 +3126,7 @@ def handle_max_iterations(agent, messages: list, api_call_count: int) -> str:
             if agent.api_mode == "codex_responses":
                 codex_kwargs = agent._build_api_kwargs(api_messages)
                 codex_kwargs.pop("tools", None)
+                codex_kwargs["__turn_budget_task__"] = "iteration_summary"
                 retry_response = agent._run_codex_stream(codex_kwargs)
                 _ct_retry = agent._get_transport()
                 _cnr_retry = _ct_retry.normalize_response(retry_response)
@@ -3174,6 +3191,10 @@ def handle_max_iterations(agent, messages: list, api_call_count: int) -> str:
                 final_response = "I reached the iteration limit and couldn't generate a summary."
 
     except Exception as e:
+        from agent.turn_budget import TurnBudgetExceeded
+
+        if isinstance(e, TurnBudgetExceeded):
+            raise
         logger.warning("Failed to get summary response: %s", e)
         final_response = f"I reached the maximum iterations ({agent.max_iterations}) but couldn't summarize. Error: {str(e)}"
     finally:
@@ -3404,6 +3425,9 @@ def interruptible_streaming_api_call(agent, api_kwargs: dict, *, on_first_delta=
                     final_kwargs.pop("__bedrock_converse__", None)
                     client = _get_bedrock_runtime_client(region)
                     try:
+                        from agent.turn_budget import reserve_agent_model_attempt
+
+                        reserve_agent_model_attempt(agent)
                         raw_response = client.converse_stream(**final_kwargs)
                     except Exception as _bedrock_exc:
                         # InvokeModel-only policies cannot open a stream. Keep
@@ -3422,6 +3446,7 @@ def interruptible_streaming_api_call(agent, api_kwargs: dict, *, on_first_delta=
                                 "using non-streaming converse() for this session.",
                                 type(_bedrock_exc).__name__,
                             )
+                            reserve_agent_model_attempt(agent)
                             return normalize_converse_response(
                                 client.converse(**final_kwargs)
                             )
@@ -4694,6 +4719,10 @@ def interruptible_streaming_api_call(agent, api_kwargs: dict, *, on_first_delta=
                     raise InterruptedError("Agent interrupted before stream retry")
                 _emit_stream_start()
                 try:
+                    if agent.provider != "moa":
+                        from agent.turn_budget import reserve_agent_model_attempt
+
+                        reserve_agent_model_attempt(agent)
                     if agent.api_mode == "anthropic_messages":
                         # #67142: per-request client (credential refresh happens
                         # inside _create_request_anthropic_client) registered so
@@ -4716,6 +4745,11 @@ def interruptible_streaming_api_call(agent, api_kwargs: dict, *, on_first_delta=
                 except Exception as e:
                     _emit_stream_end(final_text="", finished=False, error=str(e))
                     _close_managed_stream()
+                    from agent.turn_budget import TurnBudgetExceeded
+
+                    if isinstance(e, TurnBudgetExceeded):
+                        result["error"] = e
+                        return
                     # If the main poll loop force-closed this request because
                     # of an interrupt, the resulting transport error is the
                     # expected consequence of our own close — NOT a transient
@@ -5219,6 +5253,10 @@ def interruptible_streaming_api_call(agent, api_kwargs: dict, *, on_first_delta=
     if agent._interrupt_requested:
         raise InterruptedError("Agent interrupted during streaming API call (post-worker)")
     if result["error"] is not None:
+        from agent.turn_budget import TurnBudgetExceeded
+
+        if isinstance(result["error"], TurnBudgetExceeded):
+            raise result["error"]
         if deltas_were_sent["yes"]:
             # Streaming failed AFTER some tokens were already delivered to
             # the platform.  Re-raising would let the outer retry loop make

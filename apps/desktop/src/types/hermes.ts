@@ -697,6 +697,21 @@ export interface SessionRuntimeInfo {
   yolo?: boolean
 }
 
+export interface TurnBudgetMeter {
+  cache_read_tokens: number
+  estimated_cost_usd: number
+  input_tokens: number
+  model_calls: number
+  model_hard_limit: number
+  model_warn_limit: number
+  near_limit: boolean
+  output_tokens: number
+  paused: boolean
+  tool_calls: number
+  tool_hard_limit: number
+  tool_warn_limit: number
+}
+
 export interface UsageStats {
   cache_read?: number
   cache_write?: number
@@ -713,6 +728,9 @@ export interface UsageStats {
   reference_cost_status?: 'actual' | 'estimated' | 'included' | 'unknown'
   reference_cost_usd?: number
   total: number
+  /** Aggregate for exactly one user turn. During a live turn this is current;
+   * after completion it remains the most recently completed turn. */
+  turn_budget?: TurnBudgetMeter
 }
 
 /** One graph node in the star map (learned skill or memory chunk). */

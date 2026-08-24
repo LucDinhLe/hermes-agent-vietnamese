@@ -2945,6 +2945,15 @@ export const vi = defineLocale({
         title: 'Mức dùng ngữ cảnh',
         tokenSummary: (used, max) => `${used} / ${max} token`,
         tokensUntilCompact: tokens => `Còn ${tokens} trước khi Hermes compact`,
+        turnBudgetApiEquivalent: amount => `Tương đương API lượt này: ${amount} · chỉ tham chiếu`,
+        turnBudgetCalls: (model, modelLimit, tools, toolLimit) =>
+          `Gọi model ${model}/${modelLimit} · gọi công cụ ${tools}/${toolLimit}`,
+        turnBudgetNearLimit: 'Gần giới hạn',
+        turnBudgetNormal: 'Trong ngân sách',
+        turnBudgetPaused: 'Đã tạm dừng',
+        turnBudgetTitle: 'Ngân sách lượt',
+        turnBudgetTokens: (input, cacheRead, output) =>
+          `${input} đầu vào mới · ${cacheRead} cache-read · ${output} đầu ra`,
         unavailable: 'Chưa có dữ liệu'
       },
       session: 'Phiên',

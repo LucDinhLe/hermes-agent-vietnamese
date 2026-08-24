@@ -312,7 +312,14 @@ class TestRunEvents:
         async with TestClient(TestServer(app)) as cli:
             with patch.object(adapter, "_create_agent") as mock_create:
                 mock_agent = MagicMock()
-                mock_agent.run_conversation.return_value = {"final_response": "Hello!"}
+                mock_agent.run_conversation.return_value = {
+                    "final_response": "Hello!",
+                    "turn_budget": {
+                        "model_calls": 1,
+                        "tool_calls": 0,
+                        "paused": False,
+                    },
+                }
                 mock_agent.session_prompt_tokens = 10
                 mock_agent.session_completion_tokens = 5
                 mock_agent.session_total_tokens = 15
@@ -332,6 +339,8 @@ class TestRunEvents:
                 # Should contain run.completed
                 assert "run.completed" in body
                 assert "Hello!" in body
+                assert '"turn_budget"' in body
+                assert '"model_calls": 1' in body
 
 
     @pytest.mark.asyncio

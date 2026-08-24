@@ -191,6 +191,39 @@ describe('ContextUsagePanel', () => {
     expect(screen.getByText('Quota resets: 2026-08-25')).toBeTruthy()
   })
 
+  it('renders the per-user-turn governor meter and its near-limit state', () => {
+    render(
+      <ContextUsagePanel
+        breakdown={breakdown}
+        loading={false}
+        usage={{
+          ...usage,
+          turn_budget: {
+            cache_read_tokens: 42_000,
+            estimated_cost_usd: 0.125,
+            input_tokens: 1_250,
+            model_calls: 6,
+            model_hard_limit: 12,
+            model_warn_limit: 6,
+            near_limit: true,
+            output_tokens: 90,
+            paused: false,
+            tool_calls: 3,
+            tool_hard_limit: 20,
+            tool_warn_limit: 8
+          }
+        }}
+      />
+    )
+
+    expect(screen.getByText('Turn budget')).toBeTruthy()
+    expect(screen.getByText('Near limit')).toBeTruthy()
+    expect(screen.getByText('Model calls 6/12 · tool calls 3/20')).toBeTruthy()
+    expect(screen.getByText('1.3k new input · 42k cache-read · 90 output')).toBeTruthy()
+    expect(screen.getByText('API-equivalent this turn: ~$0.13 · reference only')).toBeTruthy()
+    expect(document.querySelector('[data-slot="turn-budget-meter"]')?.getAttribute('data-state')).toBe('near-limit')
+  })
+
   it('says so when there is no breakdown rather than painting an empty bar', () => {
     render(<ContextUsagePanel breakdown={null} loading={false} usage={usage} />)
 

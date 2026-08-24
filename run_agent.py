@@ -8194,36 +8194,125 @@ class AIAgent:
         segment in emission order so safe subsets still run concurrently
         while side-effect ordering is preserved.
         """
-        tool_calls = assistant_message.tool_calls
+        tool_calls = list(assistant_message.tool_calls)
+
+        # Reserve the whole emitted batch atomically before dispatch.  The
+        # governor admits only the safe prefix that still fits; every denied
+        # id receives a deterministic tool result below so strict provider
+        # alternation remains valid even though no side effect ran.
+        from agent.turn_budget import (
+            agent_turn_role,
+            governor_for_agent,
+            publish_turn_budget,
+        )
+
+        governor = governor_for_agent(self)
+        reservation = None
+        denied_calls = []
+        execution_message = assistant_message
+        if governor is not None and tool_calls:
+            reservation = governor.reserve_tool_calls(
+                count=len(tool_calls),
+                task=effective_task_id,
+                role=agent_turn_role(self),
+            )
+            publish_turn_budget(self, reservation)
+            admitted_calls = tool_calls[: reservation.admitted]
+            denied_calls = tool_calls[reservation.admitted :]
+            tool_calls = admitted_calls
+            # Tool executors only consume ``.tool_calls``.  A lightweight
+            # view avoids mutating the normalized provider response already
+            # persisted as the canonical assistant row.
+            execution_message = SimpleNamespace(tool_calls=admitted_calls)
+            if denied_calls:
+                self._turn_budget_paused = True
+                self._turn_budget_pause_reason = "tool_hard_limit"
 
         # Allow _vprint during tool execution even with stream consumers
         self._executing_tools = True
         try:
-            if len(tool_calls) <= 1:
-                return self._execute_tool_calls_sequential(
-                    assistant_message, messages, effective_task_id, api_call_count
-                )
-
-            from agent.tool_dispatch_helpers import _plan_tool_batch_segments
-            _active_env = get_active_env(effective_task_id)
-            _exec_cwd = Path(_active_env.cwd) if _active_env is not None and _active_env.cwd else None
-            segments = _plan_tool_batch_segments(tool_calls, execution_cwd=_exec_cwd)
-
-            if len(segments) == 1:
-                kind = segments[0][0]
-                if kind == "parallel":
-                    return self._execute_tool_calls_concurrent(
-                        assistant_message, messages, effective_task_id, api_call_count
+            if tool_calls:
+                if len(tool_calls) <= 1:
+                    self._execute_tool_calls_sequential(
+                        execution_message,
+                        messages,
+                        effective_task_id,
+                        api_call_count,
                     )
-                return self._execute_tool_calls_sequential(
-                    assistant_message, messages, effective_task_id, api_call_count
-                )
+                else:
+                    from agent.tool_dispatch_helpers import _plan_tool_batch_segments
 
-            from agent.tool_executor import execute_tool_calls_segmented
-            return execute_tool_calls_segmented(
-                self, assistant_message, messages, effective_task_id, api_call_count,
-                segments=segments,
-            )
+                    _active_env = get_active_env(effective_task_id)
+                    _exec_cwd = (
+                        Path(_active_env.cwd)
+                        if _active_env is not None and _active_env.cwd
+                        else None
+                    )
+                    segments = _plan_tool_batch_segments(
+                        tool_calls, execution_cwd=_exec_cwd
+                    )
+
+                    if len(segments) == 1:
+                        kind = segments[0][0]
+                        if kind == "parallel":
+                            self._execute_tool_calls_concurrent(
+                                execution_message,
+                                messages,
+                                effective_task_id,
+                                api_call_count,
+                            )
+                        else:
+                            self._execute_tool_calls_sequential(
+                                execution_message,
+                                messages,
+                                effective_task_id,
+                                api_call_count,
+                            )
+                    else:
+                        from agent.tool_executor import execute_tool_calls_segmented
+
+                        execute_tool_calls_segmented(
+                            self,
+                            execution_message,
+                            messages,
+                            effective_task_id,
+                            api_call_count,
+                            segments=segments,
+                        )
+
+            if denied_calls:
+                from agent.tool_dispatch_helpers import make_tool_result_message
+                from agent.tool_executor import _flush_session_db_after_tool_progress
+
+                pause_note = (
+                    "[Hermes turn budget paused: this tool call was not "
+                    "dispatched because the aggregate 20-call safety limit "
+                    "was reached. No side effect occurred. Send ‘tiếp tục’ "
+                    "to start a new user turn.]"
+                )
+                for denied_call in denied_calls:
+                    denied_name = self._get_tool_call_name_static(denied_call) or "tool"
+                    denied_id = (
+                        denied_call.get("id", "")
+                        if isinstance(denied_call, dict)
+                        else getattr(denied_call, "id", "")
+                    )
+                    messages.append(
+                        make_tool_result_message(
+                            denied_name,
+                            pause_note,
+                            denied_id,
+                            effect_disposition="none",
+                        )
+                    )
+                _flush_session_db_after_tool_progress(
+                    self,
+                    messages,
+                    stage=(
+                        "turn-budget denied tool results "
+                        f"({len(denied_calls)} call(s))"
+                    ),
+                )
         finally:
             self._executing_tools = False
 
@@ -8407,6 +8496,15 @@ class AIAgent:
         durable_turn_lease_interrupt_message = None
         token = None
         acct_token = None
+        turn_governor_token = None
+        turn_governor = None
+        _missing_turn_budget_attr = object()
+        previous_active_turn_governor = getattr(
+            self, "_active_turn_governor", _missing_turn_budget_attr
+        )
+        previous_turn_budget_task_id = getattr(
+            self, "_active_turn_budget_task_id", _missing_turn_budget_attr
+        )
         task_started = False
         task_finished = False
         relay_outcome = "failed"
@@ -8691,6 +8789,29 @@ class AIAgent:
                     parent_session_id=getattr(self, "_parent_session_id", None) or "",
                 )
                 task_started = True
+            # One governor spans the whole user turn, including delegated
+            # children and auxiliary/background requests.  A subagent reuses
+            # the ambient object propagated by its parent; a top-level turn
+            # creates the aggregate exactly once.
+            from agent.turn_budget import (
+                TurnGovernor,
+                agent_turn_role,
+                get_turn_governor,
+                set_turn_governor,
+            )
+
+            turn_governor = get_turn_governor()
+            if turn_governor is None:
+                turn_governor = TurnGovernor(
+                    turn_id=relay_turn_id,
+                    root_session_id=self._conversation_root_id(),
+                )
+                turn_governor.bind_root_agent(self)
+            turn_governor_token = set_turn_governor(turn_governor)
+            self._active_turn_governor = turn_governor
+            self._active_turn_budget_task_id = effective_task_id
+            self._turn_budget_paused = False
+            self._turn_budget_pause_reason = None
             # Publish the conversation id for ambient Nous Portal tagging. Every
             # LLM call made inside this turn — main loop, compression, vision,
             # web_extract, session_search, MoA slots, background-review forks
@@ -8704,6 +8825,10 @@ class AIAgent:
             acct_token = set_accounting_context(
                 getattr(self, "_session_db", None),
                 getattr(self, "session_id", None),
+                turn_id=turn_governor.turn_id,
+                governor=turn_governor,
+                role=agent_turn_role(self),
+                agent=self,
             )
             from agent.auxiliary_client import scoped_runtime_main
 
@@ -8739,6 +8864,17 @@ class AIAgent:
                     # outer finally: a refresher firing between stop and join
                     # would otherwise set an interrupt that survives the clear.
             terminal = result if isinstance(result, dict) else {}
+            if isinstance(result, dict):
+                turn_budget_snapshot = turn_governor.snapshot()
+                result["turn_budget"] = turn_budget_snapshot
+                # Keep the completed turn's compact meter available after the
+                # ContextVar/bound governor is restored below.  The desktop
+                # usage endpoint samples the agent after run_conversation()
+                # returns, and without this hand-off its per-turn figures would
+                # disappear exactly when message.complete is emitted.
+                self._last_turn_budget_snapshot = turn_budget_snapshot
+                if result.get("turn_exit_reason") == "turn_budget_paused":
+                    result["paused"] = True
             if terminal.get("interrupted") is True:
                 relay_outcome = "cancelled"
             elif terminal.get("failed") is True:
@@ -8822,6 +8958,18 @@ class AIAgent:
                         reset_accounting_context(acct_token)
                     if token is not None:
                         reset_conversation_context(token)
+                    if turn_governor_token is not None:
+                        from agent.turn_budget import reset_turn_governor
+
+                        reset_turn_governor(turn_governor_token)
+                    if previous_active_turn_governor is _missing_turn_budget_attr:
+                        vars(self).pop("_active_turn_governor", None)
+                    else:
+                        self._active_turn_governor = previous_active_turn_governor
+                    if previous_turn_budget_task_id is _missing_turn_budget_attr:
+                        vars(self).pop("_active_turn_budget_task_id", None)
+                    else:
+                        self._active_turn_budget_task_id = previous_turn_budget_task_id
 
     def chat(self, message: str, stream_callback: Optional[callable] = None) -> str:
         """

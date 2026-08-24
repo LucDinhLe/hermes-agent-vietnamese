@@ -2454,7 +2454,16 @@ export const zhHant = defineLocale({
         sourceRuntime: '目前路由',
         title: '上下文使用量',
         tokenSummary: (used, max) => `${used} / ${max} Tokens`,
-        tokensUntilCompact: tokens => `距離 Hermes 壓縮還有 ${tokens}`
+        tokensUntilCompact: tokens => `距離 Hermes 壓縮還有 ${tokens}`,
+        turnBudgetApiEquivalent: amount => `本輪 API 等值：${amount} · 僅供參考`,
+        turnBudgetCalls: (model, modelLimit, tools, toolLimit) =>
+          `模型呼叫 ${model}/${modelLimit} · 工具呼叫 ${tools}/${toolLimit}`,
+        turnBudgetNearLimit: '接近上限',
+        turnBudgetNormal: '預算內',
+        turnBudgetPaused: '已暫停',
+        turnBudgetTitle: '本輪預算',
+        turnBudgetTokens: (input, cacheRead, output) =>
+          `${input} 新輸入 · ${cacheRead} 快取讀取 · ${output} 輸出`
       },
       session: '工作階段',
       yoloOn: 'YOLO 已開啟 — 自動核准危險指令。Shift+點擊可全域切換。',

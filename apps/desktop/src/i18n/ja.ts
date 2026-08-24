@@ -2542,7 +2542,16 @@ export const ja = defineLocale({
         sourceRuntime: '現在のルート',
         title: 'コンテキスト使用状況',
         tokenSummary: (used, max) => `${used} / ${max} Tokens`,
-        tokensUntilCompact: tokens => `Hermes の圧縮まで残り ${tokens}`
+        tokensUntilCompact: tokens => `Hermes の圧縮まで残り ${tokens}`,
+        turnBudgetApiEquivalent: amount => `このターンの API 相当額: ${amount} · 参考値`,
+        turnBudgetCalls: (model, modelLimit, tools, toolLimit) =>
+          `モデル呼び出し ${model}/${modelLimit} · ツール呼び出し ${tools}/${toolLimit}`,
+        turnBudgetNearLimit: '上限間近',
+        turnBudgetNormal: '予算内',
+        turnBudgetPaused: '一時停止',
+        turnBudgetTitle: 'ターン予算',
+        turnBudgetTokens: (input, cacheRead, output) =>
+          `新規入力 ${input} · キャッシュ読取 ${cacheRead} · 出力 ${output}`
       },
       session: 'セッション',
       yoloOn: 'YOLO オン — 危険なコマンドを自動承認中。Shift+クリックで全体に切り替え。',

@@ -2919,6 +2919,15 @@ export const en: Translations = {
         title: 'Context Usage',
         tokenSummary: (used, max) => `${used} / ${max} Tokens`,
         tokensUntilCompact: tokens => `${tokens} until Hermes compacts`,
+        turnBudgetApiEquivalent: amount => `API-equivalent this turn: ${amount} · reference only`,
+        turnBudgetCalls: (model, modelLimit, tools, toolLimit) =>
+          `Model calls ${model}/${modelLimit} · tool calls ${tools}/${toolLimit}`,
+        turnBudgetNearLimit: 'Near limit',
+        turnBudgetNormal: 'Within budget',
+        turnBudgetPaused: 'Paused',
+        turnBudgetTitle: 'Turn budget',
+        turnBudgetTokens: (input, cacheRead, output) =>
+          `${input} new input · ${cacheRead} cache-read · ${output} output`,
         unavailable: 'Unavailable'
       },
       session: 'Session',

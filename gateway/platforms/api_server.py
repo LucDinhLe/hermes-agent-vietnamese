@@ -6977,6 +6977,9 @@ class APIServerAdapter(BasePlatformAdapter):
                         "output": final_response,
                         "usage": usage,
                     }
+                    turn_budget = result.get("turn_budget") if isinstance(result, dict) else None
+                    if isinstance(turn_budget, dict):
+                        completed_event["turn_budget"] = turn_budget
                     if pending_steer:
                         completed_event["pending_steer"] = pending_steer
                     _put_event_if_active(completed_event)
@@ -6986,6 +6989,7 @@ class APIServerAdapter(BasePlatformAdapter):
                         output=final_response,
                         usage=usage,
                         last_event="run.completed",
+                        **({"turn_budget": turn_budget} if isinstance(turn_budget, dict) else {}),
                         **({"pending_steer": pending_steer} if pending_steer else {}),
                     )
             except asyncio.CancelledError:

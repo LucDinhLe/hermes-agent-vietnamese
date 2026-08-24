@@ -53,6 +53,13 @@ export function ContextUsagePanel({ breakdown, loading, usage }: ContextUsagePan
           : copy.costUnknown
 
   const cacheTokens = (usage.cache_read ?? 0) + (usage.cache_write ?? 0)
+  const turnBudget = usage.turn_budget
+  const turnBudgetState = turnBudget?.paused ? 'paused' : turnBudget?.near_limit ? 'near-limit' : 'normal'
+  const turnBudgetStateLabel = turnBudget?.paused
+    ? copy.turnBudgetPaused
+    : turnBudget?.near_limit
+      ? copy.turnBudgetNearLimit
+      : copy.turnBudgetNormal
 
   const categories = useMemo(
     () =>
@@ -160,6 +167,55 @@ export function ContextUsagePanel({ breakdown, loading, usage }: ContextUsagePan
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {turnBudget && (
+        <div
+          className={cn(
+            'flex flex-col gap-1 rounded-md border p-2 text-[0.6875rem]',
+            turnBudget.paused
+              ? 'border-red-500/35 bg-red-500/8'
+              : turnBudget.near_limit
+                ? 'border-amber-500/35 bg-amber-500/8'
+                : 'border-(--ui-stroke-tertiary) bg-(--ui-bg-elevated)'
+          )}
+          data-slot="turn-budget-meter"
+          data-state={turnBudgetState}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-medium text-foreground">{copy.turnBudgetTitle}</span>
+            <span
+              className={cn(
+                'rounded-full px-1.5 py-0.5',
+                turnBudget.paused
+                  ? 'bg-red-500/12 text-red-700 dark:text-red-300'
+                  : turnBudget.near_limit
+                    ? 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
+                    : 'bg-(--ui-bg-overlay) text-muted-foreground'
+              )}
+            >
+              {turnBudgetStateLabel}
+            </span>
+          </div>
+          <span className="tabular-nums text-foreground">
+            {copy.turnBudgetCalls(
+              turnBudget.model_calls,
+              turnBudget.model_hard_limit,
+              turnBudget.tool_calls,
+              turnBudget.tool_hard_limit
+            )}
+          </span>
+          <span className="text-muted-foreground">
+            {copy.turnBudgetTokens(
+              compactNumber(turnBudget.input_tokens),
+              compactNumber(turnBudget.cache_read_tokens),
+              compactNumber(turnBudget.output_tokens)
+            )}
+          </span>
+          <span className="text-muted-foreground">
+            {copy.turnBudgetApiEquivalent(formatUsdCost(turnBudget.estimated_cost_usd, true))}
+          </span>
         </div>
       )}
 

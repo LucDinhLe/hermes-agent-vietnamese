@@ -190,8 +190,27 @@ def finalize_turn(
                 f"\n⚠️  Iteration budget exhausted ({api_call_count}/{agent.max_iterations}) "
                 "— requesting summary..."
             )
-        final_response = agent._handle_max_iterations(messages, api_call_count)
-        iteration_limit_fallback = True
+        try:
+            final_response = agent._handle_max_iterations(messages, api_call_count)
+        except Exception as exc:
+            from agent.turn_budget import (
+                TurnBudgetExceeded,
+                governor_for_agent,
+                turn_budget_pause_message,
+            )
+
+            if not isinstance(exc, TurnBudgetExceeded):
+                raise
+            governor = governor_for_agent(agent)
+            final_response = turn_budget_pause_message(
+                governor.snapshot() if governor else None
+            )
+            agent._turn_budget_paused = True
+            agent._turn_budget_pause_reason = "model_hard_limit"
+            _turn_exit_reason = "turn_budget_paused"
+            agent._emit_status(final_response)
+        else:
+            iteration_limit_fallback = True
 
     if iteration_limit_fallback:
         # If running as a kanban worker, signal the dispatcher that the
@@ -208,7 +227,7 @@ def finalize_turn(
             _record_kanban_budget_exhausted(
                 _kanban_task, api_call_count, agent.max_iterations, logger,
             )
-    elif budget_exhausted:
+    elif budget_exhausted and str(_turn_exit_reason) != "turn_budget_paused":
         # Bounded fallback (#87096): budget was exhausted but none of the
         # normal fallback paths were eligible (interrupted / failed /
         # anomalous exit_reason). If running as a kanban worker we must
@@ -225,9 +244,11 @@ def finalize_turn(
 
     # Determine if conversation completed successfully
     normal_text_response = str(_turn_exit_reason).startswith("text_response(")
+    turn_budget_paused = str(_turn_exit_reason) == "turn_budget_paused"
     completed = (
         final_response is not None
         and not failed
+        and not turn_budget_paused
         and (
             api_call_count < agent.max_iterations
             or normal_text_response
@@ -730,6 +751,16 @@ def finalize_turn(
         ).get("service_tier"),
         "session_id": agent.session_id,
     }
+    try:
+        from agent.turn_budget import governor_for_agent
+
+        _turn_governor = governor_for_agent(agent)
+        if _turn_governor is not None:
+            result["turn_budget"] = _turn_governor.snapshot()
+    except Exception:
+        pass
+    if turn_budget_paused:
+        result["paused"] = True
     if agent._tool_guardrail_halt_decision is not None:
         result["guardrail"] = agent._tool_guardrail_halt_decision.to_metadata()
     # Persistence failures already set failed=True + an explanation in
@@ -795,6 +826,7 @@ def finalize_turn(
     if (
         final_response
         and not interrupted
+        and not turn_budget_paused
         and not getattr(agent, "skip_background_review", False)
         and (_should_review_memory or _should_review_skills)
     ):

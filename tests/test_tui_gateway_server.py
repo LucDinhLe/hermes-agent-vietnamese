@@ -1053,6 +1053,124 @@ def test_write_json_drops_detached_ws_frames(monkeypatch):
         server._sessions.pop("detached-sid", None)
 
 
+def test_get_usage_includes_compact_last_turn_budget_meter():
+    snapshot = {
+        "paused": False,
+        "model": {
+            "count": 6,
+            "warn_limit": 6,
+            "hard_limit": 12,
+            "warning_emitted": True,
+        },
+        "tool": {
+            "count": 3,
+            "warn_limit": 8,
+            "hard_limit": 20,
+            "warning_emitted": False,
+        },
+        "usage": {
+            "input_tokens": 1_250,
+            "cache_read_tokens": 42_000,
+            "output_tokens": 90,
+            "estimated_cost_usd": 0.125,
+        },
+        # Diagnostics stay off the high-frequency Desktop transport.
+        "by_task": {"main": {"model_attempts": 6}},
+        "by_role": {"main": {"model_attempts": 6}},
+    }
+    agent = types.SimpleNamespace(_last_turn_budget_snapshot=snapshot)
+
+    usage = server._get_usage(agent)
+
+    assert usage["turn_budget"] == {
+        "model_calls": 6,
+        "model_warn_limit": 6,
+        "model_hard_limit": 12,
+        "tool_calls": 3,
+        "tool_warn_limit": 8,
+        "tool_hard_limit": 20,
+        "input_tokens": 1_250,
+        "cache_read_tokens": 42_000,
+        "output_tokens": 90,
+        "estimated_cost_usd": 0.125,
+        "near_limit": True,
+        "paused": False,
+    }
+    assert "by_task" not in usage["turn_budget"]
+
+
+def test_get_usage_prefers_live_governor_over_previous_turn_meter():
+    active_snapshot = {
+        "paused": False,
+        "model": {"count": 1, "warn_limit": 6, "hard_limit": 12},
+        "tool": {"count": 0, "warn_limit": 8, "hard_limit": 20},
+        "usage": {},
+    }
+    active_governor = Mock()
+    active_governor.snapshot.return_value = active_snapshot
+    agent = types.SimpleNamespace(
+        _active_turn_governor=active_governor,
+        _last_turn_budget_snapshot={
+            "paused": True,
+            "model": {"count": 12, "warn_limit": 6, "hard_limit": 12},
+            "tool": {"count": 20, "warn_limit": 8, "hard_limit": 20},
+            "usage": {},
+        },
+    )
+
+    usage = server._get_usage(agent)
+
+    assert usage["turn_budget"]["model_calls"] == 1
+    assert usage["turn_budget"]["tool_calls"] == 0
+    assert usage["turn_budget"]["near_limit"] is False
+    assert usage["turn_budget"]["paused"] is False
+
+
+def test_agent_event_forwards_late_turn_budget_as_live_session_usage(monkeypatch):
+    events: list[tuple[str, str, dict]] = []
+    monkeypatch.setattr(
+        server, "_emit", lambda event_type, sid, payload: events.append((event_type, sid, payload))
+    )
+
+    server._agent_event(
+        "runtime-1",
+        "turn:budget",
+        {
+            "turn_budget": {
+                "paused": True,
+                "model": {"count": 12, "warn_limit": 6, "hard_limit": 12},
+                "tool": {"count": 9, "warn_limit": 8, "hard_limit": 20},
+                "usage": {"input_tokens": 50, "cache_read_tokens": 100, "output_tokens": 7},
+            }
+        },
+    )
+
+    assert events == [
+        (
+            "session.usage",
+            "runtime-1",
+            {
+                "usage": {
+                    "turn_budget": {
+                        "model_calls": 12,
+                        "model_warn_limit": 6,
+                        "model_hard_limit": 12,
+                        "tool_calls": 9,
+                        "tool_warn_limit": 8,
+                        "tool_hard_limit": 20,
+                        "input_tokens": 50,
+                        "cache_read_tokens": 100,
+                        "output_tokens": 7,
+                        "estimated_cost_usd": 0.0,
+                        "near_limit": True,
+                        "paused": True,
+                    }
+                }
+            },
+        )
+    ]
+
+
 def test_usage_ticker_emits_wrapped_usage_payload(monkeypatch):
     # The live ticker must nest the snapshot under a "usage" key, matching the
     # message.complete / session.info payloads the desktop & TUI handlers read

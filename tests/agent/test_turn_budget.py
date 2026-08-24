@@ -15,6 +15,7 @@ from agent.turn_budget import (
     TurnGovernor,
     bind_turn_governor,
     get_turn_governor,
+    publish_turn_budget,
     set_turn_governor,
     reset_turn_governor,
 )
@@ -184,6 +185,30 @@ def test_nested_context_manager_restores_the_outer_governor():
             assert get_turn_governor() is inner
         assert get_turn_governor() is outer
     assert get_turn_governor() is None
+
+
+def test_late_child_updates_publish_through_root_observer_and_refresh_last_snapshot():
+    governor = TurnGovernor(turn_id="late-background")
+    root = MagicMock()
+    root.event_callback = MagicMock()
+    governor.bind_root_agent(root)
+    child = SimpleNamespace(
+        _active_turn_governor=governor,
+        event_callback=MagicMock(),
+        platform="subagent",
+        session_id="child-session",
+    )
+
+    reservation = governor.reserve_model_attempt(task="background_review", role="auxiliary")
+    snapshot = publish_turn_budget(child, reservation)
+
+    assert root._last_turn_budget_snapshot == snapshot
+    assert child._last_turn_budget_snapshot == snapshot
+    root.event_callback.assert_called_once()
+    event_type, payload = root.event_callback.call_args.args
+    assert event_type == "turn:budget"
+    assert payload["turn_budget"]["model_calls"] == 1
+    child.event_callback.assert_not_called()
 
 
 def test_aux_accounting_context_keeps_legacy_pair_and_carries_turn_metadata():

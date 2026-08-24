@@ -3036,6 +3036,15 @@ export const zh: Translations = {
         title: '上下文用量',
         tokenSummary: (used, max) => `${used} / ${max} Tokens`,
         tokensUntilCompact: tokens => `距离 Hermes 压缩还有 ${tokens}`,
+        turnBudgetApiEquivalent: amount => `本轮 API 等价值：${amount} · 仅供参考`,
+        turnBudgetCalls: (model, modelLimit, tools, toolLimit) =>
+          `模型调用 ${model}/${modelLimit} · 工具调用 ${tools}/${toolLimit}`,
+        turnBudgetNearLimit: '接近上限',
+        turnBudgetNormal: '预算内',
+        turnBudgetPaused: '已暂停',
+        turnBudgetTitle: '本轮预算',
+        turnBudgetTokens: (input, cacheRead, output) =>
+          `${input} 新输入 · ${cacheRead} 缓存读取 · ${output} 输出`,
         unavailable: '暂无数据'
       },
       session: '会话',

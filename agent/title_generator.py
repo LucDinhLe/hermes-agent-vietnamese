@@ -17,6 +17,7 @@ user typed. That ordering is the industry-standard one — Codex CLI encodes the
 same ``custom > ai > fallback`` precedence in its session importer.
 """
 
+import contextvars
 import json
 import logging
 import re
@@ -747,15 +748,23 @@ def maybe_auto_title(
 
     apply_instant_title(session_db, session_id, user_message, title_callback)
 
-    thread = threading.Thread(
-        target=auto_title_session,
-        args=(session_db, session_id, user_message),
-        kwargs={
+    # A bare daemon thread drops ContextVars. Capture the originating user
+    # turn so title-generation retries share its TurnGovernor and accounting
+    # meter instead of becoming invisible side calls.
+    title_context = contextvars.copy_context()
+    title_args = (session_db, session_id, user_message)
+    title_kwargs = {
             "failure_callback": failure_callback,
             "main_runtime": main_runtime,
             "title_callback": title_callback,
             "runtime_validator": runtime_validator,
-        },
+        }
+
+    def _run_auto_title() -> None:
+        title_context.run(auto_title_session, *title_args, **title_kwargs)
+
+    thread = threading.Thread(
+        target=_run_auto_title,
         daemon=True,
         name="auto-title",
     )

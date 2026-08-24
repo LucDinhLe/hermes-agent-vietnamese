@@ -1999,6 +1999,14 @@ def _status_update(sid: str, kind: str, text: str | None = None):
 
 def _agent_event(sid: str, event_type: str, payload: dict | None = None) -> None:
     """Bridge the small allowlisted core-event subset used by interactive UIs."""
+    if event_type == "turn:budget" and isinstance(payload, dict):
+        meter = _compact_turn_budget_meter(payload.get("turn_budget"))
+        if meter is not None:
+            # Reservations and usage updates can land after the main response
+            # (title/background helpers). Push them directly instead of waiting
+            # for the one-second ticker, which stops before message.complete.
+            _emit("session.usage", sid, {"usage": {"turn_budget": meter}})
+        return
     if event_type != "advisor.progress" or not isinstance(payload, dict):
         return
     checkpoint = str(payload.get("checkpoint") or "")
@@ -5413,6 +5421,65 @@ def _sync_session_key_after_compress(
             pass
 
 
+def _compact_turn_budget_meter(snapshot: object) -> dict | None:
+    """Return the stable, low-volume user-facing slice of a turn budget.
+
+    The full governor snapshot contains per-task/per-role diagnostics.  Those
+    are useful in logs and the Runs API, but duplicating them in every live
+    ``session.usage`` tick would make the UI transport grow with the number of
+    helpers.  This slice is exactly the meter promised to users.
+    """
+    if not isinstance(snapshot, dict):
+        return None
+    model = snapshot.get("model")
+    tool = snapshot.get("tool")
+    turn_usage = snapshot.get("usage")
+    if not isinstance(model, dict) or not isinstance(tool, dict):
+        return None
+    if not isinstance(turn_usage, dict):
+        turn_usage = {}
+
+    def _non_negative_int(value: object) -> int:
+        try:
+            return max(0, int(value or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    def _non_negative_float(value: object) -> float:
+        try:
+            return max(0.0, float(value or 0.0))
+        except (TypeError, ValueError):
+            return 0.0
+
+    model_calls = _non_negative_int(model.get("count"))
+    model_warn_limit = _non_negative_int(model.get("warn_limit"))
+    model_hard_limit = _non_negative_int(model.get("hard_limit"))
+    tool_calls = _non_negative_int(tool.get("count"))
+    tool_warn_limit = _non_negative_int(tool.get("warn_limit"))
+    tool_hard_limit = _non_negative_int(tool.get("hard_limit"))
+    paused = bool(snapshot.get("paused"))
+    near_limit = paused or bool(model.get("warning_emitted")) or bool(tool.get("warning_emitted"))
+    if model_warn_limit:
+        near_limit = near_limit or model_calls >= model_warn_limit
+    if tool_warn_limit:
+        near_limit = near_limit or tool_calls >= tool_warn_limit
+
+    return {
+        "model_calls": model_calls,
+        "model_warn_limit": model_warn_limit,
+        "model_hard_limit": model_hard_limit,
+        "tool_calls": tool_calls,
+        "tool_warn_limit": tool_warn_limit,
+        "tool_hard_limit": tool_hard_limit,
+        "input_tokens": _non_negative_int(turn_usage.get("input_tokens")),
+        "cache_read_tokens": _non_negative_int(turn_usage.get("cache_read_tokens")),
+        "output_tokens": _non_negative_int(turn_usage.get("output_tokens")),
+        "estimated_cost_usd": _non_negative_float(turn_usage.get("estimated_cost_usd")),
+        "near_limit": near_limit,
+        "paused": paused,
+    }
+
+
 def _get_usage(agent) -> dict:
     g = lambda k, fb=None: getattr(agent, k, 0) or (getattr(agent, fb, 0) if fb else 0)
     usage = {
@@ -5433,6 +5500,18 @@ def _get_usage(agent) -> dict:
         "reference_cost_status": getattr(agent, "session_reference_cost_status", "unknown") or "unknown",
         "reference_cost_source": getattr(agent, "session_reference_cost_source", "none") or "none",
     }
+    turn_budget_snapshot = None
+    active_governor = getattr(agent, "_active_turn_governor", None)
+    if active_governor is not None:
+        try:
+            turn_budget_snapshot = active_governor.snapshot()
+        except Exception:
+            pass
+    if turn_budget_snapshot is None:
+        turn_budget_snapshot = getattr(agent, "_last_turn_budget_snapshot", None)
+    turn_budget_meter = _compact_turn_budget_meter(turn_budget_snapshot)
+    if turn_budget_meter is not None:
+        usage["turn_budget"] = turn_budget_meter
     comp = getattr(agent, "context_compressor", None)
     if comp:
         # context_used is the *current-window* occupancy. Do NOT fall back to
