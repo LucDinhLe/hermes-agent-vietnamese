@@ -46,7 +46,7 @@ from agent.turn_context import (
     reanchor_current_turn_user_idx,
 )
 from agent.turn_retry_state import TurnRetryState
-from agent.turn_budget import TurnBudgetExceeded
+from agent.turn_budget import TurnBudgetExceeded, UnobservableModelRuntimeError
 from agent.runtime_cwd import resolve_agent_cwd
 from agent.message_sanitization import (
     close_interrupted_tool_sequence,
@@ -2717,6 +2717,7 @@ def run_conversation(
         retry_count = 0
         max_retries = agent._api_max_retries
         _retry = TurnRetryState()
+        _unobservable_runtime_blocked = False
 
         finish_reason = "stop"
         response = None  # Guard against UnboundLocalError if all retries fail
@@ -4316,6 +4317,28 @@ def run_conversation(
                 # a provider failure.  Never feed it into unicode/auth/rate-
                 # limit retry or model-fallback logic: doing so would let the
                 # very recovery machinery being governed bypass the hard cap.
+                if isinstance(api_error, UnobservableModelRuntimeError):
+                    # This is a v32 policy result, not a transport failure.
+                    # No provider I/O occurred, so do not retry or activate a
+                    # fallback. End the user turn with one explicit message.
+                    api_call_count = max(0, api_call_count - 1)
+                    agent._api_call_count = api_call_count
+                    failed = True
+                    _turn_exit_reason = "unobservable_model_runtime_blocked"
+                    final_response = str(api_error)
+                    agent._emit_status(final_response)
+                    append_message(
+                        messages,
+                        {"role": "assistant", "content": final_response},
+                    )
+                    if agent.stream_delta_callback:
+                        try:
+                            agent.stream_delta_callback(final_response)
+                            agent.stream_delta_callback(None)
+                        except Exception:
+                            pass
+                    _unobservable_runtime_blocked = True
+                    break
                 if isinstance(api_error, TurnBudgetExceeded):
                     raise
 
@@ -6470,6 +6493,9 @@ def run_conversation(
                     # stale request.
                     break
         
+        if _unobservable_runtime_blocked:
+            break
+
         if _retry.restart_with_redirected_messages:
             # The cancelled request produced no valid assistant item. Reuse the
             # same logical iteration after the outer loop appends the displayed
@@ -8539,6 +8565,25 @@ def run_conversation(
             agent._turn_budget_pause_reason = "model_hard_limit"
             _turn_exit_reason = "turn_budget_paused"
             final_response = turn_budget_pause_message(_budget_snapshot)
+            agent._emit_status(final_response)
+            append_message(messages, {"role": "assistant", "content": final_response})
+            if agent.stream_delta_callback:
+                try:
+                    agent.stream_delta_callback(final_response)
+                    agent.stream_delta_callback(None)
+                except Exception:
+                    pass
+            break
+
+        except UnobservableModelRuntimeError as e:
+            # No provider I/O occurred. Surface the policy boundary once and
+            # stop without feeding it into transport retries or provider/model
+            # fallback, which would violate the user's explicit selection.
+            api_call_count = max(0, api_call_count - 1)
+            agent._api_call_count = api_call_count
+            failed = True
+            _turn_exit_reason = "unobservable_model_runtime_blocked"
+            final_response = str(e)
             agent._emit_status(final_response)
             append_message(messages, {"role": "assistant", "content": final_response})
             if agent.stream_delta_callback:

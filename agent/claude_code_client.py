@@ -339,6 +339,9 @@ class ClaudeCodeClient:
         messages: list[dict[str, Any]],
         timeout_seconds: float,
     ) -> Iterator[SimpleNamespace]:
+        from agent.turn_budget import require_observable_model_runtime
+
+        require_observable_model_runtime(provider="claude-code")
         status = probe_claude_code_auth(self._command)
         if not status.get("logged_in"):
             raise RuntimeError(str(status.get("error") or "Claude Code subscription is not connected."))

@@ -707,6 +707,45 @@ def run_codex_app_server_turn(
     Called from run_conversation() when agent.api_mode == "codex_app_server".
     Returns the same dict shape as the chat_completions path.
     """
+    from agent.turn_budget import (
+        UnobservableModelRuntimeError,
+        governor_for_agent,
+        require_observable_model_runtime,
+    )
+
+    try:
+        require_observable_model_runtime(
+            api_mode="codex_app_server",
+            governor=governor_for_agent(agent),
+        )
+    except UnobservableModelRuntimeError as exc:
+        from agent.message_metadata import append_message
+
+        final_response = str(exc)
+        append_message(messages, {"role": "assistant", "content": final_response})
+        try:
+            agent._persist_session(messages, [])
+        except Exception:
+            logger.warning(
+                "codex app-server policy block persistence failed",
+                exc_info=True,
+            )
+        governor = governor_for_agent(agent)
+        return {
+            "final_response": final_response,
+            "messages": messages,
+            "api_calls": 0,
+            "completed": False,
+            "paused": False,
+            "partial": False,
+            "interrupted": False,
+            "failed": True,
+            "error": final_response,
+            "provider_error_kind": "unobservable_model_runtime",
+            "turn_exit_reason": "unobservable_model_runtime_blocked",
+            "turn_budget": governor.snapshot() if governor else None,
+            "agent_persisted": True,
+        }
     from agent.transports.codex_app_server_session import (
         CodexAppServerSession,
         _ServerRequestRouting,

@@ -95,6 +95,65 @@ class TurnBudgetExceeded(RuntimeError):
         )
 
 
+class UnobservableModelRuntimeError(RuntimeError):
+    """Raised before I/O when a provider-owned loop cannot be governed.
+
+    External agent runtimes can hide retries and tool/model loops inside a
+    single subprocess request.  Counting that request as one model attempt
+    would make the meter misleading and could let the subprocess outrun the
+    hard limit.  Governed turns therefore fail closed at the dispatch boundary
+    instead of silently switching the user's runtime or provider.
+    """
+
+    def __init__(self, runtime: str):
+        self.runtime = runtime
+        super().__init__(
+            f"Token Governor đã chặn {runtime} trước khi gửi dữ liệu vì "
+            "runtime này không công bố từng lượt gọi mô hình vật lý. "
+            "Hãy chọn đường API trực tiếp; Hermes sẽ không tự đổi mô hình "
+            "hoặc provider."
+        )
+
+
+_UNOBSERVABLE_PROCESS_PROVIDERS = frozenset(
+    {
+        "claude-code",
+        "copilot-acp",
+        "github-copilot-acp",
+        "copilot-acp-agent",
+    }
+)
+
+
+def require_observable_model_runtime(
+    *,
+    provider: Optional[str] = None,
+    api_mode: Optional[str] = None,
+    governor: Any = None,
+) -> None:
+    """Reject provider-owned agent loops during a governed user turn.
+
+    The caller must invoke this at (or defensively before) its physical model
+    dispatch boundary.  It is deliberately inert outside a governed turn so
+    credential discovery and compatibility probes remain unaffected.
+    """
+    active_governor = governor if governor is not None else get_turn_governor()
+    if active_governor is None:
+        return
+    normalized_mode = str(api_mode or "").strip().lower()
+    normalized_provider = str(provider or "").strip().lower()
+    if normalized_mode == "codex_app_server":
+        raise UnobservableModelRuntimeError("Codex app-server")
+    if normalized_provider in _UNOBSERVABLE_PROCESS_PROVIDERS:
+        label = {
+            "claude-code": "Claude Code CLI",
+            "copilot-acp": "GitHub Copilot ACP",
+            "github-copilot-acp": "GitHub Copilot ACP",
+            "copilot-acp-agent": "GitHub Copilot ACP",
+        }[normalized_provider]
+        raise UnobservableModelRuntimeError(label)
+
+
 class TurnGovernor:
     """Atomic aggregate model/tool budget and per-turn usage meter."""
 
@@ -504,6 +563,11 @@ def reserve_agent_model_attempt(
     governor = governor_for_agent(agent)
     if governor is None:
         return None
+    require_observable_model_runtime(
+        provider=getattr(agent, "provider", None),
+        api_mode=getattr(agent, "api_mode", None),
+        governor=governor,
+    )
     task_name = task or getattr(agent, "_active_turn_budget_task_id", None) or "main"
     try:
         reservation = governor.reserve_model_attempt(
@@ -578,11 +642,13 @@ __all__ = [
     "DEFAULT_TOOL_WARN_LIMIT",
     "TurnBudgetExceeded",
     "TurnGovernor",
+    "UnobservableModelRuntimeError",
     "agent_turn_role",
     "bind_turn_governor",
     "get_turn_governor",
     "governor_for_agent",
     "publish_turn_budget",
+    "require_observable_model_runtime",
     "record_agent_model_usage",
     "reset_turn_governor",
     "reserve_agent_model_attempt",

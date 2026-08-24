@@ -12,7 +12,13 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from agent.turn_budget import TurnBudgetExceeded, TurnGovernor, bind_turn_governor
+from agent.turn_budget import (
+    TurnBudgetExceeded,
+    TurnGovernor,
+    UnobservableModelRuntimeError,
+    bind_turn_governor,
+    reserve_agent_model_attempt,
+)
 
 
 def _chat_response() -> SimpleNamespace:
@@ -289,3 +295,201 @@ def test_bedrock_context_probe_records_usage_from_an_accepted_request():
     assert snapshot["model_calls"] == 1
     assert snapshot["usage"]["input_tokens"] == 5
     assert snapshot["usage"]["output_tokens"] == 2
+
+
+@pytest.mark.parametrize(
+    ("provider", "api_mode", "runtime_label"),
+    [
+        ("openai-codex", "codex_app_server", "Codex app-server"),
+        ("claude-code", "chat_completions", "Claude Code CLI"),
+        ("copilot-acp", "chat_completions", "GitHub Copilot ACP"),
+    ],
+)
+def test_main_opaque_runtime_is_blocked_before_budget_or_provider_io(
+    provider,
+    api_mode,
+    runtime_label,
+):
+    governor = TurnGovernor(turn_id=f"opaque-{provider}")
+    agent = SimpleNamespace(
+        provider=provider,
+        api_mode=api_mode,
+        platform="cli",
+        session_id="mock-session",
+    )
+
+    with bind_turn_governor(governor):
+        with pytest.raises(UnobservableModelRuntimeError, match=runtime_label):
+            reserve_agent_model_attempt(agent)
+
+    snapshot = governor.snapshot()
+    assert snapshot["model_calls"] == 0
+    assert snapshot["model"]["denied"] == 0
+    assert snapshot["paused"] is False
+
+
+def test_direct_codex_runtime_remains_governed_and_available():
+    governor = TurnGovernor(turn_id="direct-codex")
+    agent = SimpleNamespace(
+        provider="openai-codex",
+        api_mode="codex_responses",
+        platform="cli",
+        session_id="mock-session",
+    )
+
+    with bind_turn_governor(governor):
+        reservation = reserve_agent_model_attempt(agent)
+
+    assert reservation is not None
+    assert reservation.admitted == 1
+    assert governor.snapshot()["model_calls"] == 1
+
+
+def test_agent_bound_governor_still_blocks_when_contextvar_is_missing():
+    governor = TurnGovernor(turn_id="bound-without-contextvar")
+    agent = SimpleNamespace(
+        provider="claude-code",
+        api_mode="chat_completions",
+        platform="cli",
+        session_id="mock-session",
+        _active_turn_governor=governor,
+    )
+
+    with pytest.raises(UnobservableModelRuntimeError, match="Claude Code CLI"):
+        reserve_agent_model_attempt(agent)
+
+    assert governor.snapshot()["model_calls"] == 0
+
+
+def test_aux_opaque_runtime_is_blocked_before_callback():
+    from agent import auxiliary_client as aux
+
+    governor = TurnGovernor(turn_id="opaque-aux")
+    create = MagicMock(return_value=_chat_response())
+    client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create))
+    )
+    context_token = aux._RELAY_AUX_CALL_CONTEXT.set(
+        {
+            "task": "compression",
+            "request_id": "aux-opaque-test",
+            "attempt_count": 0,
+            "provider": "copilot-acp",
+            "model": "mock-model",
+            "response_model": None,
+            "api_mode": "chat_completions",
+        }
+    )
+    try:
+        with bind_turn_governor(governor):
+            with pytest.raises(
+                UnobservableModelRuntimeError,
+                match="GitHub Copilot ACP",
+            ):
+                aux._relay_sync_completion(
+                    client,
+                    {"model": "mock-model", "messages": []},
+                    provider="copilot-acp",
+                )
+    finally:
+        aux._RELAY_AUX_CALL_CONTEXT.reset(context_token)
+
+    create.assert_not_called()
+    assert governor.snapshot()["model_calls"] == 0
+
+
+def test_claude_code_defensive_boundary_blocks_before_auth_probe(tmp_path):
+    from agent.claude_code_client import ClaudeCodeClient
+
+    governor = TurnGovernor(turn_id="opaque-claude-defense")
+    client = ClaudeCodeClient(command="claude", cwd=str(tmp_path))
+    with (
+        bind_turn_governor(governor),
+        patch("agent.claude_code_client.probe_claude_code_auth") as auth_probe,
+    ):
+        iterator = client._stream_response(
+            model="sonnet",
+            messages=[{"role": "user", "content": "hello"}],
+            timeout_seconds=1,
+        )
+        with pytest.raises(UnobservableModelRuntimeError, match="Claude Code CLI"):
+            next(iterator)
+
+    auth_probe.assert_not_called()
+    assert governor.snapshot()["model_calls"] == 0
+
+
+def test_copilot_acp_defensive_boundary_blocks_before_cli_probe(tmp_path):
+    from agent.copilot_acp_client import CopilotACPClient
+
+    governor = TurnGovernor(turn_id="opaque-copilot-defense")
+    client = CopilotACPClient(acp_command="copilot", acp_cwd=str(tmp_path))
+    with (
+        bind_turn_governor(governor),
+        patch("agent.copilot_acp_client._acp_supported") as acp_probe,
+    ):
+        with pytest.raises(UnobservableModelRuntimeError, match="GitHub Copilot ACP"):
+            client._run_prompt("hello", timeout_seconds=1)
+
+    acp_probe.assert_not_called()
+    assert governor.snapshot()["model_calls"] == 0
+
+
+def test_codex_app_server_boundary_blocks_before_session_construction():
+    from agent.codex_runtime import run_codex_app_server_turn
+
+    governor = TurnGovernor(turn_id="opaque-codex-defense")
+    with bind_turn_governor(governor):
+        result = run_codex_app_server_turn(
+            SimpleNamespace(),
+            user_message="hello",
+            original_user_message="hello",
+            messages=[],
+            effective_task_id="mock-task",
+        )
+
+    assert governor.snapshot()["model_calls"] == 0
+    assert result["failed"] is True
+    assert result["api_calls"] == 0
+    assert result["provider_error_kind"] == "unobservable_model_runtime"
+    assert result["turn_exit_reason"] == "unobservable_model_runtime_blocked"
+    assert "Codex app-server" in result["final_response"]
+
+
+@pytest.mark.parametrize(
+    ("provider", "base_url", "runtime_label"),
+    [
+        ("claude-code", "claude-code://local", "Claude Code CLI"),
+        ("copilot-acp", "acp://copilot", "GitHub Copilot ACP"),
+    ],
+)
+def test_high_level_opaque_provider_returns_one_visible_failure_without_io(
+    provider,
+    base_url,
+    runtime_label,
+):
+    from run_agent import AIAgent
+
+    agent = AIAgent(
+        api_key="mock-subscription",
+        base_url=base_url,
+        provider=provider,
+        api_mode="chat_completions",
+        quiet_mode=True,
+        skip_context_files=True,
+        skip_memory=True,
+    )
+    provider_create = MagicMock(side_effect=AssertionError("provider I/O reached"))
+    agent.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=provider_create))
+    )
+
+    result = agent.run_conversation("hello")
+
+    provider_create.assert_not_called()
+    assert result["failed"] is True
+    assert result["api_calls"] == 0
+    assert result["turn_exit_reason"] == "unobservable_model_runtime_blocked"
+    assert runtime_label in result["final_response"]
+    assert result["messages"][-1]["role"] == "assistant"
+    assert result["messages"][-1]["content"] == result["final_response"]

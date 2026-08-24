@@ -3191,9 +3191,12 @@ def handle_max_iterations(agent, messages: list, api_call_count: int) -> str:
                 final_response = "I reached the iteration limit and couldn't generate a summary."
 
     except Exception as e:
-        from agent.turn_budget import TurnBudgetExceeded
+        from agent.turn_budget import (
+            TurnBudgetExceeded,
+            UnobservableModelRuntimeError,
+        )
 
-        if isinstance(e, TurnBudgetExceeded):
+        if isinstance(e, (TurnBudgetExceeded, UnobservableModelRuntimeError)):
             raise
         logger.warning("Failed to get summary response: %s", e)
         final_response = f"I reached the maximum iterations ({agent.max_iterations}) but couldn't summarize. Error: {str(e)}"
@@ -4745,9 +4748,15 @@ def interruptible_streaming_api_call(agent, api_kwargs: dict, *, on_first_delta=
                 except Exception as e:
                     _emit_stream_end(final_text="", finished=False, error=str(e))
                     _close_managed_stream()
-                    from agent.turn_budget import TurnBudgetExceeded
+                    from agent.turn_budget import (
+                        TurnBudgetExceeded,
+                        UnobservableModelRuntimeError,
+                    )
 
-                    if isinstance(e, TurnBudgetExceeded):
+                    if isinstance(
+                        e,
+                        (TurnBudgetExceeded, UnobservableModelRuntimeError),
+                    ):
                         result["error"] = e
                         return
                     # If the main poll loop force-closed this request because
@@ -5253,9 +5262,15 @@ def interruptible_streaming_api_call(agent, api_kwargs: dict, *, on_first_delta=
     if agent._interrupt_requested:
         raise InterruptedError("Agent interrupted during streaming API call (post-worker)")
     if result["error"] is not None:
-        from agent.turn_budget import TurnBudgetExceeded
+        from agent.turn_budget import (
+            TurnBudgetExceeded,
+            UnobservableModelRuntimeError,
+        )
 
-        if isinstance(result["error"], TurnBudgetExceeded):
+        if isinstance(
+            result["error"],
+            (TurnBudgetExceeded, UnobservableModelRuntimeError),
+        ):
             raise result["error"]
         if deltas_were_sent["yes"]:
             # Streaming failed AFTER some tokens were already delivered to

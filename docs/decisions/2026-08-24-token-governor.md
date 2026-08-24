@@ -2,8 +2,8 @@
 
 ## Trạng thái
 
-Accepted for implementation; candidate-only cho tới khi integration, benchmark
-và packaged smoke đạt.
+Accepted and implemented; candidate-only cho tới khi packaged smoke và Windows
+lifecycle đạt.
 
 ## Bối cảnh
 
@@ -30,14 +30,21 @@ cho `execute_code` và không aggregate parent/subagent.
   spill an toàn với size, SHA-256 và recovery pointer.
 - Tool profile `lean|full` được đóng băng trước call đầu. Lean giữ bridge schema
   ổn định và defer built-ins; `tool_describe` không mutate `tools[]` call sau.
+- Runtime agent bên ngoài chỉ được chạy trong governed user turn khi Hermes có
+  thể reserve trước từng physical model attempt. `codex app-server`, Claude
+  Code CLI và GitHub Copilot ACP hiện không xuất telemetry đủ chi tiết nên v32
+  chặn fail-closed trước subprocess/provider I/O, trả một lỗi có cấu trúc và
+  không tự đổi model/provider. Direct OpenAI/Codex Responses vẫn hoạt động và
+  được đếm bình thường.
 
 ## Hệ quả
 
 - Không thể tiếp tục âm thầm tới hàng trăm calls.
 - Retry/fallback sẽ hiển thị đúng chi phí attempt thay vì logical loop count.
 - Paused turn cần đường consent/resume rõ ràng trong gateway/Desktop.
-- App-server chỉ có thể reserve một call nếu protocol chưa cung cấp telemetry
-  nội bộ; UI phải ghi rõ khoảng trống này thay vì suy đoán.
+- Không còn đường app-server/CLI “một logical call đại diện nhiều physical
+  calls” trong governed turn; các transport dormant vẫn có test contract riêng
+  nhưng không thể vượt policy dispatch của v32.
 - Cache regression bắt buộc so byte/hash của system prompt và tool schemas qua
   turn và restart.
 
@@ -47,3 +54,5 @@ cho `execute_code` và không aggregate parent/subagent.
 - Tính call từ usage rows: bỏ sót attempt thất bại.
 - Thay tool schemas động mỗi turn: phá prompt cache và session parity.
 - Truncate không artifact: mất recovery path.
+- Đếm mỗi subprocess agent là một model call: số liệu sai và hard cap có thể bị
+  outrun bởi retry/tool-loop nội bộ không quan sát được.

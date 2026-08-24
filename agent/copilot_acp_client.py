@@ -556,6 +556,9 @@ class CopilotACPClient:
         return completion
 
     def _run_prompt(self, prompt_text: str, *, timeout_seconds: float) -> tuple[str, str]:
+        from agent.turn_budget import require_observable_model_runtime
+
+        require_observable_model_runtime(provider="copilot-acp")
         # Fast-fail when the CLI doesn't support the ACP args we'd pass.
         # Without this guard, a CLI like Claude Code v2.x exits with
         # ``error: unknown option '--acp'`` immediately, then the parent

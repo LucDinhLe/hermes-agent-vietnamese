@@ -121,6 +121,8 @@ def reserve_aux_model_attempt(
     task: Optional[str],
     *,
     role: Optional[str] = None,
+    provider: Optional[str] = None,
+    api_mode: Optional[str] = None,
 ):
     """Reserve one physical auxiliary attempt before provider I/O.
 
@@ -139,6 +141,13 @@ def reserve_aux_model_attempt(
             governor = None
     if governor is None:
         return None
+    from agent.turn_budget import require_observable_model_runtime
+
+    require_observable_model_runtime(
+        provider=provider,
+        api_mode=api_mode,
+        governor=governor,
+    )
     effective_role = role or (context.role if context is not None else None)
     try:
         reservation = governor.reserve_model_attempt(

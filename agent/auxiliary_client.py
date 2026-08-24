@@ -3256,17 +3256,28 @@ def _relay_auxiliary_metadata(
     # governed turn remain a no-op through aux_accounting.
     from agent.aux_accounting import reserve_aux_model_attempt
 
+    provider_name = str(
+        provider
+        or (context.get("provider") if context is not None else None)
+        or "auxiliary"
+    )
+    api_mode_name = str(
+        api_mode
+        or (context.get("api_mode") if context is not None else None)
+        or "chat_completions"
+    )
     reserve_aux_model_attempt(
-        str(context.get("task") or "auxiliary") if context is not None else "auxiliary"
+        str(context.get("task") or "auxiliary") if context is not None else "auxiliary",
+        provider=provider_name,
+        api_mode=api_mode_name,
     )
     if context is None:
         return None
     attempt_count = int(context.get("attempt_count") or 0)
     context["attempt_count"] = attempt_count + 1
-    provider_name = str(provider or context.get("provider") or "auxiliary")
     model_name = str(context.get("model") or "unknown")
     return provider_name, model_name, {
-        "api_mode": str(api_mode or context.get("api_mode") or "chat_completions"),
+        "api_mode": api_mode_name,
         "api_request_id": str(context["request_id"]),
         "call_role": f"auxiliary:{context['task']}",
         "retry_count": attempt_count,

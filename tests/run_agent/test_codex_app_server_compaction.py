@@ -146,8 +146,8 @@ def test_codex_app_server_compaction_heartbeat_refreshes_activity_while_waiting(
     )
 
 
-def test_codex_app_server_compaction_hard_cap_blocks_rpc_before_dispatch():
-    from agent.turn_budget import TurnBudgetExceeded, TurnGovernor
+def test_codex_app_server_compaction_policy_blocks_rpc_before_budget_or_dispatch():
+    from agent.turn_budget import UnobservableModelRuntimeError, TurnGovernor
 
     agent = DummyAgent(
         TurnResult(thread_id="thread-1", turn_id="compact-turn-1")
@@ -160,7 +160,7 @@ def test_codex_app_server_compaction_hard_cap_blocks_rpc_before_dispatch():
     governor.reserve_model_attempt(task="main", role="main")
     agent._active_turn_governor = governor
 
-    with pytest.raises(TurnBudgetExceeded) as exc_info:
+    with pytest.raises(UnobservableModelRuntimeError) as exc_info:
         compress_context(
             agent,
             [{"role": "user", "content": "hi"}],
@@ -170,14 +170,14 @@ def test_codex_app_server_compaction_hard_cap_blocks_rpc_before_dispatch():
             force=True,
         )
 
-    assert exc_info.value.task == "codex_native_compaction"
+    assert exc_info.value.runtime == "Codex app-server"
     assert agent._codex_session.calls == 0
     model_budget = governor.snapshot()["model"]
     assert model_budget["count"] == 1
     assert model_budget["warn_limit"] == 1
     assert model_budget["hard_limit"] == 1
     assert model_budget["remaining"] == 0
-    assert model_budget["denied"] == 1
+    assert model_budget["denied"] == 0
     assert agent.status_events[-1] == ("compacted", COMPACTION_DONE_STATUS)
 
 
