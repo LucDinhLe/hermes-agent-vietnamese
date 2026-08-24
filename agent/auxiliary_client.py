@@ -6838,7 +6838,15 @@ def resolve_provider_client(
         final_model = _normalize_resolved_model(model or default_model, provider)
         try:
             from openai import OpenAI
-            client = OpenAI(api_key=token, base_url=base_url)
+            # Hermes owns auxiliary retry/fallback policy and reserves every
+            # physical attempt.  Disable the OpenAI SDK's hidden default
+            # retries so one governor reservation always maps to one Vertex
+            # HTTP request.
+            client = OpenAI(
+                api_key=token,
+                base_url=base_url,
+                max_retries=0,
+            )
         except Exception as exc:
             logger.warning("resolve_provider_client: cannot create Vertex "
                            "client: %s", exc)
@@ -8895,6 +8903,14 @@ def _create_with_progress(
             "Auxiliary %s: streamed request failed (%s); retrying "
             "non-streaming", task or "call", exc,
         )
+        # The stream request already consumed the reservation made by
+        # _relay_sync_completion.  This compatibility fallback is a second
+        # physical provider request, so it needs its own reservation before
+        # touching the client.  A hard-limit exception deliberately escapes;
+        # no non-streaming payload is sent after the turn has paused.
+        from agent.aux_accounting import reserve_aux_model_attempt
+
+        reserve_aux_model_attempt(task or "auxiliary_stream_fallback")
         return client.chat.completions.create(**kwargs)
 
     # Some shims (MoA virtual provider under quiet mode, defensive adapters)

@@ -96,7 +96,9 @@ def _get_bedrock_runtime_client(region: str):
     if region not in _bedrock_runtime_client_cache:
         boto3 = _require_boto3()
         _bedrock_runtime_client_cache[region] = boto3.client(
-            "bedrock-runtime", region_name=region,
+            "bedrock-runtime",
+            region_name=region,
+            config=_single_attempt_botocore_config(),
         )
     return _bedrock_runtime_client_cache[region]
 
@@ -109,6 +111,19 @@ def _get_bedrock_control_client(region: str):
             "bedrock", region_name=region,
         )
     return _bedrock_control_client_cache[region]
+
+
+def _single_attempt_botocore_config():
+    """Return botocore config with exactly one physical HTTP attempt.
+
+    Only retry policy is overridden; credentials, region, endpoints, proxy,
+    timeout and every other SDK setting continue to resolve through the
+    existing boto3/botocore configuration chain.  ``total_max_attempts`` is
+    used because, unlike ``max_attempts``, it includes the initial request.
+    """
+    from botocore.config import Config
+
+    return Config(retries={"total_max_attempts": 1})
 
 
 def reset_client_cache():
@@ -1182,6 +1197,12 @@ def call_converse_stream(
                 "falling back to non-streaming converse().",
                 region, model,
             )
+            # The stream dispatch belongs to the caller's first reservation;
+            # this non-streaming compatibility request is a second physical
+            # attempt and must be blocked before I/O when the turn is capped.
+            from agent.aux_accounting import reserve_aux_model_attempt
+
+            reserve_aux_model_attempt("bedrock_stream_fallback")
             return normalize_converse_response(client.converse(**kwargs))
         if is_stale_connection_error(exc):
             logger.warning(
@@ -1520,16 +1541,43 @@ def probe_bedrock_context_length(model_id: str, region: str) -> Optional[int]:
         logger.debug("Bedrock context probe skipped for %s: %s", model_id, exc)
         return None
 
+    from agent.aux_accounting import reserve_aux_model_attempt
+
     last_error = ""
     for tier_tokens in _BEDROCK_PROBE_TIERS:
+        # A probe is still a physical model request, even when Bedrock rejects
+        # it during length validation.  Reserve before even constructing the
+        # oversized payload and outside the provider try/except so a hard cap
+        # cannot be swallowed as an ordinary probe failure.
+        reserve_aux_model_attempt("bedrock_context_probe")
         pad_words = int(tier_tokens / _WORDS_PER_TOKEN)
         oversized = "data " * pad_words
         try:
-            client.converse(
+            response = client.converse(
                 modelId=model_id,
                 messages=[{"role": "user", "content": [{"text": oversized}]}],
                 inferenceConfig={"maxTokens": 8},
             )
+            # A tier normally fails validation and carries no usage.  If the
+            # provider accepts it, account the known tokens before returning
+            # the conservative lower bound.  Accounting is best-effort and
+            # must not change context-resolution behavior.
+            try:
+                normalized = normalize_converse_response(response)
+                normalized.model = model_id
+                from agent.aux_accounting import record_aux_usage
+
+                record_aux_usage(
+                    normalized,
+                    "bedrock_context_probe",
+                    provider="bedrock",
+                )
+            except Exception:
+                logger.debug(
+                    "Bedrock context probe usage accounting failed for %s",
+                    model_id,
+                    exc_info=True,
+                )
             # Accepted a prompt this large → the window is at least this tier.
             # Returning the tier as a lower bound is safe and avoids inventing
             # a number we can't confirm.

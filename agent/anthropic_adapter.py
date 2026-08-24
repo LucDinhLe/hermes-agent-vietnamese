@@ -3198,6 +3198,7 @@ def create_anthropic_message(
 
     messages_api = getattr(client, "messages", None)
     stream_fn = getattr(messages_api, "stream", None)
+    stream_fallback = False
     if prefer_stream and callable(stream_fn):
         stream_kwargs = dict(api_kwargs)
         stream_kwargs.pop("stream", None)
@@ -3233,7 +3234,16 @@ def create_anthropic_message(
                 log_prefix,
                 exc,
             )
+            stream_fallback = True
 
     create_kwargs = dict(api_kwargs)
     create_kwargs.pop("stream", None)
+    if stream_fallback:
+        # The caller reserves the initial stream request at its dispatch
+        # boundary.  messages.create() is distinct physical I/O and therefore
+        # consumes one more shared turn attempt.  Outside a governed turn this
+        # remains a compatibility no-op.
+        from agent.aux_accounting import reserve_aux_model_attempt
+
+        reserve_aux_model_attempt("anthropic_stream_fallback")
     return messages_api.create(**create_kwargs)
