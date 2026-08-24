@@ -1,5 +1,30 @@
 # Tiến độ
 
+## Cập nhật 2026-08-24 — khởi động Hermes Vietnamese v32
+
+- Tạo worktree `projects/hermes-v32` và nhánh
+  `feat/v32-token-context-ux` từ `origin/main@b360c837`; vì exact v31 tag không
+  phải ancestor của main, đã tạo checkpoint hợp nhất cục bộ
+  `3cce675cea2bfdfd2fd29352f35a529e827cf46f` để giữ main public contract và
+  đưa đúng source `vi-v0.31.0-7@70b2418f` vào baseline. Không push/tag/draft.
+- Xác minh GitHub Latest thật, Windows x64 size/SHA-256 và rollback target khớp
+  public contract; v31 là unsigned community pilot, không phải stable.
+- Audit read-only session bằng chứng xác nhận 208 model calls và 235 tool results
+  trên 11 user messages; cache hit 97,6%. Không có persisted context/quota error
+  hay compaction, nên chưa gắn nhãn sai thành hard context failure.
+- Phát hiện runtime/context skew: log từng cache gpt-5.6-sol Codex ở 272k, source
+  v31 phải resolve lên 900k, còn UI có thể headline published 1,05M.
+- Hoàn tất đọc 17/17 workflow/installer/bootstrap/updater/build/signing surface.
+  Gate v32 phải đóng hard-coded stable channel, Node floor lệch, mac patch
+  fail-open, POSIX rollback risk và Windows ARM64 capability disclosure.
+- Môi trường cô lập đã khóa 253 Python package và 1.296 Node package; audit npm
+  0 vulnerability. Baseline đạt 287 Context tests và 26 UI tests. Nhóm raw
+  output/Tool Search/cache đạt 149 tests; bốn symlink tests đỏ trước sửa vì
+  runner Windows không có quyền tạo symlink, hai ca skip.
+- Kế hoạch và ba decision log nằm tại `docs/release-vi-v0.32.0-plan.md` và
+  `docs/decisions/2026-08-24-*.md`. Trạng thái hiện tại: candidate only/NO-GO;
+  candidate dự kiến `0.32.0-vi.1`, chưa build và chưa có hành động public.
+
 ## Cập nhật 2026-08-23 — successor candidate V31 `vi-v0.31.0-7`
 
 - Exact-artifact Windows x64 gate đã loại `vi-v0.31.0-6` trước nút gỡ cuối.
