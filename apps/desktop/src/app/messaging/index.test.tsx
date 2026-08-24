@@ -81,13 +81,21 @@ function RouteProbe() {
 
 async function renderMessaging(initialEntries = ['/messaging']) {
   const { MessagingView } = await import('./index')
+  let rendered!: ReturnType<typeof render>
 
-  return render(
-    <MemoryRouter initialEntries={initialEntries}>
-      <MessagingView />
-      <RouteProbe />
-    </MemoryRouter>
-  )
+  // The view starts two resolved async refreshes from its mount effect. Keep
+  // their state updates inside the same async act boundary as the render so a
+  // navigation assertion cannot race leftover platform/pairing updates.
+  await act(async () => {
+    rendered = render(
+      <MemoryRouter initialEntries={initialEntries}>
+        <MessagingView />
+        <RouteProbe />
+      </MemoryRouter>
+    )
+  })
+
+  return rendered
 }
 
 describe('MessagingView back navigation', () => {
@@ -97,14 +105,14 @@ describe('MessagingView back navigation', () => {
     await renderMessaging()
     fireEvent.click(await screen.findByRole('button', { name: 'Back to session' }))
 
-    expect(screen.getByTestId('route-probe').textContent).toBe('/stored%2Fsession')
+    await waitFor(() => expect(screen.getByTestId('route-probe').textContent).toBe('/stored%2Fsession'))
   })
 
   it('returns Home when no stored session is selected', async () => {
     await renderMessaging()
     fireEvent.click(await screen.findByRole('button', { name: 'Back to session' }))
 
-    expect(screen.getByTestId('route-probe').textContent).toBe('/')
+    await waitFor(() => expect(screen.getByTestId('route-probe').textContent).toBe('/'))
   })
 })
 
