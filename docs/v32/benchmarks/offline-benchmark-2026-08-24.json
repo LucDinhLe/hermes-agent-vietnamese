@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "benchmark": "hermes-v32-offline-token-context-governor",
+  "measurement_kind": "static-estimate-and-deterministic-simulation",
+  "offline": true,
+  "context_window_tokens": 1050000,
+  "source": {
+    "baseline_revision": "3cce675cea2bfdfd2fd29352f35a529e827cf46f",
+    "current_revision": "596d188b2c19ef5ef8f67b87bff7b1c5fa7c8c5e"
+  },
+  "configuration_sha256": {
+    "baseline": "77cd9e8ef39d397ee829c051f909a329a1d714c470b8cc0c6931150493b448f6",
+    "current": "81f745a530267f8c5eb02997ca2d188ca75b8835cbbb717c1475df0c178e28bb"
+  },
+  "scenarios": {
+    "fresh": {
+      "baseline": {"active_tokens_estimate": 34299, "context_percent": 3.2666},
+      "current": {"active_tokens_estimate": 5169, "context_percent": 0.4923}
+    },
+    "synthetic_10_turn_qa": {
+      "baseline": {
+        "active_tokens_estimate": 35077,
+        "context_percent": 3.3407,
+        "cumulative_active_tokens": [34357, 34434, 34515, 34594, 34671, 34753, 34834, 34915, 34995, 35077],
+        "pair_deltas": [78, 77, 81, 79, 77, 82, 81, 81, 80, 82]
+      },
+      "current": {
+        "active_tokens_estimate": 5947,
+        "context_percent": 0.5664,
+        "cumulative_active_tokens": [5227, 5304, 5385, 5464, 5541, 5623, 5704, 5785, 5865, 5947],
+        "pair_deltas": [78, 77, 81, 79, 77, 82, 81, 81, 80, 82]
+      }
+    },
+    "schema": {
+      "baseline": {"active_tool_count": 59, "granted_tool_count": 59, "active_schema_bytes": 117260},
+      "current": {"active_tool_count": 4, "granted_tool_count": 59, "active_schema_bytes": 4265}
+    },
+    "tool_heavy": {
+      "fixture": {"result_count": 24, "bytes_per_result": 32000, "total_raw_bytes": 768000},
+      "baseline": {"result_cap_bytes": 100000, "turn_cap_bytes": 200000, "retained_raw_bytes": 188500, "fully_inline_raw_bytes": 160000},
+      "current": {"result_cap_bytes": 9500, "turn_cap_bytes": 38000, "retained_raw_bytes": 24576, "fully_inline_raw_bytes": 0}
+    },
+    "governor": {
+      "fixture": {"planned_model_attempts": 14, "planned_tool_calls": 25},
+      "baseline": {
+        "available": false,
+        "measurement_kind": "static_counterfactual",
+        "model_admitted": 14,
+        "tool_admitted": 25
+      },
+      "current": {
+        "available": true,
+        "measurement_kind": "deterministic_simulation",
+        "model_warn_limit": 6,
+        "model_hard_limit": 12,
+        "model_admitted": 12,
+        "first_model_pause_attempt": 13,
+        "tool_warn_limit": 8,
+        "tool_hard_limit": 20,
+        "tool_admitted": 20,
+        "first_tool_pause_attempt": 21
+      }
+    },
+    "logical_350k": {
+      "target_tokens": 350000,
+      "baseline": {
+        "logical_tokens_estimate": 350105,
+        "context_percent": 33.3433,
+        "native_threshold_tokens": null,
+        "local_threshold_tokens": 525000,
+        "planning_decision": "no_compaction_due"
+      },
+      "current": {
+        "logical_tokens_estimate": 350105,
+        "context_percent": 33.3433,
+        "native_threshold_tokens": 190000,
+        "local_threshold_tokens": 208000,
+        "planning_decision": "native_and_local_fallback_due"
+      }
+    }
+  },
+  "isolation": {
+    "source": "separate git archives in automatically removed temporary roots",
+    "profile": "separate empty HOME/HERMES_HOME/APPDATA/temp roots",
+    "network": "IPv4/IPv6 socket and DNS denied; measured attempt counters are zero",
+    "subprocess": "denied in source probes; attempted calls are counted and blocked before process creation",
+    "external_plugin_discovery": "disabled",
+    "editable_install": "Hermes PEP 660 finder removed before source imports",
+    "provider_calls": 0,
+    "tool_handlers_executed": 0
+  },
+  "limitations": [
+    "Token values are rough static estimates, not tokenizer-exact provider usage.",
+    "Compaction gates are planned only; compaction execution and summary quality are not measured.",
+    "Tool availability is forced true for a stable worst-case Telegram catalog.",
+    "Baseline Governor counts are counterfactual because aggregate TurnGovernor is unavailable."
+  ]
+}
