@@ -4002,6 +4002,12 @@ def _compress_context_via_codex_app_server(
     _activity_heartbeat: Optional[_CompressionActivityHeartbeat] = None
     try:
         _activity_heartbeat = _CompressionActivityHeartbeat(agent).start()
+        # Native app-server compaction is a physical model-backed RPC just
+        # like a normal turn. Reserve at the final dispatch boundary so a
+        # turn that reached its hard cap cannot send thread/compact/start.
+        from agent.turn_budget import reserve_agent_model_attempt
+
+        reserve_agent_model_attempt(agent, task="codex_native_compaction")
         result = codex_session.compact_thread()
     except BaseException:
         if _activity_heartbeat is not None:

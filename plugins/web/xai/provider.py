@@ -254,6 +254,13 @@ class XAIWebSearchProvider(WebSearchProvider):
         resp = None
         for attempt in range(2):
             try:
+                # This provider posts to the model-backed Responses API
+                # directly rather than through Hermes' central transports.
+                # Count each physical OAuth retry independently and fail
+                # before I/O when the shared turn cap is exhausted.
+                from agent.aux_accounting import reserve_aux_model_attempt
+
+                reserve_aux_model_attempt("xai_web_search")
                 resp = httpx.post(
                     f"{base_url}/responses",
                     headers=headers,
