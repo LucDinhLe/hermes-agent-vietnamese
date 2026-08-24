@@ -323,8 +323,8 @@ describe('SessionAdvisorBar', () => {
       }
     })
 
-    expect(await screen.findByText('161.8k/1.05M (15%)')).toBeTruthy()
-    expect(screen.getByText('· ~$0.80')).toBeTruthy()
+    expect(await screen.findByText('161.8k/1.05M (15.4%)')).toBeTruthy()
+    expect(screen.getByText('· API-equivalent: ~$0.80 USD · not billed')).toBeTruthy()
     expect(request).toHaveBeenCalledWith('session.context_breakdown', { session_id: 'runtime-42' })
 
     const meter = container.querySelector('[data-session-context-meter]')
@@ -337,7 +337,7 @@ describe('SessionAdvisorBar', () => {
     const publisherLink = await screen.findByRole('link', { name: /Published capacity: 1\.05M · OpenAI/ })
 
     expect(publisherLink.getAttribute('href')).toBe('https://developers.openai.com/api/docs/models/gpt-5.6-sol')
-    expect(screen.getByText('Current route limit: 900k')).toBeTruthy()
+    expect(screen.getByText('Current route limit: 900k · 18.0% used')).toBeTruthy()
     expect(screen.getByText('288.2k until Hermes compacts')).toBeTruthy()
   })
 
@@ -389,8 +389,8 @@ describe('SessionAdvisorBar', () => {
       </QueryClientProvider>
     )
 
-    expect(await screen.findByText('100k/1.05M (10%)')).toBeTruthy()
-    expect(await screen.findByText('200k/1.05M (19%)')).toBeTruthy()
+    expect(await screen.findByText('100k/1.05M (9.5%)')).toBeTruthy()
+    expect(await screen.findByText('200k/1.05M (19.0%)')).toBeTruthy()
     expect(request).toHaveBeenCalledWith('session.context_breakdown', { session_id: 'runtime-a' })
     expect(request).toHaveBeenCalledWith('session.context_breakdown', { session_id: 'runtime-b' })
   })

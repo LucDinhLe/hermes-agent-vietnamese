@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { $selectedStoredSessionId } from '@/store/session'
 import type { MessagingPlatformInfo } from '@/types/hermes'
 
+import { MessagingView } from './index'
+
 const getMessagingPlatforms = vi.fn()
 const updateMessagingPlatform = vi.fn()
 const getPairing = vi.fn()
@@ -80,7 +82,6 @@ function RouteProbe() {
 }
 
 async function renderMessaging(initialEntries = ['/messaging']) {
-  const { MessagingView } = await import('./index')
   let rendered!: ReturnType<typeof render>
 
   // The view starts two resolved async refreshes from its mount effect. Keep
