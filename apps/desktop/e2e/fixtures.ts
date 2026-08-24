@@ -541,6 +541,42 @@ export interface PackagedAppFixture {
   cleanup: () => Promise<void>
 }
 
+export interface PackagedMockBackendFixture extends MockBackendFixture {
+  /** Relaunch the exact packaged binary against the same isolated profile. */
+  relaunch: () => Promise<void>
+}
+
+function buildPackagedAppEnv(
+  sandbox: Sandbox,
+  extra: Record<string, string> = {},
+): Record<string, string> {
+  const env = buildAppEnv(sandbox, extra)
+
+  // The packaged binary must use its resident renderer/runtime, never the dev
+  // checkout or a Vite server inherited from the host environment.
+  delete (env as Record<string, string | undefined>).HERMES_DESKTOP_DEV_SERVER
+  delete (env as Record<string, string | undefined>).HERMES_DESKTOP_HERMES
+  delete (env as Record<string, string | undefined>).HERMES_DESKTOP_HERMES_ROOT
+
+  return env
+}
+
+async function launchPackagedBinary(
+  sandbox: Sandbox,
+  extra: Record<string, string> = {},
+): Promise<{ app: ElectronApplication; page: Page }> {
+  const app = await _electron.launch({
+    executablePath: PACKAGED_BINARY_PATH,
+    args: ['--disable-gpu', '--no-sandbox'],
+    env: buildPackagedAppEnv(sandbox, extra),
+  })
+  const page = await app.firstWindow()
+
+  installErrorBannerGuard(page)
+
+  return { app, page }
+}
+
 /**
  * Launch the *packaged* Electron binary (from `npm run pack` →
  * `electron-builder --dir`) with `BOOT_FAKE=1` so it simulates boot
@@ -560,28 +596,11 @@ export async function setupPackagedApp(): Promise<PackagedAppFixture> {
 
   const sandbox = createSandbox('packaged')
 
-  // Build the sandbox env using the shared helpers, then add the
-  // packaged-binary-specific overrides.
-  const env = buildAppEnv(sandbox, {
+  const { app, page } = await launchPackagedBinary(sandbox, {
     // Fake boot: simulates progress steps without spawning the real backend.
     HERMES_DESKTOP_BOOT_FAKE: '1',
     HERMES_DESKTOP_BOOT_FAKE_STEP_MS: '120',
   })
-
-  // Clear dev-server + hermes-root overrides — the packaged binary
-  // should use its own bundled renderer, not the dev checkout.
-  delete (env as Record<string, string | undefined>).HERMES_DESKTOP_DEV_SERVER
-  delete (env as Record<string, string | undefined>).HERMES_DESKTOP_HERMES
-  delete (env as Record<string, string | undefined>).HERMES_DESKTOP_HERMES_ROOT
-
-  const app = await _electron.launch({
-    executablePath: PACKAGED_BINARY_PATH,
-    args: ['--disable-gpu', '--no-sandbox'],
-    env,
-  })
-
-  const page = await app.firstWindow()
-  installErrorBannerGuard(page)
 
   return {
     app,
@@ -592,6 +611,58 @@ export async function setupPackagedApp(): Promise<PackagedAppFixture> {
       sandbox.cleanup()
     },
   }
+}
+
+/**
+ * Launch the exact packaged binary with its resident backend pointed at the
+ * local mock provider. This proves the bundled Python/Node/runtime chain
+ * without exposing host credentials or a real Hermes profile.
+ */
+export async function setupPackagedMockBackend(
+  options: MockBackendOptions = {},
+): Promise<PackagedMockBackendFixture> {
+  if (!packagedBinaryExists()) {
+    throw new Error(
+      `Built app binary not found: ${PACKAGED_BINARY_PATH}. Build the candidate first.`,
+    )
+  }
+
+  const mock = await startMockServer(options.mockServer)
+  const sandbox = createSandbox('packaged-mock')
+
+  writeMockProviderConfig(
+    sandbox.hermesHome,
+    mock.url,
+    options.extraDisplayConfig,
+    options.extraConfig,
+    options.modelContextLength,
+  )
+  writeEnvFile(sandbox.hermesHome)
+
+  let active = await launchPackagedBinary(sandbox)
+
+  const fixture: PackagedMockBackendFixture = {
+    get app() {
+      return active.app
+    },
+    get page() {
+      return active.page
+    },
+    mock,
+    mockUrl: mock.url,
+    sandbox,
+    relaunch: async () => {
+      await active.app.close()
+      active = await launchPackagedBinary(sandbox)
+    },
+    cleanup: async () => {
+      await active.app.close().catch(() => undefined)
+      await mock.close()
+      sandbox.cleanup()
+    },
+  }
+
+  return fixture
 }
 
 // ─── Wait helpers ──────────────────────────────────────────────────────
