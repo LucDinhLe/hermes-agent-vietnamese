@@ -64,6 +64,10 @@ def agent():
         patch(
             "run_agent.get_tool_definitions", return_value=_make_tool_defs("web_search")
         ),
+        patch(
+            "tools.tool_search.resolve_session_tool_profile",
+            return_value="full",
+        ),
         patch("run_agent.check_toolset_requirements", return_value={}),
         patch("run_agent.OpenAI"),
     ):
@@ -186,6 +190,10 @@ def agent_with_memory_tool():
         patch(
             "run_agent.get_tool_definitions",
             return_value=_make_tool_defs("web_search", "memory"),
+        ),
+        patch(
+            "tools.tool_search.resolve_session_tool_profile",
+            return_value="full",
         ),
         patch("run_agent.check_toolset_requirements", return_value={}),
         patch("run_agent.OpenAI"),
@@ -988,6 +996,10 @@ class TestBuildSystemPrompt:
 
         with (
             patch("run_agent.get_tool_definitions", return_value=tools),
+            patch(
+                "tools.tool_search.resolve_session_tool_profile",
+                return_value="full",
+            ),
             patch(
                 "run_agent.check_toolset_requirements",
                 side_effect=AssertionError("should not re-check toolset requirements"),
@@ -1978,6 +1990,8 @@ class TestConcurrentToolExecution:
                 skip_tool_request_middleware=True,
                 enabled_toolsets=agent.enabled_toolsets,
                 disabled_toolsets=agent.disabled_toolsets,
+                tool_profile="full",
+                tool_catalog_defs=agent._tool_search_catalog_defs,
                 tool_request_middleware_trace=[],
             )
             assert result == "result"

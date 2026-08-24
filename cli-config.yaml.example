@@ -1465,6 +1465,25 @@ code_execution:
   max_tool_calls: 50   # Max RPC tool calls per execution (default: 50)
 
 # =============================================================================
+# Session Tool Profile
+# =============================================================================
+# lean (default): expose only clarify + Tool Search bridge schemas. Every tool
+# granted by platform_toolsets remains discoverable and callable on demand, but
+# simple Q&A does not pay for or get steered toward the full action surface.
+# full: legacy eager Hermes core schemas (explicit compatibility escape hatch).
+# The resolved profile and schema are frozen for a session and restored on
+# resume, so edit this setting before starting a new session.
+tools:
+  profile: lean
+  tool_search:
+    enabled: auto       # In full mode: auto/on defers MCP/plugin schemas; off keeps them eager.
+    threshold_pct: 5
+    search_default_limit: 5
+    max_search_limit: 20
+    listing: auto       # Lean always uses a compact search-only bridge.
+    listing_max_tokens: 4000
+
+# =============================================================================
 # Subagent Delegation
 # =============================================================================
 # The delegate_task tool spawns child agents with isolated context.

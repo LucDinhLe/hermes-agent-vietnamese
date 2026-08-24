@@ -19,6 +19,7 @@ preserved.
 
 from __future__ import annotations
 
+import copy
 import logging
 import os
 import re
@@ -490,6 +491,39 @@ def _merge_custom_provider_extra_body(agent, custom_providers: List[Dict[str, An
     agent.request_overrides = overrides
 
 
+def _freeze_session_tool_snapshot(agent) -> None:
+    """Publish one immutable model-facing tool schema for this session."""
+    from tools.tool_search import assemble_tool_defs, load_config
+
+    raw_catalog = copy.deepcopy(list(getattr(agent, "tools", None) or []))
+    agent._tool_search_catalog_defs = tuple(raw_catalog)
+    agent._tool_catalog_names = frozenset(
+        tool.get("function", {}).get("name")
+        for tool in raw_catalog
+        if isinstance(tool, dict) and tool.get("function", {}).get("name")
+    )
+    context_length = int(
+        getattr(getattr(agent, "context_compressor", None), "context_length", 0)
+        or 0
+    )
+    assembly = assemble_tool_defs(
+        copy.deepcopy(raw_catalog),
+        context_length=context_length,
+        config=load_config(),
+        profile=getattr(agent, "tool_profile", "lean") or "lean",
+    )
+    # Detach the live request prefix from registry/cache-owned dictionaries.
+    agent.tools = copy.deepcopy(assembly.tool_defs)
+    agent.valid_tool_names = {
+        tool.get("function", {}).get("name")
+        for tool in agent.tools
+        if isinstance(tool, dict) and tool.get("function", {}).get("name")
+    }
+    agent._tool_schema_frozen = True
+    agent._tool_search_scope_cache = None
+    agent._tool_profile_assembly = assembly
+
+
 def init_agent(
     agent,
     base_url: str = None,
@@ -631,6 +665,17 @@ def init_agent(
     agent.tool_progress_mode = tool_progress_mode
     agent.ephemeral_system_prompt = ephemeral_system_prompt
     agent.platform = platform  # "cli", "telegram", "discord", "whatsapp", etc.
+    try:
+        from tools.tool_search import resolve_session_tool_profile
+
+        agent.tool_profile = resolve_session_tool_profile(
+            session_db=session_db,
+            session_id=session_id,
+        )
+    except Exception:
+        # Fail lean: all granted capabilities remain reachable through the
+        # bridge, while an init/config failure never expands prompt cost.
+        agent.tool_profile = "lean"
     agent._user_id = user_id  # Platform user identifier (gateway sessions)
     agent._user_id_alt = user_id_alt  # Optional stable alternate platform identifier
     agent._user_name = user_name
@@ -654,7 +699,9 @@ def init_agent(
     # provide no value (no human in the loop, no skill-creation pressure).
     # skip_memory=True already disables the memory-review trigger; this
     # flag is the explicit single-switch off for both review paths.
-    agent.skip_background_review = bool(skip_background_review)
+    agent.skip_background_review = bool(
+        skip_background_review or agent.tool_profile == "lean"
+    )
     agent.pass_session_id = pass_session_id
     agent.log_prefix_chars = log_prefix_chars
     agent.log_prefix = f"{log_prefix} " if log_prefix else ""
@@ -1520,22 +1567,14 @@ def init_agent(
         enabled_toolsets=enabled_toolsets,
         disabled_toolsets=disabled_toolsets,
         quiet_mode=agent.quiet_mode,
+        skip_tool_search_assembly=True,
+        tool_profile=agent.tool_profile,
     )
     
     # Show tool configuration and store valid tool names for validation
     agent.valid_tool_names = set()
     if agent.tools:
         agent.valid_tool_names = {tool["function"]["name"] for tool in agent.tools}
-        tool_names = sorted(agent.valid_tool_names)
-        if not agent.quiet_mode:
-            print(f"🛠️  Loaded {len(agent.tools)} tools: {', '.join(tool_names)}")
-            # Show filtering info if applied
-            if enabled_toolsets:
-                print(f"   ✅ Enabled toolsets: {', '.join(enabled_toolsets)}")
-            if disabled_toolsets:
-                print(f"   ❌ Disabled toolsets: {', '.join(disabled_toolsets)}")
-    elif not agent.quiet_mode:
-        print("🛠️  No tools loaded (all tools filtered out or unavailable)")
 
     # Kanban worker/orchestrator lifecycle guidance is session-static:
     # the dispatcher decides at spawn time whether this process is a kanban
@@ -1688,6 +1727,7 @@ def init_agent(
         "max_iterations": agent.max_iterations,
         "reasoning_config": reasoning_config,
         "max_tokens": max_tokens,
+        "tool_profile": agent.tool_profile,
     }
     # Persist a process-scoped --yolo launch into the session row so a later
     # `hermes --resume <id>` can restore the bypass (CLI resume paths read
@@ -2827,6 +2867,27 @@ def init_agent(
             agent.valid_tool_names.add(_tname)
             agent._context_engine_tool_names.add(_tname)
             _existing_tool_names.add(_tname)
+
+    # Dynamic memory/context-engine schemas are now present in the granted
+    # catalog. Assemble once and freeze the provider-facing prefix for the
+    # lifetime of this session.
+    _freeze_session_tool_snapshot(agent)
+    if not agent.quiet_mode:
+        _active_names = sorted(agent.valid_tool_names)
+        _assembly = agent._tool_profile_assembly
+        print(
+            f"🛠️  Loaded {len(agent.tools)} {agent.tool_profile} tools: "
+            f"{', '.join(_active_names) if _active_names else 'none'}"
+        )
+        if _assembly.deferred_count:
+            print(
+                f"   🔎 Deferred {_assembly.deferred_count} granted tools "
+                "behind Tool Search"
+            )
+        if enabled_toolsets:
+            print(f"   ✅ Enabled toolsets: {', '.join(enabled_toolsets)}")
+        if disabled_toolsets:
+            print(f"   ❌ Disabled toolsets: {', '.join(disabled_toolsets)}")
 
     # Notify context engine of session start
     if hasattr(agent, "context_compressor") and agent.context_compressor:

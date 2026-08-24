@@ -7713,11 +7713,17 @@ def refresh_agent_mcp_tools(
     from model_tools import get_tool_definitions
     from tools.registry import registry
 
+    frozen_schema = bool(getattr(agent, "_tool_schema_frozen", False))
+
     # Explicit reloads (/reload-mcp) pass freshly-resolved toolsets so a server
     # the user just ENABLED in config is picked up; the agent's stored selection
     # is then updated to match. The automatic paths (between-turns, late-binding)
     # pass nothing and reuse the agent's build-time selection unchanged.
-    if enabled_override is not None or disabled_override is not None:
+    # Frozen v32 sessions deliberately ignore those ambient scope edits: a new
+    # session is the boundary for changing model-facing schema/toolset grants.
+    if not frozen_schema and (
+        enabled_override is not None or disabled_override is not None
+    ):
         enabled = enabled_override if enabled_override is not None else getattr(agent, "enabled_toolsets", None)
         disabled = disabled_override if disabled_override is not None else getattr(agent, "disabled_toolsets", None)
         agent.enabled_toolsets = enabled
@@ -7743,6 +7749,8 @@ def refresh_agent_mcp_tools(
             enabled_toolsets=enabled,
             disabled_toolsets=disabled,
             quiet_mode=quiet_mode,
+            skip_tool_search_assembly=frozen_schema,
+            tool_profile=getattr(agent, "tool_profile", "full") or "full",
         )
         or []
     )
@@ -7757,6 +7765,40 @@ def refresh_agent_mcp_tools(
     # half-swap. ``staged_engine_names`` are the context-engine routing names
     # this rebuild actually appended (matching agent_init's dedup-aware add).
     staged_engine_names = _reinject_post_build_tools(agent, new_defs, new_names)
+
+    if frozen_schema:
+        # Keep the provider-facing ``tools=`` prefix byte-identical for the
+        # lifetime of the session. Late MCP registrations can still become
+        # reachable through an already-visible Tool Search bridge by replacing
+        # only the hidden, scoped catalog snapshot. Direct schemas and
+        # ``valid_tool_names`` never change here.
+        with _agent_tools_lock:
+            published_gen_raw = getattr(agent, "_tool_snapshot_generation", -1)
+            published_gen = (
+                published_gen_raw
+                if isinstance(published_gen_raw, int)
+                else -1
+            )
+            if snapshot_generation < published_gen:
+                return set()
+            old_catalog = getattr(agent, "_tool_search_catalog_defs", ()) or ()
+            old_names = {
+                tool.get("function", {}).get("name")
+                for tool in old_catalog
+                if isinstance(tool, dict)
+            }
+            old_names.discard(None)
+            agent._tool_search_catalog_defs = tuple(new_defs)
+            agent._tool_catalog_names = frozenset(new_names)
+            agent._tool_snapshot_generation = max(
+                published_gen,
+                snapshot_generation,
+            )
+            try:
+                agent._tool_search_scope_cache = None
+            except Exception:
+                pass
+            return new_names - old_names
 
     # Single atomic read-diff-publish so the returned ``added`` is consistent
     # with what was actually published, even under concurrent callers, and a

@@ -1,17 +1,21 @@
 """Progressive tool disclosure ("tool search") for Hermes Agent.
 
-When enabled, MCP and non-core plugin tools are replaced in the model-visible
-tools array by three bridge tools — ``tool_search``, ``tool_describe``,
-``tool_call`` — and surfaced on demand. Core Hermes tools never defer.
+When enabled, tools are replaced in the model-visible tools array by three
+bridge tools — ``tool_search``, ``tool_describe``, ``tool_call`` — and surfaced
+on demand.  The legacy ``full`` profile only defers MCP/plugin tools; the
+default ``lean`` session profile also defers built-in Hermes tools except for a
+tiny direct allowlist.
 
 Design constraints this module is built around (see ``openclaw-tool-search-report``
 for the full rationale):
 
-* Core tools defined in ``toolsets._HERMES_CORE_TOOLS`` are *never* deferred.
-  Always-load means always-load. No exceptions.
-* Tiered disclosure (July 2026 plan): the moment ANY deferrable (MCP/plugin)
-  tools are present, they hide behind the bridge. What scales with catalog
-  size is the *listing*, not the activation decision:
+* ``lean`` sessions defer every granted tool except a tiny direct allowlist.
+  ``full`` preserves the legacy rule that Hermes core tools stay eager while
+  MCP/plugin tools may defer. The profile is resolved once when a session is
+  created and persisted for resume.
+* Tiered disclosure (July 2026 plan): the moment ANY profile-deferrable tools
+  are present, they hide behind the bridge. What scales with catalog size is
+  the *listing*, not the activation decision:
     - Tier 0 — no MCP/plugin tools: pure passthrough, everything eager.
     - Tier 1 — deferred tools whose catalog listing fits the listing budget
       (``min(threshold_pct`` of context — default 5% — ``, listing_max_tokens)``):
@@ -57,6 +61,15 @@ TOOL_DESCRIBE_NAME = "tool_describe"
 TOOL_CALL_NAME = "tool_call"
 
 BRIDGE_TOOL_NAMES = frozenset({TOOL_SEARCH_NAME, TOOL_DESCRIBE_NAME, TOOL_CALL_NAME})
+
+TOOL_PROFILE_LEAN = "lean"
+TOOL_PROFILE_FULL = "full"
+TOOL_PROFILES = frozenset({TOOL_PROFILE_LEAN, TOOL_PROFILE_FULL})
+
+# Keep only the interaction primitive direct in lean sessions. Everything
+# else remains available through Tool Search, but a simple explanation has no
+# action-shaped schema tempting the model into an unnecessary tool loop.
+LEAN_DIRECT_TOOL_NAMES = frozenset({"clarify"})
 
 # When estimating tokens from char count without a real tokenizer, this is
 # the cheap rule of thumb that's stable across providers. Roughly 4 chars
@@ -183,6 +196,55 @@ def load_config() -> ToolSearchConfig:
         return ToolSearchConfig.from_raw(None)
 
 
+def normalize_tool_profile(value: Any, *, default: str = TOOL_PROFILE_LEAN) -> str:
+    """Return ``lean`` or ``full`` with a safe, deterministic fallback."""
+    normalized_default = (
+        str(default or "").strip().lower()
+        if str(default or "").strip().lower() in TOOL_PROFILES
+        else TOOL_PROFILE_LEAN
+    )
+    normalized = str(value or "").strip().lower()
+    return normalized if normalized in TOOL_PROFILES else normalized_default
+
+
+def load_tool_profile() -> str:
+    """Load the default session tool profile from ``tools.profile``."""
+    try:
+        from hermes_cli.config import load_config as _load
+
+        cfg = _load() or {}
+        tools_cfg = cfg.get("tools") if isinstance(cfg.get("tools"), dict) else {}
+        return normalize_tool_profile((tools_cfg or {}).get("profile"))
+    except Exception as exc:
+        logger.debug("Failed to load session tool profile: %s", exc)
+        return TOOL_PROFILE_LEAN
+
+
+def resolve_session_tool_profile(*, session_db=None, session_id: str | None = None) -> str:
+    """Resolve one immutable profile for a new or resumed session.
+
+    A persisted ``model_config.tool_profile`` wins over ambient configuration,
+    so changing config between launches cannot silently rewrite the tool-schema
+    prefix of a resumed conversation.
+    """
+    if session_db is not None and session_id:
+        try:
+            persisted = session_db.get_session_model_config_value(
+                session_id,
+                "tool_profile",
+                None,
+            )
+            if str(persisted or "").strip().lower() in TOOL_PROFILES:
+                return normalize_tool_profile(persisted)
+        except Exception:
+            logger.debug(
+                "Failed to restore tool profile for session %s",
+                session_id,
+                exc_info=True,
+            )
+    return load_tool_profile()
+
+
 # ---------------------------------------------------------------------------
 # Tool classification
 # ---------------------------------------------------------------------------
@@ -201,7 +263,7 @@ def _core_tool_names() -> frozenset[str]:
         return frozenset()
 
 
-def is_deferrable_tool_name(name: str) -> bool:
+def is_deferrable_tool_name(name: str, *, profile: str = TOOL_PROFILE_FULL) -> bool:
     """Return True if a tool with this name is *eligible* for deferral.
 
     A tool is deferrable iff it is registered with an MCP toolset prefix
@@ -211,6 +273,12 @@ def is_deferrable_tool_name(name: str) -> bool:
     """
     if name in BRIDGE_TOOL_NAMES:
         return False
+    if normalize_tool_profile(profile, default=TOOL_PROFILE_FULL) == TOOL_PROFILE_LEAN:
+        # The caller still scopes the name against the session's frozen raw
+        # catalog before dispatch. Treating unknown-but-granted injected tools
+        # (memory/context engines) as deferrable is therefore safe and keeps
+        # them out of the eager schema too.
+        return name not in LEAN_DIRECT_TOOL_NAMES
     if name in _core_tool_names():
         return False
     # Check registry toolset for MCP prefix.
@@ -227,7 +295,11 @@ def is_deferrable_tool_name(name: str) -> bool:
         return False
 
 
-def classify_tools(tool_defs: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+def classify_tools(
+    tool_defs: List[Dict[str, Any]],
+    *,
+    profile: str = TOOL_PROFILE_FULL,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Split a tool-defs list into (visible, deferrable).
 
     ``visible`` retains every tool that must stay in the model-facing array:
@@ -243,7 +315,7 @@ def classify_tools(tool_defs: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]
             # Should never happen — bridge tools are added after classification —
             # but be defensive.
             continue
-        if is_deferrable_tool_name(name):
+        if is_deferrable_tool_name(name, profile=profile):
             deferrable.append(td)
         else:
             visible.append(td)
@@ -276,6 +348,8 @@ def should_activate(
     config: ToolSearchConfig,
     deferrable_tokens: int,
     context_length: Optional[int],
+    *,
+    profile: str = TOOL_PROFILE_FULL,
 ) -> bool:
     """Decide whether tool search should activate for the current assembly.
 
@@ -288,7 +362,14 @@ def should_activate(
     activation. ``context_length`` is retained in the signature for
     backward compatibility with existing callers.
     """
-    if config.enabled == "off":
+    # ``tools.profile: full`` is the explicit eager escape hatch.  The legacy
+    # tool_search.enabled switch still controls plugin deferral in that profile,
+    # but cannot accidentally expand a lean session back to the full schema.
+    if (
+        normalize_tool_profile(profile, default=TOOL_PROFILE_FULL)
+        == TOOL_PROFILE_FULL
+        and config.enabled == "off"
+    ):
         return False
     if deferrable_tokens <= 0:
         return False
@@ -629,6 +710,8 @@ def bridge_tool_schemas(
     deferred_count: int,
     listing: Optional[str] = None,
     listing_form: str = "",
+    *,
+    profile: str = TOOL_PROFILE_FULL,
 ) -> List[Dict[str, Any]]:
     """Build the bridge tool schemas to inject in place of deferred tools.
 
@@ -645,13 +728,23 @@ def bridge_tool_schemas(
     sees the exact name; the server-summary form ("groups") tells it which
     DOMAINS are reachable and that search is mandatory for tool discovery.
     """
-    desc_search = (
-        f"Search {deferred_count} additional tools that are loaded on demand. "
-        "Returns up to ``limit`` matches with name and description. Follow "
-        f"with `{TOOL_DESCRIBE_NAME}` to load a tool's full parameter schema, "
-        f"then `{TOOL_CALL_NAME}` to invoke it. Tools listed at the top of this "
-        "system prompt are already available and do not need to be searched."
-    )
+    if normalize_tool_profile(profile, default=TOOL_PROFILE_FULL) == TOOL_PROFILE_LEAN:
+        desc_search = (
+            f"Search {deferred_count} on-demand tools only when the request "
+            "requires external data or an action not available directly. Do not "
+            "use this for a simple explanation, conversation, rewrite, or other "
+            "answer that needs no external capability. Returns matching names and "
+            f"descriptions; use `{TOOL_DESCRIBE_NAME}` for the parameter schema, "
+            f"then `{TOOL_CALL_NAME}` to invoke the chosen tool."
+        )
+    else:
+        desc_search = (
+            f"Search {deferred_count} additional tools that are loaded on demand. "
+            "Returns up to ``limit`` matches with name and description. Follow "
+            f"with `{TOOL_DESCRIBE_NAME}` to load a tool's full parameter schema, "
+            f"then `{TOOL_CALL_NAME}` to invoke it. Tools listed at the top of this "
+            "system prompt are already available and do not need to be searched."
+        )
     if listing and listing_form == "groups":
         desc_search += (
             "\n\nThe servers below are connected and their tools ARE available "
@@ -774,13 +867,15 @@ def assemble_tool_defs(
     *,
     context_length: Optional[int] = None,
     config: Optional[ToolSearchConfig] = None,
+    profile: str = TOOL_PROFILE_FULL,
 ) -> AssemblyResult:
     """Return the tool-defs list the model should actually see.
 
     When tool search is inactive (off, no deferrable tools, or below
-    threshold), this is a passthrough. When active, MCP and plugin tools
+    threshold), this is a passthrough. When active, profile-deferrable tools
     are stripped from the visible list and replaced with the three bridge
-    tools. Core tools are *never* deferred regardless of config.
+    tools. ``full`` keeps core tools eager; ``lean`` defers them too except
+    for :data:`LEAN_DIRECT_TOOL_NAMES`.
 
     Idempotent: calling with bridge tools already in the input is a no-op
     (they classify as non-core/non-deferrable but their names are reserved,
@@ -788,18 +883,24 @@ def assemble_tool_defs(
     """
     if config is None:
         config = load_config()
+    profile = normalize_tool_profile(profile, default=TOOL_PROFILE_FULL)
 
     # Defensive: strip any bridge tools that may already be in the list
     # (e.g. someone called assemble twice).
     incoming = [td for td in tool_defs
                 if (td.get("function") or {}).get("name") not in BRIDGE_TOOL_NAMES]
 
-    visible, deferrable = classify_tools(incoming)
+    visible, deferrable = classify_tools(incoming, profile=profile)
     if not deferrable:
         return AssemblyResult(tool_defs=incoming, activated=False)
 
     deferrable_tokens = estimate_tokens_from_schemas(deferrable)
-    if not should_activate(config, deferrable_tokens, context_length):
+    if not should_activate(
+        config,
+        deferrable_tokens,
+        context_length,
+        profile=profile,
+    ):
         return AssemblyResult(
             tool_defs=incoming,
             activated=False,
@@ -812,11 +913,14 @@ def assemble_tool_defs(
     listing = None
     listing_form = "none"
     listing_budget = listing_token_budget(config, context_length)
-    if config.listing != "off":
+    # Lean keeps a constant-size bridge and discovers on demand. Embedding the
+    # catalog would spend thousands of fixed tokens and reintroduce the exact
+    # fresh-session overhead this profile exists to remove.
+    if profile == TOOL_PROFILE_FULL and config.listing != "off":
         listing, listing_form = build_catalog_listing_with_form(
             deferrable, max_tokens=listing_budget)
     bridge = bridge_tool_schemas(len(deferrable), listing=listing,
-                                 listing_form=listing_form)
+                                 listing_form=listing_form, profile=profile)
     result = visible + bridge
     # Tier 1 = per-tool listing for at least part of the catalog (full,
     # names, or mixed). Tier 2 = search-only discovery; the server-level
@@ -884,7 +988,8 @@ def _available_source_summary(catalog: List[CatalogEntry]) -> List[Dict[str, Any
 def dispatch_tool_search(args: Dict[str, Any],
                          *,
                          current_tool_defs: List[Dict[str, Any]],
-                         config: Optional[ToolSearchConfig] = None) -> str:
+                         config: Optional[ToolSearchConfig] = None,
+                         profile: str = TOOL_PROFILE_FULL) -> str:
     """Execute the ``tool_search`` bridge tool. Returns a JSON string."""
     if config is None:
         config = load_config()
@@ -898,7 +1003,7 @@ def dispatch_tool_search(args: Dict[str, Any],
     else:
         limit = max(1, min(config.max_search_limit, _safe_int(raw_limit, config.search_default_limit)))
 
-    _, deferrable = classify_tools(current_tool_defs)
+    _, deferrable = classify_tools(current_tool_defs, profile=profile)
     catalog = build_catalog(deferrable)
     hits = search_catalog(catalog, query, limit=limit)
     result: Dict[str, Any] = {
@@ -919,17 +1024,18 @@ def dispatch_tool_search(args: Dict[str, Any],
 
 def dispatch_tool_describe(args: Dict[str, Any],
                            *,
-                           current_tool_defs: List[Dict[str, Any]]) -> str:
+                           current_tool_defs: List[Dict[str, Any]],
+                           profile: str = TOOL_PROFILE_FULL) -> str:
     """Execute the ``tool_describe`` bridge tool. Returns a JSON string."""
     name = str(args.get("name") or "").strip()
     if not name:
         return tool_error("name is required")
-    if not is_deferrable_tool_name(name):
+    if not is_deferrable_tool_name(name, profile=profile):
         return tool_error(
             f"'{name}' is not a deferrable tool. If you see it in the tools list "
             "already, call it directly; otherwise check the spelling against tool_search."
         )
-    _, deferrable = classify_tools(current_tool_defs)
+    _, deferrable = classify_tools(current_tool_defs, profile=profile)
     for td in deferrable:
         fn = td.get("function") or {}
         if fn.get("name") == name:
@@ -943,7 +1049,11 @@ def dispatch_tool_describe(args: Dict[str, Any],
     )
 
 
-def scoped_deferrable_names(tool_defs: List[Dict[str, Any]]) -> frozenset[str]:
+def scoped_deferrable_names(
+    tool_defs: List[Dict[str, Any]],
+    *,
+    profile: str = TOOL_PROFILE_FULL,
+) -> frozenset[str]:
     """Return the set of deferrable tool names present in ``tool_defs``.
 
     ``tool_defs`` is expected to be the *pre-assembly* tool list for the
@@ -958,7 +1068,7 @@ def scoped_deferrable_names(tool_defs: List[Dict[str, Any]]) -> frozenset[str]:
     names: set[str] = set()
     for td in tool_defs:
         name = (td.get("function") or {}).get("name", "")
-        if name and is_deferrable_tool_name(name):
+        if name and is_deferrable_tool_name(name, profile=profile):
             names.add(name)
     return frozenset(names)
 
@@ -1016,7 +1126,11 @@ def validate_deferred_call_args(name: str, args: Dict[str, Any]) -> Optional[str
         return None
 
 
-def resolve_underlying_call(args: Dict[str, Any]) -> Tuple[Optional[str], Dict[str, Any], Optional[str]]:
+def resolve_underlying_call(
+    args: Dict[str, Any],
+    *,
+    profile: str = TOOL_PROFILE_FULL,
+) -> Tuple[Optional[str], Dict[str, Any], Optional[str]]:
     """Parse a ``tool_call`` invocation into (underlying_name, args, error_msg).
 
     Used by:
@@ -1041,7 +1155,7 @@ def resolve_underlying_call(args: Dict[str, Any]) -> Tuple[Optional[str], Dict[s
             return None, {}, f"tool_call 'arguments' is not valid JSON: {e}"
     if not isinstance(raw_args, dict):
         return None, {}, "tool_call 'arguments' must be an object"
-    if not is_deferrable_tool_name(name):
+    if not is_deferrable_tool_name(name, profile=profile):
         return None, {}, (
             f"'{name}' is not a deferrable tool. If it appears in the model-facing tools "
             "list already, call it directly instead of via tool_call."
@@ -1054,10 +1168,17 @@ __all__ = [
     "TOOL_DESCRIBE_NAME",
     "TOOL_CALL_NAME",
     "BRIDGE_TOOL_NAMES",
+    "TOOL_PROFILE_LEAN",
+    "TOOL_PROFILE_FULL",
+    "TOOL_PROFILES",
+    "LEAN_DIRECT_TOOL_NAMES",
     "ToolSearchConfig",
     "CatalogEntry",
     "AssemblyResult",
     "load_config",
+    "load_tool_profile",
+    "normalize_tool_profile",
+    "resolve_session_tool_profile",
     "is_deferrable_tool_name",
     "classify_tools",
     "estimate_tokens_from_schemas",

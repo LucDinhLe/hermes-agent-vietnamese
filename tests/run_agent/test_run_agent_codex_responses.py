@@ -21,7 +21,7 @@ def _no_codex_backoff(monkeypatch):
     monkeypatch.setattr(_time, "sleep", lambda *_a, **_k: None)
 
 
-def _patch_agent_bootstrap(monkeypatch):
+def _patch_agent_bootstrap(monkeypatch, *, tool_profile="full"):
     monkeypatch.setattr(
         run_agent,
         "get_tool_definitions",
@@ -37,10 +37,14 @@ def _patch_agent_bootstrap(monkeypatch):
         ],
     )
     monkeypatch.setattr(run_agent, "check_toolset_requirements", lambda: {})
+    monkeypatch.setattr(
+        "tools.tool_search.resolve_session_tool_profile",
+        lambda **_kwargs: tool_profile,
+    )
 
 
-def _build_agent(monkeypatch):
-    _patch_agent_bootstrap(monkeypatch)
+def _build_agent(monkeypatch, *, tool_profile="full"):
+    _patch_agent_bootstrap(monkeypatch, tool_profile=tool_profile)
 
     agent = run_agent.AIAgent(
         model="gpt-5-codex",
@@ -301,7 +305,7 @@ def test_api_mode_uses_explicit_provider_when_codex(monkeypatch):
 
 
 def test_build_api_kwargs_codex(monkeypatch):
-    agent = _build_agent(monkeypatch)
+    agent = _build_agent(monkeypatch, tool_profile="lean")
     kwargs = agent._build_api_kwargs(
         [
             {"role": "system", "content": "You are Hermes."},
@@ -315,7 +319,11 @@ def test_build_api_kwargs_codex(monkeypatch):
     assert isinstance(kwargs["input"], list)
     assert kwargs["input"][0]["role"] == "user"
     assert kwargs["tools"][0]["type"] == "function"
-    assert kwargs["tools"][0]["name"] == "terminal"
+    assert [tool["name"] for tool in kwargs["tools"]] == [
+        "tool_search",
+        "tool_describe",
+        "tool_call",
+    ]
     assert kwargs["tools"][0]["strict"] is False
     assert "function" not in kwargs["tools"][0]
     assert kwargs["store"] is False
@@ -329,6 +337,14 @@ def test_build_api_kwargs_codex(monkeypatch):
     assert kwargs["timeout"] > 0
     assert "max_tokens" not in kwargs
     assert "extra_body" not in kwargs
+
+
+def test_build_api_kwargs_codex_full_profile_keeps_eager_core_escape(monkeypatch):
+    agent = _build_agent(monkeypatch, tool_profile="full")
+
+    kwargs = agent._build_api_kwargs([{"role": "user", "content": "Ping"}])
+
+    assert [tool["name"] for tool in kwargs["tools"]] == ["terminal"]
 
 
 def test_build_api_kwargs_mantle_sets_extended_prompt_cache_retention(monkeypatch):

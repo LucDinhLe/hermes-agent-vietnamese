@@ -2669,11 +2669,16 @@ DEFAULT_CONFIG = {
     # in the model-facing tools array with three bridge tools —
     # tool_search / tool_describe / tool_call — and surfaced on demand.
     #
-    # Core Hermes tools (terminal, read_file, write_file, patch,
-    # search_files, todo, memory, browser_*, etc.) are NEVER deferred.
+    # The default lean session keeps only clarify + the three bridge schemas
+    # eager. Core, plugin, and MCP tools remain available on demand. Set
+    # tools.profile="full" for the legacy eager-core surface.
     # See tools/tool_search.py for full design notes and the
     # openclaw-tool-search-report PDF in this PR for the rationale.
     "tools": {
+        # lean (default): minimal stable request prefix; all granted tools are
+        # discoverable/callable through Tool Search. full: legacy eager core
+        # schemas, with only MCP/plugin schemas eligible for Tool Search.
+        "profile": "lean",
         "tool_search": {
             # Tiered disclosure: any deferrable (MCP/plugin) tool activates
             # the bridge; the listing then scales with catalog size.
@@ -2686,7 +2691,8 @@ DEFAULT_CONFIG = {
             #     model knows which domains are reachable; individual tools
             #     discoverable through tool_search only.
             # "auto"/"on" — activate when at least one deferrable tool exists.
-            # "off" — disable entirely. Tools-array assembly is a pass-through.
+            # "off" — disable plugin deferral in the full profile. Lean still
+            # uses its bridge; tools.profile="full" is the explicit eager escape.
             "enabled": "auto",
             # Listing budget as a percentage of the active model's context
             # length. Effective budget = min(this % of context,
