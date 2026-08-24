@@ -65,6 +65,11 @@ def _make_agent():
         patch("run_agent.OpenAI"),
         patch("run_agent._hermes_home", hermes_home),
         patch("agent.model_metadata.fetch_model_metadata", return_value={}),
+        # This suite exercises persistence ordering with a directly injected
+        # web_search call. The v32 default lean profile intentionally defers
+        # that tool behind Tool Search, so make the legacy eager-tool premise
+        # explicit instead of accidentally testing an invalid model call.
+        patch("tools.tool_search.resolve_session_tool_profile", return_value="full"),
     ):
         agent = AIAgent(
             api_key="test-key",
@@ -72,6 +77,7 @@ def _make_agent():
             quiet_mode=True,
             skip_context_files=True,
             skip_memory=True,
+            skip_background_review=True,
         )
     agent.client = MagicMock()
     agent._cached_system_prompt = "You are helpful."

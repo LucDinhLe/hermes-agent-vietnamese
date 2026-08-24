@@ -4316,8 +4316,6 @@ def run_conversation(
                 # a provider failure.  Never feed it into unicode/auth/rate-
                 # limit retry or model-fallback logic: doing so would let the
                 # very recovery machinery being governed bypass the hard cap.
-                from agent.turn_budget import TurnBudgetExceeded
-
                 if isinstance(api_error, TurnBudgetExceeded):
                     raise
 
