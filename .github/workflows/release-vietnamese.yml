@@ -96,6 +96,7 @@ jobs:
           node --test
           scripts/vietnamese-release.test.mjs
           scripts/bundled-release-policy.test.mjs
+          scripts/local-candidate-derived-outputs.test.mjs
           apps/desktop/scripts/patch-electron-builder-mac-binary.test.mjs
           scripts/validate-release-evidence.test.mjs
           scripts/validate-pilot-release-evidence.test.mjs
@@ -114,10 +115,12 @@ jobs:
           scripts/community-distribution.test.mjs
           scripts/collect-community-artifacts.test.mjs
           scripts/generate-community-update-metadata.test.mjs
+          scripts/packaged-provenance.test.mjs
           scripts/packaged-layout.test.mjs
           scripts/release-workflow-contract.test.mjs
           scripts/stage-agent-payloads.test.mjs
           scripts/stage-native-deps.test.mjs
+          scripts/verify-windows-nsis-provenance.test.mjs
           scripts/browser-connector-extension.test.mjs
           electron/app-updater.test.ts
           electron/active-runtime-state.test.ts

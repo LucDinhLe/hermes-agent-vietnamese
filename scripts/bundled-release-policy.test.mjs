@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict'
+import { spawnSync } from 'node:child_process'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import test from 'node:test'
 
 import {
   BUNDLED_BUILD_NODE_MIN_MAJOR,
   BUNDLED_BUILD_NPM_RANGE,
+  LOCAL_CANDIDATE_IGNORED_INPUT_GIT_ARGS,
   LOCAL_CANDIDATE_STATUS_COMMAND,
   bundledUpdatePolicy,
   createLocalCandidateProvenanceGuard,
@@ -43,20 +48,14 @@ test('bundled build provenance rejects npm releases excluded by the committed en
     version: '12.0.1'
   })
   for (const excluded of ['11.10.0', '11.12.1', '11.16.9']) {
-    assert.throws(
-      () => validateBundledBuildNpm(excluded),
-      /require npm <11\.10\.0 \|\| >=11\.17\.0.*current host/
-    )
+    assert.throws(() => validateBundledBuildNpm(excluded), /require npm <11\.10\.0 \|\| >=11\.17\.0.*current host/)
   }
   assert.throws(() => validateBundledBuildNpm('unknown'), /cannot determine/)
 })
 
 test('unsigned local candidates default to community prerelease and can never claim stable', () => {
   assert.equal(resolveBundledReleaseClass('', { localCandidate: true }), 'community-prerelease')
-  assert.throws(
-    () => resolveBundledReleaseClass('stable', { localCandidate: true }),
-    /unsigned.*community-prerelease/
-  )
+  assert.throws(() => resolveBundledReleaseClass('stable', { localCandidate: true }), /unsigned.*community-prerelease/)
 })
 
 test('tagged builds require an explicit supported release class', () => {
@@ -80,10 +79,10 @@ test('community prerelease metadata disables the update feed while stable enable
 
 test('tagless local candidate binds a fully clean HEAD to an explicit full commit', () => {
   const commit = 'a'.repeat(40)
-  assert.deepEqual(
-    validateLocalCandidateCheckout({ expectedCommit: commit, headCommit: commit, worktreeStatus: '' }),
-    { commit, localCandidate: true }
-  )
+  assert.deepEqual(validateLocalCandidateCheckout({ expectedCommit: commit, headCommit: commit, worktreeStatus: '' }), {
+    commit,
+    localCandidate: true
+  })
   assert.throws(
     () => validateLocalCandidateCheckout({ expectedCommit: 'a'.repeat(39), headCommit: commit, worktreeStatus: '' }),
     /full 40-character/
@@ -93,17 +92,15 @@ test('tagless local candidate binds a fully clean HEAD to an explicit full commi
     /does not match HEAD/
   )
   assert.throws(
-    () => validateLocalCandidateCheckout({ expectedCommit: commit, headCommit: commit, worktreeStatus: ' M tracked.js' }),
+    () =>
+      validateLocalCandidateCheckout({ expectedCommit: commit, headCommit: commit, worktreeStatus: ' M tracked.js' }),
     /fully clean.*tracked and untracked/
   )
 })
 
 test('tagless local candidate rejects untracked desktop source and package assets', () => {
   const commit = 'd'.repeat(40)
-  assert.equal(
-    LOCAL_CANDIDATE_STATUS_COMMAND,
-    'git status --porcelain=v1 --untracked-files=all'
-  )
+  assert.equal(LOCAL_CANDIDATE_STATUS_COMMAND, 'git status --porcelain=v1 --untracked-files=all')
 
   for (const untrackedPath of [
     'apps/desktop/src/release-shadow.ts',
@@ -111,14 +108,57 @@ test('tagless local candidate rejects untracked desktop source and package asset
     'apps/desktop/assets/release-shadow.svg'
   ]) {
     assert.throws(
-      () => validateLocalCandidateCheckout({
-        expectedCommit: commit,
-        headCommit: commit,
-        worktreeStatus: `?? ${untrackedPath}`
-      }),
+      () =>
+        validateLocalCandidateCheckout({
+          expectedCommit: commit,
+          headCommit: commit,
+          worktreeStatus: `?? ${untrackedPath}`
+        }),
       /fully clean.*tracked and untracked/,
       untrackedPath
     )
+  }
+})
+
+test('tagless local candidate detects ignored build inputs without scanning derived trees', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-ignored-build-inputs-'))
+  try {
+    fs.mkdirSync(path.join(root, 'apps/desktop/src'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'apps/desktop/dist'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'node_modules/example'), { recursive: true })
+    fs.writeFileSync(
+      path.join(root, '.gitignore'),
+      ['.env*', 'apps/desktop/src/**/*.js', 'apps/desktop/dist/', 'node_modules/'].join('\n')
+    )
+    fs.writeFileSync(path.join(root, '.env.production.local'), 'VITE_PERF_PROBE=1\n')
+    fs.writeFileSync(path.join(root, 'apps/desktop/src/App.js'), 'export const shadow = true\n')
+    fs.writeFileSync(path.join(root, 'apps/desktop/dist/app.js'), 'derived\n')
+    fs.writeFileSync(path.join(root, 'node_modules/example/index.js'), 'derived\n')
+
+    const init = spawnSync('git', ['init', '--quiet'], { cwd: root, encoding: 'utf8', shell: false })
+    assert.equal(init.status, 0, init.stderr)
+    const probe = spawnSync('git', LOCAL_CANDIDATE_IGNORED_INPUT_GIT_ARGS, {
+      cwd: root,
+      encoding: 'utf8',
+      shell: false
+    })
+    assert.equal(probe.status, 0, probe.stderr)
+    const ignored = probe.stdout.trim().split(/\r?\n/).sort()
+    assert.deepEqual(ignored, ['.env.production.local', 'apps/desktop/src/App.js'])
+
+    const commit = 'f'.repeat(40)
+    assert.throws(
+      () =>
+        validateLocalCandidateCheckout({
+          expectedCommit: commit,
+          headCommit: commit,
+          ignoredBuildInputs: probe.stdout,
+          worktreeStatus: ''
+        }),
+      /ignored artifact-affecting build inputs.*local \.env files.*source shadows/
+    )
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
   }
 })
 
@@ -130,21 +170,25 @@ test('tagless local candidate installs from lock and revalidates provenance afte
   )
 
   const guard = createLocalCandidateProvenanceGuard({ expectedCommit: commit })
-  assert.deepEqual(
-    guard.check({ headCommit: commit, worktreeStatus: '' }),
-    { commit, localCandidate: true }
-  )
+  assert.deepEqual(guard.check({ headCommit: commit, worktreeStatus: '' }), { commit, localCandidate: true })
   assert.throws(
-    () => guard.check({
-      headCommit: commit,
-      worktreeStatus: '?? apps/desktop/public/appeared-during-build.js'
-    }),
+    () =>
+      guard.check({
+        headCommit: commit,
+        worktreeStatus: '?? apps/desktop/public/appeared-during-build.js'
+      }),
     /fully clean.*tracked and untracked/
   )
   assert.throws(
-    () => guard.check({ headCommit: 'f'.repeat(40), worktreeStatus: '' }),
-    /does not match HEAD/
+    () =>
+      guard.check({
+        headCommit: commit,
+        ignoredBuildInputs: 'apps/desktop/src/stale.js',
+        worktreeStatus: ''
+      }),
+    /ignored artifact-affecting build inputs/
   )
+  assert.throws(() => guard.check({ headCommit: 'f'.repeat(40), worktreeStatus: '' }), /does not match HEAD/)
 })
 
 test('payload archive uses the immutable commit only in explicit local-candidate mode', () => {
@@ -152,8 +196,5 @@ test('payload archive uses the immutable commit only in explicit local-candidate
   const commit = 'c'.repeat(40)
   assert.equal(resolvePayloadGitRef({ tag, commit, localCandidate: false }), tag)
   assert.equal(resolvePayloadGitRef({ tag, commit, localCandidate: true }), commit)
-  assert.throws(
-    () => resolvePayloadGitRef({ tag, commit: 'HEAD', localCandidate: true }),
-    /full 40-character/
-  )
+  assert.throws(() => resolvePayloadGitRef({ tag, commit: 'HEAD', localCandidate: true }), /full 40-character/)
 })

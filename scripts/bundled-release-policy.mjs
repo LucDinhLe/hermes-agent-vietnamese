@@ -2,9 +2,37 @@ const RELEASE_CLASSES = new Set(['community-prerelease', 'stable'])
 export const BUNDLED_BUILD_NODE_MIN_MAJOR = 26
 export const BUNDLED_BUILD_NPM_RANGE = '<11.10.0 || >=11.17.0'
 export const LOCAL_CANDIDATE_STATUS_COMMAND = 'git status --porcelain=v1 --untracked-files=all'
+// `git status` deliberately omits ignored files, but several ignored paths are
+// still production inputs: Vite loads local .env files, and stale compiler
+// emissions under source trees can win module resolution over TypeScript.
+// Query only live input surfaces. Derived trees (node_modules, dist, build,
+// release, and web_dist) are intentionally absent because the pinned install
+// and build steps recreate them.
+export const LOCAL_CANDIDATE_IGNORED_INPUT_GIT_ARGS = Object.freeze([
+  'ls-files',
+  '--others',
+  '--ignored',
+  '--exclude-standard',
+  '--',
+  ':(top,glob).env*',
+  ':(top,glob)apps/desktop/.env*',
+  ':(top,glob)ui-tui/.env*',
+  ':(top,glob)web/.env*',
+  ':(top,glob)apps/desktop/assets/**',
+  ':(top,glob)apps/desktop/electron/**',
+  ':(top,glob)apps/desktop/public/**',
+  ':(top,glob)apps/desktop/src/**',
+  ':(top,glob)apps/shared/src/**',
+  ':(top,glob)ui-tui/src/**',
+  ':(top,glob)ui-tui/packages/*/src/**',
+  ':(top,glob)web/public/**',
+  ':(top,glob)web/src/**'
+])
 
 export function validateBundledBuildNode(version) {
-  const normalized = String(version || '').trim().replace(/^v/i, '')
+  const normalized = String(version || '')
+    .trim()
+    .replace(/^v/i, '')
   const match = /^(\d+)\.(\d+)\.(\d+)/.exec(normalized)
   if (!match) {
     throw new Error(`cannot determine bundled build host Node version from: ${version || '(missing)'}`)
@@ -20,7 +48,9 @@ export function validateBundledBuildNode(version) {
 }
 
 export function validateBundledBuildNpm(version) {
-  const normalized = String(version || '').trim().replace(/^v/i, '')
+  const normalized = String(version || '')
+    .trim()
+    .replace(/^v/i, '')
   const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(normalized)
   if (!match) {
     throw new Error(`cannot determine bundled build host npm version from: ${version || '(missing)'}`)
@@ -29,8 +59,7 @@ export function validateBundledBuildNpm(version) {
   const accepted = major < 11 || major > 11 || minor < 10 || minor >= 17
   if (!accepted) {
     throw new Error(
-      `bundled release builds require npm ${BUNDLED_BUILD_NPM_RANGE}; ` +
-        `current host is npm ${normalized}`
+      `bundled release builds require npm ${BUNDLED_BUILD_NPM_RANGE}; ` + `current host is npm ${normalized}`
     )
   }
   return Object.freeze({ major, minor, patch, version: normalized })
@@ -62,7 +91,12 @@ export function bundledUpdatePolicy(releaseClass) {
   })
 }
 
-export function validateLocalCandidateCheckout({ expectedCommit, headCommit, worktreeStatus }) {
+export function validateLocalCandidateCheckout({
+  expectedCommit,
+  headCommit,
+  ignoredBuildInputs = '',
+  worktreeStatus
+}) {
   if (!/^[0-9a-f]{40}$/i.test(String(expectedCommit || ''))) {
     throw new Error('--local-candidate requires --commit=<full 40-character HEAD SHA>')
   }
@@ -73,6 +107,12 @@ export function validateLocalCandidateCheckout({ expectedCommit, headCommit, wor
     throw new Error(
       'tagless local candidate requires a fully clean index and worktree; ' +
         'tracked and untracked files are forbidden'
+    )
+  }
+  if (String(ignoredBuildInputs || '').trim()) {
+    throw new Error(
+      'tagless local candidate found ignored artifact-affecting build inputs; ' +
+        'remove local .env files and ignored source shadows before building'
     )
   }
 
@@ -88,8 +128,13 @@ export function createLocalCandidateProvenanceGuard({ expectedCommit, skipInstal
 
   let initialCommit = null
   return Object.freeze({
-    check({ headCommit, worktreeStatus }) {
-      const checkout = validateLocalCandidateCheckout({ expectedCommit, headCommit, worktreeStatus })
+    check({ headCommit, ignoredBuildInputs, worktreeStatus }) {
+      const checkout = validateLocalCandidateCheckout({
+        expectedCommit,
+        headCommit,
+        ignoredBuildInputs,
+        worktreeStatus
+      })
       if (initialCommit && checkout.commit !== initialCommit) {
         throw new Error(
           `tagless local candidate commit changed during the build: ${initialCommit} -> ${checkout.commit}`
