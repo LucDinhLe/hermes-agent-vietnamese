@@ -6,13 +6,15 @@ Nhánh: `feat/v32-token-context-ux`
 
 Baseline v32: `3cce675cea2bfdfd2fd29352f35a529e827cf46f`
 
-Mốc mã được tổng hợp: `596d188b2c19ef5ef8f67b87bff7b1c5fa7c8c5e`
+Mốc mã trước checkpoint test hiện tại:
+`ffa71a84065f9272bb65df28787fe80470f72558`
 
 Trạng thái: **candidate only / NO-GO cho staging và phát hành công khai**
 
 Mốc mã trên là implementation tip trước commit tài liệu này. Commit, phiên bản
-và digest của candidate chỉ được điền sau khi freeze một worktree sạch và build
-đúng một lần.
+và digest của candidate chỉ được điền sau khi freeze một worktree sạch. Chủ dự
+án đã cho phép đúng một build retry ngoại lệ trên commit cuối đã sửa; lượt này
+chưa được sử dụng và chỉ được dùng sau khi toàn bộ pre-build gate xanh.
 
 ## Kết quả người dùng nhận được
 
@@ -52,14 +54,16 @@ Các đường Hermes quản lý trực tiếp đã có reservation trước I/O
 gồm main transport, retry/fallback quan sát được, title, auxiliary/background,
 compaction, subagent, Bedrock probe tier và các POST của công cụ xAI.
 
-### Ranh giới chưa khép kín
+### Ranh giới runtime opaque và chính sách fail-closed
 
 Codex app-server, Claude Code và Copilot ACP chạy qua subprocess hoặc protocol
-agentic bên ngoài. Hermes có thể đếm request ở biên gọi vào runtime, nhưng các
-runtime này chưa cung cấp callback cho từng provider request, retry hoặc tool
-call vật lý diễn ra bên trong tiến trình đó. Vì vậy tuyên bố “đếm toàn bộ physical
-attempt” chưa đúng trên ba tuyến này. Đây là giới hạn phát hành, không được che
-bằng số meter ước lượng.
+agentic bên ngoài và chưa cung cấp callback cho từng provider request, retry hay
+tool call vật lý. V32 không ước lượng các attempt ẩn: governed user turn chặn ba
+runtime này trước I/O bằng `UnobservableModelRuntimeError`. Codex app-server trả
+failure có cấu trúc với `provider_error_kind=unobservable_model_runtime`,
+`turn_exit_reason=unobservable_model_runtime_blocked`, `api_calls=0`; không retry,
+fallback hoặc switch âm thầm. Chỉ mở lại khi có per-attempt telemetry/reservation
+đủ mạnh để Governor chặn trước I/O.
 
 ## 2. Giới hạn raw output và đường phục hồi
 
@@ -98,6 +102,9 @@ và nguồn metadata để UI không dùng con số 1,05M như một bảo đả
 - Bedrock không tự gửi probe ngữ cảnh cỡ rất lớn. Live probe chỉ chạy khi operator
   chủ động bật `HERMES_BEDROCK_LIVE_CONTEXT_PROBE`; đây là cổng kỹ thuật nội bộ,
   chưa phải tùy chọn người dùng được khuyến nghị.
+- Regression runtime tạo transcript logic trên 350k, compact dưới ngưỡng 208k,
+  persist/relaunch bằng SQLite và tiếp tục ở agent mới trong mock profile. Toàn
+  bộ retention anchors vẫn còn; canonical context group đạt 246/246.
 
 ## 4. Lean Session và prompt-cache parity
 
@@ -157,6 +164,10 @@ estimate, chưa phải tokenizer usage hoặc hóa đơn provider. Bản evidenc
 | `fc16ae445` | Reservation cho provider fallback và Bedrock probe paths |
 | `c84a4adee` | Hạ failsafe mặc định, tắt Bedrock live probe tự động |
 | `596d188b2` | Giữ đúng binding của exception Governor qua cleanup |
+| `44aa3e18b` | Harness vòng đời Windows x64 cô lập và evidence contract |
+| `4ce6fc812` | Truyền đúng local candidate tag vào payload provenance |
+| `ffa71a840` | Fail-closed runtime opaque và khóa aggregate Governor |
+| `[checkpoint kế tiếp]` | Continuity >350k qua compaction, persistence và relaunch |
 
 ## Thành phần chính bị ảnh hưởng
 

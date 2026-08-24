@@ -126,8 +126,11 @@ prompt có một main response, không tool-loop và không background review.
 
 ## Candidate và packaged smoke
 
-- Build candidate đúng một lần sau source GO; khóa commit/version/platform/arch,
-  filename/size/SHA-256/provenance trước mọi smoke.
+- Build candidate sau source GO; khóa commit/version/platform/arch,
+  filename/size/SHA-256/provenance trước mọi smoke. Chủ dự án cho phép đúng một
+  build retry ngoại lệ trên cùng commit cuối đã sửa vì lượt build cũ dừng trước
+  artifact do local tag không truyền vào payload. Retry chưa được dùng và không
+  được tiêu trước khi toàn bộ pre-build gate xanh.
 - Smoke Windows x64 dùng HERMES_HOME, Electron userData và provider mock riêng:
   fresh install, onboarding, gateway, safe tool, relaunch/persistence, ba UX,
   synthetic compaction, update v31, repair, keep/delete data, uninstall, rollback.
@@ -175,7 +178,10 @@ vẫn bắt buộc exact tag trỏ đúng checkout, và source phải fetch đư
 
 ## Promotion boundary
 
-Technical GO chỉ cho phép tạo immutable local candidate. Staging/tag/draft/push
-vẫn cần phê duyệt mới. Promotion công khai cần thêm exact-byte smoke, secret
-scan, signing disclosure, target-machine evidence và owner GO. Thiếu signing
-hoặc máy thật cho target quảng cáo thì không được gọi stable/final.
+Technical GO cho phép tạo immutable local candidate và chuẩn bị private draft
+theo hợp đồng task. Vì kho GitHub hiện là public, việc push nhánh source vẫn làm
+lộ mã dù draft asset là private; chỉ thực hiện sau xác nhận rõ ràng cho public
+source exposure. Promotion thành GitHub Latest thay v31 là hành động cuối, cần
+exact-byte smoke, secret scan, signing disclosure, target-machine evidence và
+owner GO. Thiếu signing hoặc máy thật cho target quảng cáo thì không được gọi
+stable/final.

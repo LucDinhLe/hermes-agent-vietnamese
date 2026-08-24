@@ -2,8 +2,9 @@
 
 ## Trạng thái
 
-Accepted for implementation; nguyên nhân provider cuối cùng vẫn **chưa được
-chứng minh** nếu không có normalized persisted error hoặc live probe được duyệt.
+Accepted and covered by deterministic source integration. Nguyên nhân provider
+trong một sự cố live cụ thể vẫn chỉ được khẳng định khi có normalized persisted
+error; live probe tiếp tục cần phê duyệt riêng.
 
 ## Bối cảnh
 
@@ -30,6 +31,24 @@ mặc định tắt; local threshold GPT-5.6 có thể lên 85% effective window
   downgrade và context retry marker.
 - Native checkpoint, user asks, paths, commit SHA, exact errors và quyết định là
   retention anchors bắt buộc trong synthetic recall tests.
+
+## Bằng chứng checkpoint 2026-08-24
+
+- `tests/run_agent/test_v32_long_context_continuity.py` tạo transcript logic ít
+  nhất 350.000 token, dùng `AIAgent.run_conversation` và compressor thật với
+  provider/summary LLM mock, compact dưới ngưỡng 208.000 active token, rồi lưu
+  SQLite, đóng/mở lại DB và tiếp tục bằng một agent mới.
+- Test giữ được task anchor, Windows path, exact commit, error class và decision
+  anchor ở cả lượt trước và sau relaunch; provider wire sau compact luôn dưới
+  ngưỡng local planning.
+- Canonical group 10 tệp chạy qua `scripts/run_tests.sh` đạt 246/246, gồm native
+  compaction, Codex app-server compaction, 413 recovery, in-place compaction,
+  persistence/relaunch, summary continuity, classifier và benchmark offline.
+- Raw tool output 100.000 ký tự được spill trước recovery. Parent context chỉ
+  nhận `<persisted-output>` có giới hạn; artifact giữ đúng toàn bộ payload.
+- Đây là source proof offline, không tiêu quota và không thay thế packaged smoke
+  hay live provider probe. Final candidate vẫn phải chạy lại exact receipt sau
+  khi commit được freeze.
 
 ## Hệ quả
 

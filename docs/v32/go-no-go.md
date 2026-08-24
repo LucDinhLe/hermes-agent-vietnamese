@@ -2,7 +2,8 @@
 
 Ngày đánh giá: 2026-08-24
 
-Implementation tip được quan sát: `596d188b2c19ef5ef8f67b87bff7b1c5fa7c8c5e`
+Implementation tip trước checkpoint test hiện tại:
+`ffa71a84065f9272bb65df28787fe80470f72558`
 
 ## Quyết định
 
@@ -23,9 +24,9 @@ cập nhật chưa nằm trong phạm vi cho phép.
 | Thuộc tính | Giá trị hiện tại |
 | --- | --- |
 | Baseline v32 | `3cce675cea2bfdfd2fd29352f35a529e827cf46f` |
-| Implementation tip trước docs | `596d188b2c19ef5ef8f67b87bff7b1c5fa7c8c5e` |
+| Implementation tip trước docs | `ffa71a84065f9272bb65df28787fe80470f72558` |
 | Exact candidate commit | `[PARENT: điền sau freeze]` |
-| Version | `[PARENT: dự kiến 0.32.0-vi.1]` |
+| Version | `0.32.0-vi.1 (dự kiến; chưa build)` |
 | Tag | `[PARENT: chưa tạo]` |
 | Artifact | `[PARENT: chưa build]` |
 | Platform/architecture | `[PARENT: điền]` |
@@ -48,33 +49,30 @@ cập nhật chưa nằm trong phạm vi cho phép.
 - Các đường provider Hermes quản lý trực tiếp đã được mở rộng reservation qua
   retry, fallback, hidden compaction, Bedrock probe tier và xAI POST.
 - Benchmark offline sơ bộ đạt mục tiêu fresh dưới 1% theo static estimate.
+- Runtime opaque không còn được đếm ước lượng: governed turn fail-closed trước
+  I/O và trả lỗi có cấu trúc, không retry/fallback/switch âm thầm.
+- Canonical context/error group đạt 246/246, gồm continuity logic >350k qua
+  compaction, SQLite persistence, relaunch và lượt tiếp theo bằng agent mới.
 
 Chi tiết và trạng thái cần chạy lại nằm tại `docs/v32/test-report.md`. Những
 dòng trên chưa đủ thay thế final candidate receipts.
 
-## Blocker bắt buộc
+## Gates và blocker còn lại
 
 ### 1. Candidate chưa bất biến và chưa thể truy xuất độc lập
 
 Nhánh hiện đi trước `origin/main`, implementation tip còn local-only tại thời
-điểm lập hồ sơ. Worktree có benchmark files đang chờ commit. Release rulebook
+điểm lập hồ sơ. Worktree có test và tài liệu checkpoint đang chờ commit. Release rulebook
 cấm build candidate để staging từ commit bẩn, local-only hoặc chưa fetch được.
 
-### 2. Governor chưa phủ được physical attempts bên trong runtime opaque
+### 2. Chính sách runtime opaque đã khép kín ở source checkpoint
 
-Codex app-server, Claude Code và Copilot ACP chạy trong subprocess hoặc protocol
-agentic riêng. Hermes reserve được request ở biên gọi runtime, nhưng không nhận
-telemetry cho từng provider request, retry và tool call nội bộ. Meter có thể
-đếm thiếu; hard pause 12/20 chưa thể chặn trước I/O ở bên trong ba tiến trình.
-
-Giới hạn này chặn mọi tuyên bố “đếm toàn bộ physical attempts”. Cần một trong
-hai hướng trước phát hành rộng:
-
-1. protocol cung cấp per-request telemetry/reservation hook; hoặc
-2. chính sách fail-closed rõ ràng giới hạn/tắt các tuyến opaque trong phạm vi
-   release, có migration và UX được duyệt.
-
-Không được âm thầm đổi model hay runtime của người dùng để né blocker.
+Codex app-server, Claude Code và Copilot ACP không cung cấp telemetry cho từng
+provider request, retry và tool call nội bộ. V32 đã chọn hướng fail-closed:
+governed user turn chặn các runtime này trước I/O bằng lỗi có cấu trúc. Codex
+app-server ghi `api_calls=0`, exit reason riêng và không retry, fallback hay đổi
+runtime âm thầm. Gate còn lại là chạy lại ma trận này trên exact candidate;
+không còn cho phép meter undercount các attempt opaque.
 
 ### 3. Final source matrix chưa khóa
 
@@ -92,34 +90,34 @@ Chưa có versioned artifact, size, SHA-256, manifest, secret scan, isolated
 Windows x64 install, gateway/onboarding, safe-tool mock, persistence, ba UX v32,
 synthetic compaction, update v31, repair, hai chế độ uninstall hoặc rollback.
 
-### 5. Release-surface blockers từ kế hoạch chưa đóng
+### 5. Release-surface controls đã triển khai, final gate chưa khóa
 
-- Payload/feed còn cần chứng minh fail closed khỏi hard-coded `channel=stable`
-  cho v32 chưa ký.
-- Node floor giữa workflow/POSIX và Windows installer đang lệch 26 so với 22.
-- macOS electron-builder patch có đường skip rồi exit 0; cần gate xác minh patch
-  thực sự áp dụng.
-- POSIX updater có rủi ro xóa venv trước khi replacement sẵn sàng; chưa có
-  rollback proof.
-- Windows ARM64 có thể thiếu `read_window_below` khi `get-windows` fail-soft;
-  cần binary/architecture gate và disclosure.
+- Community prerelease đã fail-closed update feed và từ chối `latest*.yml`.
+- Node floor đã thống nhất ở 26 trong build/preflight/healer paths.
+- macOS patch gate, POSIX two-stage venv rollback và Windows ARM64
+  architecture/limitation gates đã được triển khai.
+- Các control này vẫn phải qua release/evidence regression trên exact frozen
+  commit trước khi được tính source GO.
 
 ### 6. Signing, máy thật và quyền công bố
 
 - Chưa có Authenticode Windows.
 - Chưa có Developer ID, notarization và stapling macOS.
 - Chưa có runtime smoke cho sáu target được quảng cáo.
-- Chưa có owner GO cho tag, push, draft, staging hoặc publication.
+- Private draft staging nằm trong quyền của task sau source GO. Tuy nhiên kho
+  GitHub là public nên push nhánh sẽ công khai source; bước đó cần xác nhận rõ
+  về public source exposure. Thay GitHub Latest v31 vẫn cần owner GO cuối.
 
 ## Giới hạn đã biết
 
 1. Static benchmark dùng rough estimator. Nó không đại diện tokenizer-exact
    usage, quota hoặc hóa đơn provider.
 2. Live provider behavior chưa được kiểm chứng trong lượt này.
-3. Governor có thể undercount trên Codex app-server, Claude Code và Copilot ACP
-   do thiếu visibility bên trong subprocess.
-4. Codex app-server sở hữu thread context riêng. Hermes có thể trigger outer
-   compaction RPC, còn quyết định và provider work nội bộ vẫn opaque.
+3. Codex app-server, Claude Code và Copilot ACP bị fail-closed trong governed
+   turn cho tới khi protocol có per-attempt telemetry/reservation; đây là giới
+   hạn tính năng có chủ đích, không phải số meter bị undercount.
+4. Codex app-server vẫn sở hữu thread context riêng. V32 không cho runtime opaque
+   này thực hiện provider work trong governed turn ở release scope hiện tại.
 5. Raw-output trần 9.500 byte áp dụng cho tool result dạng văn bản. Structured
    vision content đi qua adapter/DB summary path riêng.
 6. Bedrock live context probe bị tắt mặc định vì một tier thành công có thể xử
@@ -166,15 +164,17 @@ Rollback hiện là kế hoạch, chưa phải bằng chứng đã diễn tập 
 
 ## Điều kiện nhỏ nhất để đổi quyết định
 
-1. Freeze exact commit sạch, đã push và fetch độc lập.
-2. Chốt chính sách cho ba runtime opaque hoặc thêm telemetry đủ chặn trước I/O.
-3. Chạy final source matrix cùng benchmark canonical trên exact commit.
-4. Đóng năm release-surface blocker trong kế hoạch.
-5. Build local candidate đúng một lần và khóa manifest/digest.
-6. Chạy isolated Windows x64 packaged smoke, update, repair, uninstall và
+1. Freeze exact commit sạch; push/fetch độc lập sau xác nhận public source
+   exposure.
+2. Chạy final source matrix cùng benchmark canonical trên exact commit.
+3. Đóng release-surface/pre-build gates trong kế hoạch.
+4. Dùng đúng một build retry ngoại lệ đã được duyệt trên commit cuối đã sửa và
+   khóa manifest/digest; lượt retry hiện chưa dùng.
+5. Chạy isolated Windows x64 packaged smoke, update, repair, uninstall và
    rollback bằng mock provider.
-7. Ghi signing/support matrix đúng sự thật.
-8. Chỉ sau đó mới xin phê duyệt mới cho tag, push hoặc staging kín.
+6. Ghi signing/support matrix đúng sự thật.
+7. Tạo private staging giữ đúng byte đã nghiệm thu; chỉ xin owner GO cho hành
+   động public/Latest sau khi mọi gate kỹ thuật đạt.
 
 ## Handoff bắt buộc
 
@@ -182,11 +182,11 @@ Rollback hiện là kế hoạch, chưa phải bằng chứng đã diễn tập 
 Decision: NO-GO / candidate only
 Candidate: chưa freeze; chưa có artifact hoặc hash
 Audience allowed: kỹ thuật nội bộ trong môi trường cô lập, mock/offline
-Gates passed: checkpoint source tests và benchmark offline sơ bộ
-Gates failed or missing: opaque runtime accounting, final matrix, release blockers, artifact smoke, signing, máy thật, rollback proof, owner approval
+Gates passed: opaque runtime fail-closed; context/error checkpoint 246/246; >350k continuity; benchmark offline sơ bộ
+Gates failed or missing: final exact-commit matrix, release gates, artifact smoke, signing disclosure, máy Windows cô lập, rollback proof, owner approval cho Latest
 Evidence: docs/v32/implementation-summary.md; docs/v32/test-report.md; docs/v32/benchmarks/
-Residual risks: undercount physical attempts; update/rollback state; unsigned/cross-platform behavior
+Residual risks: opaque runtimes bị vô hiệu trong governed turn; update/rollback state; unsigned/cross-platform behavior
 Rollback target: vi-v0.20.4-39
 Public actions taken: none
-Next smallest step: khóa exact source gate và quyết định fail-closed/telemetry cho ba runtime opaque
+Next smallest step: commit checkpoint continuity rồi đóng toàn bộ exact source/pre-build gate
 ```

@@ -1029,15 +1029,21 @@ class TestPreflightCompression:
 
 
 class TestToolResultPreflightCompression:
-    """Compression should trigger when tool results push context past the threshold."""
+    """Tool output must be bounded before any context-recovery pass."""
 
-    def test_large_tool_results_trigger_compression(self, agent):
-        """When tool results push estimated tokens past threshold, compress before next call."""
+    def test_large_tool_results_are_spilled_before_context_recovery(
+        self, agent, tmp_path
+    ):
+        """V32 recovery receives a pointer, never the full large tool result."""
         agent.compression_enabled = True
         agent.context_compressor.context_length = 200_000
         agent.context_compressor.threshold_tokens = 130_000  # below the 135k reported usage
         agent.context_compressor.last_prompt_tokens = 130_000
         agent.context_compressor.last_completion_tokens = 5_000
+        # V32's lean profile defers web_search behind the stable bridge. This
+        # regression exercises post-execution storage directly, so expose the
+        # mocked tool name for this turn without changing the real tool schema.
+        agent.valid_tool_names.add("web_search")
 
         tc = SimpleNamespace(
             id="tc1", type="function",
@@ -1056,6 +1062,10 @@ class TestToolResultPreflightCompression:
 
         with (
             patch("run_agent.handle_function_call", return_value=large_result),
+            patch(
+                "tools.tool_result_storage._local_storage_dir",
+                return_value=tmp_path / "tool-artifacts",
+            ),
             patch.object(agent, "_compress_context") as mock_compress,
             patch.object(agent, "_persist_session"),
             patch.object(agent, "_save_trajectory"),
@@ -1066,8 +1076,24 @@ class TestToolResultPreflightCompression:
             )
             result = agent.run_conversation("hello")
 
+        # The prior provider usage already crossed the configured threshold,
+        # so recovery still runs. Its input must contain only the bounded
+        # pointer/preview rather than the 100K raw payload.
         mock_compress.assert_called_once()
         assert result["completed"] is True
+        compaction_input = mock_compress.call_args.args[0]
+        tool_messages = [
+            message for message in compaction_input
+            if message.get("role") == "tool"
+        ]
+        assert len(tool_messages) == 1
+        stored_pointer = tool_messages[0]["content"]
+        assert "<persisted-output>" in stored_pointer
+        assert "100,000 characters" in stored_pointer
+        assert large_result not in stored_pointer
+        artifacts = list((tmp_path / "tool-artifacts").glob("*.txt"))
+        assert len(artifacts) == 1
+        assert artifacts[0].read_text(encoding="utf-8") == large_result
 
     def test_mid_turn_retry_compares_fully_assembled_requests(self, agent):
         """API-only context must not make marginal compression look effective."""

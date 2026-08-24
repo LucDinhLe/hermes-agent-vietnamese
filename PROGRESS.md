@@ -1,5 +1,27 @@
 # Tiến độ
 
+## Cập nhật 2026-08-24 — continuity >350k và Governor opaque fail-closed
+
+- Implementation tip trước checkpoint test:
+  `ffa71a84065f9272bb65df28787fe80470f72558` trên
+  `feat/v32-token-context-ux`.
+- Ba runtime không thể quan sát attempt nội bộ — Codex app-server, Claude Code
+  và Copilot ACP — đã được chặn fail-closed trong governed user turn. Lỗi trả có
+  cấu trúc, không retry/fallback/switch và không khóa composer im lặng.
+- Thêm integration thật cho transcript logic ít nhất 350k: compaction dùng
+  `AIAgent.run_conversation`, persist SQLite, đóng/mở DB, tạo agent mới và tiếp
+  tục lượt kế tiếp trong profile mock/offline. Task/path/commit/error/decision
+  anchors đều được giữ.
+- Sửa regression tests theo hành vi v32: đóng DB rõ ràng trên Windows, patch
+  đúng `resolve_agent_cwd`, và chứng minh raw tool output 100k được spill trước
+  recovery thay vì phình parent context.
+- Canonical context/error group 10 tệp đạt **246/246**, exit 0 trong 79,1 giây.
+  Đây là checkpoint source, chưa thay thế final exact-candidate receipt.
+- Chủ dự án cho phép đúng **một build retry ngoại lệ** trên commit cuối đã sửa.
+  Retry vẫn chưa dùng; chỉ được chạy sau khi toàn bộ source/pre-build gate xanh.
+- GitHub Latest vẫn là v31. Không tag, push, draft hay promotion công khai ở mốc
+  này.
+
 ## Cập nhật 2026-08-24 — khởi động Hermes Vietnamese v32
 
 - Tạo worktree `projects/hermes-v32` và nhánh

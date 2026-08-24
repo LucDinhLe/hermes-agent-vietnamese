@@ -2,7 +2,8 @@
 
 Ngày lập scaffold: 2026-08-24
 
-Implementation tip được quan sát: `596d188b2c19ef5ef8f67b87bff7b1c5fa7c8c5e`
+Implementation tip trước checkpoint test này:
+`ffa71a84065f9272bb65df28787fe80470f72558`
 
 Candidate commit: `[PARENT: điền sau khi freeze]`
 
@@ -43,6 +44,7 @@ acceptance cuối và không được cộng lại vì có test trùng nhau.
 | Baseline Desktop UI | 26 test đạt | Ghi command, log và commit baseline |
 | Baseline raw-output/Tool Search/cache | 149 test đạt; 4 symlink-security fail do host thiếu quyền tạo symlink; 2 skip | Chạy symlink gate trên host phù hợp |
 | Context/recovery v32 | 187/187 đạt | Chạy lại trên exact candidate |
+| Context >350k + persistence/relaunch | Canonical group 246/246 đạt; mock/offline | Commit checkpoint rồi chạy lại trên exact candidate |
 | Lean Session | 205/205 đạt và 5 targeted checks đạt | Chạy lại trên exact candidate |
 | Governor root integration | 15/15 đạt | Gắn command/receipt |
 | Hidden compaction và xAI paths | 53/53 đạt | Gắn command/receipt |
@@ -100,7 +102,7 @@ dẫn log của lượt chạy cuối. Giữ lại checkpoint history nếu cầ
 | Fresh active input dưới 1% của 1,05M | `[PENDING FINAL LOCK]` | `docs/v32/benchmarks/offline-benchmark-2026-08-24.*` |
 | 10-turn cumulative delta | `[PENDING FINAL LOCK]` | `[JSON PATH/HASH]` |
 | Tool-heavy raw/spilled bytes | `[PENDING FINAL LOCK]` | `[JSON PATH/HASH]` |
-| Logical transcript trên 350k giữ recall anchors | `[PENDING RUNTIME PROOF]` | `[COMMAND/LOG]` |
+| Logical transcript trên 350k giữ recall anchors | `[VERIFIED CHECKPOINT; FINAL LOCK PENDING]` | `tests/run_agent/test_v32_long_context_continuity.py`; canonical 10-file group 246/246 |
 
 Benchmark offline sơ bộ tại `596d188b2` báo:
 
@@ -111,6 +113,30 @@ Benchmark offline sơ bộ tại `596d188b2` báo:
 
 Đây là deterministic planning/static estimate. Harness không gọi provider,
 không thực thi tool handler và không đánh giá chất lượng summary sau compaction.
+
+Runtime integration tách biệt đã đóng phần summary/continuity còn thiếu của
+benchmark tĩnh: transcript logic trên 350k được compact, persist qua SQLite,
+relaunch bằng agent mới và tiếp tục thêm một lượt mà vẫn giữ toàn bộ retention
+anchors. Lượt checkpoint canonical 10 tệp đạt 246/246 trong 79,1 giây, exit 0:
+
+```text
+scripts/run_tests.sh
+  tests/run_agent/test_v32_long_context_continuity.py
+  tests/run_agent/test_native_compaction.py
+  tests/run_agent/test_codex_app_server_compaction.py
+  tests/run_agent/test_413_compression.py
+  tests/run_agent/test_in_place_compaction.py
+  tests/run_agent/test_preflight_compression_cap_e2e.py
+  tests/run_agent/test_compression_persistence.py
+  tests/agent/test_context_compressor_summary_continuity.py
+  tests/agent/test_error_classifier.py
+  scripts/test_benchmark_v32_offline.py -q
+```
+
+Receipt này được tạo trên implementation tip `ffa71a840...` cùng thay đổi test
+chưa commit, nên được ghi là checkpoint chứ chưa phải final candidate lock.
+Chi tiết môi trường và behavioral proof nằm tại
+`docs/v32/evidence/source-context-checkpoint-2026-08-24.md`.
 
 `[PARENT: sau khi commit benchmark harness, chạy canonical focused regression,
 điền exact candidate commit, SHA-256 của JSON/Markdown và đổi trạng thái.]`
@@ -164,10 +190,12 @@ cáo này. Mọi live probe phải khai báo trước call/token budget và đư
 phê duyệt riêng.
 
 Codex app-server, Claude Code và Copilot ACP chưa cung cấp telemetry cho từng
-provider request nội bộ. Source test có thể chứng minh outer reservation và
-Hermes-managed retry, nhưng chưa thể chứng minh aggregate physical-attempt cap
-bên trong ba subprocess. Gate này đang mở và là blocker của tuyên bố phủ toàn bộ
-Governor.
+provider request nội bộ. V32 vì vậy fail-closed các runtime opaque này trong
+governed user turn, trước khi tiến trình có thể tạo provider work không quan sát
+được. Source test chứng minh lỗi có cấu trúc, `api_calls=0`, không fallback/switch
+và composer không bị khóa im lặng. Các runtime chỉ được mở lại trong phạm vi
+Governor khi protocol cung cấp per-attempt reservation/telemetry đủ chặn trước
+I/O.
 
 ## Kết luận test
 
