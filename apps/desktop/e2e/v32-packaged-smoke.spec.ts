@@ -35,7 +35,7 @@ async function send(page: Page, prompt: string): Promise<void> {
 test.describe('v32 exact packaged candidate', () => {
   test.describe.configure({ mode: 'serial', timeout: 360_000 })
   test.skip(
-    !packagedBinaryExists(),
+    !packagedBinaryExists() && process.env.HERMES_REQUIRE_PACKAGED_CANDIDATE !== '1',
     'Exact packaged binary is absent; build the candidate once before running this acceptance spec.',
   )
 

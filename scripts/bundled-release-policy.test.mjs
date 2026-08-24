@@ -3,12 +3,14 @@ import test from 'node:test'
 
 import {
   BUNDLED_BUILD_NODE_MIN_MAJOR,
+  BUNDLED_BUILD_NPM_RANGE,
   LOCAL_CANDIDATE_STATUS_COMMAND,
   bundledUpdatePolicy,
   createLocalCandidateProvenanceGuard,
   resolveBundledReleaseClass,
   resolvePayloadGitRef,
   validateBundledBuildNode,
+  validateBundledBuildNpm,
   validateLocalCandidateCheckout
 } from './bundled-release-policy.mjs'
 
@@ -18,6 +20,35 @@ test('bundled build provenance rejects a host below the Node 26 release floor', 
   assert.deepEqual(validateBundledBuildNode('27.1.2'), { major: 27, version: '27.1.2' })
   assert.throws(() => validateBundledBuildNode('24.18.0'), /require Node 26.*current host.*24\.18\.0/)
   assert.throws(() => validateBundledBuildNode('unknown'), /cannot determine/)
+})
+
+test('bundled build provenance rejects npm releases excluded by the committed engine range', () => {
+  assert.equal(BUNDLED_BUILD_NPM_RANGE, '<11.10.0 || >=11.17.0')
+  assert.deepEqual(validateBundledBuildNpm('11.9.0'), {
+    major: 11,
+    minor: 9,
+    patch: 0,
+    version: '11.9.0'
+  })
+  assert.deepEqual(validateBundledBuildNpm('11.17.0'), {
+    major: 11,
+    minor: 17,
+    patch: 0,
+    version: '11.17.0'
+  })
+  assert.deepEqual(validateBundledBuildNpm('12.0.1'), {
+    major: 12,
+    minor: 0,
+    patch: 1,
+    version: '12.0.1'
+  })
+  for (const excluded of ['11.10.0', '11.12.1', '11.16.9']) {
+    assert.throws(
+      () => validateBundledBuildNpm(excluded),
+      /require npm <11\.10\.0 \|\| >=11\.17\.0.*current host/
+    )
+  }
+  assert.throws(() => validateBundledBuildNpm('unknown'), /cannot determine/)
 })
 
 test('unsigned local candidates default to community prerelease and can never claim stable', () => {

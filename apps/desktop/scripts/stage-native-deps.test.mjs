@@ -52,7 +52,7 @@ function makeFakeNodePty(srcRoot, { prebuildPlatform, prebuildArch } = {}) {
 
   if (prebuildPlatform && prebuildArch) {
     const prebuildDir = join(srcRoot, 'prebuilds', `${prebuildPlatform}-${prebuildArch}`)
-    makeFakeNode(join(prebuildDir, 'pty.node'), prebuildPlatform)
+    makeFakeNode(join(prebuildDir, 'pty.node'), prebuildPlatform, prebuildArch)
   }
 }
 
@@ -377,6 +377,44 @@ test('validation rejects a staged binary with the wrong platform magic', () => {
     assert.throws(
       () => stageNodePtyInto(srcRoot, destRoot, { platform: 'linux', arch: 'x64' }),
       /platform mismatch/i
+    )
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('node-pty win32 staging rejects an x64 PE hidden in an arm64 prebuild directory', () => {
+  const tmp = fs.mkdtempSync(join(os.tmpdir(), 'hermes-stage-'))
+  try {
+    const srcRoot = join(tmp, 'node-pty')
+    const destRoot = join(tmp, 'dest')
+    makeFakeNodePty(srcRoot, { prebuildPlatform: 'win32', prebuildArch: 'arm64' })
+    makeFakeNode(join(srcRoot, 'prebuilds', 'win32-arm64', 'pty.node'), 'win32', 'x64')
+
+    assert.throws(
+      () => stageNodePtyInto(srcRoot, destRoot, { platform: 'win32', arch: 'arm64' }),
+      /expected win32-arm64, got win32-x64/i
+    )
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('node-pty win32 staging rejects a wrong-architecture nested conpty helper', () => {
+  const tmp = fs.mkdtempSync(join(os.tmpdir(), 'hermes-stage-'))
+  try {
+    const srcRoot = join(tmp, 'node-pty')
+    const destRoot = join(tmp, 'dest')
+    makeFakeNodePty(srcRoot, { prebuildPlatform: 'win32', prebuildArch: 'arm64' })
+    makeFakeNode(
+      join(srcRoot, 'prebuilds', 'win32-arm64', 'conpty', 'OpenConsole.exe'),
+      'win32',
+      'x64'
+    )
+
+    assert.throws(
+      () => stageNodePtyInto(srcRoot, destRoot, { platform: 'win32', arch: 'arm64' }),
+      /conpty\/OpenConsole\.exe: expected win32-arm64, got win32-x64/i
     )
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true })

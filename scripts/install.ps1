@@ -53,6 +53,10 @@ param(
     #   powershell -File install.ps1 -ShowResolvedPaths
     [switch]$ShowResolvedPaths,
 
+    # Pure diagnostic seam for the Node floor/path postcondition. It exits
+    # before installation and is used by Windows CI as a behavior contract.
+    [string]$CheckNodeVersion = "",
+
     # --- Ensure mode (dep_ensure.py entry point) ---
     [string]$Ensure = "",
     [switch]$PostInstall,
@@ -1891,13 +1895,24 @@ function Test-NodeVersionOk {
     return ($v.Major -ge 26)
 }
 
+function Confirm-NodeVersionAndPath {
+    param(
+        [string]$Version,
+        [scriptblock]$EnsurePath = { Ensure-NodeExeOnPath }
+    )
+    if (-not (Test-NodeVersionOk $Version)) {
+        return $false
+    }
+    & $EnsurePath | Out-Null
+    return $true
+}
+
 function Test-Node {
     Write-Info "Checking Node.js (for browser tools)..."
 
     if (Get-Command node -ErrorAction SilentlyContinue) {
         $version = node --version
-        if (Test-NodeVersionOk $version) {
-            Ensure-NodeExeOnPath | Out-Null
+        if (Confirm-NodeVersionAndPath $version) {
             Write-Success "Node.js $version found"
             $script:HasNode = $true
             return $true
@@ -2080,9 +2095,12 @@ function Test-Node {
             $env:Path = [Environment]::GetEnvironmentVariable("Path", "User") + ";" + [Environment]::GetEnvironmentVariable("Path", "Machine")
             if (Get-Command node -ErrorAction SilentlyContinue) {
                 $version = node --version
-                Write-Success "Node.js $version installed via winget"
-                $script:HasNode = $true
-                return $true
+                if (Confirm-NodeVersionAndPath $version) {
+                    Write-Success "Node.js $version installed via winget"
+                    $script:HasNode = $true
+                    return $true
+                }
+                Write-Warn "winget left Node.js $version on PATH, below the required Node >=26 floor"
             }
         } catch {
             if ($prevEAP) { $ErrorActionPreference = $prevEAP }
@@ -5143,6 +5161,19 @@ function Main {
 # structured JSON error frame instead of a bare exception.
 
 try {
+    if ($PSBoundParameters.ContainsKey("CheckNodeVersion")) {
+        $probe = @{ ensured = $false }
+        $accepted = Confirm-NodeVersionAndPath $CheckNodeVersion -EnsurePath {
+            $probe.ensured = $true
+        }
+        @{
+            accepted = [bool]$accepted
+            ensured_path = [bool]$probe.ensured
+            version = $CheckNodeVersion
+        } | ConvertTo-Json -Compress | Write-Output
+        exit 0
+    }
+
     if ($Ensure -ne "") {
         if ($PSBoundParameters.ContainsKey("Stage")) {
             Write-Err "Cannot use -Ensure and -Stage simultaneously"

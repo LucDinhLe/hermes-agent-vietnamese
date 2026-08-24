@@ -1,5 +1,6 @@
 const RELEASE_CLASSES = new Set(['community-prerelease', 'stable'])
 export const BUNDLED_BUILD_NODE_MIN_MAJOR = 26
+export const BUNDLED_BUILD_NPM_RANGE = '<11.10.0 || >=11.17.0'
 export const LOCAL_CANDIDATE_STATUS_COMMAND = 'git status --porcelain=v1 --untracked-files=all'
 
 export function validateBundledBuildNode(version) {
@@ -16,6 +17,23 @@ export function validateBundledBuildNode(version) {
     )
   }
   return Object.freeze({ major, version: normalized })
+}
+
+export function validateBundledBuildNpm(version) {
+  const normalized = String(version || '').trim().replace(/^v/i, '')
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(normalized)
+  if (!match) {
+    throw new Error(`cannot determine bundled build host npm version from: ${version || '(missing)'}`)
+  }
+  const [major, minor, patch] = match.slice(1, 4).map(Number)
+  const accepted = major < 11 || major > 11 || minor < 10 || minor >= 17
+  if (!accepted) {
+    throw new Error(
+      `bundled release builds require npm ${BUNDLED_BUILD_NPM_RANGE}; ` +
+        `current host is npm ${normalized}`
+    )
+  }
+  return Object.freeze({ major, minor, patch, version: normalized })
 }
 
 export function resolveBundledReleaseClass(value, { localCandidate = false } = {}) {

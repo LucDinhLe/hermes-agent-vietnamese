@@ -7,6 +7,7 @@ import test from 'node:test'
 import {
   electronBuilderMacPatchMarker,
   electronBuilderMacPatchNeedle,
+  hasCompleteElectronBuilderMacPatch,
   patchElectronBuilderMacBinary,
 } from './patch-electron-builder-mac-binary.mjs'
 
@@ -62,6 +63,7 @@ test('macOS applies the patch once and accepts its idempotency marker', () => {
       'applied',
     )
     const patchedSource = fs.readFileSync(electronMacPath, 'utf8')
+    assert.equal(hasCompleteElectronBuilderMacPatch(patchedSource), true)
     assert.match(patchedSource, new RegExp(electronBuilderMacPatchMarker))
     assert.doesNotMatch(patchedSource, /doRename\(path\.join\(contentsPath, "MacOS"\)/)
 
@@ -70,5 +72,19 @@ test('macOS applies the patch once and accepts its idempotency marker', () => {
       'already-applied',
     )
     assert.equal(fs.readFileSync(electronMacPath, 'utf8'), patchedSource)
+  })
+})
+
+test('macOS rejects a forged idempotency marker without the complete patched shape', () => {
+  withTempDir((tempDir) => {
+    const electronMacPath = path.join(tempDir, 'electronMac.js')
+    const corrupted = `// ${electronBuilderMacPatchMarker}\nmodule.exports = {}\n`
+    fs.writeFileSync(electronMacPath, corrupted)
+
+    assert.throws(
+      () => patchElectronBuilderMacBinary({ platform: 'darwin', electronMacPath }),
+      /marker is present but the patched shape is incomplete/,
+    )
+    assert.equal(fs.readFileSync(electronMacPath, 'utf8'), corrupted)
   })
 })

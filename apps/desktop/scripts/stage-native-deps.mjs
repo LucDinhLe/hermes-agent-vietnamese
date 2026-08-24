@@ -224,7 +224,7 @@ export function classifyPeArchitecture(filePath) {
  * somehow slipped through with the wrong platform, this catches it before
  * the package ships a broken native binary to users.
  */
-function validateStagedBinaries(destRoot, targetPlatform) {
+function validateStagedBinaries(destRoot, targetPlatform, targetArch) {
   const mismatches = []
   function scan(dir, relPrefix) {
     if (!existsSync(dir)) return
@@ -233,11 +233,29 @@ function validateStagedBinaries(destRoot, targetPlatform) {
         scan(join(dir, entry.name), `${relPrefix}${entry.name}/`)
         continue
       }
-      if (!entry.name.endsWith('.node')) continue
+      const isNativePayload = targetPlatform === 'win32'
+        ? /\.(node|dll|exe)$/i.test(entry.name)
+        : entry.name.endsWith('.node')
+      if (!isNativePayload) continue
       const fullPath = join(dir, entry.name)
       const classified = classifyNativeBinary(fullPath)
       if (classified !== targetPlatform) {
-        mismatches.push({ file: `${relPrefix}${entry.name}`, classified, expected: targetPlatform })
+        mismatches.push({
+          file: `${relPrefix}${entry.name}`,
+          classified,
+          expected: `${targetPlatform}-${targetArch}`
+        })
+        continue
+      }
+      if (targetPlatform === 'win32') {
+        const classifiedArch = classifyPeArchitecture(fullPath)
+        if (classifiedArch !== targetArch) {
+          mismatches.push({
+            file: `${relPrefix}${entry.name}`,
+            classified: `${classified}-${classifiedArch ?? 'unknown'}`,
+            expected: `${targetPlatform}-${targetArch}`
+          })
+        }
       }
     }
   }
@@ -245,7 +263,8 @@ function validateStagedBinaries(destRoot, targetPlatform) {
   scan(join(destRoot, 'build', 'Release'), 'build/Release/')
   if (mismatches.length > 0) {
     throw new Error(
-      `[stage-native-deps] native binary platform mismatch (target=${targetPlatform}):\n` +
+      `[stage-native-deps] native binary platform mismatch or architecture mismatch ` +
+        `(target=${targetPlatform}-${targetArch}):\n` +
         mismatches
           .map((m) => `  ${m.file}: expected ${m.expected}, got ${m.classified ?? 'unknown'}`)
           .join('\n') +
@@ -371,8 +390,10 @@ export function stageNodePtyInto(srcRoot, destRoot, { platform = process.platfor
     copyBuildRelease(buildReleaseDir, join(destRoot, 'build/Release'))
   }
 
-  // Validate every staged .node binary matches the target platform.
-  validateStagedBinaries(destRoot, platform)
+  // Windows x64 and arm64 share the same MZ platform magic. Validate the PE
+  // COFF machine for every staged .node/.dll/.exe helper, including nested
+  // conpty binaries, as well as the outer platform before packaging.
+  validateStagedBinaries(destRoot, platform, arch)
 
   console.log(`[stage-native-deps] staged node-pty (${platform}-${arch}) -> ${destRoot}`)
   return destRoot

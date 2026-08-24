@@ -8,6 +8,11 @@ import { listPackage } from '@electron/asar'
 import PACKAGE_JSON from '../package.json' with { type: 'json' }
 import { freshInstallSandboxPrefix } from './fresh-install-sandbox.mjs'
 import { isMacDmgArtifactName, packagedAppDirectoryName } from './packaged-layout.mjs'
+import {
+  expectedBundledProvenanceFromEnv,
+  validateBundledProvenance,
+  validateExpectedDistributionArtifact
+} from './packaged-provenance.mjs'
 
 const MODE = process.argv[2] || 'help'
 const ARCH = process.arch === 'arm64' ? 'arm64' : 'x64'
@@ -90,6 +95,34 @@ function exists(target) {
   return fs.existsSync(target)
 }
 
+function releaseGate(callback) {
+  try {
+    return callback()
+  } catch (error) {
+    die(error instanceof Error ? error.message : String(error))
+  }
+}
+
+function resolvePinnedDistributionArtifact({ required = false } = {}) {
+  const expectedPath = process.env.HERMES_DESKTOP_EXPECTED_ARTIFACT
+  if (!expectedPath) {
+    if (required) {
+      die('HERMES_DESKTOP_EXPECTED_ARTIFACT is required when a bundled release uses HERMES_DESKTOP_SKIP_BUILD=1')
+    }
+    return null
+  }
+  return releaseGate(() => {
+    const expected = expectedBundledProvenanceFromEnv(process.env)
+    return validateExpectedDistributionArtifact({
+      arch: ARCH,
+      desktopRoot: DESKTOP_ROOT,
+      expectedPath,
+      platform: PLATFORM,
+      tag: expected.tag
+    })
+  })
+}
+
 // Match node-pty native binding location to what the bundled electron-main.cjs
 // resolves at runtime. stage-native-deps.mjs stages node-pty into
 // dist/node_modules/node-pty, and dist/** is asarUnpacked (see package.json
@@ -119,7 +152,10 @@ function ensurePlatformBuilds() {
 }
 
 function ensurePackagedApp() {
-  if (process.env.HERMES_DESKTOP_SKIP_BUILD === '1' && exists(APP.binary)) {
+  if (process.env.HERMES_DESKTOP_SKIP_BUILD === '1') {
+    if (!exists(APP.binary)) {
+      die(`HERMES_DESKTOP_SKIP_BUILD=1 forbids rebuilding the missing packaged app: ${APP.binary}`)
+    }
     return
   }
 
@@ -127,6 +163,8 @@ function ensurePackagedApp() {
 }
 
 function resolveDmgPath() {
+  const pinned = resolvePinnedDistributionArtifact()
+  if (pinned) return pinned
   if (!exists(RELEASE_ROOT)) {
     return path.join(RELEASE_ROOT, `Hermes-${PACKAGE_JSON.version}-${ARCH}.dmg`)
   }
@@ -134,36 +172,42 @@ function resolveDmgPath() {
   const candidates = fs
     .readdirSync(RELEASE_ROOT)
     .filter(name => isMacDmgArtifactName(name, ARCH))
-    .sort((a, b) => {
-      const aMtime = fs.statSync(path.join(RELEASE_ROOT, a)).mtimeMs
-      const bMtime = fs.statSync(path.join(RELEASE_ROOT, b)).mtimeMs
-      return bMtime - aMtime
-    })
+    .sort()
 
-  return candidates.length > 0
+  if (candidates.length > 1) {
+    die(`Expected at most one mac-${ARCH} DMG in ${RELEASE_ROOT}; found: ${candidates.join(', ')}`)
+  }
+  return candidates.length === 1
     ? path.join(RELEASE_ROOT, candidates[0])
     : path.join(RELEASE_ROOT, `Hermes-${PACKAGE_JSON.version}-${ARCH}.dmg`)
 }
 
 function resolveNsisPath() {
+  const pinned = resolvePinnedDistributionArtifact()
+  if (pinned) return pinned
   // electron-builder NSIS artifactName template is 'Hermes-${version}-${os}-${arch}.${ext}'
   if (!exists(RELEASE_ROOT)) return null
   const candidates = fs
     .readdirSync(RELEASE_ROOT)
-    .filter(name => /\.exe$/i.test(name) && /win/i.test(name))
-    .sort((a, b) => {
-      const aMtime = fs.statSync(path.join(RELEASE_ROOT, a)).mtimeMs
-      const bMtime = fs.statSync(path.join(RELEASE_ROOT, b)).mtimeMs
-      return bMtime - aMtime
-    })
-  return candidates.length > 0 ? path.join(RELEASE_ROOT, candidates[0]) : null
+    .filter(name => name.toLowerCase().endsWith(`-win-${ARCH}.exe`))
+    .sort()
+  if (candidates.length > 1) {
+    die(`Expected at most one win-${ARCH} NSIS artifact in ${RELEASE_ROOT}; found: ${candidates.join(', ')}`)
+  }
+  return candidates.length === 1 ? path.join(RELEASE_ROOT, candidates[0]) : null
 }
 
 function ensureDmg() {
   if (PLATFORM !== 'darwin') {
     die('DMG mode is macOS-only; on Windows use the `nsis` mode instead.')
   }
-  if (process.env.HERMES_DESKTOP_SKIP_BUILD === '1' && exists(resolveDmgPath())) {
+  if (process.env.HERMES_DESKTOP_SKIP_BUILD === '1') {
+    const artifact = resolvePinnedDistributionArtifact({
+      required: process.env.HERMES_DESKTOP_BUNDLED === '1'
+    }) || resolveDmgPath()
+    if (!artifact || !exists(artifact)) {
+      die(`HERMES_DESKTOP_SKIP_BUILD=1 forbids rebuilding the missing DMG: ${artifact || '(unresolved)'}`)
+    }
     return
   }
   run('npm', ['run', 'dist:mac:dmg'])
@@ -173,7 +217,13 @@ function ensureNsis() {
   if (PLATFORM !== 'win32') {
     die('NSIS mode is win32-only; on macOS use the `dmg` mode instead.')
   }
-  if (process.env.HERMES_DESKTOP_SKIP_BUILD === '1' && resolveNsisPath()) {
+  if (process.env.HERMES_DESKTOP_SKIP_BUILD === '1') {
+    const artifact = resolvePinnedDistributionArtifact({
+      required: process.env.HERMES_DESKTOP_BUNDLED === '1'
+    }) || resolveNsisPath()
+    if (!artifact || !exists(artifact)) {
+      die(`HERMES_DESKTOP_SKIP_BUILD=1 forbids rebuilding the missing NSIS artifact: ${artifact || '(unresolved)'}`)
+    }
     return
   }
   run('npm', ['run', 'dist:win:nsis'])
@@ -307,31 +357,13 @@ function validateResidentPayload(stamp) {
   } catch (err) {
     die(`Resident payload manifest is not valid JSON: ${err.message}`)
   }
-  if (manifest.schemaVersion !== 2 || manifest.thin === true) {
-    die(`Release artifact does not carry a schema-2 resident payload: ${JSON.stringify(manifest)}`)
-  }
-  if (!/^vi-v(?:0|[1-9]\d{0,2})\.\d+\.\d+-(?:0|[1-9]\d*)$/.test(manifest.tag || '')) {
-    die(`Resident payload has an invalid Vietnamese release tag: ${manifest.tag}`)
-  }
+  const expected = releaseGate(() => expectedBundledProvenanceFromEnv(process.env))
+  releaseGate(() => validateBundledProvenance({ expected, manifest, stamp }))
   for (const item of ['repo', 'uv', 'python', 'site-packages', 'node']) {
     if (manifest.items?.[item]?.status !== 'staged') {
       die(`Resident payload item is not staged: ${item}`)
     }
   }
-  if (!stamp.payload || stamp.tag !== manifest.tag || stamp.commit !== manifest.commit) {
-    die(`Install stamp and resident manifest provenance disagree: ${JSON.stringify({ stamp, manifest })}`)
-  }
-  if (
-    !['community-prerelease', 'stable'].includes(stamp.releaseClass) ||
-    stamp.releaseClass !== manifest.releaseClass ||
-    stamp.updateChannel !== manifest.updateChannel ||
-    stamp.updateFeedEnabled !== manifest.updateFeedEnabled ||
-    (stamp.releaseClass === 'community-prerelease' && stamp.updateFeedEnabled !== false) ||
-    (stamp.releaseClass === 'stable' && stamp.updateFeedEnabled !== true)
-  ) {
-    die(`Install stamp and resident manifest update policy disagree: ${JSON.stringify({ stamp, manifest })}`)
-  }
-
   const browserLauncher = path.join(
     payloadRoot,
     'repo',
@@ -419,6 +451,29 @@ function validateBundle() {
   const resident = process.env.HERMES_DESKTOP_BUNDLED === '1'
     ? validateResidentPayload(stamp)
     : null
+  const expectedArtifact = process.env.HERMES_DESKTOP_BUNDLED === '1' && process.env.HERMES_DESKTOP_SKIP_BUILD === '1'
+    ? resolvePinnedDistributionArtifact({ required: true })
+    : null
+  if (expectedArtifact) {
+    if (PLATFORM !== 'win32') {
+      die(
+        `Exact embedded provenance validation is not implemented for ${PLATFORM}; ` +
+          'the public multi-platform release remains fail-closed.'
+      )
+    }
+    const verifier = path.join(DESKTOP_ROOT, 'scripts', 'verify-windows-nsis-provenance.mjs')
+    const verification = spawnSync(process.execPath, [verifier, expectedArtifact, `--arch=${ARCH}`], {
+      cwd: DESKTOP_ROOT,
+      env: process.env,
+      shell: false,
+      stdio: 'inherit',
+      timeout: 360_000,
+      windowsHide: true
+    })
+    if (verification.error || verification.status !== 0) {
+      die(`Exact embedded NSIS provenance validation failed (${verification.status ?? 'spawn'})`)
+    }
+  }
 
   // Positive assertion: node-pty native deps shipped
   const native = expectedNativeDepPaths()
@@ -453,7 +508,7 @@ function validateBundle() {
 
   // Renderer payload check (either unpacked or in the asar)
   if (exists(APP.unpackedDistIndex)) {
-    return { stamp, nodeBinaries, resident }
+    return { stamp, nodeBinaries, resident, expectedArtifact }
   }
   if (!exists(APP.asarPath)) {
     die(`Missing renderer payload: neither ${APP.unpackedDistIndex} nor ${APP.asarPath} exists`)
@@ -466,7 +521,7 @@ function validateBundle() {
   if (!normalized.includes('dist/index.html')) {
     die(`Missing renderer payload file in app.asar: ${APP.asarPath} (expected dist/index.html)`)
   }
-  return { stamp, nodeBinaries, resident }
+  return { stamp, nodeBinaries, resident, expectedArtifact }
 }
 
 function printArtifacts(options = {}) {
@@ -485,6 +540,9 @@ function printArtifacts(options = {}) {
   if (stamp) {
     console.log(`  install-stamp: ${stamp.commit.slice(0, 12)} (${stamp.tag || stamp.branch || 'detached'})`)
   }
+  if (options.expectedArtifact) {
+    console.log(`  expected distribution artifact: ${options.expectedArtifact}`)
+  }
   if (options.nodeBinaries && options.nodeBinaries.length > 0) {
     console.log(`  node-pty binaries: ${options.nodeBinaries.join(', ')}`)
   }
@@ -498,8 +556,11 @@ function help() {
   npm run test:desktop:nsis      # (win32 only) build NSIS installer
   npm run test:desktop:all       # build installer, validate app payload, print paths
 
-Fast rerun (skip rebuild if the packaged app already exists):
-  HERMES_DESKTOP_SKIP_BUILD=1 npm run test:desktop:fresh
+Fail-closed validation of already-built bundled bytes (never rebuilds):
+  HERMES_DESKTOP_BUNDLED=1 HERMES_DESKTOP_SKIP_BUILD=1 \\
+    HERMES_PAYLOAD_TAG=vi-vX.Y.Z-N HERMES_PAYLOAD_GIT_REF=<40-char-sha> \\
+    HERMES_RELEASE_CLASS=<class> HERMES_DESKTOP_EXPECTED_ARTIFACT=release/<exact-name> \\
+    npm run test:desktop:all
 `)
 }
 

@@ -41,6 +41,22 @@ const replacement = `    // ${electronBuilderMacPatchMarker}: electron-builder 2
         (0, builder_util_1.unlinkIfExists)(path.join(appOutDir, "LICENSES.chromium.html")),
     ]);`
 
+const requiredPatchedShape = [
+  'const macosDir = path.join(contentsPath, "MacOS");',
+  'const bundledElectronBinary = path.join(macosDir, electronBranding.productName);',
+  'path.join(packager.info.framework.distMacOsAppName, "Contents", "MacOS", electronBranding.productName)',
+  'await (0, promises_1.copyFile)(sourceBinary, bundledElectronBinary);',
+  'await (0, promises_1.chmod)(bundledElectronBinary, 0o755);',
+  'doRename(macosDir, electronBranding.productName, appPlist.CFBundleExecutable)',
+]
+
+export function hasCompleteElectronBuilderMacPatch(source) {
+  const markerCount = source.split(electronBuilderMacPatchMarker).length - 1
+  return markerCount === 1
+    && requiredPatchedShape.every(fragment => source.includes(fragment))
+    && !source.includes(electronBuilderMacPatchNeedle)
+}
+
 export function patchElectronBuilderMacBinary({
   platform = process.platform,
   electronMacPath = defaultElectronMacPath,
@@ -56,6 +72,11 @@ export function patchElectronBuilderMacBinary({
 
   const source = fs.readFileSync(electronMacPath, 'utf8')
   if (source.includes(electronBuilderMacPatchMarker)) {
+    if (!hasCompleteElectronBuilderMacPatch(source)) {
+      throw new Error(
+        `required electron-builder macOS patch marker is present but the patched shape is incomplete in ${electronMacPath}`,
+      )
+    }
     console.log('[patch-electron-builder] macOS Electron binary fallback already applied')
     return 'already-applied'
   }
@@ -66,10 +87,11 @@ export function patchElectronBuilderMacBinary({
     )
   }
 
-  fs.writeFileSync(
-    electronMacPath,
-    source.replace(electronBuilderMacPatchNeedle, replacement),
-  )
+  const patched = source.replace(electronBuilderMacPatchNeedle, replacement)
+  if (!hasCompleteElectronBuilderMacPatch(patched)) {
+    throw new Error(`required electron-builder macOS patch failed its post-apply shape check: ${electronMacPath}`)
+  }
+  fs.writeFileSync(electronMacPath, patched)
   console.log('[patch-electron-builder] applied macOS Electron binary fallback')
   return 'applied'
 }

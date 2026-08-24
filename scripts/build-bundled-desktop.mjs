@@ -28,6 +28,7 @@ import {
   LOCAL_CANDIDATE_STATUS_COMMAND,
   createLocalCandidateProvenanceGuard,
   resolveBundledReleaseClass,
+  validateBundledBuildNpm,
   validateBundledBuildNode,
 } from "./bundled-release-policy.mjs"
 import { prepareAgentBrowserPackage } from "./prepare-agent-browser-native.mjs"
@@ -94,7 +95,21 @@ try {
   fail(`PATH node used by npm is unsupported: ${error.message}`)
 }
 
-for (const tool of ["uv", "git", "npm", "tar"]) {
+const npmProbe = spawnSync("npm", ["--version"], {
+  cwd: REPO_ROOT,
+  encoding: "utf8",
+  shell: process.platform === "win32",
+})
+if (npmProbe.status !== 0) {
+  fail("required tool missing: npm")
+}
+try {
+  validateBundledBuildNpm(npmProbe.stdout)
+} catch (error) {
+  fail(error.message)
+}
+
+for (const tool of ["uv", "git", "tar"]) {
   const probe = spawnSync(tool, ["--version"], { stdio: "ignore", shell: process.platform === "win32" })
   if (probe.status !== 0) {
     fail(`required tool missing: ${tool}`)

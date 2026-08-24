@@ -290,6 +290,7 @@ jobs:
     env:
       HERMES_DESKTOP_BUNDLED: '1'
       HERMES_PAYLOAD_TAG: ${{ needs.verify.outputs.tag }}
+      HERMES_PAYLOAD_GIT_REF: ${{ needs.verify.outputs.commit }}
       HERMES_PAYLOAD_PYTHON: '3.11'
       HERMES_RELEASE_CLASS: ${{ needs.verify.outputs.release_class }}
     steps:
@@ -409,6 +410,26 @@ jobs:
           fi
           node scripts/build-bundled-desktop.mjs --tag="$HERMES_PAYLOAD_TAG" --no-install
 
+      - name: Khóa đúng đường dẫn artifact vừa dựng
+        shell: bash
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+          TARGET_PLATFORM: ${{ matrix.platform }}
+        run: |
+          app_version="$(node --input-type=module -e 'import { parseVietnameseReleaseTag } from "./scripts/vietnamese-release.mjs"; console.log(parseVietnameseReleaseTag(process.argv[1]).appVersion)' "$HERMES_PAYLOAD_TAG")"
+          case "$TARGET_PLATFORM:$TARGET_ARCH" in
+            win32:*) artifact_name="Hermes-$app_version-win-$TARGET_ARCH.exe" ;;
+            darwin:*) artifact_name="Hermes-$app_version-mac-$TARGET_ARCH.dmg" ;;
+            linux:x64) artifact_name="Hermes-$app_version-linux-x86_64.AppImage" ;;
+            linux:arm64) artifact_name="Hermes-$app_version-linux-arm64.AppImage" ;;
+            *) echo "::error::Unsupported target $TARGET_PLATFORM-$TARGET_ARCH"; exit 1 ;;
+          esac
+          test -f "apps/desktop/release/$artifact_name" || {
+            echo "::error::Missing exact distribution artifact: $artifact_name"
+            exit 1
+          }
+          printf 'HERMES_DESKTOP_EXPECTED_ARTIFACT=release/%s\n' "$artifact_name" >> "$GITHUB_ENV"
+
       - name: Kiểm tra đúng payload đóng gói
         shell: bash
         env:
@@ -487,6 +508,20 @@ jobs:
           reason=get-windows-9.3.0-has-no-win32-arm64-native-binding
           stable_eligible=false
           EOF
+
+      - name: Xác minh provenance trong đúng byte Windows sau ký
+        if: matrix.platform == 'win32'
+        shell: bash
+        env:
+          TARGET_ARCH: ${{ matrix.arch }}
+        run: |
+          installers=(release-assets/Hermes-Vietnamese-Windows-"$TARGET_ARCH"-Setup.exe)
+          test "${#installers[@]}" -eq 1 && test -f "${installers[0]}" || {
+            echo "::error::Expected one normalized Windows $TARGET_ARCH installer"
+            exit 1
+          }
+          node apps/desktop/scripts/verify-windows-nsis-provenance.mjs \
+            "${installers[0]}" --arch="$TARGET_ARCH"
 
       - name: Ghi lại checksum sau ký
         run: >-

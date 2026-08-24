@@ -27,6 +27,10 @@ import * as path from 'node:path'
 
 import { _electron, type ElectronApplication, type Page } from '@playwright/test'
 
+import {
+  expectedBundledProvenanceFromEnv,
+  readAndValidateBundledProvenance,
+} from '../scripts/packaged-provenance.mjs'
 import { startMockServer, type MockServerOptions } from './mock-server'
 import { installErrorBannerGuard } from './test'
 
@@ -515,6 +519,9 @@ providers:
  * electron-builder's output layout under release/.
  */
 function resolvePackagedBinaryPath(): string {
+  if (process.env.HERMES_PACKAGED_BINARY_PATH) {
+    return path.resolve(process.env.HERMES_PACKAGED_BINARY_PATH)
+  }
   if (process.platform === 'win32') {
     return path.join(RELEASE_ROOT, 'win-unpacked', 'Hermes.exe')
   }
@@ -530,8 +537,32 @@ function resolvePackagedBinaryPath(): string {
 
 export const PACKAGED_BINARY_PATH = resolvePackagedBinaryPath()
 
+function resolvePackagedResourcesPath(): string {
+  if (process.platform === 'darwin') {
+    return path.resolve(PACKAGED_BINARY_PATH, '..', '..', 'Resources')
+  }
+
+  return path.join(path.dirname(PACKAGED_BINARY_PATH), 'resources')
+}
+
 export function packagedBinaryExists(): boolean {
   return fs.existsSync(PACKAGED_BINARY_PATH)
+}
+
+/**
+ * Bind the binary selected by the packaged E2E suite to the exact candidate
+ * tuple supplied by its caller. A stale win-unpacked/mac/linux directory must
+ * fail before Electron is launched, even if its own stamp and manifest agree.
+ */
+export function validatePackagedCandidateProvenance(): void {
+  if (!packagedBinaryExists()) {
+    throw new Error(`Built app binary not found: ${PACKAGED_BINARY_PATH}`)
+  }
+  const expected = expectedBundledProvenanceFromEnv(process.env)
+  readAndValidateBundledProvenance({
+    expected,
+    resourcesPath: resolvePackagedResourcesPath(),
+  })
 }
 
 export interface PackagedAppFixture {
@@ -593,7 +624,6 @@ export async function setupPackagedApp(): Promise<PackagedAppFixture> {
       `Built app binary not found: ${PACKAGED_BINARY_PATH}. Run 'npm run pack' first.`,
     )
   }
-
   const sandbox = createSandbox('packaged')
 
   const { app, page } = await launchPackagedBinary(sandbox, {
@@ -626,6 +656,7 @@ export async function setupPackagedMockBackend(
       `Built app binary not found: ${PACKAGED_BINARY_PATH}. Build the candidate first.`,
     )
   }
+  validatePackagedCandidateProvenance()
 
   const mock = await startMockServer(options.mockServer)
   const sandbox = createSandbox('packaged-mock')
