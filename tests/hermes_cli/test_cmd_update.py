@@ -83,7 +83,11 @@ def _patch_gateway_discovery():
     Discovery returning nothing makes the phase a clean no-op for every test
     in this module (none of them assert on gateway restarts).
     """
-    with patch("hermes_cli.gateway.find_gateway_pids", return_value=[]), \
+    with patch("hermes_cli.main._venv_scripts_dir", return_value=None), \
+         patch("hermes_cli.main._detect_venv_python_processes", return_value=[]), \
+         patch("hermes_cli.main._run_pre_update_backup", return_value=None), \
+         patch("hermes_cli.main._pause_windows_gateways_for_update", return_value=None), \
+         patch("hermes_cli.gateway.find_gateway_pids", return_value=[]), \
          patch("hermes_cli.gateway.supports_systemd_services", return_value=False), \
          patch("hermes_cli.gateway.find_profile_gateway_processes", return_value=[]):
         yield
@@ -233,6 +237,7 @@ class TestCmdUpdateBranchFallback:
         origin but behind NousResearch/hermes-agent silently misses updates.
         """
         from hermes_cli import main as hm
+        from hermes_cli import update_cmd as uc
 
         mock_run.side_effect = _make_run_side_effect(
             branch="main", verify_ok=True, commit_count="0"
@@ -242,13 +247,17 @@ class TestCmdUpdateBranchFallback:
             hm,
             "_get_origin_url",
             return_value="https://github.com/example/hermes-agent.git",
-        ), patch.object(hm, "_sync_with_upstream_if_needed") as sync_mock:
+        ), patch.object(hm, "_sync_with_upstream_if_needed") as sync_mock, patch.object(
+            uc, "_update_node_dependencies", return_value=[]
+        ) as node_refresh_mock, patch.object(hm, "_build_web_ui") as web_build_mock:
             cmd_update(mock_args)
 
         expected_git_cmd = (
             ["git", "-c", "windows.appendAtomically=false"] if hm._is_windows() else ["git"]
         )
         sync_mock.assert_called_once_with(expected_git_cmd, PROJECT_ROOT)
+        node_refresh_mock.assert_called_once_with()
+        web_build_mock.assert_called_once_with(PROJECT_ROOT / "web")
         captured = capsys.readouterr()
         assert "Already up to date!" in captured.out
 

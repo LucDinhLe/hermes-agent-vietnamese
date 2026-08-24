@@ -8839,13 +8839,15 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
             _q_state.conversation.queued_events = kept
         return removed
 
-    def _goal_still_active_for_session(self, session_id: str) -> bool:
+    async def _goal_still_active_for_session(self, session_id: str) -> bool:
         """Best-effort fresh DB check before running a queued continuation."""
         if not session_id:
             return False
         try:
             from hermes_cli.goals import GoalManager
-            return GoalManager(session_id=session_id).is_active()
+            return await self._run_in_executor_with_context(
+                lambda: GoalManager(session_id=session_id).is_active()
+            )
         except Exception as exc:
             logger.debug("goal continuation: active-state recheck failed: %s", exc)
             return False
@@ -21032,7 +21034,16 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
         if not sid:
             return None, None
         max_turns = self._goal_max_turns_from_config()
-        return GoalManager(session_id=sid, default_max_turns=max_turns), session_entry
+        # GoalManager loads SessionDB during construction. On a cold profile
+        # that initialization can exceed goals.py's bounded loop-thread grace
+        # window; constructing it here would then return an in-memory manager
+        # whose first /goal write is silently not persisted. Build it on the
+        # gateway executor so cold schema/bootstrap work can finish without
+        # starving the event loop or dropping the user's goal.
+        manager = await self._run_in_executor_with_context(
+            lambda: GoalManager(session_id=sid, default_max_turns=max_turns)
+        )
+        return manager, session_entry
 
     async def _get_heartbeat_manager_for_event(self, event: "MessageEvent"):
         """Return a HeartbeatManager bound to the session for this event.
@@ -21225,7 +21236,9 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
 
         max_turns = self._goal_max_turns_from_config()
 
-        mgr = GoalManager(session_id=sid, default_max_turns=max_turns)
+        mgr = await self._run_in_executor_with_context(
+            lambda: GoalManager(session_id=sid, default_max_turns=max_turns)
+        )
         if not mgr.is_active():
             return
 
@@ -21451,7 +21464,9 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                         session_key = None
                     if session_key and session_key in self._running_agents:
                         continue  # busy — stays due, next scan retries
-                    if goal_blocks_loop_tick(sid):
+                    if await self._run_in_executor_with_context(
+                        lambda: goal_blocks_loop_tick(sid)
+                    ):
                         continue
 
                     mgr = LoopManager(session_id=sid)
@@ -29168,7 +29183,10 @@ class GatewayRunner(GatewayAuthorizationMixin, GatewayKanbanWatchersMixin, Gatew
                 next_message_type = None
                 if pending_event is not None:
                     next_source = getattr(pending_event, "source", None) or source
-                    if self._is_goal_continuation_event(pending_event) and not self._goal_still_active_for_session(session_id):
+                    if (
+                        self._is_goal_continuation_event(pending_event)
+                        and not await self._goal_still_active_for_session(session_id)
+                    ):
                         logger.info(
                             "Discarding stale goal continuation for session %s — goal is no longer active",
                             session_key or "?",

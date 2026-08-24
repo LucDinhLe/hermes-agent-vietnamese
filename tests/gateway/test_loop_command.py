@@ -1,5 +1,6 @@
 """Gateway /loop command tests — dispatch, routing capture, mid-run guard."""
 
+import asyncio
 import logging
 import time
 from unittest.mock import AsyncMock, Mock
@@ -98,7 +99,14 @@ async def test_gateway_loop_status_pause_stop(loop_env):
 async def test_gateway_loop_goal_note_when_goal_active(loop_env):
     from hermes_cli.goals import GoalManager
 
-    GoalManager(session_id="sid-gateway-loop").set("finish the migration")
+    # Goal persistence opens state.db synchronously. Seed it off-loop so a
+    # loaded CI shard cannot turn the bounded loop-thread bootstrap into a
+    # dropped fixture write.
+    await asyncio.to_thread(
+        lambda: GoalManager(session_id="sid-gateway-loop").set(
+            "finish the migration"
+        )
+    )
     runner = _make_runner()
     response = await GatewayRunner._handle_loop_command(runner, _make_event("/loop 5m poll CI"))
     assert "active /goal" in response

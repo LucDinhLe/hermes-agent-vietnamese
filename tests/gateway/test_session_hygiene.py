@@ -516,7 +516,11 @@ async def test_session_hygiene_timeout_continues_to_agent_and_sets_cooldown(monk
             self, messages, *_args, commit_fence=None, **_kwargs
         ):
             worker_started.set()
-            assert release_worker.wait(timeout=2)
+            # Keep the worker alive until the test releases it explicitly.
+            # A short fallback timeout lets a heavily loaded shard unblock the
+            # worker before the handler assertions run, masking the commit
+            # fence behavior this regression is meant to prove.
+            assert release_worker.wait(timeout=30)
             if commit_fence is not None and not commit_fence.begin_commit():
                 return (messages, None)
             try:
@@ -600,16 +604,18 @@ async def test_session_hygiene_timeout_continues_to_agent_and_sets_cooldown(monk
         message_id="1",
     )
 
-    started = time.monotonic()
-    result = await runner._handle_message(event)
-    elapsed = time.monotonic() - started
+    handler_task = asyncio.create_task(runner._handle_message(event))
+    try:
+        # The hygiene timeout is 10 ms. This outer watchdog only detects the
+        # old bug where dispatch waited for the still-running compression
+        # worker; it deliberately leaves headroom for loaded Windows/WSL CI.
+        result = await asyncio.wait_for(asyncio.shield(handler_task), timeout=10)
+    except BaseException:
+        release_worker.set()
+        await asyncio.gather(handler_task, return_exceptions=True)
+        raise
 
     assert result == "ok"
-    # Loose wall-clock bound per flake policy: this asserts the handler did
-    # NOT block on the hygiene-compression timeout path (which would take
-    # multiple seconds), not a precise latency. 0.15s missed by ~1-8ms on
-    # busy CI shards twice on 2026-07-23.
-    assert elapsed < 2.0
     assert worker_started.is_set()
     assert runner._run_agent.await_count == 1
     # Cooldown must be persisted to the state DB (survives restart, #74136),

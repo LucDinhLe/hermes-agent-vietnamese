@@ -734,6 +734,15 @@ def test_profile_scoped_agent_build_starts_mcp_discovery_in_profile_home(
     monkeypatch.setattr(server, "_start_notification_poller", lambda *a, **k: None)
     monkeypatch.setattr(server, "_schedule_mcp_late_refresh", lambda *a, **k: None)
     monkeypatch.setattr(server, "_emit", lambda *a, **k: None)
+    monkeypatch.setattr(server, "_notify_session_boundary", lambda *a, **k: None)
+    monkeypatch.setattr(server, "_session_info", lambda *a, **k: {})
+    monkeypatch.setattr(server, "_load_cfg", lambda: {})
+    monkeypatch.setattr(server, "_probe_config_health", lambda _cfg: None)
+    monkeypatch.setattr(
+        "agent.credits_tracker.seed_credits_at_session_start", lambda _agent: None
+    )
+    monkeypatch.setattr("tools.approval.register_gateway_notify", lambda *a, **k: None)
+    monkeypatch.setattr("tools.approval.load_permanent_allowlist", lambda: None)
 
     ready = threading.Event()
     sid = f"test-sid-{uuid.uuid4().hex[:8]}"
@@ -744,11 +753,17 @@ def test_profile_scoped_agent_build_starts_mcp_discovery_in_profile_home(
     }
 
     server._sessions[sid] = session
+    build_thread = None
     try:
         server._start_agent_build(sid, session)
+        build_thread = session["_agent_build_thread"]
         assert built.wait(timeout=15), "agent build thread never called _make_agent"
-        assert ready.wait(timeout=5), "agent_ready never set after build"
+        build_thread.join(timeout=15)
+        assert not build_thread.is_alive(), "agent build thread never finished"
+        assert ready.is_set(), "agent_ready never set after build"
     finally:
+        if build_thread is not None:
+            build_thread.join(timeout=15)
         server._sessions.pop(sid, None)
 
     assert seen == [str(profile_home)]
@@ -796,6 +811,15 @@ def test_profile_scoped_agent_build_installs_secret_scope(monkeypatch, tmp_path)
     monkeypatch.setattr(server, "_start_notification_poller", lambda *a, **k: None)
     monkeypatch.setattr(server, "_schedule_mcp_late_refresh", lambda *a, **k: None)
     monkeypatch.setattr(server, "_emit", lambda *a, **k: None)
+    monkeypatch.setattr(server, "_notify_session_boundary", lambda *a, **k: None)
+    monkeypatch.setattr(server, "_session_info", lambda *a, **k: {})
+    monkeypatch.setattr(server, "_load_cfg", lambda: {})
+    monkeypatch.setattr(server, "_probe_config_health", lambda _cfg: None)
+    monkeypatch.setattr(
+        "agent.credits_tracker.seed_credits_at_session_start", lambda _agent: None
+    )
+    monkeypatch.setattr("tools.approval.register_gateway_notify", lambda *a, **k: None)
+    monkeypatch.setattr("tools.approval.load_permanent_allowlist", lambda: None)
 
     ready = threading.Event()
     sid = f"test-secret-sid-{uuid.uuid4().hex[:8]}"
@@ -806,11 +830,17 @@ def test_profile_scoped_agent_build_installs_secret_scope(monkeypatch, tmp_path)
     }
 
     server._sessions[sid] = session
+    build_thread = None
     try:
         server._start_agent_build(sid, session)
+        build_thread = session["_agent_build_thread"]
         assert built.wait(timeout=15), "agent build thread never called _make_agent"
-        assert ready.wait(timeout=5), "agent_ready never set after build"
+        build_thread.join(timeout=15)
+        assert not build_thread.is_alive(), "agent build thread never finished"
+        assert ready.is_set(), "agent_ready never set after build"
     finally:
+        if build_thread is not None:
+            build_thread.join(timeout=15)
         server._sessions.pop(sid, None)
 
     assert scopes == [{"PROXMOX_TOKEN": "grace-secret"}]

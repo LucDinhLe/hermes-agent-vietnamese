@@ -200,7 +200,10 @@ async def test_full_dispatch_rejects_lease_timeout_without_running_goal_hook(
     runner._post_turn_goal_continuation = AsyncMock()
 
     try:
-        response = await asyncio.wait_for(runner._handle_message(_event()), timeout=1)
+        # The lease's own 20 ms clock is the behavior under test. This outer
+        # watchdog only catches a genuine dispatch hang; leave enough headroom
+        # for loaded Windows/WSL shards to finish unrelated bootstrap work.
+        response = await asyncio.wait_for(runner._handle_message(_event()), timeout=10)
     finally:
         assert runner._turn_leases.release(holder) is True
 

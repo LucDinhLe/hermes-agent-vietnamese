@@ -652,13 +652,26 @@ class TestPrefetchServerRetainVisibility:
 
     def test_prefetch_waits_for_server_completion_before_recall(self, provider):
         """Recall must not run until the tracked async op reports completed."""
+        import threading
+
         order = []
+        status_started = threading.Event()
+        release_status = threading.Event()
 
         async def _recall(**kwargs):
             order.append("recall")
             return SimpleNamespace(results=[SimpleNamespace(text="m")])
 
-        provider._client = self._client_with_ops(["pending", "pending", "completed"])
+        provider._client = self._client_with_ops(["completed"])
+
+        async def _blocked_status(**kwargs):
+            status_started.set()
+            assert release_status.wait(timeout=30)
+            return SimpleNamespace(status="completed")
+
+        provider._client.operations.get_operation_status = AsyncMock(
+            side_effect=_blocked_status
+        )
         provider._client.arecall = AsyncMock(side_effect=_recall)
 
         provider.sync_turn("hello", "world")
@@ -666,13 +679,19 @@ class TestPrefetchServerRetainVisibility:
         assert "op-1" in provider._pending_retain_ops
 
         provider.queue_prefetch("next turn query")
+        try:
+            assert status_started.wait(timeout=30)
+            assert order == [], "recall ran before server completion"
+        finally:
+            release_status.set()
         if provider._prefetch_thread:
-            provider._prefetch_thread.join(timeout=5.0)
+            provider._prefetch_thread.join(timeout=30)
+            assert not provider._prefetch_thread.is_alive()
 
         # Recall ran, the op was polled to completion, and the pending set
         # was cleared (so a later prefetch won't re-poll it).
         assert order == ["recall"]
-        assert provider._client.operations.get_operation_status.await_count >= 3
+        assert provider._client.operations.get_operation_status.await_count == 1
         assert provider._pending_retain_ops == set()
 
     def test_prefetch_proceeds_after_server_wait_timeout(self, provider_with_config):

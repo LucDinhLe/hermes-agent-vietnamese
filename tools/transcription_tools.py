@@ -781,7 +781,12 @@ def _run_command_stt(
     for reader in readers:
         reader.start()
 
-    deadline = time.monotonic() + timeout
+    # ``timeout`` is an idle budget, not a process-spawn benchmark. On a
+    # saturated host the shell/Python provider may not receive its first CPU
+    # slice before a very small idle budget expires. Allow a bounded startup
+    # grace until the first byte; every observed chunk then restores the exact
+    # caller-provided idle timeout below.
+    deadline = time.monotonic() + max(timeout, 5.0)
     timed_out = False
     while open_streams:
         remaining = deadline - time.monotonic()

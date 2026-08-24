@@ -3087,7 +3087,14 @@ class GatewaySlashCommandsMixin:
         output = result.get("output") or ""
         if result.get("created"):
             try:
-                if goal_blocks_loop_tick(mgr.session_id):
+                # GoalManager may need to open/migrate state.db on a cold
+                # profile. Keep that synchronous bootstrap off the gateway
+                # event loop so creating /loop cannot stall heartbeats or
+                # miss a persisted goal merely because the DB is contended.
+                goal_owns_boundary = await self._run_in_executor_with_context(
+                    lambda: goal_blocks_loop_tick(mgr.session_id)
+                )
+                if goal_owns_boundary:
                     output += (
                         "\nNote: an active /goal is driving this session — loop "
                         "wakeups defer until the goal finishes, pauses, or parks."

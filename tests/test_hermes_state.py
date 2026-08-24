@@ -813,17 +813,21 @@ class TestFTS5Search:
         ]
         assert all("context" in row and row["context"] for row in default)
 
-    def test_search_projection_skips_context_enrichment_queries(self, db):
+    def test_search_projection_skips_context_enrichment_queries(
+        self, db, monkeypatch
+    ):
         db.create_session(session_id="s1", source="cli")
         db.append_message("s1", role="user", content="before")
         db.append_message("s1", role="assistant", content="projectionneedle")
         db.append_message("s1", role="user", content="after")
 
         statements = []
-        read_conn = db._get_read_conn() or db._conn
+        # Route this query-shape assertion through one traced connection. A
+        # direct _get_read_conn() call checks a descriptor out without
+        # returning it to the pool, and WAL hosts may then open a different,
+        # untraced connection for each real search.
+        monkeypatch.setattr(db, "_checkout_read_conn", lambda: None)
         traced_connections = [db._conn]
-        if read_conn is not db._conn:
-            traced_connections.append(read_conn)
         for conn in traced_connections:
             conn.set_trace_callback(statements.append)
 

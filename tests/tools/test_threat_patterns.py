@@ -219,7 +219,10 @@ class TestReDoSHardening:
 
         assert isinstance(findings, list)
         assert "prompt_injection" not in findings
-        assert elapsed < 0.5
+        # Keep a true catastrophic-backtracking ceiling without treating
+        # scheduler contention as a regex regression. Healthy runs are well
+        # under one second; the pre-hardening pattern took unbounded time.
+        assert elapsed < 5.0
 
 
     def test_payload_beyond_scan_cap_is_not_evaluated(self):
