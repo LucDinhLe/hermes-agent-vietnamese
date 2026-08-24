@@ -12,13 +12,13 @@ Chỉ tiếp tục khi đủ ba điều kiện:
 
 ## 1. Chọn đúng bộ cài
 
-1. Mở [bản phát hành vi-v0.20.0-25](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-25).
+1. Mở [bản phát hành vi-v0.31.0-7](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.31.0-7).
 2. Trong phần **Assets**, chọn:
    - Máy Windows x64 thông dụng: `Hermes-Vietnamese-Windows-x64-Setup.exe`.
    - Máy Windows ARM64: `Hermes-Vietnamese-Windows-arm64-Setup.exe`.
 3. Chỉ tải tệp từ kho `LucDinhLe/hermes-agent-vietnamese` trên GitHub.
 
-Với bản v25 Windows x64, tệp đúng có kích thước `332.776.297` byte và SHA-256 `0f31c4a23bbb7913300b3f3571ad346aae517d367705a965d451a1febf620e59`.
+Với bản v31.0 Windows x64, tệp đúng có kích thước `340.302.846` byte và SHA-256 `cca0f3c0255e5e8736676a4d7ccb52c6e1b75eb73b94b8d1c3ca5dc91e57e840`.
 
 Nếu chưa biết máy dùng x64 hay ARM64, nhấn `Windows + I`, chọn **Hệ thống → Giới thiệu** và xem dòng **Loại hệ thống**.
 
