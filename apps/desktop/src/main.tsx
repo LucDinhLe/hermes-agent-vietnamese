@@ -14,18 +14,26 @@ import './store/translucency'
 import '@/debug/dev-only'
 
 import { QueryClientProvider } from '@tanstack/react-query'
-import { StrictMode } from 'react'
+import { type ReactNode, StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router'
 
 import App from './app'
+import { useActiveBackendOwner } from './app/hooks/use-backend-owner'
 import { RootErrorBoundary } from './components/error-boundary'
 import { HapticsProvider } from './components/haptics-provider'
 import { RootTooltipProvider } from './components/ui/tooltip'
 import { I18nProvider } from './i18n'
 import { installClipboardShim } from './lib/clipboard'
 import { queryClient } from './lib/query-client'
+import { installRendererAnimationPauseState } from './lib/renderer-loop-pause'
 import { ThemeProvider } from './themes/context'
+
+function BackendScopedI18nProvider({ children }: { children: ReactNode }) {
+  const backendOwner = useActiveBackendOwner()
+
+  return <I18nProvider backendOwner={backendOwner}>{children}</I18nProvider>
+}
 
 installClipboardShim()
 
@@ -39,6 +47,10 @@ if (import.meta.env.MODE !== 'production' || import.meta.env.VITE_PERF_PROBE ===
 
 const winParam = new URLSearchParams(window.location.search).get('win')
 
+if (winParam === 'hud') {
+  document.title = 'Hermes HUD'
+}
+
 if (winParam === 'overlay') {
   void import('./app/pet-overlay/overlay-root').then(({ mountPetOverlay }) => mountPetOverlay())
 } else if (winParam === 'quick') {
@@ -46,11 +58,16 @@ if (winParam === 'overlay') {
 } else if (winParam === 'wake') {
   void import('./app/wake-indicator/wake-indicator-root').then(({ mountWakeIndicator }) => mountWakeIndicator())
 } else {
+  // CSS animations do not inherit Chromium's JS-loop pause policy. Mirror the
+  // main window's focus/visibility state to :root so decorative infinite
+  // animations stop producing frames when nobody can see them.
+  installRendererAnimationPauseState()
+
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <RootErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <I18nProvider>
+          <BackendScopedI18nProvider>
             <ThemeProvider>
               <HapticsProvider>
                 {/* ONE tooltip provider for the whole app. Every `Tip` used to
@@ -74,7 +91,7 @@ if (winParam === 'overlay') {
                 </RootTooltipProvider>
               </HapticsProvider>
             </ThemeProvider>
-          </I18nProvider>
+          </BackendScopedI18nProvider>
         </QueryClientProvider>
       </RootErrorBoundary>
     </StrictMode>

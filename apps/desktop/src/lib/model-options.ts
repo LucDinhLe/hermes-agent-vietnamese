@@ -35,24 +35,39 @@ export function manualPickRemoved(
 }
 
 interface ModelOptionsRequest {
+  /** Exact registry source for the REST recovery path. */
+  connectionId?: null | string
   /** When false, include ambient/unconfigured providers (onboarding/setup
    *  surfaces). Chat pickers default to true so only explicitly configured
    *  providers are listed (#56974). */
   explicitOnly?: boolean
   gateway?: HermesGateway
   refresh?: boolean
+  profile?: null | string
   sessionId?: null | string
 }
 
-export function modelOptionsQueryKey(profile: null | string | undefined, sessionId?: null | string) {
+export function modelOptionsQueryKey(
+  profile: null | string | undefined,
+  sessionId?: null | string,
+  connectionId?: null | string
+) {
   const profileKey = (profile ?? '').trim() || 'default'
 
-  return ['model-options', profileKey, sessionId || 'global'] as const
+  return connectionId
+    ? (['model-options', connectionId, profileKey, sessionId || 'global'] as const)
+    : (['model-options', profileKey, sessionId || 'global'] as const)
 }
 
-export function requestModelOptions({
+function hasSelectableModels(options: ModelOptionsResponse | null | undefined): boolean {
+  return options?.providers?.some(provider => (provider.models?.length ?? 0) > 0) ?? false
+}
+
+export async function requestModelOptions({
+  connectionId,
   explicitOnly = true,
   gateway,
+  profile,
   refresh = false,
   sessionId
 }: ModelOptionsRequest): Promise<ModelOptionsResponse> {
@@ -71,8 +86,48 @@ export function requestModelOptions({
       params.explicit_only = true
     }
 
-    return gateway.request<ModelOptionsResponse>('model.options', params)
+    let gatewayError: unknown
+    let gatewayOptions: ModelOptionsResponse | undefined
+
+    try {
+      gatewayOptions = await gateway.request<ModelOptionsResponse>('model.options', params)
+    } catch (error) {
+      gatewayError = error
+    }
+
+    if (gatewayOptions && hasSelectableModels(gatewayOptions)) {
+      return gatewayOptions
+    }
+
+    // A connected Desktop gateway can occasionally return only the current
+    // provider/model (or an empty provider list) while its authenticated REST
+    // catalog is already populated. Recover through the same profile-scoped
+    // endpoint Settings uses, but keep the live session selection authoritative.
+    try {
+      const restOptions = await getGlobalModelOptions(
+        { explicitOnly, ...(refresh ? { refresh: true } : {}) },
+        profile,
+        connectionId
+      )
+
+      if (hasSelectableModels(restOptions)) {
+        return {
+          ...restOptions,
+          ...(gatewayOptions?.provider ? { provider: gatewayOptions.provider } : {}),
+          ...(gatewayOptions?.model ? { model: gatewayOptions.model } : {})
+        }
+      }
+    } catch {
+      // Preserve the gateway result (or its original error) when the recovery
+      // path is unavailable.
+    }
+
+    if (gatewayOptions) {
+      return gatewayOptions
+    }
+
+    throw gatewayError
   }
 
-  return getGlobalModelOptions({ explicitOnly, ...(refresh ? { refresh: true } : {}) })
+  return getGlobalModelOptions({ explicitOnly, ...(refresh ? { refresh: true } : {}) }, profile, connectionId)
 }

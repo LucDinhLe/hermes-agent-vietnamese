@@ -29,6 +29,10 @@
 import path from 'node:path'
 
 const UNINSTALL_MODES = ['gui', 'lite', 'full']
+// electron-builder derives this stable NSIS key from
+// build.appId=com.nousresearch.hermes. It is the per-user install identity,
+// not a release-version key, and must remain stable across upgrades.
+const WINDOWS_NSIS_APP_KEY = '48ae4bdc-0f8d-5252-af1e-bf7c0a8c3649'
 
 /**
  * Map an uninstall mode to the `python -m hermes_cli.uninstall` argv (after the
@@ -37,12 +41,18 @@ const UNINSTALL_MODES = ['gui', 'lite', 'full']
  * lite/full delete — see the Finding-3 note in buildWindowsCleanupScript.
  * Throws on an unknown mode so a typo can't silently become a full wipe.
  */
-function uninstallArgsForMode(mode) {
+function uninstallArgsForMode(mode, { skipPackagedApps = false } = {}) {
   if (!UNINSTALL_MODES.includes(mode)) {
     throw new Error(`Unknown uninstall mode: ${mode}`)
   }
 
-  return ['-m', 'hermes_cli.uninstall', '--mode', mode]
+  const args = ['-m', 'hermes_cli.uninstall', '--mode', mode]
+
+  if (skipPackagedApps) {
+    args.push('--skip-packaged-apps')
+  }
+
+  return args
 }
 
 /** True when `mode` removes the agent (lite/full), false for gui-only. */
@@ -53,6 +63,11 @@ function modeRemovesAgent(mode) {
 /** True when `mode` removes user data (full only). */
 function modeRemovesUserData(mode) {
   return mode === 'full'
+}
+
+/** Pass Chromium user data to detached cleanup only for a full wipe. */
+function userDataPathForUninstallMode(mode, userDataPath) {
+  return modeRemovesUserData(mode) ? userDataPath : null
 }
 
 /**
@@ -178,7 +193,16 @@ function shouldRemoveAppBundle(isPackaged, appPath) {
  * resolves from the agent source. `q()` single-quote-escapes for the shell
  * (closes-escapes-reopens any embedded apostrophe), defending against spaces.
  */
-function buildPosixCleanupScript({ desktopPid, pythonExe, pythonPath, agentRoot, uninstallArgs, appPath, hermesHome }) {
+function buildPosixCleanupScript({
+  desktopPid,
+  pythonExe,
+  pythonPath,
+  agentRoot,
+  uninstallArgs,
+  appPath,
+  userDataPath = null,
+  hermesHome
+}) {
   const q = s => `'${String(s).replace(/'/g, `'\\''`)}'`
 
   const lines = [
@@ -201,6 +225,13 @@ function buildPosixCleanupScript({ desktopPid, pythonExe, pythonPath, agentRoot,
   }
 
   lines.push(`cd ${q(agentRoot)} 2>/dev/null || true`, `${q(pythonExe)} ${uninstallArgs.map(q).join(' ')} || true`)
+
+  // The Python uninstaller also attempts this removal, but Electron helper
+  // processes can keep Chromium files open for a moment after the main PID
+  // exits. The detached handoff owns the final, post-exit cleanup.
+  if (userDataPath) {
+    lines.push(`rm -rf ${q(userDataPath)} || true`)
+  }
 
   if (appPath) {
     lines.push(`rm -rf ${q(appPath)} || true`)
@@ -241,7 +272,9 @@ function buildWindowsCleanupScript({
   agentRoot,
   uninstallArgs,
   appPath,
-  hermesHome
+  userDataPath = null,
+  hermesHome,
+  windowsNsisAppKey = null
 }) {
   const pid = Number(desktopPid) || 0
   // cmd.exe has no string escaping inside quotes; strip embedded quotes (paths
@@ -279,21 +312,55 @@ function buildWindowsCleanupScript({
     `${q(pythonExe)} ${uninstallArgs.map(q).join(' ')}`
   )
 
+  if (userDataPath) {
+    lines.push(
+      'rem Chromium helper processes can release userData handles after the',
+      'rem main PID exits. Retry the post-exit cleanup instead of leaving data behind.',
+      'set /a userdata_tries=0',
+      ':rmuserdataloop',
+      `if not exist ${q(userDataPath)} goto rmuserdatadone`,
+      `rmdir /s /q ${q(userDataPath)} >nul 2>&1`,
+      `if not exist ${q(userDataPath)} goto rmuserdatadone`,
+      'set /a userdata_tries+=1',
+      'if %userdata_tries% geq 10 goto rmuserdatadone',
+      'timeout /t 1 /nobreak >nul',
+      'goto rmuserdataloop',
+      ':rmuserdatadone'
+    )
+  }
+
   if (appPath) {
+    if (windowsNsisAppKey) {
+      const installKey = `HKCU\\Software\\${windowsNsisAppKey}`
+      const uninstallKey = `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\${windowsNsisAppKey}`
+
+      lines.push(
+        'rem Delete registration only when it belongs to this exact app path.',
+        `set "HERMES_INSTALL_KEY=${installKey}"`,
+        `set "HERMES_UNINSTALL_KEY=${uninstallKey}"`,
+        'set "REGISTERED_INSTALL="',
+        'for /f "tokens=2,*" %%A in (\'reg query "%HERMES_INSTALL_KEY%" /v InstallLocation 2^>nul ^| findstr /i /c:"InstallLocation"\') do set "REGISTERED_INSTALL=%%B"',
+        `if /i not "%REGISTERED_INSTALL%"==${q(appPath)} goto registry_cleanup_done`,
+        'reg delete "%HERMES_UNINSTALL_KEY%" /f >nul 2>&1',
+        'reg delete "%HERMES_INSTALL_KEY%" /f >nul 2>&1',
+        ':registry_cleanup_done'
+      )
+    }
+
     lines.push(
       'rem Leave the app tree before removing it. Windows cannot delete the',
       'rem current working directory of this cleanup cmd process.',
       'cd /d "%~dp0"',
-      'set /a tries=0',
-      ':rmloop',
-      `if not exist ${q(appPath)} goto rmdone`,
+      'set /a app_tries=0',
+      ':rmapploop',
+      `if not exist ${q(appPath)} goto rmapdone`,
       `rmdir /s /q ${q(appPath)} >nul 2>&1`,
-      `if not exist ${q(appPath)} goto rmdone`,
-      'set /a tries+=1',
-      'if %tries% geq 10 goto rmdone',
+      `if not exist ${q(appPath)} goto rmapdone`,
+      'set /a app_tries+=1',
+      'if %app_tries% geq 10 goto rmapdone',
       'timeout /t 1 /nobreak >nul',
-      'goto rmloop',
-      ':rmdone'
+      'goto rmapploop',
+      ':rmapdone'
     )
   }
 
@@ -312,5 +379,7 @@ export {
   selectUninstallPython,
   shouldRemoveAppBundle,
   UNINSTALL_MODES,
-  uninstallArgsForMode
+  uninstallArgsForMode,
+  userDataPathForUninstallMode,
+  WINDOWS_NSIS_APP_KEY
 }

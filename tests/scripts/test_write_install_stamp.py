@@ -28,6 +28,7 @@ def test_bundled_build_records_payload_and_tag(monkeypatch):
 
     assert stamp["payload"] is True
     assert stamp["tag"] == "vi-v0.20.0-15"
+    assert stamp["displayVersion"] == "0.20.0-vi.15"
 
 
 def test_bundled_build_rejects_upstream_or_malformed_tag(monkeypatch):

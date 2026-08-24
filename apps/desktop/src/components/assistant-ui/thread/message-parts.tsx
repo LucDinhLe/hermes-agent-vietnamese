@@ -1,13 +1,19 @@
 import {
   type ReasoningMessagePartComponent,
+  type TextMessagePartProps,
   type ToolCallMessagePartProps,
   useAuiState,
   useMessagePartReasoning
 } from '@assistant-ui/react'
+import { useStore } from '@nanostores/react'
 import { type ComponentProps, type FC, type ReactNode, useEffect, useRef, useState } from 'react'
 
+import { useSessionView } from '@/app/chat/session-view'
 import { ClarifyTool } from '@/components/assistant-ui/clarify-tool'
 import { MarkdownText, MarkdownTextContent } from '@/components/assistant-ui/markdown-text'
+import { McpSetupTool } from '@/components/assistant-ui/mcp-setup-tool'
+import { AgentDeliveryNotice, deliveryTargetFromCommand } from '@/components/assistant-ui/thread/agent-delivery'
+import { TimelineTimestamp } from '@/components/assistant-ui/thread/timeline-timestamp'
 import { DelegateTool } from '@/components/assistant-ui/tool/delegate'
 import { ToolFallback, ToolGroupSlot } from '@/components/assistant-ui/tool/fallback'
 import { formatElapsed, useElapsedSeconds, useMeasuredDuration } from '@/components/chat/activity-timer'
@@ -19,9 +25,20 @@ import { generatedImageFromResult } from '@/lib/generated-images'
 import { separateGluedReasoningBlocks } from '@/lib/reasoning-blocks'
 import { useEnterAnimation } from '@/lib/use-enter-animation'
 import { cn } from '@/lib/utils'
+import { $activeGatewayProfile } from '@/store/profile'
+import { $reasoningCollapsedByDefault } from '@/store/reasoning-disclosure'
+import {
+  $reasoningSummaries,
+  $reasoningSummaryErrors,
+  findReasoningSummary,
+  reasoningSourceDigest,
+  reasoningSummaryContextKey
+} from '@/store/reasoning-summary'
 
-const ImageGenerateTool: FC<ToolCallMessagePartProps> = props => {
-  const { args, result } = props
+type TimelineToolCallProps = ToolCallMessagePartProps & { completedAt?: number; timestamp?: number }
+
+const ImageGenerateTool: FC<TimelineToolCallProps> = props => {
+  const { args, completedAt, result, timestamp } = props
   const aspectRatio = typeof args?.aspect_ratio === 'string' ? args.aspect_ratio : undefined
 
   // The image card owns successful generations. Failed or malformed results
@@ -33,25 +50,43 @@ const ImageGenerateTool: FC<ToolCallMessagePartProps> = props => {
 
   return (
     <div className="mt-1.5">
+      <TimelineTimestamp className="mb-0.5 block" completedAt={completedAt} timestamp={timestamp} />
       <GeneratedImage aspectRatio={aspectRatio} result={result} />
     </div>
   )
 }
 
-const DelegateToolPart: FC<ToolCallMessagePartProps> = props => {
+const DelegateToolPart: FC<TimelineToolCallProps> = props => {
   // A call that failed outright dispatched nothing — there are no children to
   // list, only an error. The generic row extracts and expands it properly.
   if (props.isError) {
     return <ToolFallback {...props} />
   }
 
-  return <DelegateTool args={props.args} result={props.result} toolCallId={props.toolCallId} />
+  return (
+    <>
+      <TimelineTimestamp className="mb-0.5 block" completedAt={props.completedAt} timestamp={props.timestamp} />
+      <DelegateTool args={props.args} result={props.result} toolCallId={props.toolCallId} />
+    </>
+  )
 }
 
-const ChainToolFallback: FC<ToolCallMessagePartProps> = props => {
+const ChainToolFallback: FC<TimelineToolCallProps> = props => {
   // todo parts are hoisted to a dedicated panel above the message content.
   if (props.toolName === 'todo') {
     return null
+  }
+
+  // An inter-agent delivery run through the terminal tool renders as the
+  // compact "Messaged X" / "Message from X" notices, not a transcript row
+  // (Grok-bots parity; the receiving side already renders notices via
+  // AGENT_MESSAGE_RE). Non-delivery terminal calls fall through unchanged.
+  if (props.toolName === 'terminal' && !props.isError) {
+    const command = typeof props.args?.command === 'string' ? props.args.command : ''
+
+    if (deliveryTargetFromCommand(command)) {
+      return <AgentDeliveryNotice {...props} />
+    }
   }
 
   // A reaction's UI is the emoji landing on the bubble (message.reaction
@@ -70,25 +105,44 @@ const ChainToolFallback: FC<ToolCallMessagePartProps> = props => {
   }
 
   if (props.toolName === 'clarify') {
-    return <ClarifyTool {...props} />
+    return (
+      <>
+        <TimelineTimestamp className="mb-0.5 block" completedAt={props.completedAt} timestamp={props.timestamp} />
+        <ClarifyTool {...props} />
+      </>
+    )
+  }
+
+  if (props.toolName === 'setup_mcp') {
+    return <McpSetupTool {...props} />
   }
 
   return <ToolFallback {...props} />
 }
 
+type TimelineTextPartProps = TextMessagePartProps & { completedAt?: number; timestamp?: number }
+
+const TimelineMarkdownText: FC<TimelineTextPartProps> = ({ completedAt, timestamp }) => (
+  <>
+    <TimelineTimestamp className="mb-0.5 block" completedAt={completedAt} timestamp={timestamp} />
+    <MarkdownText />
+  </>
+)
+
 const ThinkingDisclosure: FC<{
   children: ReactNode
+  completedAt?: number
   messageRunning?: boolean
   pending?: boolean
+  timestamp?: number
   // Required: the block's duration is remembered against this key, so a
   // component that mounts after the block finished can still report it.
   timerKey: string
-}> = ({ children, messageRunning = false, pending = false, timerKey }) => {
+}> = ({ children, completedAt, messageRunning = false, pending = false, timestamp, timerKey }) => {
   const { t } = useI18n()
-  // `null` = no explicit user toggle yet, defer to the streaming default.
-  // The default is "auto-open while streaming, auto-collapse when done" so
-  // reasoning surfaces a live preview without manual interaction. The first
-  // explicit toggle wins from then on.
+  const reasoningCollapsedByDefault = useStore($reasoningCollapsedByDefault)
+  // `null` = no explicit user toggle yet. Live reasoning remains visible by
+  // default, unless the user opts into the low-jitter collapsed presentation.
   const [userOpen, setUserOpen] = useState<boolean | null>(null)
   const elapsed = useElapsedSeconds(pending, timerKey)
   const thoughtFor = useMeasuredDuration(pending, timerKey)
@@ -96,8 +150,8 @@ const ThinkingDisclosure: FC<{
   const contentRef = useRef<HTMLDivElement | null>(null)
   const enterRef = useEnterAnimation(messageRunning, timerKey)
 
-  const open = userOpen ?? pending
-  const isPreview = pending && userOpen === null
+  const open = userOpen ?? (pending && !reasoningCollapsedByDefault)
+  const isPreview = pending && userOpen === null && !reasoningCollapsedByDefault
 
   // Three ways a finished block can report itself. With a measured duration it
   // says so, unless the timer's whole seconds round it to "0s" — accurate and
@@ -163,9 +217,17 @@ const ThinkingDisclosure: FC<{
       data-slot="aui_thinking-disclosure"
       ref={enterRef}
     >
-      <ScaffoldRow onToggle={() => setUserOpen(!open)} open={open}>
+      <ScaffoldRow
+        onToggle={() => setUserOpen(!open)}
+        open={open}
+        trailing={
+          <span className="flex shrink-0 items-center gap-1.5">
+            <TimelineTimestamp className={SCAFFOLD_META_CLASS} completedAt={completedAt} timestamp={timestamp} />
+            {pending && <ActivityTimerText className={SCAFFOLD_META_CLASS} seconds={elapsed} />}
+          </span>
+        }
+      >
         <span className={cn(SCAFFOLD_LABEL_CLASS, pending && 'shimmer')}>{thoughtLabel}</span>
-        {pending && <ActivityTimerText className={SCAFFOLD_META_CLASS} seconds={elapsed} />}
       </ScaffoldRow>
       {open && (
         <div
@@ -206,6 +268,48 @@ const ReasoningAccordionGroup: FC<{ children?: ReactNode; endIndex: number; star
         .some(p => p?.type === 'reasoning' && p.status?.type !== 'complete')
   )
 
+  const messageReasoning = useAuiState(s =>
+    s.message.parts
+      .filter(part => part?.type === 'reasoning' && typeof part.text === 'string' && part.text.trim())
+      .map(part => (part.type === 'reasoning' ? part.text.trim() : ''))
+      .filter(Boolean)
+      .join('\n\n')
+  )
+
+  const isLastReasoningGroup = useAuiState(s =>
+    s.message.parts.slice(endIndex + 1).every(part => part?.type !== 'reasoning')
+  )
+
+  const view = useSessionView()
+  const storedSessionId = useStore(view.$storedId)
+  const profile = useStore($activeGatewayProfile)
+  const summaries = useStore($reasoningSummaries)
+  const errors = useStore($reasoningSummaryErrors)
+  const copy = useI18n().t.assistant.thread
+  const [sourceDigest, setSourceDigest] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+
+    if (pending || !isLastReasoningGroup || !messageReasoning) {
+      setSourceDigest('')
+
+      return () => {
+        cancelled = true
+      }
+    }
+
+    void reasoningSourceDigest(messageReasoning).then(digest => {
+      if (!cancelled) {
+        setSourceDigest(digest)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [isLastReasoningGroup, messageReasoning, pending])
+
   // A reasoning group with no actual text is pure noise — drop the whole
   // "Thinking" disclosure rather than leave an empty header eating a row. This
   // applies live too: encrypted/spinner-coerced reasoning (Opus reasoning max)
@@ -218,22 +322,82 @@ const ReasoningAccordionGroup: FC<{ children?: ReactNode; endIndex: number; star
       .some(p => p?.type === 'reasoning' && typeof p.text === 'string' && p.text.trim().length > 0)
   )
 
+  const timestamp = useAuiState(s =>
+    s.message.parts.slice(Math.max(0, startIndex), endIndex + 1).reduce<number | undefined>((earliest, part) => {
+      const value = part.type === 'reasoning' ? (part as { timestamp?: number }).timestamp : undefined
+
+      return value === undefined ? earliest : earliest === undefined ? value : Math.min(earliest, value)
+    }, undefined)
+  )
+
+  const completedAt = useAuiState(s =>
+    s.message.parts.slice(Math.max(0, startIndex), endIndex + 1).reduce<number | undefined>((latest, part) => {
+      const value = part.type === 'reasoning' ? (part as { completedAt?: number }).completedAt : undefined
+
+      return value === undefined ? latest : latest === undefined ? value : Math.max(latest, value)
+    }, undefined)
+  )
+
   if (!hasContent) {
     return null
   }
 
+  const lineage = storedSessionId ?? ''
+
+  const summary = sourceDigest
+    ? findReasoningSummary(summaries, profile, lineage, messageId, sourceDigest)
+    : undefined
+
+  const error = sourceDigest
+    ? errors[reasoningSummaryContextKey(profile, lineage, messageId, sourceDigest)]
+    : undefined
+
+  const latency = summary ? (summary.latencyMs < 1000 ? `${summary.latencyMs} ms` : `${(summary.latencyMs / 1000).toFixed(1)} s`) : ''
+  const usageTokens = summary?.usage?.totalTokens
+
   return (
-    // Keyed per block, not per message: the timer registry hands every caller
-    // of a key the same origin, so a turn that thinks three separate times used
-    // to measure the second and third blocks from the first one's start and
-    // report the running total as each block's duration.
-    <ThinkingDisclosure
-      messageRunning={messageRunning}
-      pending={pending}
-      timerKey={`reasoning:${messageId}:${startIndex}`}
-    >
-      {children}
-    </ThinkingDisclosure>
+    <>
+      {/* Keyed per block, not per message: the timer registry hands every caller
+          of a key the same origin, so separate blocks retain separate durations. */}
+      <ThinkingDisclosure
+        completedAt={completedAt}
+        messageRunning={messageRunning}
+        pending={pending}
+        timerKey={`reasoning:${messageId}:${startIndex}`}
+        timestamp={timestamp}
+      >
+        {children}
+      </ThinkingDisclosure>
+
+      {isLastReasoningGroup && !pending && (summary || error) && (
+        <section
+          className="mt-2 rounded-lg border border-(--ui-stroke-tertiary) bg-(--ui-bg-quinary)/55 px-3 py-2"
+          data-slot="aui_reasoning-summary"
+        >
+          <div className="text-[length:var(--conversation-caption-font-size)] font-medium text-(--ui-text-secondary)">
+            {copy.reasoningSummary}
+          </div>
+          {summary ? (
+            <>
+              <MarkdownTextContent
+                containerClassName="mt-1 text-xs leading-snug text-muted-foreground/90"
+                containerProps={{ 'data-slot': 'aui_reasoning-summary-text' } as ComponentProps<'div'>}
+                disableArtifacts
+                isRunning={false}
+                text={summary.summary}
+              />
+              <div className="mt-1.5 text-[length:var(--conversation-caption-font-size)] text-(--ui-text-tertiary)">
+                {copy.reasoningSummaryGenerated} · {summary.model || summary.provider} ·{' '}
+                {copy.reasoningSummaryLatency(latency)} ·{' '}
+                {usageTokens ? copy.reasoningSummaryUsage(usageTokens) : copy.reasoningSummaryCostUnavailable}
+              </div>
+            </>
+          ) : (
+            <p className="mt-1 text-xs text-(--ui-red)">{copy.reasoningSummaryFailed}</p>
+          )}
+        </section>
+      )}
+    </>
   )
 }
 
@@ -265,7 +429,7 @@ const ReasoningTextPart: ReasoningMessagePartComponent = () => {
 export const MESSAGE_PARTS_COMPONENTS = {
   Reasoning: ReasoningTextPart,
   ReasoningGroup: ReasoningAccordionGroup,
-  Text: MarkdownText,
+  Text: TimelineMarkdownText,
   ToolGroup: ToolGroupSlot,
   tools: { Fallback: ChainToolFallback }
 } as const

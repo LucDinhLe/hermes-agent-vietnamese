@@ -1,6 +1,6 @@
 # Desktop Engineering Guide
 
-How to build Hermes Desktop well. This is a judgment guide, not an inventory —
+How to build Hermes Vietnamese well. This is a judgment guide, not an inventory —
 it teaches the invariants and the reasoning behind them so a change fits the app
 even as files move. Read it with the repository `AGENTS.md` (root rules still
 apply) and [`DESIGN.md`](./DESIGN.md) for the visual and interaction contract.

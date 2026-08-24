@@ -36,7 +36,7 @@ function copyArtifact(source, outputDir, outputName) {
 export function writeChecksums(directory, outputName = 'SHA256SUMS.txt') {
   const entries = fs
     .readdirSync(directory, { withFileTypes: true })
-    .filter(entry => entry.isFile() && !entry.name.startsWith('SHA256SUMS'))
+    .filter(entry => entry.isFile() && entry.name !== outputName)
     .map(entry => entry.name)
     .sort()
 

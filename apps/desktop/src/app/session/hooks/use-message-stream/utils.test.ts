@@ -33,8 +33,8 @@ describe('toTodoPayload', () => {
 
 describe('sessionInfoStatePatch / hasSessionInfoStatePatch', () => {
   it('extracts only present runtime fields', () => {
-    const patch = sessionInfoStatePatch(payload({ model: 'gpt', fast: true, branch: 'main' }))
-    expect(patch).toMatchObject({ model: 'gpt', fast: true, branch: 'main' })
+    const patch = sessionInfoStatePatch(payload({ advisor_enabled: true, branch: 'main', fast: true, model: 'gpt' }))
+    expect(patch).toMatchObject({ advisorEnabled: true, branch: 'main', fast: true, model: 'gpt' })
     expect(hasSessionInfoStatePatch(patch)).toBe(true)
     expect(hasSessionInfoStatePatch(sessionInfoStatePatch(payload({})))).toBe(false)
   })
@@ -62,5 +62,26 @@ describe('delegateTaskPayloads', () => {
     )
 
     expect(spec).toMatchObject({ event_type: 'subagent.complete', status: 'failed' })
+  })
+
+  it.each(['timeout', 'error', 'failed', 'failure', 'TIMEOUT'])(
+    'maps completion with result.status=%s to a failed subagent.complete',
+    resultStatus => {
+      const [spec] = delegateTaskPayloads(
+        payload({ name: 'delegate_task', result: { status: resultStatus, summary: 'timed out' } }),
+        'complete'
+      )
+
+      expect(spec).toMatchObject({ event_type: 'subagent.complete', status: 'failed' })
+    }
+  )
+
+  it('maps a successful completion to completed', () => {
+    const [spec] = delegateTaskPayloads(
+      payload({ name: 'delegate_task', result: { status: 'success', summary: 'done' } }),
+      'complete'
+    )
+
+    expect(spec).toMatchObject({ event_type: 'subagent.complete', status: 'completed' })
   })
 })

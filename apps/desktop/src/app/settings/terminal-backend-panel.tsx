@@ -11,9 +11,11 @@ import type { TerminalBackendInfo, TerminalBackendsResponse } from '@/types/herm
 import { Pill } from './primitives'
 
 interface TerminalBackendPanelProps {
+  connectionId?: null | string
   /** Re-read the parent toolset list after a backend change so any derived
    *  pills stay in sync. */
   onConfiguredChange?: () => void
+  profile?: null | string
 }
 
 function StatusPill({ backend }: { backend: TerminalBackendInfo }) {
@@ -45,7 +47,7 @@ function StatusPill({ backend }: { backend: TerminalBackendInfo }) {
  * dropdown. Selecting a needs-setup backend is allowed — the row shows what's
  * missing rather than blocking, matching the CLI configurator.
  */
-export function TerminalBackendPanel({ onConfiguredChange }: TerminalBackendPanelProps) {
+export function TerminalBackendPanel({ connectionId, onConfiguredChange, profile }: TerminalBackendPanelProps) {
   const { t } = useI18n()
   const copy = t.settings.toolsets.terminalBackend
   const [data, setData] = useState<TerminalBackendsResponse | null>(null)
@@ -56,13 +58,13 @@ export function TerminalBackendPanel({ onConfiguredChange }: TerminalBackendPane
     setLoading(true)
 
     try {
-      setData(await getTerminalBackends())
+      setData(await getTerminalBackends(profile, connectionId))
     } catch (err) {
       notifyError(err, copy.failedLoad)
     } finally {
       setLoading(false)
     }
-  }, [copy.failedLoad])
+  }, [connectionId, copy.failedLoad, profile])
 
   useEffect(() => {
     void refresh()
@@ -76,7 +78,7 @@ export function TerminalBackendPanel({ onConfiguredChange }: TerminalBackendPane
     setSelecting(backend.name)
 
     try {
-      await selectTerminalBackend(backend.name)
+      await selectTerminalBackend(backend.name, profile, connectionId)
       // Mirror the backend write locally so the active highlight tracks the
       // new selection without a refetch (probes are unchanged by a select).
       setData(current =>

@@ -31,6 +31,7 @@ vi.mock('@/hermes', () => ({
   getGlobalModelInfo: () => getGlobalModelInfo(),
   getGlobalModelOptions: () => getGlobalModelOptions(),
   getAuxiliaryModels: () => getAuxiliaryModels(),
+  getApiRequestProfile: () => 'default',
   getMoaModels: () => getMoaModels(),
   setModelAssignment: (body: unknown) => setModelAssignment(body),
   getRecommendedDefaultModel: (slug: string) => getRecommendedDefaultModel(slug),
@@ -68,13 +69,19 @@ beforeEach(() => {
   })
   getAuxiliaryModels.mockResolvedValue({
     main: { provider: 'nous', model: 'hermes-4' },
-    tasks: [{ task: 'vision', provider: 'auto', model: '', base_url: '' }]
+    tasks: [
+      { task: 'advisor', provider: 'auto', model: '', base_url: '' },
+      { task: 'vision', provider: 'auto', model: '', base_url: '' }
+    ]
   })
   getMoaModels.mockResolvedValue(null)
-  setModelAssignment.mockResolvedValue({ provider: 'nous', model: 'hermes-4', gateway_tools: [] })
+  setModelAssignment.mockResolvedValue({ ok: true, provider: 'nous', model: 'hermes-4', gateway_tools: [] })
   getRecommendedDefaultModel.mockResolvedValue({ provider: 'nous', model: 'hermes-4', free_tier: null })
   setEnvVar.mockResolvedValue({ ok: true })
-  getHermesConfigRecord.mockResolvedValue({ agent: { reasoning_effort: 'medium', service_tier: 'normal' } })
+  getHermesConfigRecord.mockResolvedValue({
+    advisor: { enabled: false, max_revisions: 2, fail_open: true },
+    agent: { reasoning_effort: 'medium', service_tier: 'normal' }
+  })
   saveHermesConfig.mockResolvedValue({ ok: true })
 })
 
@@ -84,7 +91,7 @@ afterEach(() => {
   profileSwitchHandler = null
 })
 
-async function renderModelSettings() {
+async function renderModelSettings(props: { scopeProfile?: null | string } = {}) {
   const { ModelSettings } = await import('./model-settings')
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
@@ -93,7 +100,7 @@ async function renderModelSettings() {
     // needs a router context in tests (the app provides HashRouter at root).
     <MemoryRouter>
       <QueryClientProvider client={client}>
-        <ModelSettings />
+        <ModelSettings {...props} />
       </QueryClientProvider>
     </MemoryRouter>
   )
@@ -173,6 +180,31 @@ describe('ModelSettings', () => {
     expect(startManualOnboarding).not.toHaveBeenCalled()
   })
 
+  it('fails closed instead of starting OAuth while editing a non-active profile override', async () => {
+    getGlobalModelInfo.mockResolvedValueOnce({ provider: 'anthropic', model: '' })
+    getGlobalModelOptions.mockResolvedValueOnce({
+      providers: [
+        {
+          name: 'Anthropic',
+          slug: 'anthropic',
+          models: [],
+          authenticated: false,
+          auth_type: 'oauth'
+        }
+      ]
+    })
+
+    await renderModelSettings({ scopeProfile: 'profile-b' })
+
+    const setup = await screen.findByRole('button', { name: 'Set up Anthropic' })
+
+    expect(setup.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(setup)
+    expect(startManualProviderOAuth).not.toHaveBeenCalled()
+    expect(startManualLocalEndpoint).not.toHaveBeenCalled()
+    expect(startManualOnboarding).not.toHaveBeenCalled()
+  })
+
   it('replaces the selected provider and model when the active profile changes', async () => {
     getGlobalModelInfo
       .mockResolvedValueOnce({ provider: 'custom', model: 'local-a' })
@@ -232,6 +264,7 @@ describe('ModelSettings', () => {
       ]
     })
     setModelAssignment.mockResolvedValueOnce({
+      ok: true,
       provider: 'local-ollama',
       model: 'qwen3:latest',
       gateway_tools: []
@@ -263,7 +296,7 @@ describe('ModelSettings', () => {
     await renderModelSettings()
     await waitFor(() => expect(getHermesConfigRecord).toHaveBeenCalled())
 
-    const fastSwitch = await screen.findByRole('switch')
+    const fastSwitch = await screen.findByRole('switch', { name: 'Fast' })
     fireEvent.click(fastSwitch)
 
     await waitFor(() =>
@@ -289,7 +322,16 @@ describe('ModelSettings', () => {
     await renderModelSettings()
     await waitFor(() => expect(getHermesConfigRecord).toHaveBeenCalled())
 
-    expect(screen.queryByRole('switch')).toBeNull()
+    expect(screen.queryByRole('switch', { name: 'Fast' })).toBeNull()
+  })
+
+  it('keeps Advisor controls out of Settings because the session bar owns them', async () => {
+    await renderModelSettings()
+
+    expect(await screen.findByText('Auxiliary models')).toBeTruthy()
+    expect(screen.queryByText('Advisor model')).toBeNull()
+    expect(screen.queryByRole('switch', { name: 'Enable Advisor' })).toBeNull()
+    expect(screen.queryByText(/each checkpoint adds a model call/i)).toBeNull()
   })
 
   it('renders the auxiliary task rows', async () => {
@@ -353,6 +395,7 @@ describe('ModelSettings', () => {
 
   it('warns when a main switch leaves auxiliary tasks pinned to another provider', async () => {
     setModelAssignment.mockResolvedValueOnce({
+      ok: true,
       provider: 'openrouter',
       model: 'anthropic/claude-opus-4.7',
       gateway_tools: [],

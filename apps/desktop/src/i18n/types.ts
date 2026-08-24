@@ -114,6 +114,7 @@ export interface Translations {
       connectingGateway: string
       loadingSettings: string
       loadingSessions: string
+      retryingRemoteBackend: string
       startingDesktopConnection: string
       startingHermesDesktop: string
     }
@@ -170,7 +171,16 @@ export interface Translations {
     updateHermes: string
     updateReadyTitle: string
     updateReadyMessage: (count: number) => string
+    updateReadyMessageUnknown: string
     seeWhatsNew: string
+    mcp: {
+      needsAuthTitle: string
+      needsAuthMessage: (name: string) => string
+      errorTitle: string
+      errorMessage: (name: string) => string
+      signIn: string
+      view: string
+    }
     errors: {
       elevenLabsNeedsKey: string
       elevenLabsRejectedKey: string
@@ -247,7 +257,7 @@ export interface Translations {
     enterHud: string
     exitHud: string
     layoutEditor: string
-    layoutEditorTitle: string
+    layoutEditorTitle: (modifier: string) => string
   }
 
   keybinds: {
@@ -314,18 +324,22 @@ export interface Translations {
       reveal: string
       enable: string
       disable: string
+      required: string
+      requiredDescription: string
       failed: string
       empty: string
       kinds: { bundled: string; disk: string; runtime: string }
       agent: {
         title: string
         blurb: string
+        appliesTo: string
         empty: string
         loadFailed: string
         portable: string
         search: string
         noMatches: string
         toggleFailed: (name: string) => string
+        updateBackendToManage: string
         sources: Record<string, string>
       }
     }
@@ -358,8 +372,15 @@ export interface Translations {
       colorModeDesc: string
       toolViewTitle: string
       toolViewDesc: string
+      reasoningCollapsedTitle: string
+      reasoningCollapsedDesc: string
       uiScaleTitle: string
       uiScaleDesc: (percent: number) => string
+      sessionDensityTitle: string
+      sessionDensityDesc: string
+      sessionDensityCompact: string
+      sessionDensityComfortable: string
+      sessionDensityDetailed: string
       terminalFontTitle: string
       terminalFontDesc: string
       terminalFontPlaceholder: string
@@ -367,10 +388,30 @@ export interface Translations {
       terminalFontReset: string
       translucencyTitle: string
       translucencyDesc: string
+      translucencyGlassDesc: string
+      translucencyModeClear: string
+      translucencyModeGlass: string
+      translucencyFrostTitle: string
+      translucencyFrost: {
+        'under-window': string
+        popover: string
+        titlebar: string
+        header: string
+      }
+      translucencyScopeTitle: string
+      translucencyScope: {
+        window: string
+        sidebar: string
+      }
       backdropTitle: string
       backdropDesc: string
       reactionsTitle: string
       reactionsDesc: string
+      composerPopoutTitle: string
+      composerPopoutDesc: string
+      reasoningSummaryTitle: string
+      reasoningSummaryDesc: string
+      reasoningSummaryClear: string
       embedsTitle: string
       embedsDesc: string
       embedsAsk: string
@@ -437,6 +478,19 @@ export interface Translations {
       heading: string
       version: (value: string) => string
       versionUnavailable: string
+      projectInfo: string
+      technicalVersion: string
+      upstreamVersion: string
+      upstreamPublisher: string
+      upstreamPublisherValue: string
+      communityMaintainer: string
+      communityMaintainerValue: string
+      license: string
+      licenseValue: string
+      communityUpdateChannel: string
+      bundleOutOfSync: string
+      bundleOutOfSyncDesc: string
+      bundleOutOfSyncAction: string
       updates: string
       checkNow: string
       checking: string
@@ -449,6 +503,7 @@ export interface Translations {
       cantReach: string
       tapCheck: string
       updateReady: (count: number) => string
+      updateReadyUnknown: string
       lastChecked: (age: string) => string
       justNowSuffix: string
       automaticUpdates: string
@@ -476,8 +531,11 @@ export interface Translations {
       autosaveFailed: string
       imported: string
       invalidJson: string
+      toolsetsWipeConfirm: string
       keepAwakeTitle: string
       keepAwakeDesc: string
+      disableF12Title: string
+      disableF12Desc: string
       attachmentSizeTitle: string
       attachmentSizeDesc: string
       attachmentSizeUnit: string
@@ -521,6 +579,60 @@ export interface Translations {
       set: string
       clear: string
     }
+    // v2 multi-connection registry: Settings → Connections.
+    connections: {
+      title: string
+      intro: string
+      stagedNote: string
+      loadFailed: string
+      primaryPill: string
+      managedPill: string
+      addConnection: string
+      editConnection: string
+      removeConnection: string
+      removeConfirmTitle: string
+      removeConfirmDesc: (label: string) => string
+      makePrimary: string
+      testConnection: string
+      testOk: string
+      testFailed: string
+      saveFailed: string
+      removeFailed: string
+      updateAll: string
+      updateAllRunning: string
+      updateAllDone: string
+      updateAllFailed: string
+      updateSkippedCloud: string
+      kindLocal: string
+      kindRemote: string
+      kindCloud: string
+      kindSsh: string
+      kindLocalDesc: string
+      kindRemoteDesc: string
+      kindCloudDesc: string
+      kindSshDesc: string
+      labelTitle: string
+      labelDesc: string
+      labelPlaceholder: string
+      urlTitle: string
+      sshHostTitle: string
+      headersTitle: string
+      headersDesc: string
+      headerValuePlaceholder: string
+      headerValueSaved: string
+      headerAdd: string
+      headerRemove: string
+      duplicateLocal: string
+      duplicateUrl: (label: string) => string
+      duplicateSsh: (label: string) => string
+      sameBackendHint: (label: string) => string
+      localAddHint: string
+      cloudAddHint: string
+      save: string
+      saving: string
+      cancel: string
+      empty: string
+    }
     gateway: {
       loading: string
       unavailableTitle: string
@@ -528,17 +640,11 @@ export interface Translations {
       title: string
       envOverride: string
       intro: string
-      appliesTo: string
-      allProfiles: string
-      defaultConnection: string
-      profileConnection: (profile: string) => string
       envOverrideTitle: string
       envOverrideDesc: string
       modeTitle: string
       localTitle: string
       localDesc: string
-      inheritTitle: string
-      inheritDesc: string
       remoteTitle: string
       remoteDesc: string
       remoteAuthHint: string
@@ -587,6 +693,11 @@ export interface Translations {
       existingToken: (value: string) => string
       savedToken: string
       pasteSessionToken: string
+      plainTextConfirmTitle: string
+      plainTextConfirmDesc: string
+      plainTextConfirmAction: string
+      plainTextStoredTitle: string
+      plainTextStoredDesc: string
       testRemote: string
       saveForRestart: string
       saveAndReconnect: string
@@ -632,8 +743,6 @@ export interface Translations {
       sshHermesPathTitle: string
       sshHermesPathDesc: string
       sshHermesPathPlaceholder: string
-      sshRemoteProfileTitle: string
-      sshRemoteProfileDesc: string
       sshTestConnection: string
       sshConnect: string
       sshButtonsHint: string
@@ -652,6 +761,10 @@ export interface Translations {
       loading: string
       failedLoad: string
       empty: string
+    }
+    profileScope: {
+      appliesTo: string
+      editsProfile: (profile: string) => string
     }
     mcp: {
       loading: string
@@ -704,6 +817,9 @@ export interface Translations {
       catalogEnvPrompt: (name: string) => string
       catalogEnvRequired: string
       capabilitySummary: (tools: number, prompts: number, resources: number) => string
+      costTokens: (tokens: string) => string
+      usage30d: (uses: string) => string
+      unusedPill: string
       statusConnecting: string
       statusNeedsAuth: string
       statusError: string
@@ -717,6 +833,23 @@ export interface Translations {
       enableTool: (tool: string) => string
       disableTool: (tool: string) => string
       noOutput: string
+      deepLinkTitle: string
+      deepLinkDescription: string
+      deepLinkStdioWarning: string
+      deepLinkConfirm: string
+      deepLinkNameInvalid: string
+      deepLinkNameConflict: (name: string) => string
+      deepLinkErrorTitle: string
+      deepLinkErrorName: string
+      deepLinkErrorConfig: string
+      deepLinkErrorShape: string
+      deepLinkErrorUrl: string
+      deepLinkErrorTooLarge: string
+      importButton: string
+      importPlaceholder: string
+      importNoMatch: string
+      importConfirm: string
+      importConfirmMany: (count: number) => string
     }
     model: {
       loading: string
@@ -728,6 +861,11 @@ export interface Translations {
       reasoning: string
       reasoningOff: string
       defaultsFailed: string
+      advisorTitle: string
+      advisorDesc: string
+      advisorEnabled: string
+      advisorCost: string
+      advisorModel: string
       auxiliaryTitle: string
       resetAllToMain: string
       auxiliaryDesc: string
@@ -878,8 +1016,8 @@ export interface Translations {
   skills: {
     tabSkills: string
     tabToolsets: string
+    configuringProfile: string
     tabMcp: string
-    tabHub: string
     all: string
     searchSkills: string
     searchToolsets: string
@@ -926,6 +1064,10 @@ export interface Translations {
     archive: string
     skillArchivedTitle: string
     skillArchivedMessage: string
+    archiveConfirmTitle: (name: string) => string
+    archiveDescription: string
+    archiveFailed: string
+    defaultProfile: string
     hub: {
       searchPlaceholder: string
       search: string
@@ -964,6 +1106,11 @@ export interface Translations {
       updateStarted: string
       actionFailed: string
       actionLog: string
+      alreadyInstalled: (name: string) => string
+      pickerTitle: string
+      pickerBrowse: string
+      pickerHide: string
+      pickerHint: string
       loadFailed: string
       previewFailed: string
       scanFailed: string
@@ -1342,6 +1489,7 @@ export interface Translations {
     showAllProfiles: string
     switchToProfile: (name: string) => string
     manageProfiles: string
+    connectGateway: string
     actions: string
     color: string
     colorFor: string
@@ -1412,6 +1560,13 @@ export interface Translations {
     close: string
     title: string
     count: (count: number) => string
+    modelImpact: {
+      title: string
+      message: (count: number) => string
+      detailMore: (names: string, remaining: number) => string
+      review: string
+      saveFailed: string
+    }
     search: string
     loading: string
     states: Record<string, string>
@@ -1598,6 +1753,15 @@ export interface Translations {
     }
     projects: {
       sectionLabel: string
+      manageDescription: string
+      searchPlaceholder: string
+      emptyTitle: string
+      emptyDescription: string
+      open: string
+      sessionsCount: (count: number) => string
+      tokensCount: (tokens: string) => string
+      pinnedSectionLabel: string
+      pinnedEmpty: string
       home: string
       newButton: string
       createTitle: string
@@ -1608,6 +1772,8 @@ export interface Translations {
       foldersLabel: string
       ideaLabel: string
       ideaPlaceholder: string
+      ideaHint: string
+      ideaSaveFailed: string
       ideaGenerate: string
       ideaGenerating: string
       ideaShuffle: string
@@ -1642,6 +1808,7 @@ export interface Translations {
       baseBranchPlaceholder: string
       baseBranchNone: string
       startWorkFailed: string
+      worktreeStaleBackend: string
       worktreeProjectLabel: string
       worktreeProjectPlaceholder: string
       worktreeProjectNone: string
@@ -1671,15 +1838,21 @@ export interface Translations {
     loading: string
     loadMore: string
     loadCount: (step: number) => string
+    messageCount: (count: number) => string
+    toolCallCount: (count: number) => string
     row: {
       pin: string
       unpin: string
+      markUnread: string
+      markRead: string
+      unreadFailed: string
       copyId: string
       export: string
       branchFrom: string
       rename: string
       archive: string
       newWindow: string
+      openInTerminal: string
       hideTabBar: string
       openInNewTab: string
       openInSplit: string
@@ -1698,7 +1871,13 @@ export interface Translations {
       renameTitle: string
       renameDesc: string
       untitledPlaceholder: string
+      deleteTitle: string
+      deleteDesc: (title: string) => string
+      deleting: string
+      deleted: string
       untitledChat: (id: string) => string
+      messageCount: (count: number) => string
+      todoProgress: string
       ageNow: string
       ageDay: string
       ageHour: string
@@ -1715,6 +1894,7 @@ export interface Translations {
       working: string
       done: string
     }
+    markAllRead: string
   }
 
   composer: {
@@ -1774,6 +1954,7 @@ export interface Translations {
     queueEdit: string
     queueSendNext: string
     queueSend: string
+    queueSteer: string
     queueDelete: string
     queueResume: string
     queueResumeTip: string
@@ -1805,6 +1986,44 @@ export interface Translations {
     snippets: Record<string, { label: string; description: string; text: string }>
     dropFiles: string
     dropSession: string
+    mcpSuggestions: {
+      label: (server: string) => string
+      tip: (keyword: string) => string
+      connecting: (server: string) => string
+      cancelTip: string
+      added: (server: string) => string
+      addedTip: string
+      connectFailed: (server: string) => string
+      sourceChanged: string
+    }
+    skillSuggestions: {
+      label: (skill: string) => string
+      tip: (skill: string) => string
+      done: (skill: string) => string
+      doneTip: string
+    }
+    githubSuggestions: {
+      label: string
+      tip: string
+      done: string
+      doneTip: string
+    }
+    repairSuggestions: {
+      label: (server: string) => string
+      tip: (server: string) => string
+      working: (server: string) => string
+      workingTip: string
+      done: (server: string) => string
+      doneTip: string
+      failed: (server: string) => string
+    }
+    cronSuggestions: {
+      label: string
+      tip: (phrase: string) => string
+      prefix: string
+      done: string
+      doneTip: string
+    }
   }
 
   statusStack: {
@@ -1850,7 +2069,7 @@ export interface Translations {
       scopeLastTurn: string
       commit: string
       commitAndPush: string
-      commitPlaceholder: string
+      commitPlaceholder: (shortcut: string) => string
       generateCommitMessage: string
       stopGenerating: string
       createPr: string
@@ -1900,6 +2119,17 @@ export interface Translations {
     applyingClose: string
     errorTitle: string
     errorBody: string
+    blockerTitle: string
+    blockerBody: string
+    foreignBlockerTitle: string
+    foreignBlockerBody: string
+    mixedBlockerBody: string
+    closePreviewsAndUpdate: string
+    closePreviewsAndCheckAgain: string
+    localPreview: string
+    portLabel: (port: number) => string
+    pidLabel: (pid: number) => string
+    technicalDetails: string
     notNow: string
     applyStatus: {
       preparing: string
@@ -1985,8 +2215,6 @@ export interface Translations {
     lookingUpProviders: string
     collapse: string
     otherProviders: string
-    apiKeyProviders: string
-    apiKeyProviderPitch: string
     haveApiKey: string
     chooseLater: string
     recommended: string
@@ -2090,10 +2318,37 @@ export interface Translations {
       connected: string
       connecting: string
       offline: string
+      statusRunning: string
+      statusStopped: string
+      statusUnknown: string
+      pidLabel: (pid: number) => string
       inferenceReady: string
       inferenceNotReady: string
       checkingInference: string
       disconnected: string
+      reconnectGateway: string
+      startGateway: string
+      restartGateway: string
+      stopGateway: string
+      forceStopGateway: string
+      forceStopUnavailable: string
+      viewLogs: string
+      runDoctor: string
+      checkHealth: string
+      stopConfirmTitle: string
+      stopConfirmBody: (profile: string) => string
+      stopSharedConfirmBody: string
+      actionFailed: (action: string) => string
+      actionTimedOut: string
+      lifecycleManagedBy: (profile: string) => string
+      lifecycleOwnerUnknown: string
+      sharedLifecycleWarning: string
+      statusLoadFailed: string
+      logsEmpty: string
+      logsLoadFailed: string
+      doctorStarted: string
+      healthHealthy: string
+      healthUnhealthy: string
       openSystem: string
       connection: (label: string) => string
       recentActivity: string
@@ -2142,6 +2397,7 @@ export interface Translations {
       gatewayTitle: string
       customizeTitle: string
       hideStatusbar: string
+      resetStatusbar: string
       toggleApprovalMode: string
       toggleBackendVersion: string
       toggleCommandCenter: string
@@ -2176,11 +2432,31 @@ export interface Translations {
           system_prompt: string
           tool_definitions: string
         }
+        compactAt: (tokens: string, percent: number) => string
+        compactNow: string
+        costActual: (amount: string) => string
+        costDisclaimer: string
+        costEstimated: (amount: string) => string
+        costIncluded: string
+        costReference: (amount: string) => string
+        costTitle: string
+        costTokens: (input: string, output: string, cache: string) => string
+        costUnknown: string
+        effectiveCapacity: (tokens: string) => string
         empty: string
+        estimated: string
         loading: string
+        measured: string
+        modelLabel: (model: string) => string
         percentFull: (percent: number) => string
+        publishedCapacity: (tokens: string, source: string) => string
+        remaining: (tokens: string) => string
+        sourceAnthropic: string
+        sourceOpenAI: string
+        sourceRuntime: string
         title: string
         tokenSummary: (used: string, max: string) => string
+        tokensUntilCompact: (tokens: string) => string
       }
       session: string
       yoloOn: string
@@ -2327,6 +2603,49 @@ export interface Translations {
       invalidAddressMessage: string
       sharedWithAgent: string
       sharedWithAgentHint: string
+      connector: {
+        openButton: string
+        title: string
+        description: string
+        loading: string
+        officialExtension: string
+        trustVerified: string
+        trustFailed: string
+        openFolder: string
+        extensionId: string
+        digest: string
+        enabled: string
+        disabled: string
+        enableDescription: string
+        enable: string
+        disable: string
+        currentSite: string
+        createCode: string
+        pairingTitle: string
+        pairingInstructions: string
+        copy: string
+        expiresAt: (time: string) => string
+        previewReady: string
+        browser: string
+        domain: string
+        cookies: string
+        sessionCookies: string
+        unsupported: string
+        expiry: string
+        sessionOnly: string
+        importWarning: string
+        confirmImport: (count: number, hostname: string) => string
+        importing: string
+        imported: (count: number, hostname: string) => string
+        skippedUnsupported: (count: number) => string
+        importedSessions: string
+        noImports: string
+        importRecord: (count: number, time: string) => string
+        revoke: string
+        revokeWarning: string
+        error: (code: string) => string
+        close: string
+      }
     }
   }
 
@@ -2378,10 +2697,21 @@ export interface Translations {
       showEarlier: string
       loadingResponse: string
       resumeWhenBackgroundDone: (count: number) => string
+      agentMessaging: (name: string) => string
+      agentMessaged: (name: string) => string
+      agentMessageFrom: (name: string) => string
+      showAgentMessage: string
       thinking: string
       thought: string
       thoughtBriefly: string
       thoughtFor: (duration: string) => string
+      turnDuration: (duration: string) => string
+      reasoningSummary: string
+      reasoningSummaryGenerated: string
+      reasoningSummaryLatency: (duration: string) => string
+      reasoningSummaryCostUnavailable: string
+      reasoningSummaryUsage: (tokens: number) => string
+      reasoningSummaryFailed: string
       today: (time: string) => string
       yesterday: (time: string) => string
       copy: string
@@ -2410,6 +2740,41 @@ export interface Translations {
       goForward: string
       sendEdited: string
       attachingFile: string
+      workProgress: {
+        analyzingAction: string
+        analyzingReason: string
+        reasoningAction: string
+        reasoningReason: string
+        respondingAction: string
+        respondingReason: string
+        compactingAction: string
+        compactingReason: string
+        toolPreparingAction: (name: string) => string
+        toolPreparingReason: string
+        toolRunningAction: (name: string) => string
+        toolRunningReason: string
+        toolCheckingAction: (name: string) => string
+        toolCheckingReason: string
+        advisorPlanAction: string
+        advisorPlanReason: string
+        advisorRecoveryAction: string
+        advisorRecoveryReason: string
+        advisorFinalAction: string
+        advisorFinalReason: string
+        checkpointPlan: string
+        checkpointRecovery: string
+        checkpointFinal: string
+        advisorPassedAction: (checkpoint: string) => string
+        advisorPassedReason: string
+        advisorRevisionAction: (checkpoint: string) => string
+        advisorRevisionReason: string
+        advisorUnavailableAction: string
+        advisorUnavailableReason: string
+        advisorFailedAction: string
+        advisorFailedReason: string
+        advisorUnresolvedAction: string
+        advisorUnresolvedReason: string
+      }
     }
     approval: {
       gatewayDisconnected: string
@@ -2438,6 +2803,28 @@ export interface Translations {
       lateAnswer: (question: string, choice: string) => string
       lateAnswerTip: string
       lateAnswerHint: string
+    }
+    mcpSetup: {
+      installTitle: (server: string) => string
+      enableTitle: (server: string) => string
+      authorizeTitle: (server: string) => string
+      installAction: string
+      enableAction: string
+      authorizeAction: string
+      decline: string
+      declined: string
+      installed: (server: string) => string
+      enabled: (server: string) => string
+      authorized: (server: string) => string
+      failed: (server: string) => string
+      unanswered: string
+      toolCount: (count: number) => string
+      notInCatalog: (server: string) => string
+      catalogSource: string
+      envRequired: string
+      sendFailed: string
+      reloadFailed: string
+      gatewayDisconnected: string
     }
     tool: {
       copyCode: string
@@ -2528,6 +2915,7 @@ export interface Translations {
     stopFailed: string
     regenerateFailed: string
     editFailed: string
+    editTurnUnavailable: string
     resumeFailed: string
     resumeStrandedTitle: string
     resumeStrandedBody: string

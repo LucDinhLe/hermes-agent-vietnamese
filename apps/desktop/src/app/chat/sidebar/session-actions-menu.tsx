@@ -20,28 +20,40 @@ import {
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { ColorSwatches } from '@/components/ui/color-swatches'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CopyButton } from '@/components/ui/copy-button'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  preventCloseButtonAutoFocus
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { renameSession } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { PROFILE_SWATCHES } from '@/lib/profile-color'
 import { exportSession } from '@/lib/session-export'
-import { activeGateway } from '@/store/gateway'
+import { activeGateway, requestGatewayForAgent } from '@/store/gateway'
 import { notify, notifyError } from '@/store/notifications'
 import { $projectTree, moveSessionToProject, projectIdForCwd, projectRootCwd } from '@/store/projects'
 import {
   $activeSessionId,
+  $connection,
   $selectedStoredSessionId,
   $sessions,
+  $unreadFinishedSessionIds,
+  markSessionRead,
   sessionMatchesStoredId,
   sessionPinId,
   setSessions
 } from '@/store/session'
 import { $sessionColorOverrides, setSessionColorOverride } from '@/store/session-color'
 import { $sessionTiles } from '@/store/session-states'
-import { canOpenSessionWindow } from '@/store/windows'
+import { ackStoredSessionId } from '@/store/session-unread'
+import { canOpenSessionInTerminal, canOpenSessionWindow, openSessionInTerminal } from '@/store/windows'
 
 import type { SessionTitleResponse } from '../../types'
 
@@ -64,7 +76,9 @@ import type { SessionTitleResponse } from '../../types'
 export async function renameSessionPreferringRpc(
   storedSessionId: string,
   title: string,
-  profile?: string
+  profile?: string,
+  connectionId?: string,
+  explicitRuntimeId?: string
 ): Promise<{ title?: string }> {
   const selectedStoredSessionId = $selectedStoredSessionId.get()
 
@@ -78,15 +92,20 @@ export async function renameSessionPreferringRpc(
             sessionMatchesStoredId(session, storedSessionId) && sessionMatchesStoredId(session, selectedStoredSessionId)
         ))
 
-  const runtimeId = isActiveRow ? $activeSessionId.get() : null
+  const runtimeId = explicitRuntimeId ?? (isActiveRow ? $activeSessionId.get() : null)
   const gateway = activeGateway()
 
-  if (title && runtimeId && gateway) {
+  if (title && runtimeId && (connectionId || gateway)) {
     try {
-      const result = await gateway.request<SessionTitleResponse>('session.title', {
-        session_id: runtimeId,
-        title
-      })
+      const params = { session_id: runtimeId, title }
+      const result = connectionId
+        ? await requestGatewayForAgent<SessionTitleResponse>(
+            connectionId,
+            profile || 'default',
+            'session.title',
+            params
+          )
+        : await gateway!.request<SessionTitleResponse>('session.title', params)
 
       return { title: result?.title ?? title }
     } catch (err) {
@@ -98,15 +117,23 @@ export async function renameSessionPreferringRpc(
     }
   }
 
-  return renameSession(storedSessionId, title, profile)
+  return renameSession(storedSessionId, title, profile, connectionId)
 }
 
 interface SessionActions {
+  /** Source-blind local chrome actions are safe only for the foreground owner. */
+  ambientActionsEnabled?: boolean
+  connectionId?: string
   sessionId: string
   title: string
   pinned?: boolean
+  /** Backend-derived read state — drives the Mark as unread/read label. */
+  unread?: boolean
   profile?: string
+  runtimeId?: string
   onPin?: () => void
+  /** Toggle the persisted read-state watermark for this row. */
+  onToggleUnread?: () => void
   onBranch?: () => void
   onArchive?: () => void
   onDelete?: () => void
@@ -184,11 +211,16 @@ function MoveToProjectItems({ kit, sessionId, profile }: { kit: MenuKit; session
 }
 
 function useSessionActions({
+  ambientActionsEnabled = true,
+  connectionId,
   sessionId,
   title,
   pinned = false,
+  unread = false,
   profile,
+  runtimeId,
   onPin,
+  onToggleUnread,
   onBranch,
   onArchive,
   onDelete,
@@ -200,8 +232,22 @@ function useSessionActions({
   const { t } = useI18n()
   const r = t.sidebar.row
   const [renameOpen, setRenameOpen] = useState(false)
+  // The rename item opens a Dialog. When a menu closes, Radix restores focus to
+  // its trigger — for a sidebar row that trigger is the row's own <button>, so
+  // focus lands there instead of the dialog's input: Space then activates the
+  // row (selecting the session) and the arrow keys move the list rather than
+  // the caret. Suppress that one restore so the dialog keeps focus; every other
+  // action leaves the restore alone (it's the correct behavior for them). Mirrors
+  // the project menu's appearance-popover guard.
+  const suppressCloseFocusRef = useRef(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
   const tiles = useStore($sessionTiles)
   const selectedStoredSessionId = useStore($selectedStoredSessionId)
+  const activeConnection = useStore($connection)
+  const isRemote = connectionId ? connectionId !== 'local' : activeConnection?.mode === 'remote'
+  // The row's finished-unread dot is cleared by opening the session (main or
+  // tile) — this menu item is the explicit escape hatch for the rest.
+  const isUnread = useStore($unreadFinishedSessionIds).includes(sessionId)
 
   // Already showing as a tab somewhere (a tile, or loaded in main — main IS
   // a tab): offering "Open in new tab" again is noise.
@@ -228,7 +274,7 @@ function useSessionActions({
           })
         ]
       : []),
-    ...(canOpenSessionWindow()
+    ...(canOpenSessionWindow() && ambientActionsEnabled
       ? [
           spec({
             disabled: !sessionId,
@@ -237,6 +283,31 @@ function useSessionActions({
             onSelect: () => {
               triggerHaptic('selection')
               openSession(sessionId, () => undefined, 'window')
+            }
+          })
+        ]
+      : []),
+    // The user's OWN terminal, not the in-app pane: resumes the session in the
+    // TUI. Hidden on a remote connection — the emulator we'd open runs on this
+    // machine while the session (and its runtime) lives on the remote host.
+    ...(canOpenSessionInTerminal() && !isRemote && ambientActionsEnabled
+      ? [
+          spec({
+            disabled: !sessionId,
+            icon: 'terminal',
+            label: r.openInTerminal,
+            onSelect: () => {
+              triggerHaptic('selection')
+
+              // Read the row lazily: subscribing every row's menu to $sessions
+              // would re-render the whole sidebar on each session update.
+              const cwd =
+                $sessions
+                  .get()
+                  .find(s => sessionMatchesStoredId(s, sessionId))
+                  ?.cwd?.trim() || undefined
+
+              void openSessionInTerminal(sessionId, { cwd, profile })
             }
           })
         ]
@@ -251,6 +322,8 @@ function useSessionActions({
       label: r.rename,
       onSelect: () => {
         triggerHaptic('selection')
+        // Keep focus off the row trigger so it lands in the dialog input.
+        suppressCloseFocusRef.current = true
         setRenameOpen(true)
       }
     }),
@@ -261,6 +334,34 @@ function useSessionActions({
       onSelect: () => {
         triggerHaptic('selection')
         onPin?.()
+      }
+    }),
+    // One read-state item, driven by BOTH unread sources: the transient
+    // finished-unread dot (isUnread) and the backend watermark (unread).
+    // "Mark as read" clears whichever is lit; "Mark as unread" arms the
+    // persisted watermark so the dot survives restarts.
+    spec({
+      disabled: !ambientActionsEnabled || !sessionId || (!onToggleUnread && !isUnread),
+      // Closed envelope = unread, open envelope = read (codicon has mail and
+      // mail-read, but no mail-unread glyph — verified against the font css).
+      icon: unread || isUnread ? 'mail-read' : 'mail',
+      label: unread || isUnread ? r.markRead : r.markUnread,
+      onSelect: () => {
+        triggerHaptic('selection')
+
+        if (unread || isUnread) {
+          // Clear the transient family dot immediately (and ack the persisted
+          // watermark/marker so a list refresh doesn't repaint it)…
+          markSessionRead(sessionId)
+          ackStoredSessionId(sessionId)
+
+          // …and retire the persisted watermark when the row carries one.
+          if (unread) {
+            onToggleUnread?.()
+          }
+        } else {
+          onToggleUnread?.()
+        }
       }
     })
   ]
@@ -285,7 +386,7 @@ function useSessionActions({
       label: r.export,
       onSelect: () => {
         triggerHaptic('selection')
-        void exportSession(sessionId, { profile, title })
+        void exportSession(sessionId, { connectionId, profile, title })
       }
     })
   ]
@@ -373,7 +474,15 @@ function useSessionActions({
       label: t.common.delete,
       onSelect: () => {
         triggerHaptic('warning')
-        onDelete?.()
+
+        // Deleting is irreversible (the CLI path asks y/N; the desktop used to
+        // fire instantly on click). Gate it behind an explicit confirm — see
+        // #61470. The dialog owns the delete call, so every surface that routes
+        // through this menu (sidebar rows, tab menus, the chat header) gets the
+        // guard for free.
+        if (onDelete) {
+          setDeleteOpen(true)
+        }
       },
       variant: 'destructive'
     }
@@ -385,7 +494,7 @@ function useSessionActions({
       {openItems.length > 0 && <kit.Separator />}
       {identityItems.map(item => renderActionItem(kit, item))}
       <kit.Sub>
-        <kit.SubTrigger disabled={!sessionId}>
+        <kit.SubTrigger disabled={!ambientActionsEnabled || !sessionId}>
           <Codicon name="symbol-color" size="0.875rem" />
           <span>{t.sidebar.projects.menuAppearance}</span>
         </kit.SubTrigger>
@@ -406,7 +515,7 @@ function useSessionActions({
       <kit.Separator />
       {workItems.map(item => renderActionItem(kit, item))}
       <kit.Sub>
-        <kit.SubTrigger disabled={!sessionId}>
+        <kit.SubTrigger disabled={!ambientActionsEnabled || !sessionId}>
           <Codicon name="folder" size="0.875rem" />
           <span>{t.sidebar.projects.moveToProject}</span>
         </kit.SubTrigger>
@@ -441,15 +550,69 @@ function useSessionActions({
 
   const renameDialog = (
     <RenameSessionDialog
+      connectionId={connectionId}
       currentTitle={title}
       onOpenChange={setRenameOpen}
       open={renameOpen}
       profile={profile}
+      runtimeId={runtimeId}
       sessionId={sessionId}
     />
   )
 
-  return { renameDialog, renderItems }
+  // Consumed once per close: when rename was the action that closed the menu,
+  // block Radix's focus-restore to the trigger so the dialog input keeps focus.
+  const onCloseAutoFocus = (event: Event) => {
+    if (suppressCloseFocusRef.current) {
+      suppressCloseFocusRef.current = false
+      event.preventDefault()
+    }
+  }
+
+  const deleteDialog = (
+    <DeleteSessionDialog
+      onConfirm={() => {
+        onDelete?.()
+      }}
+      onOpenChange={setDeleteOpen}
+      open={deleteOpen}
+      sessionTitle={title}
+    />
+  )
+
+  return { deleteDialog, onCloseAutoFocus, renameDialog, renderItems }
+}
+
+interface DeleteSessionDialogProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onConfirm: () => void
+  sessionTitle: string
+}
+
+// Thin wrapper over ConfirmDialog — the single choke point for every session
+// delete entry point (sidebar rows, tab menus, the chat header). Deleting a
+// session is irreversible and the desktop used to fire it instantly on click
+// (#61470); this mirrors the CLI's y/N guard. onConfirm is the fire-and-forget
+// delete call; ConfirmDialog owns the busy/done beat and Enter-to-confirm.
+function DeleteSessionDialog({ open, onOpenChange, onConfirm, sessionTitle }: DeleteSessionDialogProps) {
+  const { t } = useI18n()
+  const r = t.sidebar.row
+
+  return (
+    <ConfirmDialog
+      busyLabel={r.deleting}
+      confirmLabel={t.common.delete}
+      description={r.deleteDesc(sessionTitle)}
+      destructive
+      doneLabel={r.deleted}
+      onClose={() => onOpenChange(false)}
+      onConfirm={onConfirm}
+      onOpenAutoFocus={preventCloseButtonAutoFocus}
+      open={open}
+      title={r.deleteTitle}
+    />
+  )
 }
 
 interface SessionActionsMenuProps
@@ -459,7 +622,7 @@ interface SessionActionsMenuProps
 
 export function SessionActionsMenu({ children, align = 'end', sideOffset = 6, ...actions }: SessionActionsMenuProps) {
   const { t } = useI18n()
-  const { renameDialog, renderItems } = useSessionActions(actions)
+  const { deleteDialog, onCloseAutoFocus, renameDialog, renderItems } = useSessionActions(actions)
 
   return (
     <>
@@ -468,11 +631,13 @@ export function SessionActionsMenu({ children, align = 'end', sideOffset = 6, ..
         ariaLabel={t.sidebar.row.sessionActions}
         contentClassName="w-40"
         items={renderItems}
+        onCloseAutoFocus={onCloseAutoFocus}
         sideOffset={sideOffset}
       >
         {children}
       </ActionsMenu>
       {renameDialog}
+      {deleteDialog}
     </>
   )
 }
@@ -483,27 +648,43 @@ interface SessionContextMenuProps extends SessionActions {
 
 export function SessionContextMenu({ children, ...actions }: SessionContextMenuProps) {
   const { t } = useI18n()
-  const { renameDialog, renderItems } = useSessionActions(actions)
+  const { deleteDialog, onCloseAutoFocus, renameDialog, renderItems } = useSessionActions(actions)
 
   return (
     <>
-      <ActionsContextMenu ariaLabel={t.sidebar.row.sessionActions} contentClassName="w-40" items={renderItems}>
+      <ActionsContextMenu
+        ariaLabel={t.sidebar.row.sessionActions}
+        contentClassName="w-40"
+        items={renderItems}
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         {children}
       </ActionsContextMenu>
       {renameDialog}
+      {deleteDialog}
     </>
   )
 }
 
 interface RenameSessionDialogProps {
+  connectionId?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   sessionId: string
   currentTitle: string
   profile?: string
+  runtimeId?: string
 }
 
-function RenameSessionDialog({ open, onOpenChange, sessionId, currentTitle, profile }: RenameSessionDialogProps) {
+function RenameSessionDialog({
+  connectionId,
+  open,
+  onOpenChange,
+  sessionId,
+  currentTitle,
+  profile,
+  runtimeId
+}: RenameSessionDialogProps) {
   const { t } = useI18n()
   const r = t.sidebar.row
   const [value, setValue] = useState(currentTitle)
@@ -533,7 +714,7 @@ function RenameSessionDialog({ open, onOpenChange, sessionId, currentTitle, prof
     setSubmitting(true)
 
     try {
-      const result = await renameSessionPreferringRpc(sessionId, next, profile)
+      const result = await renameSessionPreferringRpc(sessionId, next, profile, connectionId, runtimeId)
       const finalTitle = result.title || next || ''
       setSessions(prev => prev.map(s => (s.id === sessionId ? { ...s, title: finalTitle || null } : s)))
       notify({ durationMs: 2_000, kind: 'success', message: r.renamed })
@@ -556,7 +737,7 @@ function RenameSessionDialog({ open, onOpenChange, sessionId, currentTitle, prof
           disabled={submitting}
           onChange={event => setValue(event.target.value)}
           onKeyDown={event => {
-            if (event.key === 'Enter') {
+            if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
               event.preventDefault()
               void submit()
             } else if (event.key === 'Escape') {

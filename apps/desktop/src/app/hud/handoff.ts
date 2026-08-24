@@ -17,10 +17,17 @@
 import { useStore } from '@nanostores/react'
 import { useEffect, useRef } from 'react'
 
+import { activeBackendOwner, sameBackendOwner } from '@/store/backend-owner'
 import { reloadPersistedDrafts, requestComposerDraftSync } from '@/store/composer'
+import { ensureGatewayForAgent } from '@/store/gateway'
 import { reportHudSession, watchHudState } from '@/store/hud'
 import { $selectedStoredSessionId } from '@/store/session'
-import { focusOpenSession, sessionTileDelegate } from '@/store/session-states'
+import {
+  focusOpenSession,
+  parseSessionTileIdentity,
+  sessionTileDelegate,
+  sessionTileIdentity
+} from '@/store/session-states'
 import { isHudWindow } from '@/store/windows'
 
 import { getActiveComposer } from '../chat/composer/focus'
@@ -43,7 +50,7 @@ const TILE_TARGET_PREFIX = 'tile:'
  */
 export function hudTargetSessionId(): null | string {
   const target = getActiveComposer()
-  const tile = target.startsWith(TILE_TARGET_PREFIX) ? target.slice(TILE_TARGET_PREFIX.length) : null
+  const tile = target.startsWith(TILE_TARGET_PREFIX) ? target : null
 
   return tile || $selectedStoredSessionId.get()
 }
@@ -71,7 +78,12 @@ export function useHudHandoff({ navigate, resumeSession }: HudHandoffParams): vo
       reloadPersistedDrafts()
 
       const selected = $selectedStoredSessionId.get()
-      const target = hudSessionId ?? selected
+      const encodedTile = hudSessionId?.startsWith(TILE_TARGET_PREFIX)
+        ? parseSessionTileIdentity(hudSessionId.slice(TILE_TARGET_PREFIX.length))
+        : null
+
+      const target = encodedTile?.storedSessionId ?? hudSessionId ?? selected
+      const owner = encodedTile?.owner ?? null
 
       // Somewhere other than the workspace pane. If it is an open tile, front
       // it and re-resume THROUGH the tile delegate: the ordinary resume path
@@ -80,16 +92,24 @@ export function useHudHandoff({ navigate, resumeSession }: HudHandoffParams): vo
       // opened on purpose. Otherwise it's a session this window has never seen
       // — route to it and let the route resume do the rest, including loading
       // its draft as the composer's scope swaps.
-      if (target && target !== selected) {
-        const delegate = focusOpenSession(target) === 'tile' ? sessionTileDelegate() : null
+      if (target && (target !== selected || (owner && !sameBackendOwner(activeBackendOwner(), owner)))) {
+        const delegate = focusOpenSession(target, owner ?? activeBackendOwner()) === 'tile' ? sessionTileDelegate() : null
 
-        if (delegate) {
-          void delegate.resumeTile(target).catch(() => undefined)
+        if (delegate && owner) {
+          void delegate.resumeTile(target, owner).catch(() => undefined)
 
           return
         }
 
-        openSession(target, paramsRef.current.navigate)
+        if (owner) {
+          void ensureGatewayForAgent(owner.connectionId, owner.profile).then(activated => {
+            if (activated) {
+              openSession(target, paramsRef.current.navigate)
+            }
+          })
+        } else {
+          openSession(target, paramsRef.current.navigate)
+        }
 
         return
       }
@@ -111,7 +131,27 @@ export function useHudGoto(navigate: OpenSessionNavigate): void {
   const navigateRef = useRef(navigate)
   navigateRef.current = navigate
 
-  useEffect(() => window.hermesDesktop?.hud?.onGoto?.(id => navigateRef.current(sessionRoute(id))), [])
+  useEffect(
+    () =>
+      window.hermesDesktop?.hud?.onGoto?.(id => {
+        const encoded = id.startsWith(TILE_TARGET_PREFIX)
+          ? parseSessionTileIdentity(id.slice(TILE_TARGET_PREFIX.length))
+          : null
+
+        if (!encoded) {
+          navigateRef.current(sessionRoute(id))
+
+          return
+        }
+
+        void ensureGatewayForAgent(encoded.owner.connectionId, encoded.owner.profile).then(activated => {
+          if (activated) {
+            navigateRef.current(sessionRoute(encoded.storedSessionId))
+          }
+        })
+      }),
+    []
+  )
 }
 
 /** HUD side: keep main told which session this window is on. */
@@ -120,7 +160,12 @@ export function useReportHudSession(): void {
 
   useEffect(() => {
     if (isHudWindow()) {
-      reportHudSession(selectedStoredSessionId)
+      const owner = activeBackendOwner()
+      reportHudSession(
+        selectedStoredSessionId && owner
+          ? `${TILE_TARGET_PREFIX}${sessionTileIdentity(owner, selectedStoredSessionId)}`
+          : selectedStoredSessionId
+      )
     }
   }, [selectedStoredSessionId])
 }

@@ -15,6 +15,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
+import { UUID } from 'builder-util-runtime'
 import { test } from 'vitest'
 
 import {
@@ -26,8 +27,17 @@ import {
   selectUninstallPython,
   shouldRemoveAppBundle,
   UNINSTALL_MODES,
-  uninstallArgsForMode
+  uninstallArgsForMode,
+  userDataPathForUninstallMode,
+  WINDOWS_NSIS_APP_KEY
 } from './desktop-uninstall'
+
+test('Windows NSIS app key matches electron-builder derivation from build.appId', () => {
+  const packageJson = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
+  const electronBuilderNamespace = UUID.parse('50e065bc-3134-11e6-9bab-38c9862bdaf3')
+
+  assert.equal(WINDOWS_NSIS_APP_KEY, UUID.v5(packageJson.build.appId, electronBuilderNamespace))
+})
 
 // --- uninstallArgsForMode ---
 
@@ -40,6 +50,18 @@ test('uninstallArgsForMode maps each mode to the module-runner argv', () => {
 test('uninstallArgsForMode throws on an unknown mode (no silent full wipe)', () => {
   assert.throws(() => uninstallArgsForMode('nuke'), /Unknown uninstall mode/)
   assert.throws(() => uninstallArgsForMode(''), /Unknown uninstall mode/)
+})
+
+test('every desktop handoff tells Python not to scan packaged app locations', () => {
+  for (const mode of UNINSTALL_MODES) {
+    assert.deepEqual(uninstallArgsForMode(mode, { skipPackagedApps: true }), [
+      '-m',
+      'hermes_cli.uninstall',
+      '--mode',
+      mode,
+      '--skip-packaged-apps'
+    ])
+  }
 })
 
 test('UNINSTALL_MODES lists exactly the three supported modes', () => {
@@ -56,6 +78,14 @@ test('mode predicates classify what each mode removes', () => {
   assert.equal(modeRemovesUserData('gui'), false)
   assert.equal(modeRemovesUserData('lite'), false)
   assert.equal(modeRemovesUserData('full'), true)
+})
+
+test('detached cleanup receives user data only for a full wipe', () => {
+  const userDataPath = 'C:\\Users\\x\\AppData\\Roaming\\Hermes'
+
+  assert.equal(userDataPathForUninstallMode('gui', userDataPath), null)
+  assert.equal(userDataPathForUninstallMode('lite', userDataPath), null)
+  assert.equal(userDataPathForUninstallMode('full', userDataPath), userDataPath)
 })
 
 // --- selectUninstallPython ---
@@ -208,6 +238,7 @@ test('buildPosixCleanupScript waits for the PID, runs the uninstall module, remo
     agentRoot: '/home/x/.hermes/hermes-agent',
     uninstallArgs: ['-m', 'hermes_cli.uninstall', '--mode', 'gui'],
     appPath: '/opt/hermes/linux-unpacked',
+    userDataPath: '/home/x/.config/Hermes',
     hermesHome: '/home/x/.hermes'
   })
 
@@ -218,6 +249,7 @@ test('buildPosixCleanupScript waits for the PID, runs the uninstall module, remo
   assert.match(script, /seq 1 60/)
   assert.match(script, /'-m' 'hermes_cli\.uninstall' '--mode' 'gui'/)
   assert.match(script, /rm -rf '\/opt\/hermes\/linux-unpacked'/)
+  assert.match(script, /rm -rf '\/home\/x\/\.config\/Hermes'/)
   assert.match(script, /export HERMES_HOME='\/home\/x\/\.hermes'/)
 })
 
@@ -293,7 +325,9 @@ test('buildWindowsCleanupScript waits (bounded) for PID, runs uninstall, rmdir b
     agentRoot: 'C:\\hermes',
     uninstallArgs: ['-m', 'hermes_cli.uninstall', '--mode', 'full'],
     appPath: 'C:\\Users\\x\\AppData\\Local\\Programs\\Hermes',
-    hermesHome: 'C:\\Users\\x\\AppData\\Local\\hermes'
+    userDataPath: 'C:\\Users\\x\\AppData\\Roaming\\Hermes',
+    hermesHome: 'C:\\Users\\x\\AppData\\Local\\hermes',
+    windowsNsisAppKey: WINDOWS_NSIS_APP_KEY
   })
 
   assert.match(script, /@echo off/)
@@ -311,9 +345,26 @@ test('buildWindowsCleanupScript waits (bounded) for PID, runs uninstall, rmdir b
   assert.doesNotMatch(script, /find "%PID%"/) // the old substring-prone form is gone
   // Removal is a retry loop (Windows releases dir handles lazily).
   assert.match(script, /cd \/d "%~dp0"/)
-  assert.match(script, /:rmloop/)
+  assert.match(script, /:rmuserdataloop/)
+  assert.match(script, /rmdir \/s \/q "C:\\Users\\x\\AppData\\Roaming\\Hermes" >nul 2>&1/)
+  assert.match(script, /if %userdata_tries% geq 10 goto rmuserdatadone/)
+  // Remove only this per-user NSIS registration. A sibling HKLM install or a
+  // differently located HKCU install must not match the exact InstallLocation.
+  assert.match(script, /HKCU\\Software\\48ae4bdc-0f8d-5252-af1e-bf7c0a8c3649/)
+  assert.match(
+    script,
+    /HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\48ae4bdc-0f8d-5252-af1e-bf7c0a8c3649/
+  )
+  assert.match(script, /reg query "%HERMES_INSTALL_KEY%" \/v InstallLocation/)
+  assert.match(
+    script,
+    /if \/i not "%REGISTERED_INSTALL%"=="C:\\Users\\x\\AppData\\Local\\Programs\\Hermes" goto registry_cleanup_done/
+  )
+  assert.match(script, /reg delete "%HERMES_UNINSTALL_KEY%" \/f >nul 2>&1/)
+  assert.match(script, /reg delete "%HERMES_INSTALL_KEY%" \/f >nul 2>&1/)
+  assert.match(script, /:rmapploop/)
   assert.match(script, /rmdir \/s \/q "C:\\Users\\x\\AppData\\Local\\Programs\\Hermes" >nul 2>&1/)
-  assert.match(script, /if %tries% geq 10 goto rmdone/)
+  assert.match(script, /if %app_tries% geq 10 goto rmapdone/)
   assert.match(script, /del "%~f0"/)
 })
 
@@ -323,11 +374,14 @@ test.skipIf(process.platform !== 'win32')(
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-uninstall-wait-'))
     const scriptPath = path.join(directory, 'cleanup.cmd')
     const appPath = path.join(directory, 'app')
+    const userDataPath = path.join(directory, 'user-data')
     const agentRoot = path.join(appPath, 'resources', 'agent-payload', 'repo')
 
     try {
       fs.mkdirSync(agentRoot, { recursive: true })
+      fs.mkdirSync(userDataPath, { recursive: true })
       fs.writeFileSync(path.join(agentRoot, 'payload.txt'), 'runtime payload')
+      fs.writeFileSync(path.join(userDataPath, 'state.json'), 'desktop state')
       fs.writeFileSync(
         scriptPath,
         buildWindowsCleanupScript({
@@ -337,6 +391,7 @@ test.skipIf(process.platform !== 'win32')(
           agentRoot,
           uninstallArgs: ['cmd.exe'],
           appPath,
+          userDataPath,
           hermesHome: path.join(directory, 'home')
         })
       )
@@ -352,6 +407,7 @@ test.skipIf(process.platform !== 'win32')(
       assert.match(completed.stdout, /cmd\.exe/i)
       assert.equal(fs.existsSync(scriptPath), false)
       assert.equal(fs.existsSync(path.join(directory, 'cleanup-tasklist.tmp')), false)
+      assert.equal(fs.existsSync(userDataPath), false)
       assert.equal(fs.existsSync(appPath), false)
     } finally {
       fs.rmSync(directory, { recursive: true, force: true })
@@ -359,7 +415,7 @@ test.skipIf(process.platform !== 'win32')(
   }
 )
 
-test('buildWindowsCleanupScript omits PYTHONPATH + rmdir when not needed (gui, no bundle)', () => {
+test('buildWindowsCleanupScript omits PYTHONPATH + rmdir when neither bundle nor userData is removable', () => {
   const script = buildWindowsCleanupScript({
     desktopPid: 2,
     pythonExe: 'C:\\h\\venv\\Scripts\\python.exe',

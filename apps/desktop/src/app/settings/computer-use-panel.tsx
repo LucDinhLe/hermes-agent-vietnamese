@@ -11,9 +11,11 @@ import type { ComputerUseStatus } from '@/types/hermes'
 import { Pill } from './primitives'
 
 interface ComputerUsePanelProps {
+  connectionId?: null | string
   /** Re-read the parent toolset list after a permission/install change so the
    *  "Configured / Needs keys" pill stays in sync. */
   onConfiguredChange?: () => void
+  profile?: null | string
 }
 
 // Per-OS one-liner shown when there's no TCC grant flow (Windows/Linux). macOS
@@ -74,7 +76,7 @@ function PermissionRow({ granted, label, hint }: { granted: boolean | null; labe
  * Binary install/upgrade stays in the cua-driver provider's post-setup runner
  * below this card (the generic ToolsetConfigPanel).
  */
-export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) {
+export function ComputerUsePanel({ connectionId, onConfiguredChange, profile }: ComputerUsePanelProps) {
   const { locale } = useI18n()
   const isVi = locale === 'vi'
   const [status, setStatus] = useState<ComputerUseStatus | null>(null)
@@ -84,13 +86,13 @@ export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) 
 
   const refresh = useCallback(async () => {
     try {
-      setStatus(await getComputerUseStatus())
+      setStatus(await getComputerUseStatus(profile, connectionId))
     } catch (err) {
       notifyError(err, isVi ? 'Không thể đọc trạng thái Computer Use' : 'Could not read Computer Use status')
     } finally {
       setLoading(false)
     }
-  }, [isVi])
+  }, [connectionId, isVi, profile])
 
   // eslint-disable-next-line no-restricted-syntax -- legitimate non-atom ref write (see eslint rule comment)
   useEffect(() => {
@@ -104,7 +106,7 @@ export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) 
     setGranting(true)
 
     try {
-      const started = await grantComputerUsePermissions()
+      const started = await grantComputerUsePermissions(profile, connectionId)
 
       if (!started.ok) {
         notifyError(new Error('spawn failed'), isVi ? 'Không thể yêu cầu cấp quyền' : 'Could not request permissions')
@@ -128,7 +130,7 @@ export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) 
           break
         }
 
-        const polled = await getActionStatus(started.name, 200)
+        const polled = await getActionStatus(started.name, 200, profile, connectionId)
         upsertDesktopActionTask(polled)
 
         if (!polled.running) {
@@ -149,7 +151,7 @@ export function ComputerUsePanel({ onConfiguredChange }: ComputerUsePanelProps) 
         setGranting(false)
       }
     }
-  }, [isVi, onConfiguredChange, refresh])
+  }, [connectionId, isVi, onConfiguredChange, profile, refresh])
 
   if (loading) {
     return (

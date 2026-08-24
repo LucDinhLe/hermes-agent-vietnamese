@@ -27,7 +27,34 @@ export const REQUIRED_RUNTIME_GATES = Object.freeze([
   'rollback'
 ])
 
+export const V31_RUNTIME_GATES = Object.freeze([
+  'updateFromV39',
+  'agentsPersistentEntry',
+  'agentsNoLeftPane',
+  'agentsRosterSearch',
+  'agentsMultiInvite',
+  'agentsLeadUnchanged',
+  'agentsManagementEntry',
+  'agentsLegacyProfiles',
+  'agentsSessionProjectPersistence',
+  'agentsGroupRoutineCompatibility',
+  'agentsVietnameseEnglish',
+  'agentsResponsiveRightPanel',
+  'agentsAdvisorContextCostPreserved',
+  'agentsNoRightClickPhrase'
+])
+
 export const RELEASE_CLASSES = Object.freeze(['community-prerelease', 'stable'])
+
+export function requiredRuntimeGatesForTag(tag) {
+  const match = /^vi-v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)-(0|[1-9]\d*)$/.exec(String(tag))
+  if (!match) throw new Error(`evidence tag is invalid: ${tag}`)
+  const version = match.slice(1, 4).map(Number)
+  const requiresV31Gates =
+    version[0] > 0 || version[1] > 31 || (version[1] === 31 && version[2] >= 0)
+
+  return requiresV31Gates ? [...REQUIRED_RUNTIME_GATES, ...V31_RUNTIME_GATES] : REQUIRED_RUNTIME_GATES
+}
 
 export function parseChecksumManifest(text) {
   const entries = new Map()
@@ -42,6 +69,7 @@ export function parseChecksumManifest(text) {
 
 export function validateReleaseEvidence(evidence, checksumText, expected = {}) {
   if (!evidence || evidence.schemaVersion !== 1) throw new Error('release evidence must use schemaVersion 1')
+  const requiredRuntimeGates = requiredRuntimeGatesForTag(evidence.tag)
   if (expected.tag && evidence.tag !== expected.tag) throw new Error(`evidence tag mismatch: ${evidence.tag}`)
   if (!/^[0-9a-f]{40}$/.test(evidence.commit ?? '')) throw new Error('evidence commit must be a full Git SHA')
   if (expected.commit && evidence.commit !== expected.commit) {
@@ -66,7 +94,7 @@ export function validateReleaseEvidence(evidence, checksumText, expected = {}) {
     if (!record.artifact || checksums.get(record.artifact) !== record.sha256) {
       throw new Error(`${platform}: artifact SHA-256 is absent from or disagrees with SHA256SUMS.txt`)
     }
-    for (const gate of REQUIRED_RUNTIME_GATES) {
+    for (const gate of requiredRuntimeGates) {
       if (record.gates?.[gate] !== true) throw new Error(`${platform}: missing runtime gate ${gate}`)
     }
     if (!Array.isArray(record.logs) || record.logs.length === 0) throw new Error(`${platform}: no logs recorded`)

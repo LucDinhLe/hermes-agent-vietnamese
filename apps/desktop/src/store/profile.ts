@@ -11,7 +11,8 @@ import {
   storedStringArray,
   storedStringRecord
 } from '@/lib/storage'
-import { $gateway, ensureGatewayForProfile, openGatewayForProfile } from '@/store/gateway'
+import { invalidateCronModelImpactScopeState } from '@/store/cron-model-impact-scope'
+import { $gateway, ensureGatewayForAgent, ensureGatewayForProfile, openGatewayForProfile } from '@/store/gateway'
 import { setConnection } from '@/store/session'
 import { resetStarmapGraph } from '@/store/starmap'
 import type { ProfileInfo } from '@/types/hermes'
@@ -38,9 +39,29 @@ export function setActiveProfile(name: string): void {
   $activeProfile.set(name || 'default')
 }
 
+// ── Stale-fetch invalidation across backend switches ───────────────────────
+// $profiles mirrors the ACTIVE backend's /api/profiles. A connection/mode
+// apply (the soft re-home) or a profile/agent activation changes which backend
+// that is while a fetch may still be in flight — and a late response from the
+// PREVIOUS backend must not clobber the list the new backend just served.
+// That was #85731's disappearing rail: applying a different remote/Cloud
+// connection let the old (often dying, profile-less) backend's response land
+// last, collapsing $profiles and hiding the rail. Bumping the epoch strands
+// every in-flight fetch: the response still resolves for its caller, but it
+// no longer writes the shared cache ("guard against the past").
+let profileListEpoch = 0
+
+export function invalidateProfileListFetches(): void {
+  profileListEpoch += 1
+}
+
 export async function refreshProfiles(): Promise<ProfileInfo[]> {
+  const epoch = profileListEpoch
   const { profiles } = await getProfiles()
-  $profiles.set(profiles)
+
+  if (epoch === profileListEpoch) {
+    $profiles.set(profiles)
+  }
 
   return profiles
 }
@@ -109,13 +130,19 @@ interface ActiveProfileResponse {
 // Pull the running backend's current profile + the available profile list.
 // Best-effort: failures (backend not up yet) leave the prior values intact.
 export async function refreshActiveProfile(): Promise<void> {
+  const epoch = profileListEpoch
+
   try {
     const res = await window.hermesDesktop.api<ActiveProfileResponse>({
       path: '/api/profiles/active',
       timeoutMs: STARTUP_REQUEST_TIMEOUT_MS
     })
 
-    setActiveProfile(res.current || 'default')
+    // Same stale-response guard as refreshProfiles: a backend switch mid-fetch
+    // means this answer describes the PREVIOUS backend.
+    if (epoch === profileListEpoch) {
+      setActiveProfile(res.current || 'default')
+    }
   } catch {
     // Backend may not be ready; keep the last known value.
   }
@@ -176,11 +203,16 @@ $activeGatewayProfile.subscribe(value => {
   setApiRequestProfile(key)
 
   if (_lastRoutedProfile !== null && _lastRoutedProfile !== key) {
+    invalidateCronModelImpactScopeState()
     // Profile-scoped settings + the unified session list are now stale.
     // Narrowed so account/marketplace/onboarding caches don't refetch on
     // every profile switch.
     invalidateProfileScopedQueries()
     resetStarmapGraph()
+    // /api/profiles now routes to a different backend: strand any in-flight
+    // profile-list fetch so the previous backend's late answer can't clobber
+    // the rail (the #85731 class — same guard as the connection-apply wipe).
+    invalidateProfileListFetches()
   }
 
   _lastRoutedProfile = key
@@ -224,7 +256,27 @@ export function prewarmProfileBackend(name: string): void {
   openGatewayForProfile(key).catch(() => undefined)
 }
 
-let gatewaySwitch: Promise<void> | null = null
+// A real promise tail, not a one-shot mutex. Callers can enqueue while an
+// earlier activation is still settling; every activation then runs in request
+// order and the final request is the final published gateway identity.
+let gatewaySwitchTail: Promise<void> = Promise.resolve()
+let pendingGatewaySwitches = 0
+
+function enqueueGatewaySwitch(target: string, activate: () => Promise<void>): Promise<void> {
+  pendingGatewaySwitches += 1
+  $gatewaySwapTarget.set(target)
+
+  const operation = gatewaySwitchTail.catch(() => undefined).then(activate)
+  gatewaySwitchTail = operation.catch(() => undefined)
+
+  return operation.finally(() => {
+    pendingGatewaySwitches -= 1
+
+    if (pendingGatewaySwitches === 0) {
+      $gatewaySwapTarget.set(null)
+    }
+  })
+}
 
 // Keep the renderer's $connection (mode / baseUrl / profile) in lockstep with
 // the profile the live gateway is now on. $connection seeds from the PRIMARY
@@ -263,31 +315,29 @@ export async function ensureGatewayProfile(profile: string | null | undefined): 
     // (e.g. the user just picked a profile in the switcher) is still in flight,
     // let it settle first so a new chat doesn't race session.create against a
     // half-open socket and land on the wrong backend.
-    if (gatewaySwitch) {
-      await gatewaySwitch.catch(() => undefined)
-    }
+    await gatewaySwitchTail.catch(() => undefined)
 
     return
   }
 
   const target = normalizeProfileKey(profile)
 
-  if (normalizeProfileKey($activeGatewayProfile.get()) === target && $gateway.get()) {
+  if (
+    pendingGatewaySwitches === 0 &&
+    normalizeProfileKey($activeGatewayProfile.get()) === target &&
+    $gateway.get()
+  ) {
     return
   }
 
-  // Serialize concurrent activations so two rapid session switches don't race
-  // the active pointer.
-  if (gatewaySwitch) {
-    await gatewaySwitch.catch(() => undefined)
-
+  // Serialize every activation on the shared promise tail. Unlike awaiting a
+  // single captured promise before assigning a new one, this also orders B and
+  // C when both arrive while A is still in flight.
+  await enqueueGatewaySwitch(target, async () => {
     if (normalizeProfileKey($activeGatewayProfile.get()) === target && $gateway.get()) {
       return
     }
-  }
 
-  $gatewaySwapTarget.set(target)
-  gatewaySwitch = (async () => {
     // ensureGatewayForProfile opens (or reuses) the target's socket and points
     // the active gateway at it — without closing the profile you came from.
     await ensureGatewayForProfile(target)
@@ -295,14 +345,62 @@ export async function ensureGatewayProfile(profile: string | null | undefined): 
     // The active backend just changed; resync $connection so remote-aware
     // paths (image.attach_bytes vs image.attach, /api/fs/*, /api/media) follow.
     await syncConnectionToActiveProfile(target)
-  })()
+  })
+}
+
+// Registry-aware sibling of syncConnectionToActiveProfile: a connection-scoped
+// agent's descriptor comes from getConnectionFor (its SOURCE connection), not
+// getConnection (the local pool). Same best-effort contract.
+async function syncConnectionToActiveAgent(connectionId: string, profile: string): Promise<void> {
+  const getConnectionFor = window.hermesDesktop?.getConnectionFor
+
+  if (!getConnectionFor) {
+    return
+  }
 
   try {
-    await gatewaySwitch
-  } finally {
-    gatewaySwitch = null
-    $gatewaySwapTarget.set(null)
+    setConnection(await getConnectionFor({ connectionId, profile }))
+  } catch {
+    // Leave the prior connection in place; boot/reconnect resyncs it later.
   }
+}
+
+// Activate a connection-scoped agent's gateway — the (connectionId, profile)
+// analogue of ensureGatewayProfile, and the door the SDK's ensureAgent goes
+// through. Two invariants the raw store call (ensureGatewayForAgent) does not
+// provide on its own:
+//  - Every activation moves $activeGatewayProfile and resyncs $connection,
+//    exactly like the profile path — otherwise activating an ALREADY-OPEN
+//    registry agent left both describing the previous backend, routing
+//    /api/fs, /api/media and image.attach to the wrong machine (the same
+//    class as #46651) and pointing newSessionInProfile at the stale profile.
+//  - Activations share the gatewaySwitch mutex with profile switches, so a
+//    rapid agent↔profile (or agent↔agent) interleave can't finish out of
+//    order and leave the EARLIER setActive() as the last write.
+// Only a null connectionId falls through to the legacy profile path. Explicit
+// `local` is a registry identity and must use the genuinely-local route.
+export async function ensureGatewayAgent(connectionId: null | string, profile: string): Promise<void> {
+  const target = normalizeProfileKey(profile)
+  const connection = (connectionId ?? '').trim() || null
+
+  if (!connection) {
+    return ensureGatewayProfile(target)
+  }
+
+  // Serialize against every queued profile/agent switch, including siblings
+  // that arrived while an earlier activation was still in flight.
+  await enqueueGatewaySwitch(target, async () => {
+    const activated = await ensureGatewayForAgent(connection, target)
+
+    if (!activated) {
+      throw new Error(`Could not activate Agent ${target} on source ${connection}. The source may be unavailable.`)
+    }
+
+    $activeGatewayProfile.set(target)
+    // The active backend just changed; resync $connection so remote-aware
+    // paths (image.attach_bytes vs image.attach, /api/fs/*, /api/media) follow.
+    await syncConnectionToActiveAgent(connection, target)
+  })
 }
 
 // ── Sidebar profile scope (the "workspace switcher" model) ─────────────────
@@ -312,6 +410,14 @@ export async function ensureGatewayProfile(profile: string | null | undefined): 
 // fans every profile's sessions into one grouped, browsable list.
 
 export const ALL_PROFILES = '__all__'
+
+/** Normalize a sidebar scope to the profile key used by session and cron queries. */
+export const sidebarProfileForScope = (profileScope: string): string =>
+  profileScope === ALL_PROFILES ? 'all' : normalizeProfileKey(profileScope)
+
+/** Key a platform total by its Desktop profile route so counts cannot leak across profiles. */
+export const messagingTotalsKey = (messagingProfile: string, sourceId: string): string =>
+  `${messagingProfile}:${sourceId}`
 
 const SHOW_ALL_PROFILES_STORAGE_KEY = 'hermes.desktop.showAllProfiles'
 

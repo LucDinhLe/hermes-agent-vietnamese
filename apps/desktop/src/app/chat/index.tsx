@@ -3,7 +3,7 @@ import { useStore } from '@nanostores/react'
 import { useQuery } from '@tanstack/react-query'
 import type { ReadableAtom } from 'nanostores'
 import type * as React from 'react'
-import { memo, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router'
 
 import type { SubmitTextOptions } from '@/app/session/hooks/use-prompt-actions/utils'
@@ -24,13 +24,16 @@ import { NEW_SESSION_TITLE, quickModelOptions, sessionTitle } from '@/lib/chat-r
 import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-store-runtime'
 import { modelOptionsQueryKey, requestModelOptions } from '@/lib/model-options'
 import { cn } from '@/lib/utils'
+import { activeBackendOwner, type BackendOwner, sameBackendOwner } from '@/store/backend-owner'
 import { migrateSessionDraft } from '@/store/composer'
 import { migrateQueuedPrompts, parkQueuedPrompts } from '@/store/composer-queue'
 import { $pinnedSessionIds } from '@/store/layout'
 import { $petActive } from '@/store/pet'
 import { $petOverlayActive } from '@/store/pet-overlay'
-import { $activeGatewayProfile, $gatewaySwapTarget, $profiles } from '@/store/profile'
+import { $activeGatewayProfile, $gatewaySwapTarget, $profiles, $profileScope, ALL_PROFILES } from '@/store/profile'
+import { $projectTree, $projectTreeOwner, projectIdForCwd } from '@/store/projects'
 import {
+  $connection,
   $contextSuggestions,
   $freshDraftReady,
   $gatewayState,
@@ -43,6 +46,13 @@ import {
   sessionPinId,
   shouldMigrateComposerScope
 } from '@/store/session'
+import {
+  sessionConnectionId,
+  sessionEventProfile,
+  sessionTileDelegate,
+  sessionTileIdentity
+} from '@/store/session-states'
+import { $transcriptTailBySessionId } from '@/store/transcript-tail'
 import { isAuxiliaryWindow, isWatchWindow } from '@/store/windows'
 import type { ModelOptionsResponse } from '@/types/hermes'
 
@@ -59,16 +69,27 @@ import type { ChatBarState } from './composer/types'
 import { type DroppedFile, partitionDroppedFiles } from './hooks/use-composer-actions'
 import { type DragKind, useFileDropZone } from './hooks/use-file-drop-zone'
 import { ProfileTag } from './profile-tag'
+import { isRouteSessionMismatch } from './route-session-state'
 import { useRuntimeMessageRepository } from './runtime-repository'
 import { ScrollToBottomButton } from './scroll-to-bottom-button'
+import { SessionAdvisorBar } from './session-advisor-bar'
 import { useSessionView } from './session-view'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
 import { threadLoadingState } from './thread-loading'
-import { selectTranscriptWindow } from './transcript-window'
+import {
+  backfillOlderTranscriptPage,
+  mergeOlderTranscriptPage,
+  transcriptBackfillAvailable
+} from './transcript-backfill'
+import { advanceTranscriptWindow, type TranscriptWindowState } from './transcript-window'
 
 interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
+  /** Durable source for a background tile. Foreground surfaces omit it. */
+  backendOwner?: BackendOwner
   gateway: HermesGateway | null
+  gatewayReady?: boolean
   modelMenuContent?: React.ReactNode
+  paneId?: string
   onToggleSelectedPin: () => void
   onDeleteSelectedSession: () => void
   onCancel: () => Promise<void> | void
@@ -78,6 +99,7 @@ interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
   maxVoiceRecordingSeconds?: number
   onAttachImageBlob: (blob: Blob) => Promise<boolean | void> | boolean | void
   onAttachDroppedItems: (candidates: DroppedFile[]) => Promise<boolean | void> | boolean | void
+  onAttachPrCommentUrl?: (url: string) => boolean
   onPasteClipboardImage: (opts?: { silent?: boolean }) => Promise<boolean> | void
   onPickFiles: () => void
   onPickFolders: () => void
@@ -229,24 +251,64 @@ function ChatRuntimeBoundary({
 
   const [windowPages, setWindowPages] = useState(1)
   const [windowSessionKey, setWindowSessionKey] = useState(runtimeId)
+  // Sticky-cut continuity across flushes (advanceTranscriptWindow). A ref, not
+  // state: it is derived from `messages` and must never trigger a render.
+  const windowStateRef = useRef<null | TranscriptWindowState>(null)
 
   // Reset the window on session swap during RENDER, so a large expand from the
   // previous chat can't leak into the next one's first paint (#55191).
   if (windowSessionKey !== runtimeId) {
     setWindowSessionKey(runtimeId)
     setWindowPages(1)
+    windowStateRef.current = null
   }
 
-  const { messages: windowedMessages, windowed } = useMemo(
-    () => selectTranscriptWindow(messages, windowPages),
-    [messages, windowPages]
-  )
+  const { messages: windowedMessages, windowed } = useMemo(() => {
+    const next = advanceTranscriptWindow(windowStateRef.current, messages, windowPages)
+
+    windowStateRef.current = next
+
+    return next.window
+  }, [messages, windowPages])
 
   const runtimeMessageRepository = useRuntimeMessageRepository(windowedMessages)
 
-  const expandWindow = useCallback(() => setWindowPages(pages => pages + 1), [])
+  const storedId = useStore(view.$storedId)
+  // Subscribed (not read imperatively) so the "Show earlier" affordance
+  // appears/retires as tail hydrations and backfill pages record their state.
+  const transcriptTailStates = useStore($transcriptTailBySessionId)
+  const restBackfillAvailable = Boolean(storedId && transcriptTailStates[storedId]?.possiblyTruncated)
 
-  const transcriptWindow = useMemo(() => ({ olderAvailable: windowed, expandWindow }), [expandWindow, windowed])
+  const expandWindow = useCallback(() => {
+    // The store window still holds older messages: growing pages is enough.
+    // Otherwise the whole in-memory transcript is already materialized — if
+    // the REST tail hydration was truncated, fetch the next older page and
+    // PREPEND it to the session store before growing, so the grown window has
+    // something older to show. Fire-and-forget: the prepend lands through the
+    // session-state write path and re-renders this boundary.
+    if (!windowStateRef.current?.window.windowed && runtimeId && storedId && transcriptBackfillAvailable(storedId)) {
+      void backfillOlderTranscriptPage({
+        storedSessionId: storedId,
+        // Stale-response guard: a session switch remounts/re-keys this view;
+        // checking the live atoms (not captured props) discards a page that
+        // resolves after the user moved on — same pattern as isCurrentResume.
+        isCurrent: () => view.$storedId.get() === storedId && view.$runtimeId.get() === runtimeId,
+        applyOlderPage: olderPage => {
+          sessionTileDelegate()?.updateSession(runtimeId, state => {
+            const merged = mergeOlderTranscriptPage(state.messages, olderPage)
+
+            return merged === state.messages ? state : { ...state, messages: merged }
+          })
+        }
+      })
+    }
+
+    setWindowPages(pages => pages + 1)
+  }, [runtimeId, storedId, view])
+
+  const olderAvailable = windowed || restBackfillAvailable
+
+  const transcriptWindow = useMemo(() => ({ olderAvailable, expandWindow }), [expandWindow, olderAvailable])
 
   const runtime = useIncrementalExternalStoreRuntime<ThreadMessage>({
     messageRepository: runtimeMessageRepository,
@@ -272,9 +334,12 @@ function ChatRuntimeBoundary({
 // on idle ticks unrelated to the chat; with stable callback props (hoisted to
 // useCallback at the call sites) memo() lets the whole chat shell skip those.
 export const ChatView = memo(function ChatView({
+  backendOwner,
   className,
   gateway,
+  gatewayReady,
   modelMenuContent,
+  paneId,
   onToggleSelectedPin,
   onDeleteSelectedSession,
   onCancel,
@@ -282,6 +347,7 @@ export const ChatView = memo(function ChatView({
   onAddUrl,
   onAttachImageBlob,
   onAttachDroppedItems,
+  onAttachPrCommentUrl,
   onBranchInNewChat,
   maxVoiceRecordingSeconds,
   onPasteClipboardImage,
@@ -310,16 +376,20 @@ export const ChatView = memo(function ChatView({
   const storedId = useStore(view.$storedId)
   // Dock anchor for a session drop onto this surface: the workspace pane for the
   // primary, this tile's pane id for a tile. Read by the session-drop bridge.
-  const sessionAnchor = isPrimary ? 'workspace' : `session-tile:${storedId ?? ''}`
+  const sessionAnchor = isPrimary ? 'workspace' : (paneId ?? `session-tile:${storedId ?? ''}`)
   const awaitingResponse = useStore(view.$awaitingResponse)
   const busy = useStore(view.$busy)
   const activeGatewayProfile = useStore($activeGatewayProfile)
+  const activeConnection = useStore($connection)
+  const profileScope = useStore($profileScope)
   const contextSuggestions = useStore($contextSuggestions)
   // Per-session (SessionView) reads — a tile IS its session, so these come
   // from the view slice, not the global atoms (which track the primary only).
   const currentCwd = useStore(view.$cwd)
+  const advisorEnabled = useStore(view.$advisorEnabled)
   const currentModel = useStore(view.$model)
   const currentProvider = useStore(view.$provider)
+  const currentUsage = useStore(view.$usage)
   // A pet anywhere (in-window or popped out) owns the hearts; composer only when none.
   const petActive = useStore($petActive)
   const petOverlayActive = useStore($petOverlayActive)
@@ -327,7 +397,7 @@ export const ChatView = memo(function ChatView({
   const freshDraftReady = useStore($freshDraftReady)
   const gatewayState = useStore($gatewayState)
   const gatewaySwapTarget = useStore($gatewaySwapTarget)
-  const gatewayOpen = gatewayState === 'open'
+  const gatewayOpen = gatewayReady ?? gatewayState === 'open'
   const introPersonality = useStore($introPersonality)
   const introSeed = useStore($introSeed)
   // PERF: ChatView must not subscribe to the view's $messages — the atom is
@@ -340,6 +410,44 @@ export const ChatView = memo(function ChatView({
   const lastVisibleIsUser = useStore(view.$lastVisibleIsUser)
   const selectedSessionId = useStore(view.$storedId)
   const sessions = useStore($sessions)
+  // Project membership arrives asynchronously from projects.tree. Subscribe
+  // here (rather than letting projectIdForCwd read its atom invisibly) so a
+  // chat header adopts the stable project id as soon as that tree hydrates.
+  // Until then project-scoped invites stay disabled: a raw cwd is not a stable
+  // project identity and must never become a persistence key.
+  const projectTree = useStore($projectTree)
+  const projectTreeOwner = useStore($projectTreeOwner)
+
+  const storedSession = selectedSessionId && (!backendOwner || sameBackendOwner(activeBackendOwner(), backendOwner))
+    ? sessions.find(session => sessionMatchesStoredId(session, selectedSessionId))
+    : null
+
+  const leadProfile =
+    (backendOwner?.profile ?? sessionEventProfile(activeSessionId) ?? storedSession?.profile ?? activeGatewayProfile).trim() ||
+    'default'
+
+  const leadConnectionId = backendOwner?.connectionId ?? sessionConnectionId(activeSessionId)
+
+  const activeConnectionId =
+    activeConnection?.connectionId?.trim() || (activeConnection?.mode === 'local' ? 'local' : '')
+
+  // projects.tree is scoped to the active (source, profile), while a split tile
+  // may render a background session from another backend. Only expose a
+  // project persistence key when the tree and the session share that exact
+  // owner; an empty key disables project invites instead of cross-writing an
+  // identically named project on the wrong source.
+  const projectTreeMatchesLead = Boolean(
+    profileScope !== ALL_PROFILES &&
+    projectTreeOwner?.scope === 'profile' &&
+    leadConnectionId &&
+      activeConnectionId &&
+      leadConnectionId === activeConnectionId &&
+      leadConnectionId === projectTreeOwner.connectionId &&
+      leadProfile === projectTreeOwner.profile &&
+      leadProfile === activeGatewayProfile
+  )
+
+  const projectKey = projectTreeMatchesLead && projectTree.length ? (projectIdForCwd(currentCwd) ?? '') : ''
   const resumeExhaustedSessionId = useStore($resumeExhaustedSessionId)
 
   // Durable composer/queue scope (lineage root) so auto-compression tip rotation
@@ -353,8 +461,12 @@ export const ChatView = memo(function ChatView({
       ? primaryRouteSelectedSessionId(location.pathname, selectedSessionId)
       : selectedSessionId
 
-    return resolveComposerSessionKey(effectiveSelectedSessionId, sessions)
-  }, [isPrimary, location.pathname, selectedSessionId, sessions])
+    const resolved = resolveComposerSessionKey(effectiveSelectedSessionId, sessions)
+
+    return !isPrimary && backendOwner && selectedSessionId
+      ? sessionTileIdentity(backendOwner, resolved || selectedSessionId)
+      : resolved
+  }, [backendOwner, isPrimary, location.pathname, selectedSessionId, sessions])
 
   // When the tip row arrives after compression, migrate any tip-keyed stash onto
   // the durable lineage key before the composer remounts onto that key.
@@ -364,13 +476,13 @@ export const ChatView = memo(function ChatView({
   // migrating on bare inequality would re-home A's queued prompts onto B and
   // auto-drain them into the wrong chat.
   useEffect(() => {
-    if (!shouldMigrateComposerScope(selectedSessionId, queueSessionKey, sessions)) {
+    if (!isPrimary || !shouldMigrateComposerScope(selectedSessionId, queueSessionKey, sessions)) {
       return
     }
 
     migrateSessionDraft(selectedSessionId, queueSessionKey)
     migrateQueuedPrompts(selectedSessionId, queueSessionKey)
-  }, [queueSessionKey, selectedSessionId, sessions])
+  }, [isPrimary, queueSessionKey, selectedSessionId, sessions])
 
   // Transcript-side stops (the streaming message's hover Stop, the runtime's
   // cancel) are explicit halts, same as the composer's Stop button: park any
@@ -391,7 +503,7 @@ export const ChatView = memo(function ChatView({
   // direct nav). Derived in render so the swap reads instantly: the same frame
   // the id changes we drop the old transcript and show the loader, instead of
   // waiting for the resume effect (which paints a frame later) to clear them.
-  const routeSessionMismatch = isRoutedSessionView && routedSessionId !== selectedSessionId
+  const routeSessionMismatch = isPrimary ? isRouteSessionMismatch(routedSessionId, selectedSessionId, sessions) : false
 
   // The compact new-session pop-out skips the wordmark/tagline intro — it's a
   // scratch window, not the full-height empty state.
@@ -428,8 +540,14 @@ export const ChatView = memo(function ChatView({
   const threadKey = selectedSessionId || activeSessionId || (isRoutedSessionView ? location.pathname : 'new')
 
   const modelOptionsQuery = useQuery<ModelOptionsResponse>({
-    queryKey: modelOptionsQueryKey(activeGatewayProfile, activeSessionId),
-    queryFn: () => requestModelOptions({ gateway: gateway || undefined, sessionId: activeSessionId }),
+    queryKey: modelOptionsQueryKey(leadProfile, activeSessionId, leadConnectionId),
+    queryFn: () =>
+      requestModelOptions({
+        connectionId: leadConnectionId,
+        gateway: gateway || undefined,
+        profile: leadProfile,
+        sessionId: activeSessionId
+      }),
     enabled: gatewayOpen
   })
 
@@ -451,7 +569,11 @@ export const ChatView = memo(function ChatView({
       tools: {
         enabled: true,
         label: t.composer.attachLabel,
-        suggestions: contextSuggestions
+        // The global suggestion cache is populated for the foreground
+        // session/cwd. A tile has its own owner and cwd; exposing the ambient
+        // list can insert B's paths into A. Fail closed until a tile-scoped
+        // suggestion provider is available.
+        suggestions: isPrimary ? contextSuggestions : []
       },
       voice: {
         enabled: true,
@@ -463,6 +585,7 @@ export const ChatView = memo(function ChatView({
       currentModel,
       currentProvider,
       gatewayOpen,
+      isPrimary,
       modelMenuContent,
       quickModels,
       t.composer.attachLabel
@@ -515,6 +638,8 @@ export const ChatView = memo(function ChatView({
         'relative isolate flex h-full min-w-0 flex-col overflow-hidden bg-(--ui-chat-surface-background)',
         className
       )}
+      data-backend-connection={backendOwner?.connectionId || leadConnectionId || activeConnectionId || undefined}
+      data-backend-profile={leadProfile}
       data-chat-surface=""
       data-composer-target={composerScope.target}
       data-session-anchor={sessionAnchor}
@@ -531,6 +656,23 @@ export const ChatView = memo(function ChatView({
           selectedSessionId={selectedSessionId}
         />
       )}
+
+      <SessionAdvisorBar
+        busy={busy}
+        enabled={advisorEnabled}
+        gateway={gateway}
+        gatewayConnectionId={leadConnectionId || activeConnectionId || null}
+        gatewayOpen={gatewayOpen}
+        leadConnectionId={leadConnectionId}
+        leadProfile={leadProfile}
+        model={currentModel}
+        projectKey={projectKey}
+        projectResolutionKnown={projectTreeMatchesLead}
+        provider={currentProvider}
+        sessionId={activeSessionId}
+        storedSessionId={selectedSessionId}
+        usage={currentUsage}
+      />
 
       {/* Mounted for the primary AND every tile, each scoped to its own session
           so a tiled/background session's blocking prompt surfaces instead of
@@ -617,6 +759,7 @@ export const ChatView = memo(function ChatView({
               onAddUrl={onAddUrl}
               onAttachDroppedItems={onAttachDroppedItems}
               onAttachImageBlob={onAttachImageBlob}
+              onAttachPrCommentUrl={onAttachPrCommentUrl}
               onCancel={onCancel}
               onPasteClipboardImage={onPasteClipboardImage}
               onPickFiles={onPickFiles}

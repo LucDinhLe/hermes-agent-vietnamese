@@ -6,6 +6,8 @@ profile switcher can target any profile's HERMES_HOME. These tests pin:
 reads/writes land in the REQUESTED profile, the dashboard's own profile
 stays untouched, and the chat PTY env is scoped via HERMES_HOME.
 """
+import json
+
 import pytest
 import yaml
 
@@ -48,6 +50,12 @@ def client(monkeypatch, isolated_profiles):
 
 def _cfg(home):
     return yaml.safe_load((home / "config.yaml").read_text()) or {}
+
+
+def _write_jobs(home, jobs):
+    cron_dir = home / "cron"
+    cron_dir.mkdir(parents=True, exist_ok=True)
+    (cron_dir / "jobs.json").write_text(json.dumps(jobs), encoding="utf-8")
 
 
 class TestProfileScopedConfig:
@@ -158,6 +166,60 @@ class TestProfileScopedMcp:
         )
         assert resp.json()["ok"] is True
 
+    def test_mcp_test_reports_optional_schema_chars(
+        self, client, isolated_profiles, monkeypatch
+    ):
+        """The probe's per-tool `schema_chars` (details out-param) surfaces as an
+        ADDITIVE per-tool field on the wire; tools without a size stay bare so
+        older/partial probes degrade to 'no estimate' in the renderer."""
+        import hermes_cli.mcp_config as mcp_config
+
+        (isolated_profiles["worker_beta"] / "config.yaml").write_text(
+            "mcp_servers:\n  sized-srv:\n    url: http://x/mcp\n",
+            encoding="utf-8",
+        )
+
+        def fake_probe(name, config, connect_timeout=30, details=None):
+            if details is not None:
+                details["schema_chars"] = {"tool-a": 420}
+            return [("tool-a", "desc-a"), ("tool-b", "desc-b")]
+
+        monkeypatch.setattr(mcp_config, "_probe_single_server", fake_probe)
+
+        resp = client.post(
+            "/api/mcp/servers/sized-srv/test", params={"profile": "worker_beta"}
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["ok"] is True
+        tools = {t["name"]: t for t in body["tools"]}
+        assert tools["tool-a"]["schema_chars"] == 420
+        # No size for tool-b → the key is simply absent (additive-optional).
+        assert "schema_chars" not in tools["tool-b"]
+
+    def test_mcp_test_without_schema_chars_keeps_old_wire_shape(
+        self, client, isolated_profiles, monkeypatch
+    ):
+        """A probe that never fills schema_chars (older code path) produces the
+        exact pre-overlay tool objects — nothing new for old renderers."""
+        import hermes_cli.mcp_config as mcp_config
+
+        (isolated_profiles["worker_beta"] / "config.yaml").write_text(
+            "mcp_servers:\n  plain-srv:\n    url: http://x/mcp\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            mcp_config,
+            "_probe_single_server",
+            lambda name, config, connect_timeout=30, details=None: [("tool-a", "desc")],
+        )
+
+        resp = client.post(
+            "/api/mcp/servers/plain-srv/test", params={"profile": "worker_beta"}
+        )
+        assert resp.status_code == 200
+        assert resp.json()["tools"] == [{"name": "tool-a", "description": "desc"}]
+
 
 class TestProfileScopedModel:
     def test_model_set_main_scoped(self, client, isolated_profiles):
@@ -179,6 +241,113 @@ class TestProfileScopedModel:
         default_model = _cfg(isolated_profiles["default"]).get("model", {})
         if isinstance(default_model, dict):
             assert default_model.get("default") != "test/model-1"
+
+    def test_main_assignment_reports_only_target_profile_cron_impact(
+        self, client, isolated_profiles
+    ):
+        stale = {
+            "name": "Worker summary",
+            "enabled": True,
+            "no_agent": False,
+            "provider_snapshot": "openrouter",
+            "model_snapshot": "old/model",
+        }
+        _write_jobs(
+            isolated_profiles["worker_beta"], [{"id": "worker-job", **stale}]
+        )
+        _write_jobs(
+            isolated_profiles["default"],
+            [{"id": "default-job", **stale, "name": "Default summary"}],
+        )
+
+        resp = client.post(
+            "/api/model/set",
+            json={
+                "scope": "main",
+                "provider": "nous",
+                "model": "new/model",
+                "confirm_expensive_model": True,
+                "profile": "worker_beta",
+            },
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["cron_model_impact"] == {
+            "available": True,
+            "guard_enabled": True,
+            "affected_count": 1,
+            "truncated": False,
+            "jobs": [
+                {
+                    "id": "worker-job",
+                    "name": "Worker summary",
+                    "drifted_axes": ["provider", "model"],
+                }
+            ],
+        }
+
+    def test_unavailable_impact_does_not_fail_persisted_assignment(
+        self, client, isolated_profiles, monkeypatch
+    ):
+        import cron.jobs
+
+        monkeypatch.setattr(cron.jobs, "load_jobs", lambda: {"malformed": True})
+
+        resp = client.post(
+            "/api/model/set",
+            json={
+                "scope": "main",
+                "provider": "nous",
+                "model": "new/model",
+                "confirm_expensive_model": True,
+                "profile": "worker_beta",
+            },
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+        assert resp.json()["cron_model_impact"]["available"] is False
+        assert _cfg(isolated_profiles["worker_beta"])["model"]["default"] == "new/model"
+
+    def test_auxiliary_and_confirmation_responses_have_no_impact_summary(
+        self, client, isolated_profiles
+    ):
+        _write_jobs(
+            isolated_profiles["worker_beta"],
+            [
+                {
+                    "id": "worker-job",
+                    "enabled": True,
+                    "provider_snapshot": "openrouter",
+                    "model_snapshot": "old/model",
+                }
+            ],
+        )
+
+        auxiliary = client.post(
+            "/api/model/set",
+            json={
+                "scope": "auxiliary",
+                "provider": "nous",
+                "model": "new/model",
+                "profile": "worker_beta",
+            },
+        )
+        confirmation = client.post(
+            "/api/model/set",
+            json={
+                "scope": "main",
+                "provider": "openrouter",
+                "model": "openai/gpt-5.5-pro",
+                "profile": "worker_beta",
+            },
+        )
+
+        assert auxiliary.status_code == 200
+        assert "cron_model_impact" not in auxiliary.json()
+        assert confirmation.status_code == 200
+        assert confirmation.json()["confirm_required"] is True
+        assert "cron_model_impact" not in confirmation.json()
 
 
 
@@ -251,6 +420,515 @@ class TestProfileScopedPostSetup:
 
 
 class TestProfileScopedGateway:
+
+    def test_lifecycle_and_doctor_target_requested_profile(
+        self, client, isolated_profiles, monkeypatch
+    ):
+        import hermes_cli.web_server as web_server
+
+        calls = []
+
+        class _FakeProc:
+            pid = 4242
+
+        def fake_spawn_action(subcommand, name):
+            calls.append((list(subcommand), name))
+            return _FakeProc()
+
+        def fake_spawn_restart(profile=None):
+            calls.append((profile, "gateway-restart"))
+            return _FakeProc(), False
+
+        monkeypatch.setattr(web_server, "_spawn_hermes_action", fake_spawn_action)
+        monkeypatch.setattr(web_server, "_spawn_gateway_restart", fake_spawn_restart)
+
+        responses = []
+        for path in (
+            "/api/gateway/start",
+            "/api/gateway/restart",
+            "/api/gateway/stop",
+            "/api/ops/doctor",
+        ):
+            response = client.post(path, params={"profile": "worker_beta"})
+            assert response.status_code == 200
+            responses.append(response)
+
+        assert [response.json()["name"] for response in responses] == [
+            "gateway-start-worker_beta",
+            "gateway-restart-worker_beta",
+            "gateway-stop-worker_beta",
+            "doctor-worker_beta",
+        ]
+
+        assert calls == [
+            (
+                ["-p", "worker_beta", "gateway", "start"],
+                "gateway-start-worker_beta",
+            ),
+            ("worker_beta", "gateway-restart"),
+            (
+                ["-p", "worker_beta", "gateway", "stop"],
+                "gateway-stop-worker_beta",
+            ),
+            (["-p", "worker_beta", "doctor"], "doctor-worker_beta"),
+        ]
+
+    def test_unscoped_actions_keep_legacy_registry_names(
+        self, client, isolated_profiles, monkeypatch
+    ):
+        import hermes_cli.web_server as web_server
+
+        calls = []
+
+        class _FakeProc:
+            pid = 4242
+
+        monkeypatch.setattr(
+            web_server,
+            "_spawn_hermes_action",
+            lambda subcommand, name: calls.append((list(subcommand), name))
+            or _FakeProc(),
+        )
+        monkeypatch.setattr(
+            web_server,
+            "_spawn_gateway_restart",
+            lambda profile=None: calls.append((profile, "gateway-restart"))
+            or (_FakeProc(), False),
+        )
+        monkeypatch.setattr(
+            web_server,
+            "_gateway_lifecycle_contract",
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("unscoped lifecycle must keep legacy ambient routing")
+            ),
+        )
+
+        responses = [
+            client.post("/api/gateway/start"),
+            client.post("/api/gateway/restart"),
+            client.post("/api/gateway/stop"),
+            client.post("/api/ops/doctor"),
+        ]
+
+        assert [response.status_code for response in responses] == [200] * 4
+        assert [response.json()["name"] for response in responses] == [
+            "gateway-start",
+            "gateway-restart",
+            "gateway-stop",
+            "doctor",
+        ]
+        assert calls == [
+            (["gateway", "start"], "gateway-start"),
+            (None, "gateway-restart"),
+            (["gateway", "stop"], "gateway-stop"),
+            (["doctor"], "doctor"),
+        ]
+
+    def test_lifecycle_registry_serializes_verbs_by_owner(
+        self, client, monkeypatch, tmp_path
+    ):
+        import hermes_cli.web_server as web_server
+        from hermes_cli import profiles
+
+        monkeypatch.setattr(web_server, "_ACTION_PROCS", {})
+        monkeypatch.setattr(web_server, "_ACTION_COMMANDS", {})
+        monkeypatch.setattr(web_server, "_ACTION_IDS", {})
+        monkeypatch.setattr(web_server, "_ACTION_RESULTS", {})
+        monkeypatch.setattr(web_server, "_GATEWAY_LIFECYCLE_ACTIONS", {})
+        monkeypatch.setattr(
+            web_server,
+            "_ACTION_LOG_FILES",
+            dict(web_server._ACTION_LOG_FILES),
+        )
+        monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
+        monkeypatch.setattr(
+            web_server,
+            "_require_gateway_lifecycle_owner",
+            lambda profile: {
+                "requested_profile": web_server._canonical_gateway_profile(profile),
+                "owner_profile": web_server._canonical_gateway_profile(profile),
+                "shared": False,
+                "runtime_owned": False,
+            },
+        )
+        monkeypatch.setattr(
+            "hermes_cli.gateway._reap_unsupervised_gateway_orphans", lambda: None
+        )
+        action_log_dir = tmp_path / "action-logs"
+        monkeypatch.setattr(web_server, "_ACTION_LOG_DIR", action_log_dir)
+
+        class _FakeProc:
+            def __init__(self, pid):
+                self.pid = pid
+                self.return_code = None
+
+            def poll(self):
+                return self.return_code
+
+        spawned = []
+
+        def fake_popen(*args, **kwargs):
+            proc = _FakeProc(5100 + len(spawned))
+            spawned.append(proc)
+            return proc
+
+        monkeypatch.setattr(
+            web_server.subprocess,
+            "Popen",
+            fake_popen,
+        )
+
+        first_stop = client.post(
+            "/api/gateway/stop", params={"profile": "default"}
+        )
+        same_stop = client.post(
+            "/api/gateway/stop", params={"profile": "default"}
+        )
+        ambient_same_stop = client.post("/api/gateway/stop")
+
+        assert [response.status_code for response in (first_stop, same_stop, ambient_same_stop)] == [
+            200,
+            200,
+            200,
+        ]
+        assert first_stop.json() == {
+            "ok": True,
+            "pid": 5100,
+            "name": "gateway-stop-default",
+            "already_running": False,
+        }
+        for response in (same_stop, ambient_same_stop):
+            assert response.json() == {
+                "ok": True,
+                "pid": 5100,
+                "name": "gateway-stop-default",
+                "already_running": True,
+            }
+
+        for path in ("/api/gateway/start", "/api/gateway/restart"):
+            conflict = client.post(path, params={"profile": "default"})
+            assert conflict.status_code == 409
+            assert "still running" in conflict.json()["detail"]
+        assert len(spawned) == 1
+
+        worker_stop = client.post(
+            "/api/gateway/stop", params={"profile": "worker_beta"}
+        )
+        assert worker_stop.status_code == 200
+        assert worker_stop.json()["name"] == "gateway-stop-worker_beta"
+        assert worker_stop.json()["pid"] == 5101
+
+        # Doctor remains independently idempotent and profile-qualified.
+        doctor = client.post("/api/ops/doctor", params={"profile": "default"})
+        doctor_retry = client.post(
+            "/api/ops/doctor", params={"profile": "default"}
+        )
+        assert doctor.status_code == doctor_retry.status_code == 200
+        assert doctor.json()["pid"] == doctor_retry.json()["pid"] == 5102
+        assert doctor_retry.json()["already_running"] is True
+
+        # Once the original stop has finished, a different verb replaces the
+        # owner slot and an explicit restart receives a qualified public name.
+        spawned[0].return_code = 0
+        restart = client.post(
+            "/api/gateway/restart", params={"profile": "default"}
+        )
+        restart_retry = client.post(
+            "/api/gateway/restart", params={"profile": "default"}
+        )
+        assert restart.status_code == restart_retry.status_code == 200
+        assert restart.json() == {
+            "ok": True,
+            "pid": 5103,
+            "name": "gateway-restart-default",
+            "already_running": False,
+        }
+        assert restart_retry.json() == {
+            **restart.json(),
+            "already_running": True,
+        }
+
+        invalidations = []
+        monkeypatch.setattr(
+            web_server,
+            "_invalidate_gateway_lifecycle_caches",
+            lambda: invalidations.append(True),
+        )
+        spawned[3].return_code = 0
+        completed = client.get(
+            "/api/actions/gateway-restart-default/status"
+        )
+        assert completed.status_code == 200
+        assert completed.json()["running"] is False
+        assert "default" not in web_server._GATEWAY_LIFECYCLE_ACTIONS
+        assert invalidations == [True]
+
+        assert web_server._GATEWAY_LIFECYCLE_ACTIONS == {
+            "worker_beta": ("stop", "gateway-stop-worker_beta")
+        }
+        assert web_server._ACTION_COMMANDS["gateway-stop-worker_beta"] == (
+            "-p",
+            "worker_beta",
+            "gateway",
+            "stop",
+        )
+        assert all(
+            (action_log_dir / web_server._ACTION_LOG_FILES[name]).is_file()
+            for name in (
+                "gateway-stop-default",
+                "gateway-stop-worker_beta",
+                "doctor-default",
+                "gateway-restart-default",
+            )
+        )
+
+    def test_ambient_restart_keeps_legacy_name_and_shares_default_owner(
+        self, client, monkeypatch, tmp_path
+    ):
+        import hermes_cli.web_server as web_server
+        from hermes_cli import profiles
+
+        monkeypatch.setattr(web_server, "_ACTION_PROCS", {})
+        monkeypatch.setattr(web_server, "_ACTION_COMMANDS", {})
+        monkeypatch.setattr(web_server, "_ACTION_IDS", {})
+        monkeypatch.setattr(web_server, "_ACTION_RESULTS", {})
+        monkeypatch.setattr(web_server, "_GATEWAY_LIFECYCLE_ACTIONS", {})
+        monkeypatch.setattr(
+            web_server,
+            "_ACTION_LOG_FILES",
+            dict(web_server._ACTION_LOG_FILES),
+        )
+        monkeypatch.setattr(web_server, "_ACTION_LOG_DIR", tmp_path)
+        monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
+        monkeypatch.setattr(
+            web_server,
+            "_require_gateway_lifecycle_owner",
+            lambda profile: {
+                "requested_profile": web_server._canonical_gateway_profile(profile),
+                "owner_profile": web_server._canonical_gateway_profile(profile),
+                "shared": False,
+                "runtime_owned": False,
+            },
+        )
+        monkeypatch.setattr(
+            "hermes_cli.gateway._reap_unsupervised_gateway_orphans", lambda: None
+        )
+
+        class _FakeProc:
+            pid = 6200
+
+            def poll(self):
+                return None
+
+        spawned = []
+        monkeypatch.setattr(
+            web_server.subprocess,
+            "Popen",
+            lambda *args, **kwargs: spawned.append(_FakeProc()) or spawned[-1],
+        )
+
+        ambient = client.post("/api/gateway/restart")
+        explicit_default = client.post(
+            "/api/gateway/restart", params={"profile": "default"}
+        )
+
+        assert ambient.status_code == explicit_default.status_code == 200
+        assert ambient.json() == {
+            "ok": True,
+            "pid": 6200,
+            "name": "gateway-restart",
+            "already_running": False,
+        }
+        assert explicit_default.json() == {
+            **ambient.json(),
+            "already_running": True,
+        }
+        assert len(spawned) == 1
+        assert web_server._GATEWAY_LIFECYCLE_ACTIONS == {
+            "default": ("restart", "gateway-restart")
+        }
+
+    def test_onboarding_and_webhook_restarts_share_lifecycle_registry(
+        self, client, monkeypatch, tmp_path
+    ):
+        import hermes_cli.web_server as web_server
+        from hermes_cli import profiles
+
+        monkeypatch.setattr(web_server, "_ACTION_PROCS", {})
+        monkeypatch.setattr(web_server, "_ACTION_COMMANDS", {})
+        monkeypatch.setattr(web_server, "_ACTION_IDS", {})
+        monkeypatch.setattr(web_server, "_ACTION_RESULTS", {})
+        monkeypatch.setattr(web_server, "_GATEWAY_LIFECYCLE_ACTIONS", {})
+        monkeypatch.setattr(
+            web_server,
+            "_ACTION_LOG_FILES",
+            dict(web_server._ACTION_LOG_FILES),
+        )
+        monkeypatch.setattr(web_server, "_ACTION_LOG_DIR", tmp_path)
+        monkeypatch.setattr(profiles, "get_active_profile_name", lambda: "default")
+        monkeypatch.setattr(
+            web_server,
+            "_require_gateway_lifecycle_owner",
+            lambda profile: {
+                "requested_profile": web_server._canonical_gateway_profile(profile),
+                "owner_profile": web_server._canonical_gateway_profile(profile),
+                "shared": False,
+                "runtime_owned": False,
+            },
+        )
+
+        class _FakeProc:
+            pid = 6300
+
+            def poll(self):
+                return None
+
+        spawned = []
+        monkeypatch.setattr(
+            web_server.subprocess,
+            "Popen",
+            lambda *args, **kwargs: spawned.append(_FakeProc()) or spawned[-1],
+        )
+
+        stopped = client.post(
+            "/api/gateway/stop", params={"profile": "default"}
+        )
+        assert stopped.status_code == 200
+
+        for restart_helper in (
+            web_server._restart_gateway_after_webhook_enable,
+            web_server._restart_gateway_after_whatsapp_onboarding,
+            web_server._restart_gateway_after_telegram_onboarding,
+        ):
+            result = restart_helper("default")
+            assert result["restart_started"] is False
+            assert "still running" in result["restart_error"]
+
+        assert len(spawned) == 1
+
+    def test_multiplex_secondary_lifecycle_fails_closed_but_doctor_remains_scoped(
+        self, client, monkeypatch
+    ):
+        import hermes_cli.web_server as web_server
+
+        topology = {
+            "profiles": ["default", "worker_beta"],
+            "gateway_mode": "multiplex",
+            "gateways": [
+                {
+                    "profile": "default",
+                    "ports": {},
+                    "served_profiles": ["default", "worker_beta"],
+                }
+            ],
+            "profile_platforms": {},
+        }
+        monkeypatch.setattr(
+            web_server, "_collect_profile_gateway_topology", lambda: topology
+        )
+
+        calls = []
+
+        class _FakeProc:
+            pid = 6262
+
+            def poll(self):
+                return None
+
+        monkeypatch.setattr(web_server, "_ACTION_PROCS", {})
+        monkeypatch.setattr(web_server, "_ACTION_COMMANDS", {})
+        monkeypatch.setattr(
+            web_server,
+            "_spawn_hermes_action",
+            lambda subcommand, name: calls.append((list(subcommand), name))
+            or _FakeProc(),
+        )
+
+        for path in (
+            "/api/gateway/start",
+            "/api/gateway/restart",
+            "/api/gateway/stop",
+        ):
+            response = client.post(path, params={"profile": "worker_beta"})
+            assert response.status_code == 409
+            assert "owned by profile 'default'" in response.json()["detail"]
+
+        topology["gateways"].append(
+            {"profile": "worker_beta", "ports": {}}
+        )
+        ambiguous = client.post(
+            "/api/gateway/stop", params={"profile": "worker_beta"}
+        )
+        assert ambiguous.status_code == 409
+        assert "could not be proven" in ambiguous.json()["detail"]
+
+        doctor = client.post("/api/ops/doctor", params={"profile": "worker_beta"})
+        assert doctor.status_code == 200
+        assert calls == [
+            (["-p", "worker_beta", "doctor"], "doctor-worker_beta")
+        ]
+
+    def test_stopped_multiplex_config_still_assigns_lifecycle_to_default(
+        self, client, isolated_profiles, monkeypatch
+    ):
+        import hermes_cli.web_server as web_server
+
+        (isolated_profiles["default"] / "config.yaml").write_text(
+            yaml.safe_dump(
+                {
+                    "gateway": {
+                        "multiplex_profiles": True,
+                        "multiplex_profile_allowlist": ["worker_beta"],
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            web_server,
+            "_collect_profile_gateway_topology",
+            lambda: {
+                "profiles": ["default", "worker_beta"],
+                "gateway_mode": "none",
+                "gateways": [],
+                "profile_platforms": {},
+            },
+        )
+        spawned = []
+        monkeypatch.setattr(
+            web_server,
+            "_spawn_hermes_action",
+            lambda *args, **kwargs: spawned.append((args, kwargs)),
+        )
+
+        response = client.post(
+            "/api/gateway/start", params={"profile": "worker_beta"}
+        )
+
+        assert response.status_code == 409
+        assert "owned by profile 'default'" in response.json()["detail"]
+        assert spawned == []
+
+    def test_logs_read_requested_profile_home(
+        self, client, isolated_profiles
+    ):
+        for label, home in isolated_profiles.items():
+            logs_dir = home / "logs"
+            logs_dir.mkdir(parents=True, exist_ok=True)
+            (logs_dir / "gateway.log").write_text(
+                f"2026-08-22 10:00:00 INFO gateway.run: {label}-only\n",
+                encoding="utf-8",
+            )
+
+        response = client.get(
+            "/api/logs",
+            params={"file": "gateway", "profile": "worker_beta"},
+        )
+
+        assert response.status_code == 200
+        lines = "\n".join(response.json()["lines"])
+        assert "worker_beta-only" in lines
+        assert "default-only" not in lines
 
     def test_status_reads_requested_profile_home(
         self, client, isolated_profiles, monkeypatch
@@ -333,6 +1011,153 @@ class TestProfileScopedGateway:
         assert data["gateway_state"] == "running"
         assert data["gateway_platforms"] == {"telegram": {"state": "connected"}}
 
+    def test_status_projects_live_default_multiplexer_for_secondary_profile(
+        self, client, isolated_profiles, monkeypatch
+    ):
+        import hermes_cli.web_server as web_server
+
+        runtime = {
+            "pid": 5151,
+            "gateway_state": "running",
+            "platforms": {
+                "telegram": {"state": "connected"},
+                "worker_beta:discord": {"state": "connected"},
+            },
+            "served_profiles": ["default", "worker_beta"],
+            "exit_reason": None,
+            "updated_at": "2026-08-22T00:00:00+00:00",
+        }
+        topology = {
+            "profiles": ["default", "worker_beta"],
+            "gateway_mode": "multiplex",
+            "gateways": [
+                {
+                    "profile": "default",
+                    "ports": {},
+                    "served_profiles": ["default", "worker_beta"],
+                }
+            ],
+            "profile_platforms": {},
+        }
+        seen_paths = []
+
+        def fake_read_runtime_status(*args, **kwargs):
+            path = kwargs.get("path")
+            seen_paths.append(path)
+            if path == isolated_profiles["default"] / "gateway_state.json":
+                return runtime
+            return None
+
+        monkeypatch.setattr(web_server, "check_config_version", lambda: (1, 1))
+        monkeypatch.setattr(
+            web_server, "_collect_profile_gateway_topology_cached", lambda: topology
+        )
+        monkeypatch.setattr(
+            web_server,
+            "_read_configured_gateway_lifecycle",
+            lambda: (_ for _ in ()).throw(
+                AssertionError("live runtime must not load multiplex config")
+            ),
+        )
+        monkeypatch.setattr(web_server, "read_runtime_status", fake_read_runtime_status)
+        monkeypatch.setattr(
+            web_server, "get_running_pid_cached", lambda *args, **kwargs: 5151
+        )
+        monkeypatch.setattr(web_server, "_GATEWAY_HEALTH_URL", None)
+        monkeypatch.setattr(
+            web_server, "_load_configured_gateway_platforms", lambda: {"discord"}
+        )
+
+        response = client.get(
+            "/api/status", params={"profile": "worker_beta"}
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["gateway_lifecycle_owner_profile"] == "default"
+        assert data["gateway_lifecycle_shared"] is True
+        assert data["gateway_running"] is True
+        assert data["gateway_pid"] == 5151
+        assert data["gateway_platforms"] == {
+            "discord": {"state": "connected"}
+        }
+        assert isolated_profiles["default"] / "gateway_state.json" in seen_paths
+        assert isolated_profiles["worker_beta"] / "gateway_state.json" not in seen_paths
+
+    def test_status_keeps_fatal_platforms_on_startup_failed(
+        self, client, isolated_profiles, monkeypatch
+    ):
+        """startup_failed keeps FATAL per-profile entries — they're the diagnosis.
+
+        A multiplex gateway that dies at startup persists per-profile fatal
+        entries (``alpha:telegram`` etc.). The dead-gateway platform clear must
+        not erase them: exit_reason alone can't say which profile failed how.
+        Non-fatal leftovers (e.g. a platform that connected before the crash)
+        are still dropped — only fatals survive.
+        """
+        import hermes_cli.web_server as web_server
+
+        runtime = {
+            "pid": 4242,
+            "gateway_state": "startup_failed",
+            "platforms": {
+                "telegram": {"state": "fatal", "error_code": "telegram_auth_error"},
+                "alpha:telegram": {"state": "fatal", "error_code": "credential_collision"},
+                "beta:discord": {"state": "connected"},
+            },
+            "exit_reason": "telegram: token rejected",
+            "updated_at": "2026-06-17T00:00:00+00:00",
+        }
+        monkeypatch.setattr(web_server, "check_config_version", lambda: (1, 1))
+        monkeypatch.setattr(
+            web_server, "get_running_pid_cached", lambda *a, **k: None
+        )
+        monkeypatch.setattr(web_server, "read_runtime_status", lambda *a, **k: runtime)
+        # Bare platform keys are checked against the configured set (fail
+        # closed) — mirror a host that actually has telegram configured.
+        monkeypatch.setattr(
+            web_server, "_load_configured_gateway_platforms", lambda: {"telegram"}
+        )
+        monkeypatch.setattr(web_server, "_GATEWAY_HEALTH_URL", None)
+
+        resp = client.get("/api/status", params={"profile": "worker_beta"})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["gateway_running"] is False
+        assert data["gateway_state"] == "startup_failed"
+        assert data["gateway_exit_reason"] == "telegram: token rejected"
+        # Fatal entries (root and namespaced) survive; the stale non-fatal is dropped.
+        assert set(data["gateway_platforms"]) == {"telegram", "alpha:telegram"}
+        assert data["gateway_platforms"]["alpha:telegram"]["error_code"] == "credential_collision"
+
+    def test_status_clears_platforms_on_clean_stop(
+        self, client, isolated_profiles, monkeypatch
+    ):
+        """A cleanly stopped gateway still reports no platforms (stale-noise rule)."""
+        import hermes_cli.web_server as web_server
+
+        runtime = {
+            "pid": 4242,
+            "gateway_state": "stopped",
+            "platforms": {"telegram": {"state": "connected"}},
+            "exit_reason": None,
+            "updated_at": "2026-06-17T00:00:00+00:00",
+        }
+        monkeypatch.setattr(web_server, "check_config_version", lambda: (1, 1))
+        monkeypatch.setattr(
+            web_server, "get_running_pid_cached", lambda *a, **k: None
+        )
+        monkeypatch.setattr(web_server, "read_runtime_status", lambda *a, **k: runtime)
+        monkeypatch.setattr(web_server, "_GATEWAY_HEALTH_URL", None)
+
+        resp = client.get("/api/status", params={"profile": "worker_beta"})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["gateway_state"] == "stopped"
+        assert data["gateway_platforms"] == {}
+
 
 class TestProfileScopedTelegramOnboarding:
     def test_apply_writes_target_profile_and_restarts_target(
@@ -364,8 +1189,12 @@ class TestProfileScopedTelegramOnboarding:
             "_spawn_hermes_action",
             lambda subcommand, name: calls.append((list(subcommand), name)) or _FakeProc(),
         )
-        web_server._ACTION_PROCS.pop("gateway-restart", None)
-        web_server._ACTION_COMMANDS.pop("gateway-restart", None)
+        monkeypatch.setattr(web_server, "_ACTION_PROCS", {})
+        monkeypatch.setattr(web_server, "_ACTION_COMMANDS", {})
+        monkeypatch.setattr(web_server, "_GATEWAY_LIFECYCLE_ACTIONS", {})
+        monkeypatch.setattr(
+            "hermes_cli.gateway._reap_unsupervised_gateway_orphans", lambda: None
+        )
 
         resp = client.post(
             "/api/messaging/telegram/onboarding/pair-worker/apply",
@@ -376,7 +1205,10 @@ class TestProfileScopedTelegramOnboarding:
         assert resp.status_code == 200
         assert resp.json()["restart_started"] is True
         assert calls == [
-            (["-p", "worker_beta", "gateway", "restart"], "gateway-restart")
+            (
+                ["-p", "worker_beta", "gateway", "restart"],
+                "gateway-restart-worker_beta",
+            )
         ]
 
         worker_env = (isolated_profiles["worker_beta"] / ".env").read_text()

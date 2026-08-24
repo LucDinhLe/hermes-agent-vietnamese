@@ -91,7 +91,7 @@ def compute_session_context_breakdown(
     messages: Optional[List[dict]] = None,
 ) -> Dict[str, Any]:
     """Return a Cursor-style context usage breakdown for one live agent."""
-    from agent.model_metadata import estimate_messages_tokens_rough
+    from agent.model_metadata import estimate_messages_tokens_rough, get_published_model_context_window
     from agent.system_prompt import build_system_prompt_parts
 
     parts = build_system_prompt_parts(agent)
@@ -131,9 +131,24 @@ def compute_session_context_breakdown(
     context_max = int(getattr(comp, "context_length", 0) or 0) if comp else 0
     measured_used = int(getattr(comp, "last_prompt_tokens", 0) or 0) if comp else 0
     context_used = measured_used if measured_used > 0 else estimated_total
+    context_measurement = "measured" if measured_used > 0 else "estimated"
     context_percent = (
         max(0, min(100, round(context_used / context_max * 100)))
         if context_max
+        else 0
+    )
+    model = getattr(agent, "model", "") or ""
+    published = get_published_model_context_window(model)
+    published_context_max = int(published["tokens"]) if published else context_max
+    published_context_percent = (
+        max(0, min(100, round(context_used / published_context_max * 100)))
+        if published_context_max
+        else 0
+    )
+    compact_threshold_tokens = int(getattr(comp, "threshold_tokens", 0) or 0) if comp else 0
+    compact_threshold_percent = (
+        max(0, round(compact_threshold_tokens / context_max * 100))
+        if context_max and compact_threshold_tokens
         else 0
     )
 
@@ -151,8 +166,19 @@ def compute_session_context_breakdown(
         "context_max": context_max,
         "context_percent": context_percent,
         "context_used": context_used,
+        "context_measurement": context_measurement,
+        "effective_remaining_tokens": max(0, context_max - context_used),
         "estimated_total": estimated_total,
-        "model": getattr(agent, "model", "") or "",
+        "model": model,
+        "published_context_max": published_context_max,
+        "published_context_percent": published_context_percent,
+        "published_context_reference": published["reference"] if published else "",
+        "published_context_source": published["source"] if published else "runtime",
+        "remaining_tokens": max(0, published_context_max - context_used),
+        "compact_recommended": bool(compact_threshold_tokens and context_used >= compact_threshold_tokens),
+        "compact_threshold_percent": compact_threshold_percent,
+        "compact_threshold_tokens": compact_threshold_tokens,
+        "tokens_until_compact": max(0, compact_threshold_tokens - context_used) if compact_threshold_tokens else 0,
     }
 
 

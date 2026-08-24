@@ -35,7 +35,11 @@ export default async function afterPack(context) {
   try {
     await stampExeIdentity(exe, desktopRoot)
   } catch (err) {
-    // Never fail the build over a cosmetic stamp.
     console.warn(`[after-pack] exe identity stamp failed (${err.message}); Hermes.exe keeps the stock Electron icon`)
+    // A developer pack may stay best-effort, but a candidate must never ship
+    // with stock Electron metadata after the public display name was changed.
+    if (process.env.HERMES_RELEASE_CLASS || process.env.HERMES_DESKTOP_BUNDLED === '1') {
+      throw err
+    }
   }
 }

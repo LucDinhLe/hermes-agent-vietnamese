@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { RELEASE_PLATFORMS, REQUIRED_RUNTIME_GATES, validateReleaseEvidence } from './validate-release-evidence.mjs'
+import {
+  RELEASE_PLATFORMS,
+  REQUIRED_RUNTIME_GATES,
+  V31_RUNTIME_GATES,
+  validateReleaseEvidence
+} from './validate-release-evidence.mjs'
 
 const manifestSha = 'f'.repeat(64)
 const commit = 'a'.repeat(40)
@@ -48,6 +53,15 @@ function validEvidence() {
       ])
     )
   }
+}
+
+function validV31Evidence() {
+  const evidence = validEvidence()
+  evidence.tag = 'vi-v0.31.0-1'
+  for (const record of Object.values(evidence.platforms)) {
+    for (const gate of V31_RUNTIME_GATES) record.gates[gate] = true
+  }
+  return evidence
 }
 
 test('accepts complete exact-artifact evidence for all advertised platforms', () => {
@@ -106,6 +120,19 @@ test('one missing platform or runtime gate makes the release NO-GO', () => {
   const missingGate = validEvidence()
   missingGate.platforms['windows-x64'].gates.updateFromPrevious = false
   assert.throws(() => validateReleaseEvidence(missingGate, checksumText), /updateFromPrevious/)
+})
+
+test('v31 requires the vi39 upgrade and Agents gates while older evidence stays valid', () => {
+  assert.doesNotThrow(() => validateReleaseEvidence(validEvidence(), checksumText))
+  assert.doesNotThrow(() =>
+    validateReleaseEvidence(validV31Evidence(), checksumText, { tag: 'vi-v0.31.0-1' })
+  )
+
+  for (const gate of V31_RUNTIME_GATES) {
+    const missingGate = validV31Evidence()
+    delete missingGate.platforms['windows-x64'].gates[gate]
+    assert.throws(() => validateReleaseEvidence(missingGate, checksumText), new RegExp(gate))
+  }
 })
 
 test('rejects evidence produced for another source commit', () => {

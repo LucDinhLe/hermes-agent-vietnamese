@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import { QueryClientProvider } from '@tanstack/react-query'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import type * as ReactRouterDom from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type * as HermesApi from '@/hermes'
 import { queryClient } from '@/lib/query-client'
+
+import { SkillsView } from './index'
 
 const getSkills = vi.fn()
 const getToolsets = vi.fn()
@@ -15,19 +17,29 @@ const setToolsetEnabled = vi.fn()
 const getToolsetConfig = vi.fn()
 const selectToolsetProvider = vi.fn()
 const getUsageAnalytics = vi.fn()
+const getProfiles = vi.fn()
+const getSkillContent = vi.fn()
 
 // Partial mock: keep the real module (SkillsView pulls in @/store/profile,
 // whose import-time subscription calls setApiRequestProfile) and stub only the
-// calls we assert on.
+// calls we assert on. Args are forwarded so the per-profile scope arg is
+// observable.
 vi.mock('@/hermes', async importOriginal => ({
   ...(await importOriginal<typeof HermesApi>()),
-  getSkills: () => getSkills(),
-  getToolsets: () => getToolsets(),
-  setSkillEnabled: (name: string, enabled: boolean) => setSkillEnabled(name, enabled),
-  setToolsetEnabled: (name: string, enabled: boolean) => setToolsetEnabled(name, enabled),
-  getToolsetConfig: (name: string) => getToolsetConfig(name),
+  getSkills: (profile?: null | string, connectionId?: null | string) => getSkills(profile, connectionId),
+  getToolsets: (profile?: null | string, connectionId?: null | string) => getToolsets(profile, connectionId),
+  setSkillEnabled: (name: string, enabled: boolean, profile?: null | string, connectionId?: null | string) =>
+    setSkillEnabled(name, enabled, profile, connectionId),
+  setToolsetEnabled: (name: string, enabled: boolean, profile?: null | string, connectionId?: null | string) =>
+    setToolsetEnabled(name, enabled, profile, connectionId),
+  getToolsetConfig: (name: string, profile?: null | string, connectionId?: null | string) =>
+    getToolsetConfig(name, profile, connectionId),
   selectToolsetProvider: (toolset: string, provider: string) => selectToolsetProvider(toolset, provider),
-  getUsageAnalytics: (days: number) => getUsageAnalytics(days)
+  getUsageAnalytics: (days: number, profile?: null | string, connectionId?: null | string) =>
+    getUsageAnalytics(days, profile, connectionId),
+  getProfiles: (connectionId?: null | string) => getProfiles(connectionId),
+  getSkillContent: (name: string, profile?: null | string, connectionId?: null | string) =>
+    getSkillContent(name, profile, connectionId)
 }))
 
 // Notifications hit nanostores/timers we don't care about here.
@@ -58,8 +70,7 @@ function toolset(overrides: Record<string, unknown> = {}) {
   }
 }
 
-async function renderSkills() {
-  const { SkillsView } = await import('./index')
+function renderSkills() {
   return render(
     // SkillsView reads skills/toolsets via useQuery, so it needs a provider.
     <QueryClientProvider client={queryClient}>
@@ -76,6 +87,14 @@ beforeEach(() => {
   setToolsetEnabled.mockResolvedValue({ ok: true, name: 'web', enabled: false })
   getToolsetConfig.mockResolvedValue({ has_category: true, active_provider: null, providers: [] })
   getUsageAnalytics.mockResolvedValue({ tools: [] })
+  getSkillContent.mockResolvedValue({
+    name: 'web-research',
+    path: '/skills/web-research/SKILL.md',
+    content: '---\nname: web-research\nversion: 1.2.0\nauthor: Nous\n---\n\n# Web Research\n\nDeep research steps.'
+  })
+  // Single profile by default → the scope selector stays hidden (>1 gate),
+  // so existing tests see unchanged single-profile behavior.
+  getProfiles.mockResolvedValue({ profiles: [{ name: 'default', is_default: true }] })
 })
 
 afterEach(() => {
@@ -95,7 +114,8 @@ describe('SkillsView toolset management', () => {
 
     fireEvent.click(sw)
 
-    await waitFor(() => expect(setToolsetEnabled).toHaveBeenCalledWith('web', false))
+    await waitFor(() => expect(setToolsetEnabled).toHaveBeenCalled())
+    expect(setToolsetEnabled.mock.calls[0].slice(0, 2)).toEqual(['web', false])
   })
 
   it('renders toolset titles without leading emoji', async () => {
@@ -117,7 +137,221 @@ describe('SkillsView toolset management', () => {
     await renderSkills()
 
     await screen.findByRole('switch', { name: 'Turn Web Search toolset off' })
-    await waitFor(() => expect(getToolsetConfig).toHaveBeenCalledWith('web'))
+    await waitFor(() => expect(getToolsetConfig).toHaveBeenCalled())
+    expect(getToolsetConfig.mock.calls[0][0]).toBe('web')
+  })
+
+  it('scopes Tools config to the profile chosen in the selector', async () => {
+    // Two profiles → the "Configuring:" selector renders. Picking a non-active
+    // profile must re-fetch toolsets scoped to THAT profile.
+    // jsdom's scrollIntoView is missing/non-functional; Radix Select calls it
+    // on open. Force a stub so the dropdown can render in the test env.
+    Element.prototype.scrollIntoView = vi.fn()
+    getProfiles.mockResolvedValue({
+      profiles: [
+        { name: 'default', is_default: true },
+        { name: 'researcher', is_default: false }
+      ]
+    })
+
+    const { SkillsView } = await import('./index')
+    await act(async () => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/skills?tab=toolsets']}>
+            <SkillsView />
+          </MemoryRouter>
+        </QueryClientProvider>
+      )
+    })
+
+    // The selector appears with >1 profile.
+    const trigger = await screen.findByRole('combobox')
+    await act(async () => {
+      fireEvent.click(trigger)
+    })
+    const option = await screen.findByRole('option', { name: 'researcher' })
+    await act(async () => {
+      fireEvent.click(option)
+    })
+
+    // Toolsets refetch scoped to the picked profile.
+    await waitFor(() => expect(getToolsets).toHaveBeenCalledWith('researcher', null))
+  })
+
+  it('isolates same-profile capability caches and writes by backend source', async () => {
+    getToolsets.mockImplementation(async (_profile: null | string, connectionId: null | string) => [
+      toolset({ label: connectionId === 'source-b' ? 'Source B Tools' : 'Source A Tools' })
+    ])
+
+    const { SkillsView } = await import('./index')
+    const view = (connectionId: string) => (
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/skills?tab=toolsets']}>
+          <SkillsView fixedConnectionId={connectionId} fixedProfile="default" />
+        </MemoryRouter>
+      </QueryClientProvider>
+    )
+    const rendered = render(view('source-a'))
+
+    await screen.findByRole('switch', { name: 'Turn Source A Tools toolset off' })
+
+    rendered.rerender(view('source-b'))
+
+    const sourceBSwitch = await screen.findByRole('switch', { name: 'Turn Source B Tools toolset off' })
+    expect(screen.queryByRole('switch', { name: 'Turn Source A Tools toolset off' })).toBeNull()
+    expect(getToolsets).toHaveBeenCalledWith('default', 'source-a')
+    expect(getToolsets).toHaveBeenCalledWith('default', 'source-b')
+
+    fireEvent.click(sourceBSwitch)
+    await waitFor(() => expect(setToolsetEnabled).toHaveBeenCalledWith('web', false, 'default', 'source-b'))
+  })
+
+  it('scopes the Skills tab (and skill toggles) to the profile chosen in the selector', async () => {
+    // The selector is Capabilities-WIDE: picking a profile on the Skills tab
+    // must refetch the skill list scoped to it, and route toggles there too.
+    Element.prototype.scrollIntoView = vi.fn()
+    getProfiles.mockResolvedValue({
+      profiles: [
+        { name: 'default', is_default: true },
+        { name: 'researcher', is_default: false }
+      ]
+    })
+    getSkills.mockResolvedValue([
+      {
+        name: 'web-research',
+        description: 'Research the web',
+        category: 'research',
+        enabled: true,
+        usage: 3,
+        provenance: 'bundled'
+      }
+    ])
+
+    const { SkillsView } = await import('./index')
+    await act(async () => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/skills?tab=skills']}>
+            <SkillsView />
+          </MemoryRouter>
+        </QueryClientProvider>
+      )
+    })
+
+    // The selector renders on the Skills tab too (Capabilities-wide).
+    const trigger = await screen.findByRole('combobox')
+    await act(async () => {
+      fireEvent.click(trigger)
+    })
+    const option = await screen.findByRole('option', { name: 'researcher' })
+    await act(async () => {
+      fireEvent.click(option)
+    })
+
+    // Skills refetch scoped to the picked profile...
+    await waitFor(() => expect(getSkills).toHaveBeenCalledWith('researcher', null))
+
+    // ...and a toggle routes its write to that profile as well.
+    const sw = await screen.findByRole('switch', { name: 'web-research' })
+    await act(async () => {
+      fireEvent.click(sw)
+    })
+    await waitFor(() => expect(setSkillEnabled).toHaveBeenCalledWith('web-research', false, 'researcher', null))
+  })
+
+  it('shows the FULL skill in the detail pane — frontmatter metadata + body', async () => {
+    getSkills.mockResolvedValue([
+      {
+        name: 'web-research',
+        description: 'Research the web',
+        category: 'research',
+        enabled: true,
+        usage: 3,
+        provenance: 'bundled'
+      }
+    ])
+
+    const { SkillsView } = await import('./index')
+    await act(async () => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/skills?tab=skills']}>
+            <SkillsView />
+          </MemoryRouter>
+        </QueryClientProvider>
+      )
+    })
+
+    // Frontmatter renders as metadata rows, the body as full text — not just
+    // the one-line description.
+    await waitFor(() => expect(getSkillContent).toHaveBeenCalled())
+    expect(getSkillContent.mock.calls[0][0]).toBe('web-research')
+    expect(await screen.findByText('version')).toBeTruthy()
+    expect(await screen.findByText('1.2.0')).toBeTruthy()
+    expect(await screen.findByText(/Deep research steps/)).toBeTruthy()
+  })
+
+  it('hub picker refuses to reinstall an already-installed skill', async () => {
+    const { notify } = await import('@/store/notifications')
+    const { EmbeddedHubPicker } = await import('./embedded-hub-picker')
+
+    render(<EmbeddedHubPicker installedNames={new Set(['web-research'])} profile={null} />)
+
+    // The picker is expanded by default — the hub iframe is live on mount.
+    expect(document.querySelector('iframe')).toBeTruthy()
+
+    await act(async () => {
+      window.dispatchEvent(
+        new MessageEvent('message', {
+          data: { type: 'hermes-skill-pick', name: 'web-research', identifier: 'web-research' },
+          origin: 'https://hermes-agent.nousresearch.com'
+        })
+      )
+    })
+
+    // Refused with an informational toast, no install action spawned.
+    await waitFor(() =>
+      expect(vi.mocked(notify)).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '"web-research" is already installed' })
+      )
+    )
+  })
+
+  it('mounts the hub iframe lazily and keeps it (hidden) across tab switches', async () => {
+    // On a non-Skills tab the docs-site iframe must not exist at all — an
+    // eagerly mounted hub is exactly the Capabilities lag bug.
+    await renderSkills() // ?tab=toolsets
+    await screen.findByRole('switch', { name: 'Turn Web Search toolset off' })
+    expect(document.querySelector('iframe')).toBeNull()
+    cleanup()
+
+    // Embedded mode drives tabs through local state (the route hooks are
+    // mocked here), starting on Skills: the picker mounts with the tab.
+    const { SkillsView } = await import('./index')
+    await act(async () => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/skills']}>
+            <SkillsView embedded />
+          </MemoryRouter>
+        </QueryClientProvider>
+      )
+    })
+
+    const iframe = document.querySelector('iframe')
+    expect(iframe).toBeTruthy()
+    expect(iframe!.closest('section')!.classList.contains('hidden')).toBe(false)
+
+    // Switch to Tools → the iframe STAYS mounted (no docs-site reload on the
+    // next visit) but its section is fully hidden, so nothing from the hub
+    // can paint over the toolsets UI.
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Tools/ }))
+    })
+    const kept = document.querySelector('iframe')
+    expect(kept).toBeTruthy()
+    expect(kept!.closest('section')!.classList.contains('hidden')).toBe(true)
   })
 
   it('shows a vision explainer that deep-links to Settings → Models', async () => {

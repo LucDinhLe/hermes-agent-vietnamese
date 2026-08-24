@@ -4,7 +4,9 @@ import { test } from 'vitest'
 
 import {
   decideResidentRuntime,
+  decideResidentRuntimeFromState,
   findResidentPython,
+  latestPublicReleaseTag,
   latestReleaseFromLsRemote,
   type PayloadInfo,
   resolveChannel,
@@ -14,7 +16,9 @@ import {
 // ─── resolvePayload ────────────────────────────────────────────────
 
 const readerFor = (manifest: unknown) => (p: string) => {
-  if (!p.endsWith('manifest.json')) {throw new Error('ENOENT')}
+  if (!p.endsWith('manifest.json')) {
+    throw new Error('ENOENT')
+  }
 
   return JSON.stringify(manifest)
 }
@@ -31,10 +35,7 @@ test('resolvePayload returns null for dev runs, thin stubs, and garbage', () => 
   )
   assert.equal(resolvePayload('/res', readerFor('not-an-object')), null)
   // A manifest with items but no staged item returns null (an all-skipped payload).
-  assert.equal(
-    resolvePayload('/res', readerFor({ tag: 'v1.0.0', items: { repo: { status: 'skipped' } } })),
-    null
-  )
+  assert.equal(resolvePayload('/res', readerFor({ tag: 'v1.0.0', items: { repo: { status: 'skipped' } } })), null)
 })
 
 test('resolvePayload returns dir + tag for a real payload', () => {
@@ -93,6 +94,51 @@ test('resident even over an old desktop-managed checkout (marker or bundled mani
     }).resident,
     true
   )
+})
+
+test('legacy installer marker without desktopVersion selects the resident runtime', () => {
+  const d = decideResidentRuntimeFromState({
+    payload: residentPayload(),
+    checkoutExists: true,
+    checkoutManifest: null,
+    bootstrapMarker: {
+      schemaVersion: 1,
+      pinnedCommit: '48fb23a881d2d5eb1fbbcb7e16866cabc1244ff3'
+    },
+    bootstrapMarkerSchemaVersion: 1
+  })
+
+  assert.equal(d.resident, true)
+  assert.equal(d.reason, 'complete resident payload')
+})
+
+test('checkout without a valid legacy marker remains CLI-owned', () => {
+  const d = decideResidentRuntimeFromState({
+    payload: residentPayload(),
+    checkoutExists: true,
+    checkoutManifest: null,
+    bootstrapMarker: { schemaVersion: 1, pinnedCommit: 'short' },
+    bootstrapMarkerSchemaVersion: 1
+  })
+
+  assert.equal(d.resident, false)
+  assert.match(d.reason, /CLI-first/)
+})
+
+test('valid legacy marker never overrides an explicitly source-managed checkout', () => {
+  const d = decideResidentRuntimeFromState({
+    payload: residentPayload(),
+    checkoutExists: true,
+    checkoutManifest: { installMode: 'source' },
+    bootstrapMarker: {
+      schemaVersion: 1,
+      pinnedCommit: '48fb23a881d2d5eb1fbbcb7e16866cabc1244ff3'
+    },
+    bootstrapMarkerSchemaVersion: 1
+  })
+
+  assert.equal(d.resident, false)
+  assert.match(d.reason, /source-managed/)
 })
 
 test('never resident over a checkout the user owns', () => {
@@ -159,7 +205,9 @@ test('thin, pre-resident, and incomplete payloads never run resident', () => {
 test('findResidentPython picks the patch-versioned dir and needs a real binary', () => {
   const fsStub = (dirs: string[], files: string[]) => ({
     readdirSync: (p: string) => {
-      if (!p.endsWith('python')) {throw new Error('ENOENT')}
+      if (!p.endsWith('python')) {
+        throw new Error('ENOENT')
+      }
 
       return dirs
     },
@@ -232,7 +280,11 @@ test('release picking is numeric, skips prereleases, prefers peeled shas', () =>
   assert.equal(latest?.sha, 'c'.repeat(40))
 
   const semverOnly = latestReleaseFromLsRemote(
-    [`${'a'.repeat(40)}\trefs/tags/v0.9.0`, `${'b'.repeat(40)}\trefs/tags/v0.10.0`, `${'c'.repeat(40)}\trefs/tags/v0.10.0^{}`].join('\n')
+    [
+      `${'a'.repeat(40)}\trefs/tags/v0.9.0`,
+      `${'b'.repeat(40)}\trefs/tags/v0.10.0`,
+      `${'c'.repeat(40)}\trefs/tags/v0.10.0^{}`
+    ].join('\n')
   )
 
   assert.equal(semverOnly?.tag, 'v0.10.0')
@@ -252,8 +304,24 @@ test('release picking understands Vietnamese iterations', () => {
     sha: 'd'.repeat(40)
   })
 })
-
 test('release picking returns null when no final release tag exists', () => {
   assert.equal(latestReleaseFromLsRemote(''), null)
   assert.equal(latestReleaseFromLsRemote(`${'d'.repeat(40)}\trefs/tags/v1.0.0-beta.2`), null)
+})
+
+test('public release picking hides drafts and exposes published community prereleases', () => {
+  const draft = [
+    { tag_name: 'vi-v0.20.0-28', draft: true, prerelease: true },
+    { tag_name: 'vi-v0.20.0-25', draft: false, prerelease: false }
+  ]
+
+  assert.equal(latestPublicReleaseTag(draft), 'vi-v0.20.0-25')
+  assert.equal(
+    latestPublicReleaseTag([
+      { tag_name: 'vi-v0.20.0-28', draft: false, prerelease: true },
+      { tag_name: 'vi-v0.20.0-25', draft: false, prerelease: false },
+      { tag_name: 'v0.20.4', draft: false, prerelease: false }
+    ]),
+    'vi-v0.20.0-28'
+  )
 })

@@ -89,7 +89,7 @@ class TestNormalizeProvider:
 
 class TestProviderLabel:
     def test_known_labels_and_auto(self):
-        assert provider_label("anthropic") == "Anthropic API"
+        assert provider_label("anthropic") == "Anthropic"
         assert provider_label("kimi") == "Kimi / Kimi Coding Plan"
         assert provider_label("stepfun") == "StepFun Step Plan"
         assert provider_label("copilot") == "GitHub Copilot"
@@ -521,4 +521,3 @@ class TestProbeApiModelsUserAgent:
         assert ua and ua.startswith("hermes-cli/")
         # No Authorization was set, but UA must still be present.
         assert req.get_header("Authorization") is None
-

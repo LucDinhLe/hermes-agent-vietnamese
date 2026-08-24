@@ -333,6 +333,10 @@ class SessionRename(BaseModel):
     # Durable "keep" flag mirrored from the Desktop sidebar's pins; pinned
     # sessions are exempt from the sessions.auto_archive stale sweep.
     pinned: Optional[bool] = None
+    # Read-state watermark toggle (sessions.last_read_at): True marks the
+    # session explicitly unread, False marks it read up to now. Mirrored from
+    # the Desktop sidebar's "Mark as unread"/"Mark as read". None = leave alone.
+    unread: Optional[bool] = None
     # Mutate a session belonging to another profile (opens its state.db). Omit
     # for the current/default profile.
     profile: Optional[str] = None
@@ -394,7 +398,10 @@ class CronJobUpdate(BaseModel):
 
 class AutomationBlueprintInstantiate(BaseModel):
     blueprint: str                      # blueprint key, e.g. "morning-brief"
-    values: Dict[str, Any] = {}      # filled slot values from the form
+    values: Dict[str, Any] = {}         # filled slot values from the form
+    # Optional localized display name supplied by a graphical client. The
+    # blueprint key remains the semantic identity; older clients omit this.
+    name: Optional[str] = None
 
 
 # --- from web_server.py (originally lines 13002-13019) ---
@@ -734,4 +741,3 @@ class _PluginProvidersPutBody(BaseModel):
 
 class _PluginVisibilityBody(BaseModel):
     hidden: bool
-

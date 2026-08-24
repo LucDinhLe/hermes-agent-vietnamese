@@ -7,6 +7,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { deleteLearningNode, editLearningNode, getLearningNode } from '@/hermes'
 import { useI18n } from '@/i18n'
+import { activeBackendOwner, type BackendOwner, sameBackendOwner } from '@/store/backend-owner'
 import { notifyError } from '@/store/notifications'
 import { evictStarmapNode, loadStarmapGraph } from '@/store/starmap'
 
@@ -30,14 +31,17 @@ interface EditState {
   content: string
   id: string
   label: string
+  owner: BackendOwner
 }
+
+type DeleteState = Omit<NodeMenuTarget, 'x' | 'y'> & { owner: BackendOwner }
 
 /** Right-click actions for a star-map node: edit (modal) or delete (confirm). */
 export function NodeContextMenu({ onClose, onNodeRemoved, target }: NodeContextMenuProps) {
   const { locale, t } = useI18n()
   const isVi = locale === 'vi'
   const [editing, setEditing] = useState<EditState | null>(null)
-  const [deleting, setDeleting] = useState<Omit<NodeMenuTarget, 'x' | 'y'> | null>(null)
+  const [deleting, setDeleting] = useState<DeleteState | null>(null)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<null | string>(null)
@@ -64,18 +68,24 @@ export function NodeContextMenu({ onClose, onNodeRemoved, target }: NodeContextM
       return
     }
 
+    const owner = activeBackendOwner()
+
+    if (!owner) {
+      return
+    }
+
     const epoch = editEpoch.current
     setLoading(true)
     setError(null)
 
     try {
-      const detail = await getLearningNode(target.id)
+      const detail = await getLearningNode(target.id, owner.profile, owner.connectionId)
 
-      if (editEpoch.current !== epoch) {
+      if (editEpoch.current !== epoch || !sameBackendOwner(activeBackendOwner(), owner)) {
         return
       }
 
-      setEditing({ content: detail.content, id: target.id, label: target.label })
+      setEditing({ content: detail.content, id: target.id, label: target.label, owner })
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -93,14 +103,22 @@ export function NodeContextMenu({ onClose, onNodeRemoved, target }: NodeContextM
     setError(null)
 
     try {
-      const res = await editLearningNode(editing.id, editing.content)
+      const res = await editLearningNode(
+        editing.id,
+        editing.content,
+        editing.owner.profile,
+        editing.owner.connectionId
+      )
 
       if (!res.ok) {
         throw new Error(res.message)
       }
 
       setEditing(null)
-      void loadStarmapGraph(true)
+
+      if (sameBackendOwner(activeBackendOwner(), editing.owner)) {
+        void loadStarmapGraph(true, editing.owner)
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -134,7 +152,13 @@ export function NodeContextMenu({ onClose, onNodeRemoved, target }: NodeContextM
             <button
               className="block w-full cursor-pointer rounded-md px-2 py-1 text-left text-xs text-destructive hover:bg-destructive/10"
               onClick={() => {
-                setDeleting({ id: target.id, kind: target.kind, label: target.label })
+                const owner = activeBackendOwner()
+
+                if (!owner) {
+                  return
+                }
+
+                setDeleting({ id: target.id, kind: target.kind, label: target.label, owner })
                 onClose()
               }}
               type="button"
@@ -185,14 +209,16 @@ export function NodeContextMenu({ onClose, onNodeRemoved, target }: NodeContextM
 
       {deleting?.kind === 'skill' ? (
         <ArchiveSkillConfirmDialog
+          connectionId={deleting.owner.connectionId}
           onApply={() => {
             onNodeRemoved()
 
-            return evictStarmapNode(deleting.id)
+            return evictStarmapNode(deleting.id, deleting.owner)
           }}
           onClose={() => setDeleting(null)}
           onFailure={(err, name) => notifyError(err, name)}
           open
+          profile={deleting.owner.profile}
           skillId={deleting.id}
           skillName={deleting.label}
         />
@@ -208,12 +234,12 @@ export function NodeContextMenu({ onClose, onNodeRemoved, target }: NodeContextM
               return
             }
 
-            const { id, label } = deleting
-            const rollback = evictStarmapNode(id)
+            const { id, label, owner } = deleting
+            const rollback = evictStarmapNode(id, owner)
             onNodeRemoved()
 
             fireOptimistic(
-              deleteLearningNode(id).then(res => {
+              deleteLearningNode(id, owner.profile, owner.connectionId).then(res => {
                 if (!res.ok) {
                   throw new Error(res.message)
                 }

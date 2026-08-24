@@ -3,6 +3,18 @@ import fs from "node:fs"
 
 export const VI_RELEASE_TAG_RE = /^vi-v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)-(0|[1-9]\d*)$/
 
+const productMetadata = JSON.parse(
+  fs.readFileSync(new URL("../apps/desktop/product-metadata.json", import.meta.url), "utf8"),
+)
+
+export const VI_PRODUCT_RELEASE = Object.freeze({
+  displayName: productMetadata.displayName,
+  productVersion: productMetadata.productVersion,
+  technicalVersion: productMetadata.technicalVersion,
+  upstreamVersion: productMetadata.upstream?.version,
+  releaseTitle: `${productMetadata.displayName} ${productMetadata.productVersion}`,
+})
+
 export function parseVietnameseReleaseTag(tag) {
   const normalized = String(tag).trim()
   const match = VI_RELEASE_TAG_RE.exec(normalized)
@@ -20,6 +32,134 @@ export function parseVietnameseReleaseTag(tag) {
     // as a numeric prerelease component.
     appVersion: `${baseVersion}-vi.${iteration}`,
   }
+}
+
+export function resolveVietnameseReleaseCandidate(tag) {
+  const release = parseVietnameseReleaseTag(tag)
+  const metadata = VI_PRODUCT_RELEASE
+
+  if (!/^v\d+\.\d+$/.test(metadata.productVersion || "")) {
+    throw new Error(`product metadata has an invalid productVersion: ${metadata.productVersion}`)
+  }
+  if (!/^\d+\.\d+\.\d+$/.test(metadata.technicalVersion || "")) {
+    throw new Error(`product metadata has an invalid technicalVersion: ${metadata.technicalVersion}`)
+  }
+  if (!/^\d+\.\d+\.\d+$/.test(metadata.upstreamVersion || "")) {
+    throw new Error(`product metadata has an invalid upstream version: ${metadata.upstreamVersion}`)
+  }
+  if (release.baseVersion !== metadata.technicalVersion) {
+    throw new Error(
+      `release tag ${tag} does not match Hermes Vietnamese technical version ${metadata.technicalVersion}`,
+    )
+  }
+
+  return { ...release, ...metadata }
+}
+
+export function compareVietnameseReleaseTags(leftTag, rightTag) {
+  const order = (tag) => {
+    const normalized = parseVietnameseReleaseTag(tag).tag
+    const match = VI_RELEASE_TAG_RE.exec(normalized)
+    return match.slice(1, 5).map((value) => BigInt(value))
+  }
+  const left = order(leftTag)
+  const right = order(rightTag)
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] > right[index]) return 1
+    if (left[index] < right[index]) return -1
+  }
+  return 0
+}
+
+/** Refuse a stable publication that would move GitHub Latest backward. */
+export function validateStablePromotionOrder({ previousLatestTag, tag }) {
+  if (compareVietnameseReleaseTags(tag, previousLatestTag) <= 0) {
+    throw new Error(`stable tag ${tag} must be newer than current Latest ${previousLatestTag}`)
+  }
+  return { newer: true, previousLatestTag, tag }
+}
+
+/** Refuse local candidate builds from untagged, mismatched, or dirty bytes. */
+export function validateVietnameseCandidateCheckout({ headCommit, status, tag, tagCommit }) {
+  parseVietnameseReleaseTag(tag)
+  if (!/^[0-9a-f]{40}$/.test(String(headCommit ?? ""))) {
+    throw new Error("candidate checkout HEAD must be a full Git commit")
+  }
+  if (!/^[0-9a-f]{40}$/.test(String(tagCommit ?? ""))) {
+    throw new Error(`candidate tag ${tag} does not resolve to a full Git commit`)
+  }
+  if (tagCommit !== headCommit) {
+    throw new Error(`candidate tag ${tag} points to ${tagCommit}, but HEAD is ${headCommit}`)
+  }
+  if (String(status ?? "").trim()) {
+    throw new Error("candidate checkout must be clean before building exact artifacts")
+  }
+
+  return { clean: true, commit: headCommit, tag }
+}
+
+function normalizedReleaseBody(value) {
+  return String(value ?? "").replace(/\r\n?/g, "\n").replace(/\n+$/g, "")
+}
+
+/** Validate the two mutable GitHub release fields against the immutable tag. */
+export function validateVietnameseReleasePresentation({ body, expectedBody, expectedTitle, name }) {
+  if (String(name ?? "") !== String(expectedTitle ?? "")) {
+    throw new Error(`release title mismatch; expected ${expectedTitle}, got ${name}`)
+  }
+
+  if (normalizedReleaseBody(body) !== normalizedReleaseBody(expectedBody)) {
+    throw new Error("release body differs from the notes committed by the candidate tag")
+  }
+
+  return { title: String(name), bodyMatches: true }
+}
+
+/** Bind prerelease promotion to the exact public callout prepared by the tag. */
+export function validateFeaturedCandidatePromotion({ featuredCandidate, tag }) {
+  if (featuredCandidate?.tag !== tag) {
+    throw new Error(`featured candidate tag mismatch; expected ${tag}, got ${featuredCandidate?.tag}`)
+  }
+  if (featuredCandidate.releaseClass !== "community-prerelease") {
+    throw new Error(
+      `featured candidate releaseClass must be community-prerelease, got ${featuredCandidate.releaseClass}`,
+    )
+  }
+  if (featuredCandidate.published !== true) {
+    throw new Error("featured candidate must describe the target published state")
+  }
+
+  return { tag, published: true }
+}
+
+/** Ensure immutable release notes describe the class the operator will publish. */
+export function validateVietnameseReleaseNotesForClass({ body, releaseClass }) {
+  const notes = normalizedReleaseBody(body)
+  const communityClaim = /community[ -]prerelease/i
+  const notStableClaim = /chưa phải stable/i
+  const stableClassClaim = /lớp phát hành:\s*(?:\*\*)?stable\b/i
+  const stableLatestClaim = /\bstable\s*\/\s*latest\b/i
+
+  if (releaseClass === "community-prerelease") {
+    if (!communityClaim.test(notes) || !notStableClaim.test(notes)) {
+      throw new Error("community-prerelease notes must say community prerelease and chưa phải stable")
+    }
+    if (stableClassClaim.test(notes) || stableLatestClaim.test(notes)) {
+      throw new Error("community-prerelease notes must not claim Stable/Latest")
+    }
+  } else if (releaseClass === "stable") {
+    if (!stableClassClaim.test(notes) || !stableLatestClaim.test(notes)) {
+      throw new Error("stable notes must identify the stable release as Stable/Latest")
+    }
+    if (communityClaim.test(notes) || notStableClaim.test(notes)) {
+      throw new Error("stable notes must not contain community-prerelease or not-stable claims")
+    }
+  } else {
+    throw new Error(`unsupported release class for notes: ${releaseClass}`)
+  }
+
+  return { releaseClass, classMatches: true }
 }
 
 // Runtime Node is an immutable build input. Values are from the official

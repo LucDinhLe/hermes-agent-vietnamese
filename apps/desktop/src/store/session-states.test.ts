@@ -3,18 +3,76 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ClientSessionState } from '@/app/types'
 import { findGroupOfPane, group, split } from '@/components/pane-shell/tree/model'
 import { $layoutTree } from '@/components/pane-shell/tree/store'
+import type { HermesConnection } from '@/global'
 import { $selectedStoredSessionId } from '@/store/session'
 import type { SessionTile } from '@/store/session-states'
 import {
+  $sessionStates,
+  $sessionTiles,
   blankDraftTile,
   focusedSessionNeedsRoute,
   markSelectionRestore,
   orderTilesByTree,
-  selectionHomesToWorkspace
+  releaseSessionTranscript,
+  resetTileRuntimeBindings,
+  selectionHomesToWorkspace,
+  type SessionTileDelegate,
+  setSessionTileDelegate
 } from '@/store/session-states'
 
 const tile = (storedSessionId: string): SessionTile => ({ storedSessionId })
 const tilePane = (id: string) => `session-tile:${id}`
+
+describe('resetTileRuntimeBindings', () => {
+  afterEach(() => {
+    $sessionTiles.set([])
+  })
+
+  it('invalidates the delegate wiring cache AND drops tile runtime ids (sleep/wake reconnect)', () => {
+    // The reconnect path must bust BOTH layers: the tile atoms' runtimeId and
+    // the delegate's stored→runtime warm cache. Clearing only the atoms let
+    // resumeTile's warm path re-bind the same dead runtime id after wake.
+    const invalidateRuntimeBindings = vi.fn()
+    setSessionTileDelegate({ invalidateRuntimeBindings } as unknown as SessionTileDelegate)
+
+    $sessionTiles.set([{ runtimeId: 'runtime-dead', storedSessionId: 'stored-a' }])
+    resetTileRuntimeBindings()
+
+    expect(invalidateRuntimeBindings).toHaveBeenCalledTimes(1)
+    expect($sessionTiles.get()).toEqual([
+      { anchor: undefined, before: undefined, dir: undefined, storedSessionId: 'stored-a' }
+    ])
+  })
+
+  it('tolerates a delegate without invalidateRuntimeBindings (older wiring)', () => {
+    setSessionTileDelegate({} as unknown as SessionTileDelegate)
+    $sessionTiles.set([{ runtimeId: 'runtime-dead', storedSessionId: 'stored-a' }])
+
+    expect(() => resetTileRuntimeBindings()).not.toThrow()
+    expect($sessionTiles.get()[0]?.runtimeId).toBeUndefined()
+  })
+})
+
+describe('releaseSessionTranscript', () => {
+  afterEach(() => {
+    $sessionStates.set({})
+  })
+
+  it('normalizes legacy state whose messages field is undefined', () => {
+    const legacy = { busy: false, storedSessionId: 'stored' } as ClientSessionState
+    $sessionStates.set({ runtime: legacy })
+
+    expect(() => releaseSessionTranscript('runtime')).not.toThrow()
+    expect($sessionStates.get().runtime).toEqual({ ...legacy, messages: [] })
+  })
+
+  it('ignores a legacy undefined state without throwing', () => {
+    $sessionStates.set({ runtime: undefined } as unknown as Record<string, ClientSessionState>)
+
+    expect(() => releaseSessionTranscript('runtime')).not.toThrow()
+    expect($sessionStates.get()).toHaveProperty('runtime', undefined)
+  })
+})
 
 describe('orderTilesByTree', () => {
   it('no-ops (null) without a tree or below two tiles', () => {
@@ -124,6 +182,19 @@ describe('blankDraftTile', () => {
     expect(blankDraftTile(tiles, states)).toEqual(tiles[1])
   })
 
+  it('does not spend another source\'s same-profile blank draft', () => {
+    const ownerA = { connectionId: 'source-a', profile: 'default' }
+    const ownerB = { connectionId: 'source-b', profile: 'default' }
+    const tiles: SessionTile[] = [
+      { ...ownerA, runtimeId: 'run-a', storedSessionId: 'draft-a' },
+      { ...ownerB, runtimeId: 'run-b', storedSessionId: 'draft-b' }
+    ]
+    const states = { 'run-a': state(0), 'run-b': state(0) }
+
+    expect(blankDraftTile(tiles, states, ownerA)).toEqual(tiles[0])
+    expect(blankDraftTile(tiles, states, ownerB)).toEqual(tiles[1])
+  })
+
   it('leaves a blank-but-busy tab alone — its first turn is already in flight', () => {
     expect(blankDraftTile([bound('a', 'run-a')], { 'run-a': state(0, true) })).toBeNull()
   })
@@ -156,8 +227,12 @@ describe('reopenLastClosedTile focuses the restored tab', () => {
     const tree = await import('@/components/pane-shell/tree/store')
     const model = await import('@/components/pane-shell/tree/model')
     const { registry } = await import('@/contrib/registry')
+    const profile = await import('@/store/profile')
     const session = await import('@/store/session')
     const states = await import('@/store/session-states')
+
+    profile.$activeGatewayProfile.set('default')
+    session.$connection.set({ connectionId: 'local', mode: 'local', profile: 'default' } as HermesConnection)
 
     registry.register({
       area: 'panes',
@@ -172,9 +247,9 @@ describe('reopenLastClosedTile focuses the restored tab', () => {
     const registered = new Map<string, () => void>()
 
     const syncTiles = () => {
-      const wanted = new Set(states.$sessionTiles.get().map(t => t.storedSessionId))
+      const wanted = new Map(states.$sessionTiles.get().map(tile => [states.sessionTileKey(tile), tile]))
 
-      for (const id of wanted) {
+      for (const [id, tile] of wanted) {
         if (registered.has(id)) {
           continue
         }
@@ -184,9 +259,9 @@ describe('reopenLastClosedTile focuses the restored tab', () => {
           registry.register({
             area: 'panes',
             data: { dock: { pane: 'workspace', pos: 'center' }, placement: 'main' },
-            id: tilePane(id),
+            id: states.sessionTilePaneId(tile),
             render: () => null,
-            title: id
+            title: tile.storedSessionId
           })
         )
       }
@@ -208,13 +283,15 @@ describe('reopenLastClosedTile focuses the restored tab', () => {
     states.openSessionTile('closed', 'center', 'workspace')
     states.focusOpenSession('closed')
     tree.noteActiveTreeGroup('grp-main')
-    expect(findGroupOfPane(tree.$layoutTree.get()!, tilePane('closed'))?.active).toBe(tilePane('closed'))
+    const opened = states.sessionTileForStoredId('closed', { connectionId: 'local', profile: 'default' })!
+    const paneId = states.sessionTilePaneId(opened)
+    expect(findGroupOfPane(tree.$layoutTree.get()!, paneId)?.active).toBe(paneId)
 
-    return { states, tree }
+    return { paneId, states, tree }
   }
 
   it('fronts the restored tab after ⌘⇧T', async () => {
-    const { states, tree } = await setup()
+    const { paneId, states, tree } = await setup()
 
     states.closeSessionTile('closed')
     expect(states.$sessionTiles.get().some(t => t.storedSessionId === 'closed')).toBe(false)
@@ -223,7 +300,7 @@ describe('reopenLastClosedTile focuses the restored tab', () => {
     states.reopenLastClosedTile()
 
     expect(states.$sessionTiles.get().some(t => t.storedSessionId === 'closed')).toBe(true)
-    expect(findGroupOfPane(tree.$layoutTree.get()!, tilePane('closed'))?.active).toBe(tilePane('closed'))
+    expect(findGroupOfPane(tree.$layoutTree.get()!, paneId)?.active).toBe(paneId)
     expect(tree.$activeTreeGroup.get()).toBe('grp-main')
   })
 })

@@ -524,7 +524,8 @@ def run_gui_uninstall(args):
     )
 
     hermes_home = get_hermes_home()
-    summary = gui_install_summary(hermes_home)
+    packaged_app_paths = getattr(args, "packaged_app_paths", None)
+    summary = gui_install_summary(hermes_home, packaged_paths=packaged_app_paths)
     skip_confirm = bool(getattr(args, "yes", False))
 
     print()
@@ -569,7 +570,7 @@ def run_gui_uninstall(args):
     print()
     print(color("Uninstalling Chat GUI...", Colors.CYAN, Colors.BOLD))
     print()
-    uninstall_gui(hermes_home)
+    uninstall_gui(hermes_home, packaged_app_paths=packaged_app_paths)
 
     print()
     print(color("┌─────────────────────────────────────────────────────────┐", Colors.GREEN, Colors.BOLD))
@@ -621,6 +622,7 @@ def run_uninstall(args):
             full_uninstall=full_uninstall,
             remove_profiles=False,
             named_profiles=named_profiles,
+            packaged_app_paths=getattr(args, "packaged_app_paths", None),
         )
         return
 
@@ -726,6 +728,7 @@ def run_uninstall(args):
         full_uninstall=full_uninstall,
         remove_profiles=remove_profiles,
         named_profiles=named_profiles,
+        packaged_app_paths=getattr(args, "packaged_app_paths", None),
     )
 
 
@@ -760,6 +763,7 @@ def _perform_uninstall(
     full_uninstall: bool,
     remove_profiles: bool,
     named_profiles: list,
+    packaged_app_paths: "list[Path] | None" = None,
 ) -> None:
     """Execute the uninstall steps. Shared by the interactive and ``--yes``
     paths so the destructive sequence lives in exactly one place.
@@ -841,7 +845,7 @@ def _perform_uninstall(
     log_info("Removing desktop Chat GUI artifacts...")
     try:
         from hermes_cli.gui_uninstall import uninstall_gui
-        gui_removed = uninstall_gui(hermes_home)
+        gui_removed = uninstall_gui(hermes_home, packaged_app_paths=packaged_app_paths)
         if not gui_removed:
             log_info("No desktop GUI artifacts found")
     except Exception as e:
@@ -916,9 +920,9 @@ def _perform_uninstall(
         print()
         print("To reinstall later with your existing settings:")
         if _is_windows():
-            print(color("  iex (irm https://hermes-agent.nousresearch.com/install.ps1)", Colors.DIM))
+            print(color("  iex (irm https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/scripts/install.ps1)", Colors.DIM))
         else:
-            print(color("  curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash", Colors.DIM))
+            print(color("  curl -fsSL https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/scripts/install.sh | bash", Colors.DIM))
         print()
 
     if _is_windows():
@@ -935,11 +939,15 @@ def _perform_uninstall(
 class _UninstallArgs:
     """Lightweight args namespace for the module entrypoint below."""
 
-    def __init__(self, *, mode: str):
+    def __init__(self, *, mode: str, skip_packaged_apps: bool = False):
         self.gui = mode == "gui"
         self.gui_summary = False
         self.full = mode == "full"
         self.yes = True  # the module entrypoint is always non-interactive
+        # The Desktop's detached cleanup already owns the exact running app
+        # path. An empty list prevents this Python phase from scanning sibling
+        # per-user/per-machine installs before the detached script runs.
+        self.packaged_app_paths = [] if skip_packaged_apps else None
 
 
 def main(argv=None) -> int:
@@ -965,8 +973,13 @@ def main(argv=None) -> int:
         required=True,
         help="gui = Chat GUI only; lite = GUI + agent, keep data; full = everything",
     )
+    parser.add_argument(
+        "--skip-packaged-apps",
+        action="store_true",
+        help="leave packaged app removal to an exact-path detached cleanup",
+    )
     ns = parser.parse_args(argv)
-    args = _UninstallArgs(mode=ns.mode)
+    args = _UninstallArgs(mode=ns.mode, skip_packaged_apps=ns.skip_packaged_apps)
 
     if args.gui:
         run_gui_uninstall(args)

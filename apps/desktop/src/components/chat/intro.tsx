@@ -145,9 +145,10 @@ function pickCopy(copies: IntroCopy[], seed = 0): IntroCopy {
   return copies[Math.abs(seed) % copies.length] || FALLBACK_COPY[0]
 }
 
-const WORDMARK = 'HERMES AGENT'
+const WORDMARK = 'HERMES VIETNAMESE'
+
 const VIETNAMESE_TAGLINE =
-  'Nhập một nhiệm vụ, câu hỏi hoặc đoạn mã. Hermes ghi nhớ phiên làm việc, dẫn nguồn và sẽ hỏi lại khi chưa chắc chắn.'
+  'Nhập một nhiệm vụ, câu hỏi hoặc đoạn mã. Hermes Vietnamese ghi nhớ phiên làm việc, dẫn nguồn và sẽ hỏi lại khi chưa chắc chắn.'
 
 function resolveCopy(personality?: string, seed?: number): IntroCopy {
   const personalityKey = normalizeKey(personality)

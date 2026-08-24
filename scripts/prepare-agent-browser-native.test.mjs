@@ -1,9 +1,12 @@
 import assert from "node:assert/strict"
+import fs from "node:fs"
 import { test } from "node:test"
 
 import {
+  AGENT_BROWSER_PACKAGE,
   AGENT_BROWSER_SOURCE,
   agentBrowserBinaryName,
+  hostTarBin,
   peMachine,
 } from "./prepare-agent-browser-native.mjs"
 
@@ -20,6 +23,25 @@ test("Windows ARM64 source is locked to a full commit and digest", () => {
   assert.match(AGENT_BROWSER_SOURCE.commit, /^[0-9a-f]{40}$/)
   assert.match(AGENT_BROWSER_SOURCE.sha256, /^[0-9a-f]{64}$/)
   assert.match(AGENT_BROWSER_SOURCE.url, new RegExp(AGENT_BROWSER_SOURCE.commit))
+})
+
+test("Windows archive extraction always uses the inbox tar executable", () => {
+  assert.equal(hostTarBin("win32", "C:\\Windows"), "C:\\Windows\\System32\\tar.exe")
+  assert.equal(hostTarBin("linux"), "tar")
+
+  const source = fs.readFileSync(new URL("./prepare-agent-browser-native.mjs", import.meta.url), "utf8")
+  assert.doesNotMatch(source, /run\(["']tar\.exe["']/)
+})
+
+test("resident runtime pins agent-browser outside the root workspace graph", () => {
+  const manifest = JSON.parse(fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"))
+  const lock = JSON.parse(fs.readFileSync(new URL("../package-lock.json", import.meta.url), "utf8"))
+
+  assert.equal(manifest.dependencies?.["agent-browser"], undefined)
+  assert.equal(lock.packages?.["node_modules/agent-browser"], undefined)
+  assert.equal(AGENT_BROWSER_PACKAGE.version, "0.26.0")
+  assert.match(AGENT_BROWSER_PACKAGE.url, /agent-browser-0\.26\.0\.tgz$/)
+  assert.match(AGENT_BROWSER_PACKAGE.integrity, /^sha512-[A-Za-z0-9+/]+=*$/)
 })
 
 test("reads the ARM64 machine field from a PE executable", () => {

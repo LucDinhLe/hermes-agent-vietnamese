@@ -5,7 +5,7 @@ import { BrandMark } from '@/components/brand-mark'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { type Translations, useI18n } from '@/i18n'
-import { CheckCircle2, ExternalLink, Loader2, RefreshCw } from '@/lib/icons'
+import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, RefreshCw } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import {
   $desktopVersion,
@@ -18,10 +18,36 @@ import {
   startActiveUpdate
 } from '@/store/updates'
 
+import productMetadata from '../../../product-metadata.json'
+
 import { ListRow, SectionHeading, SettingsContent } from './primitives'
 import { UninstallSection } from './uninstall-section'
 
 const RELEASE_NOTES_URL = 'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases'
+const INSTALLER_URL = RELEASE_NOTES_URL
+const UPSTREAM_URL = 'https://github.com/NousResearch/hermes-agent'
+const COMMUNITY_URL = 'https://github.com/LucDinhLe/hermes-agent-vietnamese'
+const LICENSE_URL = 'https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/LICENSE'
+const PRODUCT_VERSION = productMetadata.productVersion
+const UPSTREAM_VERSION = productMetadata.upstream.version
+
+function ExternalProjectLink({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      className="inline-flex items-center gap-1 text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground"
+      href={href}
+      onClick={event => {
+        event.preventDefault()
+        void window.hermesDesktop?.openExternal?.(href)
+      }}
+      rel="noreferrer"
+      target="_blank"
+    >
+      {label}
+      <ExternalLink className="size-3" />
+    </a>
+  )
+}
 
 function relativeTime(ms: number | undefined, a: Translations['settings']['about']) {
   if (!ms) {
@@ -63,8 +89,18 @@ export function AboutSettings() {
   }, [])
 
   const behind = status?.behind ?? 0
+  // behind is null when the exact count is unknowable (shallow clone): the
+  // backend flags that case via updateAvailable instead of a number.
+  const updateAvailable = behind > 0 || Boolean(status?.updateAvailable)
   const supported = status?.supported !== false
   const applying = apply.applying || apply.stage === 'restart'
+
+  const updateSourceHint =
+    status?.mechanism === 'app-updater'
+      ? a.communityUpdateChannel
+      : status?.branch || status?.currentSha
+        ? a.branchCommit(status?.branch ?? 'main', status?.currentSha?.slice(0, 7) ?? '—')
+        : undefined
 
   const handleCheck = async () => {
     setJustChecked(false)
@@ -84,8 +120,8 @@ export function AboutSettings() {
   } else if (applying) {
     statusLine = a.installing
     statusTone = 'available'
-  } else if (behind > 0) {
-    statusLine = a.updateReady(behind)
+  } else if (updateAvailable) {
+    statusLine = behind > 0 ? a.updateReady(behind) : a.updateReadyUnknown
     statusTone = 'available'
   } else if (status) {
     statusLine = a.onLatest
@@ -100,12 +136,59 @@ export function AboutSettings() {
         <div>
           <h2 className="text-lg font-semibold tracking-tight">{a.heading}</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            {version?.appVersion ? a.version(version.appVersion) : a.versionUnavailable}
+            {a.version(PRODUCT_VERSION)}
           </p>
         </div>
+        {version?.bundleOutOfSync && (
+          <div className="mx-auto w-full max-w-2xl rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-left text-sm">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div className="min-w-0">
+                <p className="font-medium">{a.bundleOutOfSync}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{a.bundleOutOfSyncDesc}</p>
+                <Button asChild className="mt-2" size="sm" variant="textStrong">
+                  <a
+                    href={INSTALLER_URL}
+                    onClick={event => {
+                      event.preventDefault()
+                      void window.hermesDesktop?.openExternal?.(INSTALLER_URL)
+                    }}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <ExternalLink className="size-3" />
+                    {a.bundleOutOfSyncAction}
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="mx-auto mt-4 w-full max-w-2xl">
+        <div aria-label={a.projectInfo} className="mb-5 rounded-xl border border-border/70 bg-muted/20 px-4 py-3">
+          <p className="mb-2 text-sm font-medium text-foreground">{a.projectInfo}</p>
+          <dl className="grid gap-2 text-xs sm:grid-cols-[minmax(0,1fr)_auto]">
+            <dt className="text-muted-foreground">{a.technicalVersion}</dt>
+            <dd>{version?.appVersion ?? a.versionUnavailable}</dd>
+            <dt className="text-muted-foreground">{a.upstreamVersion}</dt>
+            <dd>{UPSTREAM_VERSION}</dd>
+            <dt className="text-muted-foreground">{a.upstreamPublisher}</dt>
+            <dd>
+              <ExternalProjectLink href={UPSTREAM_URL} label={a.upstreamPublisherValue} />
+            </dd>
+            <dt className="text-muted-foreground">{a.communityMaintainer}</dt>
+            <dd>
+              <ExternalProjectLink href={COMMUNITY_URL} label={a.communityMaintainerValue} />
+            </dd>
+            <dt className="text-muted-foreground">{a.license}</dt>
+            <dd>
+              <ExternalProjectLink href={LICENSE_URL} label={a.licenseValue} />
+            </dd>
+          </dl>
+        </div>
+
         <SectionHeading icon={RefreshCw} title={a.updates} />
 
         <div
@@ -142,7 +225,7 @@ export function AboutSettings() {
               {checking ? a.checking : a.checkNow}
             </Button>
 
-            {behind > 0 && supported && !applying && (
+            {updateAvailable && supported && !applying && (
               <>
                 <Button onClick={() => startActiveUpdate()} size="sm">
                   {a.updateNow}
@@ -172,7 +255,7 @@ export function AboutSettings() {
 
         <ListRow
           description={a.automaticUpdatesDesc}
-          hint={a.branchCommit(status?.branch ?? 'unknown', status?.currentSha?.slice(0, 7) ?? 'unknown')}
+          hint={updateSourceHint}
           title={a.automaticUpdates}
         />
 

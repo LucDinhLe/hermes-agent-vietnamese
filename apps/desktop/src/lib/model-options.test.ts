@@ -16,7 +16,11 @@ describe('requestModelOptions', () => {
   })
 
   it('uses the connected gateway even before a session exists', async () => {
-    const gatewayPayload = { model: 'BeastMode', provider: 'moa', providers: [] }
+    const gatewayPayload = {
+      model: 'BeastMode',
+      provider: 'moa',
+      providers: [{ models: ['BeastMode'], name: 'Mixture of Agents', slug: 'moa' }]
+    }
 
     const gateway = {
       request: vi.fn(() => Promise.resolve(gatewayPayload))
@@ -28,24 +32,108 @@ describe('requestModelOptions', () => {
     expect(getGlobalModelOptions).not.toHaveBeenCalled()
   })
 
+  it('recovers an empty gateway catalog through profile-scoped REST without replacing the session selection', async () => {
+    const gatewayPayload = { model: 'hermes-local', provider: 'hermes-local' }
+
+    const restPayload = {
+      model: 'profile-default',
+      provider: 'openai-codex',
+      providers: [{ models: ['hermes-local'], name: 'Hermes Local vLLM', slug: 'hermes-local' }]
+    }
+
+    const gateway = {
+      request: vi.fn(() => Promise.resolve(gatewayPayload))
+    }
+
+    vi.mocked(getGlobalModelOptions).mockResolvedValueOnce(restPayload)
+
+    await expect(
+      requestModelOptions({
+        connectionId: 'source-a',
+        gateway: gateway as never,
+        profile: 'work',
+        sessionId: 'session-1'
+      })
+    ).resolves.toEqual({
+      ...restPayload,
+      model: 'hermes-local',
+      provider: 'hermes-local'
+    })
+
+    expect(getGlobalModelOptions).toHaveBeenCalledWith({ explicitOnly: true }, 'work', 'source-a')
+  })
+
+  it('recovers through profile-scoped REST when the gateway catalog request fails', async () => {
+    const restPayload = {
+      model: 'hermes-local',
+      provider: 'hermes-local',
+      providers: [{ models: ['hermes-local'], name: 'Hermes Local vLLM', slug: 'hermes-local' }]
+    }
+
+    const gateway = {
+      request: vi.fn(() => Promise.reject(new Error('gateway request unavailable')))
+    }
+
+    vi.mocked(getGlobalModelOptions).mockResolvedValueOnce(restPayload)
+
+    await expect(
+      requestModelOptions({
+        connectionId: 'source-a',
+        gateway: gateway as never,
+        profile: 'work',
+        sessionId: 'session-1'
+      })
+    ).resolves.toEqual(restPayload)
+    expect(getGlobalModelOptions).toHaveBeenCalledWith({ explicitOnly: true }, 'work', 'source-a')
+  })
+
+  it('preserves the gateway error when its REST recovery path also fails', async () => {
+    const gatewayError = new Error('gateway request unavailable')
+
+    const gateway = {
+      request: vi.fn(() => Promise.reject(gatewayError))
+    }
+
+    vi.mocked(getGlobalModelOptions).mockRejectedValueOnce(new Error('REST request unavailable'))
+
+    await expect(requestModelOptions({ gateway: gateway as never })).rejects.toBe(gatewayError)
+  })
+
+  it('keeps the gateway result when both catalog paths have no selectable models', async () => {
+    const gatewayPayload = { model: 'hermes-local', provider: 'hermes-local', providers: [] }
+
+    const gateway = {
+      request: vi.fn(() => Promise.resolve(gatewayPayload))
+    }
+
+    await expect(requestModelOptions({ gateway: gateway as never })).resolves.toBe(gatewayPayload)
+  })
+
   it('passes the active session id and refresh flag through the gateway', async () => {
     const gateway = {
       request: vi.fn(() => Promise.resolve(globalOptions))
     }
 
-    await requestModelOptions({ gateway: gateway as never, refresh: true, sessionId: 'session-1' })
+    await requestModelOptions({
+      connectionId: 'source-a',
+      gateway: gateway as never,
+      profile: 'work',
+      refresh: true,
+      sessionId: 'session-1'
+    })
 
     expect(gateway.request).toHaveBeenCalledWith('model.options', {
       explicit_only: true,
       refresh: true,
       session_id: 'session-1'
     })
+    expect(getGlobalModelOptions).toHaveBeenCalledWith({ explicitOnly: true, refresh: true }, 'work', 'source-a')
   })
 
   it('falls back to REST when no gateway is connected', async () => {
-    await requestModelOptions({ refresh: true })
+    await requestModelOptions({ connectionId: 'source-a', profile: 'work', refresh: true })
 
-    expect(getGlobalModelOptions).toHaveBeenCalledWith({ explicitOnly: true, refresh: true })
+    expect(getGlobalModelOptions).toHaveBeenCalledWith({ explicitOnly: true, refresh: true }, 'work', 'source-a')
   })
 })
 

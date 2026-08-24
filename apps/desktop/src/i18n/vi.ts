@@ -1,6 +1,6 @@
 import { defineFieldCopy } from '@/app/settings/field-copy'
 
-import type { Translations } from './types'
+import { defineLocale } from './define-locale'
 
 // Generated from en.ts by tools/hermes-i18n/generate-vi.mjs.
 
@@ -221,7 +221,7 @@ const VI_FIELD_DESCRIPTIONS = defineFieldCopy({
   }
 })
 
-export const vi: Translations = {
+export const vi = defineLocale({
   common: {
     apply: 'Áp dụng',
     back: 'Quay lại',
@@ -281,14 +281,14 @@ export const vi: Translations = {
   },
 
   boot: {
-    ready: 'Hermes Desktop đã sẵn sàng',
+    ready: 'Hermes Vietnamese đã sẵn sàng',
     desktopBootFailedWithMessage: message => `Khởi động Desktop không thành công: ${message}`,
     steps: {
       connectingGateway: 'Kết nối cổng Desktop trực tiếp',
       loadingSettings: 'Đang tải cài đặt Hermes',
       loadingSessions: 'Đang tải các phiên gần đây',
       startingDesktopConnection: 'Đang bắt đầu kết nối Desktop',
-      startingHermesDesktop: 'Đang bắt đầu Hermes Desktop…'
+      startingHermesDesktop: 'Đang bắt đầu Hermes Vietnamese…'
     },
     errors: {
       backgroundExited: 'Tiến trình nền của Hermes đã dừng.',
@@ -354,7 +354,7 @@ export const vi: Translations = {
       diskFull: 'Đĩa đầy — giải phóng một số dung lượng rồi thử lại.',
       gatewayAuthFailed: 'Xác thực cổng không thành công — hãy kiểm tra API_SERVER_KEY của bạn.',
       methodNotAllowed:
-        'Dịch vụ nền đã từ chối yêu cầu đó (HTTP 405: phương thức không được phép). Hãy thử khởi động lại Hermes Desktop.',
+        'Dịch vụ nền đã từ chối yêu cầu đó (HTTP 405: phương thức không được phép). Hãy thử khởi động lại Hermes Vietnamese.',
       microphonePermission: 'Quyền sử dụng micrô đã bị từ chối.',
       openaiRejectedApiKey: 'OpenAI đã từ chối khóa API.',
       openaiRejectedApiKeyWithStatus: status => `OpenAI đã từ chối khóa API (${status}: invalid_api_key).`,
@@ -424,7 +424,7 @@ export const vi: Translations = {
     enterHud: 'Chế độ HUD',
     exitHud: 'Thoát chế độ HUD',
     layoutEditor: 'Trình chỉnh sửa bố cục',
-    layoutEditorTitle: 'Trình chỉnh sửa bố cục — ⌘ nhấp vào sẽ đặt lại bố cục'
+    layoutEditorTitle: modifier => `Trình chỉnh sửa bố cục — ${modifier}-nhấp sẽ đặt lại bố cục`
   },
 
   keybinds: {
@@ -582,6 +582,8 @@ export const vi: Translations = {
       reveal: 'Hiển thị trong trình quản lý tệp',
       enable: 'Bật',
       disable: 'Tắt',
+      required: 'bắt buộc',
+      requiredDescription: 'Đây là tính năng đi kèm bắt buộc của Hermes Vietnamese và luôn được bật.',
       failed: 'không thành công',
       empty: 'Chưa cài đặt plugin Desktop nào.',
       kinds: { bundled: 'đi kèm', disk: 'trên máy', runtime: 'đang chạy' },
@@ -635,7 +637,7 @@ export const vi: Translations = {
         }
       },
       test: 'Gửi thông báo kiểm tra',
-      testTitle: 'Hermes',
+      testTitle: 'Hermes Vietnamese',
       testBody: 'Thông báo đang hoạt động.',
       testSent:
         'Đã gửi bài kiểm tra. Nếu không có gì xuất hiện, hãy kiểm tra quyền thông báo của hệ điều hành và Tập trung/Không làm phiền.',
@@ -655,7 +657,7 @@ export const vi: Translations = {
       advanced: 'Nâng cao'
     },
     searchPlaceholder: {
-      about: 'Giới thiệu về Hermes Desktop',
+      about: 'Giới thiệu về Hermes Vietnamese',
       config: 'Cài đặt tìm kiếm...',
       gateway: 'Kết nối cổng...',
       keys: 'Tìm kiếm khóa API...',
@@ -689,6 +691,10 @@ export const vi: Translations = {
       backdropDesc: 'Hình ảnh bức tượng mờ nhạt đằng sau cuộc trò chuyện.',
       reactionsTitle: 'Cảm xúc tin nhắn',
       reactionsDesc: 'Gắn biểu tượng cảm xúc vào tin nhắn; Hermes cũng có thể bày tỏ cảm xúc với tin nhắn của bạn.',
+      reasoningSummaryTitle: 'Tóm tắt suy luận bằng tiếng Việt',
+      reasoningSummaryDesc:
+        'Sau khi lượt chạy kết thúc, phần suy luận công khai được gửi qua một model call bổ sung. Thao tác này có thể phát sinh chi phí và độ trễ; bản gốc và câu trả lời không thay đổi.',
+      reasoningSummaryClear: 'Xóa cache bản tóm tắt',
       embedsTitle: 'Nhúng nội tuyến',
       embedsDesc:
         'Tải bản xem trước từ trang web bên thứ ba như YouTube hoặc X. “Hỏi” chờ bạn cho phép từng nội dung; “Luôn luôn” tự động tải; “Tắt” chỉ hiển thị liên kết.',
@@ -756,9 +762,19 @@ export const vi: Translations = {
     fieldLabels: VI_FIELD_LABELS,
     fieldDescriptions: VI_FIELD_DESCRIPTIONS,
     about: {
-      heading: 'Hermes Desktop',
+      heading: 'Hermes Vietnamese',
       version: value => `Phiên bản ${value}`,
       versionUnavailable: 'Phiên bản không có sẵn',
+      projectInfo: 'Thông tin dự án',
+      technicalVersion: 'Phiên bản kỹ thuật',
+      upstreamVersion: 'Phiên bản Hermes Agent gốc',
+      upstreamPublisher: 'Dự án gốc và nhà phát hành',
+      upstreamPublisherValue: 'Hermes Agent · Nous Research',
+      communityMaintainer: 'Nhà phát hành và duy trì Hermes Vietnamese',
+      communityMaintainerValue: 'Lê Đình Lực (LucDinhLe)',
+      license: 'Giấy phép',
+      licenseValue: 'Giấy phép MIT',
+      communityUpdateChannel: 'Kênh Hermes Vietnamese · GitHub Releases',
       updates: 'Cập nhật',
       checkNow: 'Kiểm tra ngay',
       checking: 'Đang kiểm tra…',
@@ -854,11 +870,6 @@ export const vi: Translations = {
       envOverride: 'env ghi đè',
       intro:
         'Mặc định chạy trên máy này. Chọn từ xa khi ứng dụng cần điều khiển dịch vụ nền Hermes ở máy khác. Có thể thiết lập riêng cho từng hồ sơ bên dưới.',
-      appliesTo: 'Áp dụng cho',
-      allProfiles: 'Tất cả hồ sơ',
-      defaultConnection: 'Kết nối mặc định cho mọi hồ sơ không có ghi đè riêng.',
-      profileConnection: profile =>
-        `Kết nối chỉ được sử dụng khi “${profile}” là hồ sơ đang hoạt động. Chọn Sử dụng cổng mặc định để xóa ghi đè của nó.`,
       envOverrideTitle: 'Các biến môi trường đang kiểm soát phiên Desktop này.',
       envOverrideDesc:
         'Bỏ đặt HERMES_DESKTOP_REMOTE_URL và HERMES_DESKTOP_REMOTE_TOKEN để sử dụng cài đặt đã lưu bên dưới.',
@@ -866,8 +877,6 @@ export const vi: Translations = {
       localTitle: 'Cổng trên máy này',
       localDesc:
         'Khởi động dịch vụ nền Hermes riêng trên localhost. Đây là lựa chọn mặc định và có thể hoạt động ngoại tuyến.',
-      inheritTitle: 'Sử dụng cổng mặc định',
-      inheritDesc: 'Xóa ghi đè của hồ sơ này và sử dụng kết nối mặc định.',
       remoteTitle: 'Cổng từ xa',
       remoteDesc: 'Kết nối ứng dụng Desktop với dịch vụ nền Hermes từ xa.',
       remoteAuthHint:
@@ -937,7 +946,7 @@ export const vi: Translations = {
       enterUrlFirst: 'Trước tiên hãy nhập URL từ xa.',
       restartingTitle: 'Đang khởi động lại kết nối cổng',
       savedTitle: 'Đã lưu cài đặt cổng',
-      restartingMessage: 'Hermes Desktop sẽ kết nối lại bằng cài đặt đã lưu; ứng dụng vẫn mở.',
+      restartingMessage: 'Hermes Vietnamese sẽ kết nối lại bằng cài đặt đã lưu; ứng dụng vẫn mở.',
       savedMessage: 'Được lưu cho lần khởi động lại tiếp theo.',
       connectedTo: (baseUrl, version) => `Đã kết nối với ${baseUrl}${version ? ` · Hermes ${version}` : ''}`,
       reachableTitle: 'Có thể truy cập cổng từ xa',
@@ -970,8 +979,6 @@ export const vi: Translations = {
       sshHermesPathTitle: 'Hermes (tùy chọn)',
       sshHermesPathDesc: 'Đường dẫn đầy đủ đến nhị phân Hermes từ xa. Trống = tự động phát hiện.',
       sshHermesPathPlaceholder: 'tự động phát hiện',
-      sshRemoteProfileTitle: 'Hồ sơ từ xa (tùy chọn)',
-      sshRemoteProfileDesc: 'Tên hồ sơ trên máy chủ từ xa. Để trống = sử dụng tên hồ sơ Desktop.',
       sshTestConnection: 'Kiểm tra SSH',
       sshConnect: 'Kết nối',
       sshButtonsHint: '“Lưu” áp dụng ở lần khởi động tiếp theo; “Kết nối” sẽ kết nối lại ngay.',
@@ -983,9 +990,9 @@ export const vi: Translations = {
       sshErrHostKey:
         'Khóa máy chủ đã THAY ĐỔI từ lần kết nối trước. Hãy xác minh thay đổi này, sau đó chạy ssh-keygen -R <host> và kết nối lại.',
       sshErrNotInstalled:
-        'Hermes chưa được cài đặt trên máy chủ từ xa. Cài đặt nó ở đó (curl -fsSL https://hermes-agent.nousresearch.com/install.sh | sh) hoặc đặt đường dẫn Hermes.',
+        'Hermes chưa được cài đặt trên máy chủ từ xa. Cài đặt nó ở đó (curl -fsSL https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/scripts/install.sh | sh) hoặc đặt đường dẫn Hermes.',
       sshErrPlatform:
-        'Nền tảng từ xa không được hỗ trợ. Chế độ SSH Hermes Desktop hỗ trợ các máy chủ từ xa Linux, macOS và Windows.',
+        'Nền tảng từ xa không được hỗ trợ. Chế độ SSH Hermes Vietnamese hỗ trợ các máy chủ từ xa Linux, macOS và Windows.',
       sshErrTimeout: 'Kết nối SSH đã hết thời gian chờ. Máy chủ có thể không truy cập được hoặc đang ngủ.',
       sshErrUpdateRequired: 'Cập nhật Hermes trên máy chủ từ xa trước khi kết nối với Desktop SSH.',
       sshErrUnknown: 'Kết nối SSH không thành công.'
@@ -1071,6 +1078,12 @@ export const vi: Translations = {
       reasoning: 'Lý luận',
       reasoningOff: 'Tắt',
       defaultsFailed: 'Không lưu được giá trị mặc định của model',
+      advisorTitle: 'Giám sát (Advisor)',
+      advisorDesc:
+        'Một model độc lập rà soát kế hoạch, lúc đổi hướng hoặc lặp lỗi, và kết quả cuối trước khi Hermes trả lời.',
+      advisorEnabled: 'Bật Giám sát',
+      advisorCost: 'Khi bật, mỗi nhịp rà soát tạo thêm model call, độ trễ và chi phí.',
+      advisorModel: 'Model Giám sát',
       auxiliaryTitle: 'Model phụ trợ',
       resetAllToMain: 'Đặt lại tất cả về model chính',
       auxiliaryDesc:
@@ -1090,6 +1103,7 @@ export const vi: Translations = {
         approval: { label: 'Phê duyệt', hint: 'Tự động phê duyệt thông minh' },
         mcp: { label: 'MCP', hint: 'MCP định tuyến công cụ' },
         title_generation: { label: 'Tạo tiêu đề', hint: 'Đặt tiêu đề phiên' },
+        reasoning_summary_vi: { label: 'Tóm tắt suy luận', hint: 'Tóm tắt tiếng Việt sau lượt' },
         curator: { label: 'Quản lý kỹ năng', hint: 'Đánh giá việc sử dụng kỹ năng' }
       }
     },
@@ -1239,7 +1253,6 @@ export const vi: Translations = {
     tabSkills: 'Kỹ năng',
     tabToolsets: 'Công cụ',
     tabMcp: 'MCP',
-    tabHub: 'Duyệt trung tâm',
     all: 'Tất cả',
     searchSkills: 'Tìm kỹ năng...',
     searchToolsets: 'Tìm bộ công cụ...',
@@ -1291,6 +1304,10 @@ export const vi: Translations = {
     archive: 'Lưu trữ',
     skillArchivedTitle: 'Đã lưu trữ kỹ năng',
     skillArchivedMessage: 'Có thể khôi phục bằng công cụ quản lý kỹ năng của Hermes.',
+    archiveConfirmTitle: name => `Lưu trữ ${name}?`,
+    archiveDescription: 'Kỹ năng sẽ được lưu trữ và có thể khôi phục bằng công cụ quản lý kỹ năng của Hermes.',
+    archiveFailed: 'Không thể lưu trữ kỹ năng',
+    defaultProfile: 'Hermes (mặc định)',
     hub: {
       searchPlaceholder: 'Tìm kiếm trung tâm kỹ năng',
       search: 'Tìm kiếm',
@@ -2094,10 +2111,13 @@ export const vi: Translations = {
   sidebar: {
     nav: {
       'new-session': 'Phiên mới',
+      projects: 'Dự án',
+      usage: 'Thống kê sử dụng',
       browser: 'Trình duyệt',
       skills: 'Kỹ năng',
       messaging: 'Nhắn tin',
-      artifacts: 'Tệp kết quả'
+      artifacts: 'Tệp kết quả',
+      cron: 'Tác vụ định kỳ'
     },
     searchAria: 'Tìm phiên',
     searchPlaceholder: 'Tìm phiên…',
@@ -2156,6 +2176,15 @@ export const vi: Translations = {
     },
     projects: {
       sectionLabel: 'Dự án',
+      manageDescription: 'Quản lý tập trung thư mục, phiên làm việc và mức sử dụng liên quan.',
+      searchPlaceholder: 'Tìm dự án…',
+      emptyTitle: 'Chưa có dự án',
+      emptyDescription: 'Tạo dự án để gom các thư mục và phiên làm việc liên quan.',
+      open: 'Mở dự án',
+      sessionsCount: count => `${count} phiên`,
+      tokensCount: tokens => `${tokens} token`,
+      pinnedSectionLabel: 'Dự án đã ghim',
+      pinnedEmpty: 'Ghim dự án để truy cập nhanh tại đây.',
       home: 'Trang chủ',
       newButton: 'Dự án mới',
       createTitle: 'Dự án mới',
@@ -2165,7 +2194,10 @@ export const vi: Translations = {
       namePlaceholder: 'Ví dụ: Skunkworks',
       foldersLabel: 'Thư mục',
       ideaLabel: 'Ý tưởng',
-      ideaPlaceholder: 'Dự án này nói về cái gì? (đã lưu vào IDEA.md)',
+      ideaPlaceholder: 'Mô tả mục tiêu và ý tưởng chính của dự án.',
+      ideaHint:
+        'Không bắt buộc. Khi tạo dự án, Hermes lưu nội dung này thành IDEA.md trong thư mục chính để agent hiểu mục tiêu.',
+      ideaSaveFailed: 'Dự án đã được tạo nhưng không thể lưu IDEA.md trong thư mục chính.',
       ideaGenerate: 'Tạo ý tưởng',
       ideaGenerating: 'Đang tạo…',
       ideaShuffle: 'Xáo trộn các mẫu',
@@ -2295,7 +2327,7 @@ export const vi: Translations = {
       'Bắt đầu bằng một mục tiêu'
     ],
     followUpPlaceholders: [
-      'Gửi theo dõi',
+      'Gửi yêu cầu',
       'Thêm ngữ cảnh khác',
       'Tinh chỉnh yêu cầu',
       'Tiếp theo là gì?',
@@ -2398,6 +2430,16 @@ export const vi: Translations = {
     snippetsDesc: 'Chọn một yêu cầu mẫu để đưa vào khung soạn thảo.',
     dropFiles: 'Thả tệp để đính kèm',
     dropSession: 'Thả để liên kết cuộc trò chuyện này',
+    mcpSuggestions: {
+      label: server => `Thêm ${server}`,
+      tip: keyword => `Đề xuất vì bạn nhắc “${keyword}” — bấm để kết nối`,
+      connecting: server => `Đang kết nối ${server}…`,
+      cancelTip: 'Bấm để hủy',
+      added: server => `Đã thêm ${server}`,
+      addedTip: 'Đã kết nối — các công cụ đã sẵn sàng trong cuộc trò chuyện này',
+      connectFailed: server => `Không thể kết nối ${server}`,
+      sourceChanged: 'Đề xuất MCP thuộc một nguồn Agent khác. Hãy thử lại trong phiên này.'
+    },
     snippets: {
       codeReview: {
         label: 'Đánh giá mã',
@@ -2461,7 +2503,7 @@ export const vi: Translations = {
       scopeLastTurn: 'Lượt cuối cùng',
       commit: 'Commit',
       commitAndPush: 'Commit và đẩy lên',
-      commitPlaceholder: 'Thông điệp commit (⌘↵ để commit)',
+      commitPlaceholder: shortcut => `Thông điệp commit (${shortcut} để commit)`,
       generateCommitMessage: 'Tạo thông điệp commit',
       stopGenerating: 'Dừng tạo',
       createPr: 'Tạo PR',
@@ -2515,7 +2557,7 @@ export const vi: Translations = {
     manualPickedUp: 'Hermes sẽ nhận phiên bản mới vào lần tiếp theo bạn khởi chạy nó.',
     guiSkewTitle: 'Cập nhật ứng dụng Desktop',
     guiSkewBody:
-      'Dịch vụ nền đã cập nhật nhưng gói ứng dụng Desktop chưa đổi. Hãy cập nhật hoặc cài lại Hermes Desktop (AppImage / .deb / .rpm) để đồng bộ phiên bản.',
+      'Dịch vụ nền đã cập nhật nhưng gói ứng dụng Desktop chưa đổi. Hãy cập nhật hoặc cài lại Hermes Vietnamese (AppImage / .deb / .rpm) để đồng bộ phiên bản.',
     copy: 'Sao chép',
     copied: 'Đã sao chép',
     done: 'Hoàn tất',
@@ -2556,7 +2598,7 @@ export const vi: Translations = {
     viewDocs: 'Xem tài liệu cài đặt',
     installTo: 'Sẽ cài đặt vào',
     retryAfterRun: 'Tôi đã chạy lệnh — thử lại',
-    setupChoiceTitle: 'Thiết lập Hermes Desktop',
+    setupChoiceTitle: 'Thiết lập Hermes Vietnamese',
     setupChoiceDesc:
       'Kết nối ứng dụng này với cổng Hermes mà bạn đã chạy hoặc cài đặt Hermes cục bộ trên máy tính này.',
     connectExistingTitle: 'Kết nối với Hermes hiện có',
@@ -2565,9 +2607,9 @@ export const vi: Translations = {
       'Dùng dịch vụ nền từ xa bằng token phiên hoặc đăng nhập qua trình duyệt. Hermes sẽ không cài thêm dịch vụ cục bộ.',
     installLocalTitle: 'Cài đặt Hermes cục bộ',
     installLocalDesc: 'Tải xuống Hermes, tạo môi trường Python và chạy dịch vụ nền trên máy tính này.',
-    localStartUnavailable: 'Không thể khởi động cài đặt cục bộ. Khởi động lại Hermes Desktop và thử lại.',
+    localStartUnavailable: 'Không thể khởi động cài đặt cục bộ. Khởi động lại Hermes Vietnamese và thử lại.',
     remoteSetupTitle: 'Kết nối với Hermes hiện có',
-    remoteSetupDesc: 'Nhập URL cổng. Hermes Desktop sẽ tự phát hiện cổng cần token hay đăng nhập qua trình duyệt.',
+    remoteSetupDesc: 'Nhập URL cổng. Hermes Vietnamese sẽ tự phát hiện cổng cần token hay đăng nhập qua trình duyệt.',
     remoteUrlTitle: 'URL cổng kết nối',
     remoteUrlDesc: 'Sử dụng URL cơ sở của cổng Hermes, bao gồm https:// khi ở xa.',
     remoteUrlPlaceholder: 'https://gateway.example.com/hermes',
@@ -2622,8 +2664,6 @@ export const vi: Translations = {
     lookingUpProviders: 'Đang tìm nhà cung cấp...',
     collapse: 'Thu gọn',
     otherProviders: 'Nhà cung cấp khác',
-    apiKeyProviders: 'Khóa API, dịch vụ đám mây và model cục bộ',
-    apiKeyProviderPitch: 'Kết nối bằng khóa API riêng của bạn.',
     haveApiKey: 'Tôi có khóa API',
     chooseLater: 'Tôi sẽ chọn nhà cung cấp sau',
     recommended: 'Khuyên dùng',
@@ -2750,14 +2790,44 @@ export const vi: Translations = {
       fastFailed: 'Không cập nhật được chế độ nhanh'
     },
     gatewayMenu: {
-      gateway: 'cổng kết nối',
+      gateway: 'Gateway',
       connected: 'Đã kết nối',
       connecting: 'Đang kết nối',
       offline: 'Ngoại tuyến',
+      statusRunning: 'Đang chạy',
+      statusStopped: 'Đã dừng',
+      statusUnknown: 'Chưa rõ trạng thái',
+      pidLabel: pid => `PID ${pid}`,
       inferenceReady: 'Sẵn sàng suy luận',
       inferenceNotReady: 'Suy luận chưa sẵn sàng',
       checkingInference: 'Kiểm tra suy luận',
       disconnected: 'Đã ngắt kết nối',
+      startGateway: 'Khởi động',
+      restartGateway: 'Khởi động lại',
+      stopGateway: 'Dừng',
+      forceStopGateway: 'Dừng cưỡng bức',
+      forceStopUnavailable: 'Dừng cưỡng bức không khả dụng cho nguồn cổng này.',
+      viewLogs: 'Xem nhật ký',
+      runDoctor: 'Chạy doctor',
+      checkHealth: 'Kiểm tra sức khỏe',
+      stopConfirmTitle: 'Dừng cổng này?',
+      stopConfirmBody: profile =>
+        `Các phiên đang hoạt động của hồ sơ “${profile}” có thể bị gián đoạn. Dữ liệu trò chuyện và cài đặt vẫn được giữ nguyên.`,
+      stopSharedConfirmBody:
+        'Gateway dùng chung này phục vụ nhiều hồ sơ. Các phiên đang hoạt động có thể bị gián đoạn. Dữ liệu trò chuyện và cài đặt vẫn được giữ nguyên.',
+      actionFailed: action => `${action} không thành công.`,
+      actionTimedOut: 'Đã hết thời gian chờ nhưng tác vụ vẫn đang chạy. Hãy kiểm tra trạng thái trước khi thử lại.',
+      lifecycleManagedBy: profile =>
+        `Các nút điều khiển chỉ khả dụng tại hồ sơ “${profile}” vì Gateway này được dùng chung.`,
+      lifecycleOwnerUnknown: 'Không thể điều khiển vì hệ thống chưa xác định chắc chắn hồ sơ sở hữu Gateway.',
+      sharedLifecycleWarning:
+        'Gateway này được dùng chung. Khởi động lại hoặc dừng sẽ ảnh hưởng mọi hồ sơ đang được phục vụ.',
+      statusLoadFailed: 'Không thể tải trạng thái cổng.',
+      logsEmpty: 'Chưa có nhật ký cổng.',
+      logsLoadFailed: 'Không thể tải nhật ký cổng.',
+      doctorStarted: 'Đã bắt đầu chạy doctor.',
+      healthHealthy: 'Cổng hoạt động bình thường.',
+      healthUnhealthy: 'Kiểm tra sức khỏe cổng không thành công.',
       openSystem: 'Mở bảng hệ thống',
       connection: label => `Kết nối: ${label}`,
       recentActivity: 'Hoạt động gần đây',
@@ -2780,7 +2850,7 @@ export const vi: Translations = {
       update: 'cập nhật',
       updateInProgress: 'Đang cập nhật',
       commitsBehind: (count, branch) => `${count} commit phía sau ${branch}`,
-      desktopVersion: version => `Hermes Desktop v${version}`,
+      desktopVersion: version => `Hermes Vietnamese v${version}`,
       backendVersion: version => `dịch vụ nền v${version}`,
       clientLabel: version => `ứng dụng v${version}`,
       connectionSsh: host => `SSH: ${host}`,
@@ -2840,11 +2910,31 @@ export const vi: Translations = {
           system_prompt: 'chỉ dẫn hệ thống',
           tool_definitions: 'Định nghĩa công cụ'
         },
+        compactAt: (tokens, percent) => `Hermes compact tại ${tokens} (${percent}% giới hạn tuyến hiện tại)`,
+        compactNow: 'Đã tới ngưỡng cần compact',
+        costActual: amount => `Chi phí phiên do nhà cung cấp báo: ${amount} USD`,
+        costDisclaimer: 'Ước tính theo giá API công bố; phí công cụ, khu vực và hợp đồng có thể khác.',
+        costEstimated: amount => `Chi phí ước tính của phiên: ${amount} USD`,
+        costIncluded: 'Đã gồm trong gói hiện tại',
+        costReference: amount => `Giá trị API tham chiếu: ${amount} USD`,
+        costTitle: 'Chi phí phiên',
+        costTokens: (input, output, cache) => `${input} đầu vào · ${output} đầu ra · ${cache} bộ nhớ đệm`,
+        costUnknown: 'Chưa có giá công bố cho tuyến này',
+        effectiveCapacity: tokens => `Giới hạn tuyến hiện tại: ${tokens}`,
         empty: 'Chưa có dữ liệu ngữ cảnh',
+        estimated: 'Ước tính',
         loading: 'Đang tải số liệu chi tiết…',
-        percentFull: percent => `${percent}% Đầy đủ`,
+        measured: 'Đã đo',
+        modelLabel: model => `Model làm việc: ${model}`,
+        percentFull: percent => `${percent}% đã dùng`,
+        publishedCapacity: (tokens, source) => `Dung lượng công bố: ${tokens} · ${source}`,
+        remaining: tokens => `Còn lại trong cửa sổ công bố: ${tokens}`,
+        sourceAnthropic: 'Anthropic',
+        sourceOpenAI: 'OpenAI',
+        sourceRuntime: 'Tuyến hiện tại',
         title: 'Mức dùng ngữ cảnh',
-        tokenSummary: (used, max) => `${used} / ${max} token`
+        tokenSummary: (used, max) => `${used} / ${max} token`,
+        tokensUntilCompact: tokens => `Còn ${tokens} trước khi Hermes compact`
       },
       session: 'Phiên',
       yoloOn: 'YOLO bật — tự động phê duyệt các lệnh nguy hiểm. Chuyển đổi Shift+click trên toàn cầu.',
@@ -2993,7 +3083,52 @@ export const vi: Translations = {
       invalidAddressTitle: 'Địa chỉ web không hợp lệ',
       invalidAddressMessage: 'Hãy nhập địa chỉ http hoặc https.',
       sharedWithAgent: 'Dùng chung với agent',
-      sharedWithAgentHint: 'Bạn và agent đang dùng cùng trang và cùng phiên đăng nhập này.'
+      sharedWithAgentHint: 'Bạn và agent đang dùng cùng trang và cùng phiên đăng nhập này.',
+      connector: {
+        openButton: 'Dùng phiên Chrome hoặc Edge',
+        title: 'Hermes Connector',
+        description: 'Chuyển cookie của website này từ companion Chrome hoặc Edge chính chủ.',
+        loading: 'Đang kiểm tra connector…',
+        officialExtension: 'Companion extension chính chủ',
+        trustVerified: 'Digest bundle và chính sách quyền đã được xác minh.',
+        trustFailed: 'Bundle extension không đạt xác minh. Hãy giữ connector ở trạng thái tắt.',
+        openFolder: 'Mở thư mục',
+        extensionId: 'ID extension',
+        digest: 'SHA-256',
+        enabled: 'Connector đang bật',
+        disabled: 'Connector đang tắt',
+        enableDescription: 'Bật để cho phép ghép nối loopback ngắn hạn. Mỗi website vẫn cần bạn đồng ý.',
+        enable: 'Bật',
+        disable: 'Tắt',
+        currentSite: 'Website trong Hermes Browser',
+        createCode: 'Tạo mã dùng một lần',
+        pairingTitle: 'Ghép nối extension trình duyệt',
+        pairingInstructions:
+          'Mở Hermes Connector trên cùng website trong Chrome hoặc Edge, xem trước cookie rồi nhập mã này.',
+        copy: 'Sao chép',
+        expiresAt: time => `Hết hạn lúc ${time}`,
+        previewReady: 'Kiểm tra trước khi nhập',
+        browser: 'Trình duyệt',
+        domain: 'Domain',
+        cookies: 'Cookie có thể nhập',
+        sessionCookies: 'Cookie phiên',
+        unsupported: 'Không hỗ trợ',
+        expiry: 'Hết hạn muộn nhất',
+        sessionOnly: 'Khi đóng phiên',
+        importWarning: 'Import có thể thay cookie cùng định danh trong Hermes Browser. Cookie phân vùng sẽ bị bỏ qua.',
+        confirmImport: (count, hostname) => `Nhập ${count} cookie cho ${hostname}`,
+        importing: 'Đang chờ an toàn và nhập…',
+        imported: (count, hostname) => `Đã nhập ${count} cookie cho ${hostname}.`,
+        skippedUnsupported: count => `Đã bỏ qua ${count} cookie phân vùng chưa hỗ trợ.`,
+        importedSessions: 'Phiên website đã nhập',
+        noImports: 'Chưa có phiên website nào được nhập.',
+        importRecord: (count, time) => `${count} cookie · ${time}`,
+        revoke: 'Xóa',
+        revokeWarning:
+          'Xóa chỉ tác động các định danh đã ghi. Cookie được website làm mới cùng định danh cũng sẽ bị xóa.',
+        error: code => `Connector không thể tiếp tục (${code}). Không có giá trị cookie nào được ghi vào log.`,
+        close: 'Đóng'
+      }
     }
   },
 
@@ -3047,10 +3182,20 @@ export const vi: Translations = {
       loadingResponse: 'Hermes đang tải phản hồi',
       resumeWhenBackgroundDone: count =>
         count === 1 ? 'Sẽ tiếp tục khi tác vụ nền kết thúc' : `Sẽ tiếp tục khi ${count} nhiệm vụ nền đã hoàn tất`,
+      agentMessaging: name => `Đang nhắn cho ${name}…`,
+      agentMessaged: name => `Đã nhắn cho ${name}`,
+      agentMessageFrom: name => `Tin nhắn từ ${name}`,
+      showAgentMessage: 'Hiện tin nhắn',
       thinking: 'Đang suy nghĩ',
       thought: 'Suy nghĩ',
       thoughtBriefly: 'Đã suy nghĩ trong chốc lát',
       thoughtFor: duration => `Đã suy nghĩ trong ${duration}`,
+      reasoningSummary: 'Tóm tắt suy luận bằng tiếng Việt',
+      reasoningSummaryGenerated: 'Bản tóm tắt do model tạo',
+      reasoningSummaryLatency: duration => `Độ trễ ${duration}`,
+      reasoningSummaryCostUnavailable: 'Chi phí không được provider cung cấp',
+      reasoningSummaryUsage: tokens => `${tokens.toLocaleString('vi-VN')} token`,
+      reasoningSummaryFailed: 'Không thể tạo bản tóm tắt tiếng Việt. Phần suy luận gốc không bị thay đổi.',
       today: time => `Hôm nay, ${time}`,
       yesterday: time => `Hôm qua, ${time}`,
       copy: 'Sao chép',
@@ -3078,7 +3223,42 @@ export const vi: Translations = {
       restoreNext: 'Khôi phục điểm kiểm tra tiếp theo',
       goForward: 'Tiến lên',
       sendEdited: 'Gửi tin nhắn đã chỉnh sửa',
-      attachingFile: 'Đang đính kèm…'
+      attachingFile: 'Đang đính kèm…',
+      workProgress: {
+        analyzingAction: 'Hermes đang xác định yêu cầu',
+        analyzingReason: 'Để nhận diện mục tiêu, ràng buộc và bước an toàn tiếp theo.',
+        reasoningAction: 'Hermes đang đánh giá bước tiếp theo',
+        reasoningReason: 'Để chọn hành động phù hợp với bằng chứng đã có trong phiên này.',
+        respondingAction: 'Hermes đang chuẩn bị câu trả lời',
+        respondingReason: 'Để chuyển phần việc đã kiểm chứng thành kết quả rõ ràng cho người dùng.',
+        compactingAction: 'Hermes đang tóm tắt phiên',
+        compactingReason: 'Để giữ lại ngữ cảnh quan trọng trước khi tiếp tục trong giới hạn model.',
+        toolPreparingAction: name => `Đang chuẩn bị ${name}`,
+        toolPreparingReason: 'Để chuyển bước đã chọn thành hành động có thể thực thi.',
+        toolRunningAction: name => `Đang chạy ${name}`,
+        toolRunningReason: 'Để thu thập hoặc kiểm chứng bằng chứng cần cho mục tiêu hiện tại.',
+        toolCheckingAction: name => `Đang kiểm tra ${name}`,
+        toolCheckingReason: 'Để xác định bước vừa làm đã đạt chưa và cần tiếp tục thế nào.',
+        advisorPlanAction: 'Advisor đang rà soát kế hoạch',
+        advisorPlanReason: 'Để kiểm tra mức độ bám mục tiêu, ràng buộc và quyền thực thi trước khi thay đổi.',
+        advisorRecoveryAction: 'Advisor đang rà soát hướng xử lý mới',
+        advisorRecoveryReason: 'Để bảo đảm hướng đã điều chỉnh vẫn phục vụ đúng mục tiêu ban đầu.',
+        advisorFinalAction: 'Advisor đang đối chiếu kết quả cuối',
+        advisorFinalReason: 'Để so kết quả và bằng chứng với mục tiêu ban đầu của người dùng.',
+        checkpointPlan: 'kế hoạch',
+        checkpointRecovery: 'hướng xử lý mới',
+        checkpointFinal: 'kết quả cuối',
+        advisorPassedAction: checkpoint => `Advisor đã xác nhận ${checkpoint}`,
+        advisorPassedReason: 'Điểm rà soát này phù hợp với mục tiêu người dùng.',
+        advisorRevisionAction: checkpoint => `Advisor yêu cầu tinh chỉnh ${checkpoint}`,
+        advisorRevisionReason: 'Hermes sẽ sửa phần liên quan trước khi tiếp tục.',
+        advisorUnavailableAction: 'Chưa gọi được Advisor',
+        advisorUnavailableReason: 'Hermes sẽ áp dụng chính sách dự phòng đã cấu hình cho phiên này.',
+        advisorFailedAction: 'Lượt rà soát Advisor chưa hoàn tất',
+        advisorFailedReason: 'Luồng chính sẽ tiếp tục theo phương án dự phòng an toàn đã cấu hình.',
+        advisorUnresolvedAction: 'Advisor vẫn còn điểm chưa đạt',
+        advisorUnresolvedReason: 'Hermes sẽ nêu rõ phần còn thiếu thay vì xác nhận hoàn thành khi chưa đủ bằng chứng.'
+      }
     },
     approval: {
       gatewayDisconnected: 'Chưa kết nối cổng Hermes',
@@ -3277,8 +3457,8 @@ export const vi: Translations = {
     sessionExportFailed: 'Không thể xuất phiên',
     imageSaved: 'Đã lưu hình ảnh',
     downloadStarted: 'Đã bắt đầu tải xuống',
-    restartToUseSaveImage: 'Khởi động lại Hermes Desktop để sử dụng Lưu hình ảnh.',
-    restartToSaveImages: 'Khởi động lại Hermes Desktop để lưu hình ảnh',
+    restartToUseSaveImage: 'Khởi động lại Hermes Vietnamese để sử dụng Lưu hình ảnh.',
+    restartToSaveImages: 'Khởi động lại Hermes Vietnamese để lưu hình ảnh',
     imageDownloadFailed: 'Tải hình ảnh không thành công',
     openImage: 'Mở hình ảnh',
     downloadImage: 'Tải hình ảnh',
@@ -3326,4 +3506,4 @@ export const vi: Translations = {
       toggle: open => `${open ? 'Hiển thị' : 'Ẩn'} thanh bên`
     }
   }
-}
+})

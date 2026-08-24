@@ -12,9 +12,24 @@ import { cn } from '@/lib/utils'
 export const dropdownMenuRow = 'gap-2 rounded-none px-2.5 py-1 text-xs'
 export const dropdownMenuSectionLabel = 'px-2.5 pt-1 pb-0.5 text-[0.625rem] font-medium uppercase tracking-wide'
 
-// Keys that must reach Radix's menu handler (navigation/close). Everything else
-// is a filter keystroke and is stopped so the menu's typeahead doesn't hijack it.
+// Escape/Tab must reach Radix's menu handler. Arrow/Enter need a small bridge:
+// focus is inside a real input, so Radix's roving-focus handler intentionally
+// ignores those bubbled events instead of moving to a menu item.
 const DROPDOWN_NAV_KEYS = new Set(['ArrowDown', 'ArrowUp', 'Enter', 'Escape', 'Tab'])
+
+const enabledMenuItems = (input: HTMLInputElement): HTMLElement[] => {
+  const menu = input.closest<HTMLElement>('[role="menu"]')
+
+  if (!menu) {
+    return []
+  }
+
+  return Array.from(
+    menu.querySelectorAll<HTMLElement>(
+      '[role="menuitem"]:not([data-disabled]), [role="menuitemcheckbox"]:not([data-disabled]), [role="menuitemradio"]:not([data-disabled])'
+    )
+  )
+}
 
 function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
   return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />
@@ -30,8 +45,9 @@ function DropdownMenuTrigger({ ...props }: React.ComponentProps<typeof DropdownM
 
 /**
  * Borderless filter input for a searchable dropdown. Autofocuses, keeps the
- * menu's typeahead from eating keystrokes, and still lets arrow/enter/escape
- * drive the list. Drop it in as the first child of a `DropdownMenuContent`.
+ * menu's typeahead from eating keystrokes, bridges arrow/enter into Radix's
+ * registered items, and still lets escape close the menu. Drop it in as the
+ * first child of a `DropdownMenuContent`.
  */
 function DropdownMenuSearch({
   className,
@@ -55,11 +71,29 @@ function DropdownMenuSearch({
           onValueChange?.(event.target.value)
         }}
         onKeyDown={event => {
-          if (!DROPDOWN_NAV_KEYS.has(event.key)) {
-            event.stopPropagation()
+          // Give consumers first refusal. Complex menus (for example the
+          // model catalog) keep focus in the search field and implement
+          // their own highlighted-row navigation. When they prevent the
+          // event, the generic bridge must not also click the first DOM item.
+          onKeyDown?.(event)
+
+          if (event.defaultPrevented) {
+            return
           }
 
-          onKeyDown?.(event)
+          const items = enabledMenuItems(event.currentTarget)
+
+          if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && items.length) {
+            event.preventDefault()
+            event.stopPropagation()
+            items[event.key === 'ArrowDown' ? 0 : items.length - 1]?.focus()
+          } else if (event.key === 'Enter' && items.length) {
+            event.preventDefault()
+            event.stopPropagation()
+            items[0]?.click()
+          } else if (!DROPDOWN_NAV_KEYS.has(event.key)) {
+            event.stopPropagation()
+          }
         }}
         type="text"
         {...props}

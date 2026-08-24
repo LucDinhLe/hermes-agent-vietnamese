@@ -3,17 +3,20 @@ import { deleteLearningNode } from '@/hermes'
 import { type Translations, useI18n } from '@/i18n'
 import { notify } from '@/store/notifications'
 
-export const ARCHIVE_SKILL_DESCRIPTION = 'The skill is archived and can be restored with `hermes curator restore`.'
-
 export function notifySkillArchived(t: Translations): void {
   notify({ kind: 'success', message: t.skills.skillArchivedMessage, title: t.skills.skillArchivedTitle })
 }
 
-export async function archiveLearningSkill(id: string): Promise<void> {
-  const res = await deleteLearningNode(id)
+export async function archiveLearningSkill(
+  id: string,
+  profile?: null | string,
+  connectionId?: null | string,
+  failureMessage = ''
+): Promise<void> {
+  const res = await deleteLearningNode(id, profile, connectionId)
 
   if (!res.ok) {
-    throw new Error(res.message || 'Archive failed')
+    throw new Error(res.message || failureMessage)
   }
 }
 
@@ -26,23 +29,30 @@ export function fireOptimistic(action: Promise<void>, rollback: () => void, onFa
 }
 
 interface ArchiveSkillConfirmDialogProps {
+  /** Immutable backend source paired with `profile`. */
+  connectionId?: null | string
   /** Apply optimistic UI updates; return rollback if the background archive fails. */
   onApply: () => () => void
   onClose: () => void
   onFailure?: (err: unknown, skillName: string) => void
   onSuccess?: () => void
   open: boolean
+  /** Capabilities profile-scope override — archive against THIS profile's
+   *  backend; undefined/null keeps the app-wide active profile. */
+  profile?: null | string
   skillId: string
   skillName: string
 }
 
 /** Shared archive confirm for learned skills (capabilities page + memory graph). */
 export function ArchiveSkillConfirmDialog({
+  connectionId,
   onApply,
   onClose,
   onFailure,
   onSuccess,
   open,
+  profile,
   skillId,
   skillName
 }: ArchiveSkillConfirmDialogProps) {
@@ -51,7 +61,7 @@ export function ArchiveSkillConfirmDialog({
   return (
     <ConfirmDialog
       confirmLabel={t.skills.archive}
-      description={ARCHIVE_SKILL_DESCRIPTION}
+      description={t.skills.archiveDescription}
       destructive
       dismissOnConfirm
       onClose={onClose}
@@ -59,7 +69,7 @@ export function ArchiveSkillConfirmDialog({
         const rollback = onApply()
 
         fireOptimistic(
-          archiveLearningSkill(skillId).then(() => {
+          archiveLearningSkill(skillId, profile, connectionId, t.skills.archiveFailed).then(() => {
             notifySkillArchived(t)
             onSuccess?.()
           }),
@@ -68,7 +78,7 @@ export function ArchiveSkillConfirmDialog({
         )
       }}
       open={open}
-      title={`Archive ${skillName}?`}
+      title={t.skills.archiveConfirmTitle(skillName)}
     />
   )
 }

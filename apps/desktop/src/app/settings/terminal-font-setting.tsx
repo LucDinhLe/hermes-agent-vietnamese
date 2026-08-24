@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   normalizeTerminalFontFamily,
@@ -10,10 +10,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { saveHermesConfig } from '@/hermes'
 import { useI18n } from '@/i18n'
+import type { BackendOwner } from '@/store/backend-owner'
 import { notifyError } from '@/store/notifications'
 import type { HermesConfigRecord } from '@/types/hermes'
 
-import { setHermesConfigCache, useHermesConfigRecord } from '../hooks/use-config-record'
+import { useBackendOwnerGuard } from '../hooks/use-backend-owner-guard'
+import { hermesConfigCacheWriter, setHermesConfigCache, useHermesConfigRecord } from '../hooks/use-config-record'
 import { useOnProfileSwitch } from '../hooks/use-on-profile-switch'
 
 import { getNested, setNested } from './helpers'
@@ -25,10 +27,18 @@ function fontFamilyFromConfig(config: HermesConfigRecord): string {
   return normalizeTerminalFontFamily(getNested(config, 'terminal.font_family'))
 }
 
-export function TerminalFontSetting() {
+export function TerminalFontSetting({ backendOwner = null }: { backendOwner?: BackendOwner | null }) {
   const { t } = useI18n()
   const copy = t.settings.appearance
-  const { data: loadedConfig } = useHermesConfigRecord()
+  const { data: loadedConfig } = useHermesConfigRecord(backendOwner?.profile, backendOwner?.connectionId)
+
+  const writeConfigCache = useMemo(
+    () =>
+      backendOwner ? hermesConfigCacheWriter(backendOwner.profile, backendOwner.connectionId) : setHermesConfigCache,
+    [backendOwner]
+  )
+
+  const isCurrentOwner = useBackendOwnerGuard(backendOwner)
   // draft === null ⇔ unseeded: nothing painted yet for this profile. The
   // profile-switch handler resets it to null and records the config object
   // it was looking at (`staleConfig`) — the seed effect refuses to re-seed
@@ -88,20 +98,20 @@ export function TerminalFontSetting() {
     const timeout = window.setTimeout(() => {
       const next = setNested(loadedConfig, 'terminal.font_family', value)
 
-      void saveHermesConfig(next)
+      void saveHermesConfig(next, backendOwner?.profile, backendOwner?.connectionId)
         .then(result => {
           if (!result.ok) {
             throw new Error(t.settings.config.autosaveFailed)
           }
 
-          if (saveVersionRef.current !== version) {
+          if (!isCurrentOwner() || saveVersionRef.current !== version) {
             return
           }
 
-          setHermesConfigCache(next)
+          writeConfigCache(next)
         })
         .catch(error => {
-          if (saveVersionRef.current !== version) {
+          if (!isCurrentOwner() || saveVersionRef.current !== version) {
             return
           }
 
@@ -114,7 +124,16 @@ export function TerminalFontSetting() {
     }, AUTOSAVE_DELAY_MS)
 
     return () => window.clearTimeout(timeout)
-  }, [draft, loadedConfig, saveVersion, t.settings.config.autosaveFailed])
+  }, [
+    backendOwner?.connectionId,
+    backendOwner?.profile,
+    draft,
+    isCurrentOwner,
+    loadedConfig,
+    saveVersion,
+    t.settings.config.autosaveFailed,
+    writeConfigCache
+  ])
 
   const update = (value: string) => {
     saveVersionRef.current += 1

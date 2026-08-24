@@ -8,7 +8,8 @@ import {
   QUICK_TARGET_NEW,
   type QuickComposerEvent,
   quickComposerReducer,
-  type QuickComposerState
+  type QuickComposerState,
+  quickEntrySessionTarget
 } from '@/store/quick-entry'
 
 /**
@@ -189,7 +190,7 @@ export function QuickEntryApp() {
             <option value={QUICK_TARGET_CURRENT}>{copy.currentChat}</option>
             <option value={QUICK_TARGET_NEW}>{copy.newSession}</option>
             {state.sessions.map(session => (
-              <option key={session.id} value={session.id}>
+              <option key={quickEntrySessionTarget(session)} value={quickEntrySessionTarget(session)}>
                 {session.title}
               </option>
             ))}

@@ -3,8 +3,11 @@ import { useEffect, useState } from 'react'
 import { deleteEnvVar, getEnvVars, revealEnvVar, setEnvVar } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { type IconComponent } from '@/lib/icons'
+import type { BackendOwner } from '@/store/backend-owner'
 import { notify, notifyError } from '@/store/notifications'
 import type { EnvVarInfo } from '@/types/hermes'
+
+import { useBackendOwnerGuard } from '../hooks/use-backend-owner-guard'
 
 import { asText, includesQuery, redactedValue, withoutKey } from './helpers'
 import { Pill } from './primitives'
@@ -40,8 +43,13 @@ export function SettingsCategoryHeading({ count, icon: Icon, title }: CategoryHe
 
 // Owns the env-var fetch + the edit/reveal/save/delete lifecycle so multiple
 // credential pages (Providers, Keys) share one source of truth and one set of
-// mutation handlers instead of duplicating the plumbing.
-export function useEnvCredentials(): UseEnvCredentials {
+// mutation handlers instead of duplicating the plumbing. A concrete owner pins
+// both the backend and profile for the whole async operation; null preserves
+// the legacy ambient path for standalone/test consumers.
+export function useEnvCredentials(
+  owner: BackendOwner | null = null,
+  ambientProfile: null | string = null
+): UseEnvCredentials {
   const { t } = useI18n()
   const credentials = t.settings.credentials
   const toolsets = t.settings.toolsets
@@ -49,6 +57,9 @@ export function useEnvCredentials(): UseEnvCredentials {
   const [edits, setEdits] = useState<Record<string, string>>({})
   const [revealed, setRevealed] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState<string | null>(null)
+  const isCurrentOwner = useBackendOwnerGuard(owner)
+  const profile = owner?.profile ?? ambientProfile ?? undefined
+  const connectionId = owner?.connectionId
 
   // Best-effort cleanup of a retired localStorage flag (global "Show
   // advanced" toggle) — everything in these views is configuration-level.
@@ -63,21 +74,24 @@ export function useEnvCredentials(): UseEnvCredentials {
   useEffect(() => {
     let cancelled = false
 
+    setVars(null)
+
     void (async () => {
       try {
-        const next = await getEnvVars()
+        const next = await getEnvVars(profile, connectionId)
 
-        if (!cancelled) {
+        if (!cancelled && isCurrentOwner()) {
           setVars(next)
         }
       } catch (err) {
-        notifyError(err, t.settings.keys.failedLoad)
+        if (!cancelled && isCurrentOwner()) {
+          notifyError(err, t.settings.keys.failedLoad)
+        }
       }
     })()
 
     return () => void (cancelled = true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount; copy is stable
-  }, [])
+  }, [connectionId, isCurrentOwner, profile, t.settings.keys.failedLoad])
 
   function patchVar(key: string, patch: Partial<Pick<EnvVarInfo, 'is_set' | 'redacted_value'>>) {
     setVars(c => (c ? { ...c, [key]: { ...c[key], ...patch } } : c))
@@ -98,14 +112,23 @@ export function useEnvCredentials(): UseEnvCredentials {
     setSaving(key)
 
     try {
-      await setEnvVar(key, value)
+      await setEnvVar(key, value, profile, connectionId)
+
+      if (!isCurrentOwner()) {
+        return
+      }
+
       patchVar(key, { is_set: true, redacted_value: redactedValue(value) })
       clearLocalState(key)
       notify({ kind: 'success', title: toolsets.savedTitle, message: toolsets.savedMessage(key) })
     } catch (err) {
-      notifyError(err, toolsets.failedSave(key))
+      if (isCurrentOwner()) {
+        notifyError(err, toolsets.failedSave(key))
+      }
     } finally {
-      setSaving(null)
+      if (isCurrentOwner()) {
+        setSaving(null)
+      }
     }
   }
 
@@ -122,18 +145,29 @@ export function useEnvCredentials(): UseEnvCredentials {
     setSaving(key)
 
     try {
-      await setEnvVar(key, trimmed)
+      await setEnvVar(key, trimmed, profile, connectionId)
+
+      if (!isCurrentOwner()) {
+        return { ok: false }
+      }
+
       patchVar(key, { is_set: true, redacted_value: redactedValue(trimmed) })
       clearLocalState(key)
       notify({ kind: 'success', message: toolsets.savedMessage(key), title: toolsets.savedTitle })
 
       return { ok: true }
     } catch (err) {
+      if (!isCurrentOwner()) {
+        return { ok: false }
+      }
+
       notifyError(err, toolsets.failedSave(key))
 
       return { message: err instanceof Error ? err.message : credentials.couldNotSave, ok: false }
     } finally {
-      setSaving(null)
+      if (isCurrentOwner()) {
+        setSaving(null)
+      }
     }
   }
 
@@ -145,14 +179,23 @@ export function useEnvCredentials(): UseEnvCredentials {
     setSaving(key)
 
     try {
-      await deleteEnvVar(key)
+      await deleteEnvVar(key, profile, connectionId)
+
+      if (!isCurrentOwner()) {
+        return
+      }
+
       patchVar(key, { is_set: false, redacted_value: null })
       clearLocalState(key)
       notify({ kind: 'success', title: toolsets.removedTitle, message: toolsets.removedMessage(key) })
     } catch (err) {
-      notifyError(err, toolsets.failedRemove(key))
+      if (isCurrentOwner()) {
+        notifyError(err, toolsets.failedRemove(key))
+      }
     } finally {
-      setSaving(null)
+      if (isCurrentOwner()) {
+        setSaving(null)
+      }
     }
   }
 
@@ -164,10 +207,15 @@ export function useEnvCredentials(): UseEnvCredentials {
     }
 
     try {
-      const result = await revealEnvVar(key)
-      setRevealed(c => ({ ...c, [key]: result.value }))
+      const result = await revealEnvVar(key, profile, connectionId)
+
+      if (isCurrentOwner()) {
+        setRevealed(c => ({ ...c, [key]: result.value }))
+      }
     } catch (err) {
-      notifyError(err, toolsets.failedReveal(key))
+      if (isCurrentOwner()) {
+        notifyError(err, toolsets.failedReveal(key))
+      }
     }
   }
 

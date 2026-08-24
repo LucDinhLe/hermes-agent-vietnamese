@@ -33,7 +33,7 @@ def test_download_tables_use_current_release_and_exact_asset_names() -> None:
         "https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/"
         f"{current_release}/"
     )
-    for path in ("README.md", "README.vi.md", ".github/release-notes-vietnamese.md"):
+    for path in ("README.md", "README.vi.md"):
         text = _read(path)
         for filename in PUBLIC_RELEASE["downloadFiles"]:
             assert prefix + filename in text, (
@@ -41,12 +41,55 @@ def test_download_tables_use_current_release_and_exact_asset_names() -> None:
             )
 
 
-def test_release_notes_identify_current_default_and_rollback() -> None:
+def test_featured_candidate_notes_use_the_candidate_assets() -> None:
+    candidate = PUBLIC_RELEASE["featuredCandidate"]
+    assert candidate["releaseClass"] == "community-prerelease"
+    prefix = (
+        "https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/"
+        f"{candidate['tag']}/"
+    )
     text = _read(".github/release-notes-vietnamese.md")
-    assert "bản tải mặc định/Latest" in text
-    assert PUBLIC_RELEASE["tag"] in text
-    assert f"{PUBLIC_RELEASE['rollbackTag']}) được giữ nguyên làm bản quay lui" in text
+    assert candidate["tag"] in text
+    assert "community prerelease, chưa phải stable" in text
+    for filename in PUBLIC_RELEASE["downloadFiles"]:
+        assert prefix + filename in text, (
+            ".github/release-notes-vietnamese.md is missing the featured "
+            f"candidate URL for {filename}"
+        )
+
+
+def test_featured_candidate_does_not_relabel_the_default_release() -> None:
+    text = _read(".github/release-notes-vietnamese.md")
+    assert PUBLIC_RELEASE["featuredCandidate"]["tag"] != PUBLIC_RELEASE["tag"]
+    assert "bản tải mặc định/Latest" not in text
     assert "Bản ổn định/Latest vẫn là" not in text
+
+
+def test_published_candidate_requires_a_public_readme_callout() -> None:
+    candidate = PUBLIC_RELEASE["featuredCandidate"]
+    if candidate.get("published") is not True:
+        return
+
+    release_url = (
+        "https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/"
+        f"{candidate['tag']}"
+    )
+    download_prefix = (
+        "https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/"
+        f"{candidate['tag']}/"
+    )
+
+    for path in ("README.md", "README.vi.md"):
+        text = _read(path)
+        assert candidate["tag"] in text, f"{path} must feature the published candidate"
+        assert "prerelease" in text.lower(), (
+            f"{path} must identify {candidate['tag']} as prerelease"
+        )
+        assert release_url in text, f"{path} must link to the candidate release page"
+        for filename in PUBLIC_RELEASE["downloadFiles"]:
+            assert download_prefix + filename in text, (
+                f"{path} is missing the candidate URL for {filename}"
+            )
 
 
 def test_windows_guide_matches_published_x64_identity() -> None:
@@ -61,7 +104,6 @@ def test_windows_warning_images_are_published_and_referenced() -> None:
     required_docs = (
         "README.vi.md",
         "docs/cai-dat-windows-bang-anh.md",
-        ".github/release-notes-vietnamese.md",
     )
     for filename in PUBLIC_RELEASE["windowsInstallImages"]:
         image = image_dir / filename
@@ -73,6 +115,8 @@ def test_windows_warning_images_are_published_and_referenced() -> None:
 
 
 def test_public_introduction_does_not_duplicate_v25_changelog() -> None:
-    text = _read(".github/release-notes-vietnamese.md")
-    assert "Cải thiện trong bản v25" not in text
-    assert "Điểm mạnh so với cách tự cài Hermes Agent từ mã nguồn" in text
+    default_readme = _read("README.md")
+    candidate_notes = _read(".github/release-notes-vietnamese.md")
+    assert "Cải thiện trong bản v25" not in default_readme
+    assert "Cải thiện trong bản v25" not in candidate_notes
+    assert "Điểm mạnh so với cách tự cài Hermes Agent từ mã nguồn" in default_readme

@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { __resetElapsedTimerRegistryForTests } from '@/components/chat/activity-timer'
 import { I18nProvider } from '@/i18n'
+import { $providerWaitSessions, setSessionProviderWait } from '@/store/provider-wait'
 import { $activeSessionId, $turnStartedAt } from '@/store/session'
+import { $workProgressSessions, setSessionWorkProgress } from '@/store/work-progress'
 
 import { ResponseLoadingIndicator } from './status'
 
@@ -19,6 +21,10 @@ describe('ResponseLoadingIndicator timer', () => {
   beforeEach(() => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+    // useViewedInterval gates ticking on document focus + visibility; jsdom's
+    // hasFocus() is unreliable across runners, so pin it (same as the
+    // background-sync backstop tests).
+    vi.spyOn(globalThis.document, 'hasFocus').mockReturnValue(true)
     __resetElapsedTimerRegistryForTests()
   })
 
@@ -26,7 +32,10 @@ describe('ResponseLoadingIndicator timer', () => {
     cleanup()
     $activeSessionId.set(null)
     $turnStartedAt.set(null)
+    $providerWaitSessions.set({})
+    $workProgressSessions.set({})
     __resetElapsedTimerRegistryForTests()
+    vi.restoreAllMocks()
     vi.useRealTimers()
   })
 
@@ -52,6 +61,33 @@ describe('ResponseLoadingIndicator timer', () => {
     renderIndicator()
 
     expect(screen.getAllByText((_, node) => node?.textContent === '8s').length).toBeGreaterThan(0)
+  })
+
+  it('names a prolonged provider wait in the existing response status row', () => {
+    $activeSessionId.set('session-a')
+    $turnStartedAt.set(Date.now())
+    setSessionProviderWait('session-a', '⏳ waiting on local-model — 30s with no output yet')
+
+    renderIndicator()
+
+    expect(screen.getByText('⏳ waiting on local-model — 30s with no output yet')).toBeTruthy()
+  })
+
+  it('shows both the Advisor action and its workflow reason', () => {
+    $activeSessionId.set('session-a')
+    $turnStartedAt.set(Date.now())
+    setSessionWorkProgress('session-a', {
+      checkpoint: 'plan',
+      kind: 'advisor',
+      state: 'reviewing'
+    })
+
+    renderIndicator()
+
+    expect(screen.getByText('Advisor is reviewing the plan')).toBeTruthy()
+    expect(
+      screen.getByText('To verify goal alignment, constraints, and authorization before changes run.')
+    ).toBeTruthy()
   })
 })
 

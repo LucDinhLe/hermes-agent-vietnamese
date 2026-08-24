@@ -2,15 +2,23 @@ import { atom } from 'nanostores'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { NO_PROJECT_ID, type SidebarProjectTree } from '@/app/chat/sidebar/projects/workspace-groups'
-import { $sidebarAgentsGrouped } from '@/store/layout'
+import { $sidebarAgentsGrouped, setSidebarAgentsGrouped } from '@/store/layout'
 import { $activeGatewayProfile } from '@/store/profile'
-import { $currentCwd, $selectedStoredSessionId, $sessions, applyConfiguredDefaultProjectDir } from '@/store/session'
+import {
+  $connection,
+  $currentCwd,
+  $selectedStoredSessionId,
+  $sessions,
+  applyConfiguredDefaultProjectDir
+} from '@/store/session'
 
 import {
   $activeProjectId,
+  $projects,
   $projectScope,
   $projectsRpcAvailable,
   $projectTree,
+  $projectTreeOwner,
   $removedSessionIds,
   $sessionMutationsInFlight,
   $worktreeRefreshToken,
@@ -29,7 +37,9 @@ import {
   refreshWorktrees,
   resolveNewSessionCwd,
   scanAndRecordRepos,
-  tombstoneSessions
+  startWorkInRepo,
+  tombstoneSessions,
+  updateProject
 } from './projects'
 
 vi.mock('@/i18n', () => ({
@@ -53,7 +63,10 @@ vi.mock('@/store/gateway', () => ({
   ensureActiveGatewayOpen: vi.fn()
 }))
 
-vi.mock('@/lib/desktop-git', () => ({ desktopGit: vi.fn() }))
+vi.mock('@/lib/desktop-git', async importOriginal => ({
+  ...((await importOriginal()) as Record<string, unknown>),
+  desktopGit: vi.fn()
+}))
 
 vi.mock('@/hermes', () => ({
   getHermesConfig: vi.fn(),
@@ -66,6 +79,7 @@ const fs = await import('@/lib/desktop-fs')
 const desktopDefaultCwd = vi.mocked(fs.desktopDefaultCwd)
 const isDesktopFsRemoteMode = vi.mocked(fs.isDesktopFsRemoteMode)
 const selectDesktopPaths = vi.mocked(fs.selectDesktopPaths)
+const writeDesktopFileText = vi.mocked(fs.writeDesktopFileText)
 
 const gw = await import('@/store/gateway')
 const activeGateway = vi.mocked(gw.activeGateway)
@@ -78,6 +92,11 @@ const hermes = await import('@/hermes')
 const getHermesConfig = vi.mocked(hermes.getHermesConfig)
 const notifications = await import('@/store/notifications')
 const notify = vi.mocked(notifications.notify)
+
+afterEach(() => {
+  $connection.set(null)
+  $projectTreeOwner.set(null)
+})
 
 describe('project scope', () => {
   beforeEach(() => {
@@ -274,6 +293,33 @@ describe('worktree refresh', () => {
   })
 })
 
+describe('startWorkInRepo remote capability gate (#81724)', () => {
+  it('names the stale-backend remedy when a remote gateway lacks the worktree route', async () => {
+    isDesktopFsRemoteMode.mockReturnValue(true)
+    desktopGit.mockReturnValue({
+      worktreeAdd: vi.fn(async () => {
+        throw new Error(
+          'Expected JSON from https://vps/api/git/worktree/add but got HTML (status 404). The endpoint is likely missing on the Hermes backend.'
+        )
+      })
+    } as never)
+
+    // The i18n mock echoes keys, so the surfaced error is the catalog key.
+    await expect(startWorkInRepo('/srv/repo', { branch: 'x' })).rejects.toThrow('sidebar.projects.worktreeStaleBackend')
+  })
+
+  it('re-throws real git failures untouched (a remote 400 is not a capability verdict)', async () => {
+    isDesktopFsRemoteMode.mockReturnValue(true)
+    desktopGit.mockReturnValue({
+      worktreeAdd: vi.fn(async () => {
+        throw new Error("400: fatal: 'stale' is not a commit")
+      })
+    } as never)
+
+    await expect(startWorkInRepo('/srv/repo', { branch: 'x' })).rejects.toThrow('not a commit')
+  })
+})
+
 describe('pickProjectFolder', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -311,7 +357,7 @@ describe('pickProjectFolder', () => {
 describe('createProject', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    $sidebarAgentsGrouped.set(false)
+    setSidebarAgentsGrouped(false)
     $activeProjectId.set(null)
     $projectsRpcAvailable.set(null)
   })
@@ -349,6 +395,27 @@ describe('createProject', () => {
       'sidebar.projects.staleBackend'
     )
     expect($projectsRpcAvailable.get()).toBe(false)
+  })
+
+  it('writes IDEA.md after creation and warns when that file cannot be saved', async () => {
+    const created = { folders: [], id: 'p_new', name: 'Demo', primary_path: '/srv/demo' }
+
+    const request = vi.fn(async (method: string) =>
+      method === 'projects.create'
+        ? { project: created }
+        : { active_id: 'p_new', projects: [created], scoped_session_ids: [] }
+    )
+
+    activeGateway.mockReturnValue({ connectionState: 'open', request } as never)
+    writeDesktopFileText.mockRejectedValueOnce(new Error('read only'))
+
+    await createProject({ folders: ['/srv/demo'], idea: '# Demo', name: 'Demo' })
+
+    expect(writeDesktopFileText).toHaveBeenCalledWith('/srv/demo/IDEA.md', '# Demo\n')
+    expect(notify).toHaveBeenCalledWith({
+      kind: 'warning',
+      message: 'sidebar.projects.ideaSaveFailed'
+    })
   })
 })
 
@@ -491,10 +558,13 @@ describe('project tree profile isolation', () => {
     let current = gatewayA
     activeGateway.mockImplementation(() => current as never)
     gatewayAtom.set(gatewayA as never)
+    $activeGatewayProfile.set('profile-a')
+    $connection.set({ connectionId: 'source-a', mode: 'remote' } as never)
 
     const pendingA = refreshProjectTree()
     current = gatewayB
     $activeGatewayProfile.set('profile-b')
+    $connection.set({ connectionId: 'source-b', mode: 'remote' } as never)
     gatewayAtom.set(gatewayB as never)
     await refreshProjectTree()
     resolveA?.({
@@ -505,6 +575,75 @@ describe('project tree profile isolation', () => {
     await pendingA
 
     expect($projectTree.get().map(project => project.id)).toEqual(['profile-b'])
+    expect($projectTreeOwner.get()).toEqual({ connectionId: 'source-b', profile: 'profile-b', scope: 'profile' })
+  })
+
+  it('retains the previous tree owner when the new source refresh fails', async () => {
+    const gatewayA = {
+      connectionState: 'open',
+      request: vi.fn().mockResolvedValue({
+        active_id: null,
+        projects: [{ id: 'project-a', label: 'A', path: '/work', repos: [], sessionCount: 0 }],
+        scoped_session_ids: []
+      })
+    }
+
+    const gatewayB = {
+      connectionState: 'open',
+      request: vi.fn().mockRejectedValue(new Error('offline'))
+    }
+
+    let current = gatewayA
+
+    activeGateway.mockImplementation(() => current as never)
+    gatewayAtom.set(gatewayA as never)
+    $activeGatewayProfile.set('profile-a')
+    $connection.set({ connectionId: 'source-a', mode: 'remote' } as never)
+    await refreshProjectTree()
+
+    current = gatewayB
+    gatewayAtom.set(gatewayB as never)
+    $activeGatewayProfile.set('profile-b')
+    $connection.set({ connectionId: 'source-b', mode: 'remote' } as never)
+    await refreshProjectTree()
+
+    expect($projectTree.get().map(project => project.id)).toEqual(['project-a'])
+    expect($projectTreeOwner.get()).toEqual({ connectionId: 'source-a', profile: 'profile-a', scope: 'profile' })
+  })
+
+  it('does not roll an old source snapshot over a new source after a rejected optimistic write', async () => {
+    let rejectUpdate: ((error: Error) => void) | undefined
+
+    const updateResult = new Promise((_resolve, reject) => {
+      rejectUpdate = reject
+    })
+
+    const gatewayA = { connectionState: 'open', request: vi.fn(() => updateResult) }
+
+    activeGateway.mockReturnValue(gatewayA as never)
+    gatewayAtom.set(gatewayA as never)
+    $activeGatewayProfile.set('profile-a')
+    $connection.set({ connectionId: 'source-a', mode: 'remote' } as never)
+    $projects.set([{ folders: [], id: 'project-a', name: 'A' }] as never)
+    $projectTree.set([{ id: 'project-a', label: 'A', path: '/a', repos: [], sessionCount: 0 }])
+    $projectTreeOwner.set({ connectionId: 'source-a', profile: 'profile-a', scope: 'profile' })
+
+    const pending = updateProject('project-a', { name: 'A edited' })
+
+    expect($projectTree.get()[0]?.label).toBe('A edited')
+
+    $activeGatewayProfile.set('profile-b')
+    $connection.set({ connectionId: 'source-b', mode: 'remote' } as never)
+    $projects.set([{ folders: [], id: 'project-b', name: 'B' }] as never)
+    $projectTreeOwner.set(null)
+    $projectTree.set([{ id: 'project-b', label: 'B', path: '/b', repos: [], sessionCount: 0 }])
+    $projectTreeOwner.set({ connectionId: 'source-b', profile: 'profile-b', scope: 'profile' })
+
+    rejectUpdate?.(new Error('source A rejected update'))
+    await expect(pending).rejects.toThrow('source A rejected update')
+
+    expect($projectTree.get().map(project => project.id)).toEqual(['project-b'])
+    expect($projectTreeOwner.get()).toEqual({ connectionId: 'source-b', profile: 'profile-b', scope: 'profile' })
   })
 })
 

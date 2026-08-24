@@ -178,6 +178,7 @@ try:
 except (ValueError, TypeError):
     _ws_orphan_reap_grace = 20.0
 _WS_ORPHAN_REAP_GRACE_S = max(0.0, _ws_orphan_reap_grace)
+_TURN_SETTLE_BEFORE_CLOSE_SECONDS = 5.0
 _DETAIL_SECTION_NAMES = ("thinking", "tools", "subagents", "activity")
 _DETAIL_MODES = frozenset({"hidden", "collapsed", "expanded"})
 
@@ -220,6 +221,7 @@ _LONG_HANDLERS = frozenset(
         "complete.path",
         "complete.slash",
         "llm.oneshot",
+        "reasoning.summarize",
         # model.options builds the full picker payload — per-provider credential
         # pool checks, pricing fetch, Nous tier check, optional custom-provider
         # probe — measured seconds inline. While it runs on the reader thread,
@@ -248,7 +250,25 @@ _LONG_HANDLERS = frozenset(
         # dead after a few skin switches. The handler serializes concurrent
         # reloads via _mcp_reload_lock.
         "reload.mcp",
+        # MCP server test/OAuth RPCs block on network: a probe spawns a stdio
+        # server (cold `npx` cold start = many seconds) or connects to a remote
+        # endpoint; oauth.start blocks up to ~30s waiting for the provider to
+        # publish an authorization URL. Keep them off the reader thread.
+        "mcp.servers.test",
+        "mcp.servers.oauth.start",
         "process.list",
+        # profiles.list runs list_profiles() (recursive skill-tree walk per
+        # profile) and opens each profile's state.db for the last-session
+        # preview; profiles.create copies skill bundles. Both are seconds-
+        # scale on cold disks — keep them off the WS reader thread.
+        "profiles.configure",
+        "profiles.create",
+        "profiles.describe",
+        "profiles.get_asset",
+        "profiles.list",
+        "profiles.set_asset",
+        # image.generate is a multi-second remote API round-trip.
+        "image.generate",
         "projects.discover_repos",
         "projects.record_repos",
         "projects.for_cwd",
@@ -264,6 +284,27 @@ _LONG_HANDLERS = frozenset(
         # the WS read loop and causing false "needs setup" (#50005 family).
         "setup.runtime_check",
         "setup.status",
+        # Voice RPCs can trigger check_voice_requirements() → STT provider
+        # auto-detect → a SYNCHRONOUS faster-whisper lazy install (uv/pip
+        # subprocess with a 300s timeout). Inline they stall the WS reader
+        # loop (handle_ws awaits dispatch before reading the next frame), so
+        # prompt.submit / session.list queued behind a voice.toggle sit
+        # unread and the desktop "send message" appears dead for minutes
+        # (reproduced: voice.toggle → session.list 40s+ timeout). Route them
+        # to the pool so a slow lazy install can't block message handling.
+        "voice.toggle",
+        "voice.record",
+        "voice.tts",
+        # wake.start calls check_wake_word_requirements() → _stt_ready() →
+        # _get_provider() → _try_lazy_install_stt() → ensure("stt.faster_whisper")
+        # (same synchronous subprocess install chain as the voice RPCs above).
+        # It also calls start_listening() → _build_engine() whose constructors
+        # call lazy_deps.ensure("wake.openwakeword" / "wake.sherpa" / …).
+        # wake.status calls check_wake_word_requirements() too and is polled
+        # by the desktop on every gateway-ready, so it can re-trigger the
+        # same block on a fresh launch. Same bug class as #21123 / #50005.
+        "wake.start",
+        "wake.status",
         # Desktop also polls the in-memory live-session registry every 15s.
         # The handler is normally cheap, but under heavy agent GIL pressure it
         # can still stall for tens of seconds. Keep it off the WS reader thread
@@ -329,6 +370,30 @@ _stdio_transport = StdioTransport(lambda: _real_stdout, _stdout_lock)
 _detached_ws_transport = _DropTransport()
 
 
+def _prepend_tool_paths(env: dict[str, str]) -> dict[str, str]:
+    """Prepend Hermes' managed bin, the venv bin dir, and the user-local
+    bin dir to PATH so slash_worker child processes can resolve
+    Hermes-managed CLIs (browser-use, uvx, uv) even when the parent
+    gateway was launched with a minimal PATH (e.g. by the
+    Desktop/Dashboard app). Managed bin leads, matching the managed-first
+    resolution policy for the Browser Use CLI."""
+    managed_bin = ""
+    try:
+        from hermes_constants import get_hermes_home
+
+        managed_bin = str(Path(get_hermes_home()) / "bin")
+    except Exception:
+        pass
+    venv_bin = str(Path(sys.executable).parent)  # <venv>/bin (POSIX) or <venv>/Scripts (Windows)
+    user_bin = str(Path.home() / ".local" / "bin")
+    existing = env.get("PATH") or ""
+    env["PATH"] = os.pathsep.join(
+        [p for p in (managed_bin, venv_bin, user_bin) if p]
+        + ([existing] if existing else [])
+    )
+    return env
+
+
 class _SlashWorker:
     """Persistent HermesCLI subprocess for slash commands."""
 
@@ -365,6 +430,11 @@ class _SlashWorker:
             inherit_profile_home=False,  # base already carries the HOME contract
             extra={"HERMES_HOME": str(profile_home)} if profile_home else None,
         )
+        # Prepend the Hermes venv bin dir and the user-local bin dir to PATH so
+        # slash_worker child processes can resolve Hermes-managed CLIs
+        # (browser-use, uvx) even when the parent gateway was launched with a
+        # minimal PATH (e.g. by the Desktop/Dashboard app). See #83845.
+        env = _prepend_tool_paths(env)
 
         # start_new_session=True detaches the slash worker into its own
         # process group / session. Without this, the worker inherits the
@@ -670,6 +740,10 @@ def _finalize_session(session: dict | None, end_reason: str = "tui_close") -> No
     if not session or session.get("_finalized"):
         return
     session["_finalized"] = True
+    history_ready = session.get("resume_history_ready")
+    if history_ready is not None and not history_ready.is_set():
+        session["resume_history_error"] = "session resume cancelled"
+        history_ready.set()
     _release_active_session_slot(session)
     stop_event = session.get("_notif_stop")
     if stop_event is not None:
@@ -892,7 +966,10 @@ def _pop_session_by_id(sid: str) -> dict | None:
     the global ``_session_resume_lock``.
     """
     with _sessions_lock:
-        session = _sessions.pop(sid, None)
+        session = _sessions.get(sid)
+        if session is not None:
+            session["_closing"] = True
+            _sessions.pop(sid, None)
     if session is None:
         return None
     # The session is already out of _sessions here, so downstream teardown
@@ -908,6 +985,22 @@ def _teardown_popped_session(
     """Finish a close after the caller has atomically detached the session."""
     if session is None:
         return False
+    run_thread = session.get("_run_thread")
+    if (
+        end_reason != "tui_shutdown"
+        and run_thread is not None
+        and run_thread is not threading.current_thread()
+    ):
+        try:
+            if run_thread.is_alive():
+                run_thread.join(timeout=_TURN_SETTLE_BEFORE_CLOSE_SECONDS)
+            if run_thread.is_alive():
+                logger.warning(
+                    "session turn thread still alive after %.1fs teardown grace",
+                    _TURN_SETTLE_BEFORE_CLOSE_SECONDS,
+                )
+        except Exception:
+            logger.debug("failed waiting for session turn thread", exc_info=True)
     _teardown_session(session, end_reason=end_reason)
     return True
 
@@ -1668,6 +1761,7 @@ def _compute_host_turn_frame(
     text: Any,
     image_paths: list[str] | None = None,
     queued_prompt_generation: int | None = None,
+    display_kind: str | None = None,
 ) -> dict:
     with session["history_lock"]:
         history = list(session.get("history", []))
@@ -1683,6 +1777,7 @@ def _compute_host_turn_frame(
         "request_id": rid,
         "session_key": session.get("session_key") or sid,
         "text": text,
+        **({"display_kind": display_kind} if display_kind else {}),
         "history": history,
         "history_version": history_version,
         "cols": int(session.get("cols", 80) or 80),
@@ -1691,6 +1786,7 @@ def _compute_host_turn_frame(
         "model_override": session.get("model_override"),
         "reasoning_config_override": session.get("create_reasoning_override"),
         "service_tier_override": session.get("create_service_tier_override"),
+        "advisor_enabled_override": session.get("create_advisor_override"),
         "source": _session_source(session),
         "attached_images": attached_images,
         "queued_prompt_generation": queued_prompt_generation,
@@ -1771,6 +1867,7 @@ def _submit_prompt_to_compute_host(
     text: Any,
     image_paths: list[str] | None = None,
     queued_prompt_generation: int | None = None,
+    display_kind: str | None = None,
 ) -> dict:
     cfg = _load_dashboard_process_isolation_config()
     frame = _compute_host_turn_frame(
@@ -1780,6 +1877,7 @@ def _submit_prompt_to_compute_host(
         text,
         image_paths=image_paths,
         queued_prompt_generation=queued_prompt_generation,
+        display_kind=display_kind,
     )
 
     def _complete(done: dict) -> None:
@@ -1823,13 +1921,8 @@ def _send_compute_host_control(
     )
 
 
-def _emit_approval_request(sid: str, data: dict | None) -> None:
-    """Emit an ``approval.request`` event to the TUI client with the command
-    redacted. The approval payload is built from the RAW command string, so a
-    credential-shaped value Tirith flagged would otherwise be echoed verbatim
-    to the TUI client (#48456 — third egress transport alongside the chat
-    platforms and the SSE/API stream fixed in #50767). Reuse the shared gateway
-    seam so all approval transports redact consistently."""
+def _approval_request_payload(data: dict | None) -> dict:
+    """Build the client-safe representation of a pending approval."""
     payload = dict(data or {})
     if "choices" not in payload:
         if payload.get("smart_denied"):
@@ -1842,6 +1935,49 @@ def _emit_approval_request(sid: str, data: dict | None) -> None:
         from gateway.run import _redact_approval_command
 
         payload["command"] = _redact_approval_command(payload.get("command"))
+    return payload
+
+
+def _pending_clarify_request_payload(sid: str) -> dict | None:
+    """Read the clarify prompt still blocking a session, if there is one.
+
+    Clarify prompts share `_block()`'s pending registry, so a reconnecting
+    client whose transport was detached when `clarify.request` was emitted
+    would otherwise never see the question — the agent thread stays parked on
+    the Event until timeout. Same replay contract as `pending_approval`: a
+    read-only snapshot, the registry stays authoritative and `clarify.respond`
+    with the embedded request_id resolves it.
+    """
+    with _prompt_lock:
+        for rid, (owner_sid, _ev) in _pending.items():
+            if owner_sid != sid:
+                continue
+            event, prompt_payload = _pending_prompt_payloads.get(rid, ("", {}))
+            if event == "clarify.request":
+                return dict(prompt_payload)
+    return None
+
+
+def _pending_approval_request_payload(session_key: str) -> dict | None:
+    """Read the oldest unresolved approval in a session, if there is one."""
+    try:
+        from tools.approval import get_pending_gateway_approval
+
+        approval = get_pending_gateway_approval(session_key)
+    except Exception:
+        logger.debug("failed to read pending approval for %s", session_key, exc_info=True)
+        return None
+    return _approval_request_payload(approval) if approval else None
+
+
+def _emit_approval_request(sid: str, data: dict | None) -> None:
+    """Emit an ``approval.request`` event to the TUI client with the command
+    redacted. The approval payload is built from the RAW command string, so a
+    credential-shaped value Tirith flagged would otherwise be echoed verbatim
+    to the TUI client (#48456 — third egress transport alongside the chat
+    platforms and the SSE/API stream fixed in #50767). Reuse the shared gateway
+    seam so all approval transports redact consistently."""
+    payload = _approval_request_payload(data)
     _emit("approval.request", sid, payload)
 
 
@@ -1859,6 +1995,29 @@ def _status_update(sid: str, kind: str, text: str | None = None):
         if COMPACTION_STATUS_MARKER in body:
             out_kind = "compacting"
     _emit("status.update", sid, {"kind": out_kind, "text": body})
+
+
+def _agent_event(sid: str, event_type: str, payload: dict | None = None) -> None:
+    """Bridge the small allowlisted core-event subset used by interactive UIs."""
+    if event_type != "advisor.progress" or not isinstance(payload, dict):
+        return
+    checkpoint = str(payload.get("checkpoint") or "")
+    state = str(payload.get("state") or "")
+    if checkpoint not in {"plan", "recovery", "final"}:
+        return
+    if state not in {
+        "reviewing",
+        "passed",
+        "revision_requested",
+        "unavailable",
+        "failed",
+        "unresolved",
+    }:
+        return
+    safe_payload = {"checkpoint": checkpoint, "state": state}
+    if summary := str(payload.get("summary") or "").strip()[:600]:
+        safe_payload["summary"] = summary
+    _emit("advisor.progress", sid, safe_payload)
 
 
 def _estimate_image_tokens(width: int, height: int) -> int:
@@ -1891,8 +2050,11 @@ def _ok(rid, result: dict) -> dict:
     return {"jsonrpc": "2.0", "id": rid, "result": result}
 
 
-def _err(rid, code: int, msg: str) -> dict:
-    return {"jsonrpc": "2.0", "id": rid, "error": {"code": code, "message": msg}}
+def _err(rid, code: int, msg: str, data=None) -> dict:
+    error = {"code": code, "message": msg}
+    if data is not None:
+        error["data"] = data
+    return {"jsonrpc": "2.0", "id": rid, "error": error}
 
 
 def method(name: str):
@@ -2171,6 +2333,15 @@ def _start_agent_build(sid: str, session: dict) -> None:
         owns_db = False
         profile_home = current.get("profile_home")
         try:
+            history_ready = current.get("resume_history_ready")
+            if history_ready is not None:
+                if not history_ready.wait(timeout=300.0):
+                    raise TimeoutError("session history hydration timed out")
+                if history_error := current.get("resume_history_error"):
+                    raise RuntimeError(str(history_error))
+                with _sessions_lock:
+                    if _sessions.get(sid) is not current:
+                        return
             tokens = _set_session_context(key)
             # Build against the session's profile (global-remote): bind its
             # HERMES_HOME so config/skills/model resolve to it, and hand the
@@ -2220,7 +2391,7 @@ def _start_agent_build(sid: str, session: dict) -> None:
                     # provider and fail with "No LLM provider configured".
                     kw.update(resume_overrides)
                 else:
-                    # Model/effort/fast the desktop picked for a brand-new chat
+                    # Model/effort/fast/advisor the desktop picked for a brand-new chat
                     # ride in as per-session overrides so the first build uses
                     # them directly (no global config, no build-then-switch).
                     if override := current.get("model_override"):
@@ -2229,9 +2400,19 @@ def _start_agent_build(sid: str, session: dict) -> None:
                         kw["reasoning_config_override"] = reasoning
                     if (tier := current.get("create_service_tier_override")) is not None:
                         kw["service_tier_override"] = tier
+                    if (advisor := current.get("create_advisor_override")) is not None:
+                        kw["advisor_enabled_override"] = advisor
                 agent = _make_agent(sid, key, **kw)
             finally:
                 _clear_session_context(tokens)
+
+            # Bot Mode gate hint: the DB title lands post-first-turn
+            # (pending_title), but the system prompt builds at turn START —
+            # hand the agent its intended title so the "Bot Chat" protocol
+            # gate (agent/system_prompt.py) doesn't depend on write order.
+            _title_hint = str(current.get("pending_title") or "").strip()
+            if _title_hint:
+                agent._session_title_hint = _title_hint
 
             # Session DB row deferred to first run_conversation() call.
             # pending_title applied post-first-message (see cli.exec handler).
@@ -2356,11 +2537,42 @@ def _sess_nowait(params, rid):
 
 
 def _sess(params, rid):
+    s, err = _sess_building(params, rid)
+    if err:
+        return (None, err)
+    return (s, _wait_agent(s, rid))
+
+
+def _sess_building(params, rid):
+    """Resolve a session and warm its agent build WITHOUT waiting for it.
+
+    For handlers that need the session record but not the agent. The attach
+    RPCs are the whole reason this exists: ``image.attach``,
+    ``image.attach_bytes``, ``file.attach``, ``pdf.attach``,
+    ``clipboard.paste`` and ``image.detach`` only read ``cwd`` /
+    ``profile_home`` and mutate ``attached_images`` — every one of those
+    fields is populated when the session record is created, so ``_sess``'s
+    ``_wait_agent`` was buying nothing and charging up to 30 seconds for it.
+
+    That charge landed in the worst possible place. Attach runs BEFORE
+    ``prompt.submit``, none of these methods is in ``_LONG_HANDLERS``, and a
+    non-pooled handler runs inline on the socket reader thread — so pasting an
+    image into a session whose deferred build was still running (MCP
+    discovery, model metadata, skills scan: routinely tens of seconds on a
+    cold start) stalled the send AND every RPC queued behind it on the same
+    socket, with no spinner to explain it. Plain text was unaffected because
+    ``prompt.submit`` already resolves via ``_sess_nowait`` and waits later,
+    off the reader thread — which is exactly why the bug reads as "text is
+    instant, images hang."
+
+    The build is still kicked off (it warms the agent the following
+    ``prompt.submit`` needs); we simply stop blocking on it here.
+    """
     s, err = _sess_nowait(params, rid)
     if err:
         return (None, err)
     _start_agent_build(params.get("session_id") or "", s)
-    return (s, _wait_agent(s, rid))
+    return (s, None)
 
 
 def _normalize_completion_path(path_part: str) -> str:
@@ -2586,13 +2798,7 @@ def _display_session_cwd(session: dict | None) -> str:
     healed = _heal_dead_cwd(cwd)
     if healed and healed != cwd and session is not None:
         session["cwd"] = healed
-        try:
-            with _session_db(session) as db:
-                if db is not None:
-                    db.update_session_cwd(session.get("session_key", ""), healed)
-        except Exception:
-            logger.debug("failed to persist healed session cwd", exc_info=True)
-        _persist_session_git_meta(session, healed)
+        _persist_session_cwd_and_schedule_git_meta(session, healed)
 
     return healed
 
@@ -2675,14 +2881,7 @@ def _reconcile_session_cwd_from_terminal(session: dict | None) -> bool:
     session["cwd_from_settle"] = True
     _register_session_cwd(session)
 
-    with _session_db(session) as db:
-        if db is not None:
-            try:
-                db.update_session_cwd(session.get("session_key", ""), resolved)
-            except Exception:
-                logger.debug("failed to persist settled session cwd", exc_info=True)
-
-    _persist_session_git_meta(session, resolved)
+    _persist_session_cwd_and_schedule_git_meta(session, resolved)
     return True
 
 
@@ -2820,6 +3019,9 @@ def _ensure_session_db_row(session: dict) -> None:
         # service_tier value to the provider. Persist a durable marker so resume
         # can distinguish that choice from an omitted/inherited tier.
         model_config["service_tier"] = create_service_tier_override or "normal"
+    create_advisor_override = session.get("create_advisor_override")
+    if create_advisor_override is not None:
+        model_config["advisor_enabled"] = bool(create_advisor_override)
     # Branch lineage: stamp the same ``_branched_from`` marker the TUI /branch
     # uses so list_sessions_rich keeps the branch listed and the desktop sidebar
     # can nest it under its parent.
@@ -2839,6 +3041,14 @@ def _ensure_session_db_row(session: dict) -> None:
             # means the launch/default profile (matches run_agent's convention).
             profile_name=Path(profile_home).name if profile_home else None,
         )
+        # A session can be born hidden (session.create hidden=true, or a
+        # session.set_hidden that arrived before the row existed): apply the
+        # deferred intent now that the row exists, mirroring pending_title.
+        if session.get("pending_hidden"):
+            try:
+                db.set_session_hidden(key, True)
+            except Exception:
+                logger.debug("failed to apply pending hidden flag", exc_info=True)
     except Exception as exc:
         # Disk-full is not a soft failure: if we swallow it here, prompt.submit
         # returns {"status":"streaming"} and the user's message vanishes with
@@ -2894,6 +3104,13 @@ def _persist_branch_seed(session: dict) -> None:
                         "reasoning_details": msg.get("reasoning_details"),
                         "codex_reasoning_items": msg.get("codex_reasoning_items"),
                         "codex_message_items": msg.get("codex_message_items"),
+                        # Timeline markers (model_switch, personality_switch,
+                        # auto_continue, …) ride as role=user; dropping the tag
+                        # here re-planted them as bare user turns after a
+                        # restart, corrupting the truncate ordinal address
+                        # space the same way #82756 did.
+                        "display_kind": msg.get("display_kind"),
+                        "display_metadata": msg.get("display_metadata"),
                         # Preserve the parent's original message timestamps —
                         # append_message would otherwise stamp time.time() and the
                         # branch's copied history would all appear authored "now".
@@ -2940,7 +3157,7 @@ def _session_db(session: dict):
                 db.close()
 
 
-def _persist_session_git_meta(session: dict, cwd: str) -> None:
+def _persist_session_git_meta(session: dict, cwd: str, generation: int) -> None:
     """Resolve + persist a session's git branch / repo root WITHOUT blocking.
 
     Branch and root come from ``git`` subprocess probes; running them inline on
@@ -2954,7 +3171,13 @@ def _persist_session_git_meta(session: dict, cwd: str) -> None:
     probe never delays gateway shutdown.
     """
     session_key = session.get("session_key", "")
-    if not session_key or not cwd:
+    if (
+        not session_key
+        or not cwd
+        or isinstance(generation, bool)
+        or not isinstance(generation, int)
+        or generation < 1
+    ):
         return
     # Snapshot the routing fields now; the live session dict may be gone by the
     # time the thread runs. `_session_db` reopens the profile-correct db inside.
@@ -2968,11 +3191,50 @@ def _persist_session_git_meta(session: dict, cwd: str) -> None:
                 return
             with _session_db(db_session) as db:
                 if db is not None:
-                    db.update_session_cwd(session_key, cwd, branch, root)
+                    db.publish_session_git_metadata(
+                        session_key,
+                        cwd,
+                        generation,
+                        branch,
+                        root,
+                    )
         except Exception:
             logger.debug("failed to persist session git metadata", exc_info=True)
 
     threading.Thread(target=_run, name="git-meta", daemon=True).start()
+
+
+def _persist_session_cwd_and_schedule_git_meta(
+    session: dict,
+    cwd: str,
+    *,
+    db=None,
+) -> int | None:
+    """Claim a DB-backed probe generation, then start Git enrichment."""
+    try:
+        if db is not None:
+            generation = db.update_session_cwd(
+                session.get("session_key", ""), cwd
+            )
+        else:
+            with _session_db(session) as owner_db:
+                if owner_db is None:
+                    return None
+                generation = owner_db.update_session_cwd(
+                    session.get("session_key", ""), cwd
+                )
+    except Exception:
+        logger.debug("failed to persist session cwd", exc_info=True)
+        return None
+
+    if (
+        isinstance(generation, bool)
+        or not isinstance(generation, int)
+        or generation < 1
+    ):
+        return None
+    _persist_session_git_meta(session, cwd, generation)
+    return generation
 
 
 def _set_session_cwd(session: dict, cwd: str) -> str:
@@ -2990,14 +3252,9 @@ def _set_session_cwd(session: dict, cwd: str) -> str:
     # the terminal wandering must not move the workspace again.
     session["cwd_from_settle"] = False
     _register_session_cwd(session)
-    with _session_db(session) as db:
-        if db is not None:
-            try:
-                db.update_session_cwd(session.get("session_key", ""), resolved)
-            except Exception:
-                logger.debug("failed to persist session cwd", exc_info=True)
-    # Branch/repo-root probes are git subprocesses — capture them off the hot path.
-    _persist_session_git_meta(session, resolved)
+    # The synchronous DB write claims ordering authority; Git subprocesses stay
+    # off the hot path and may publish only for that exact generation.
+    _persist_session_cwd_and_schedule_git_meta(session, resolved)
     try:
         from tools.terminal_tool import cleanup_vm
 
@@ -3280,6 +3537,7 @@ def _block(event: str, sid: str, payload: dict, timeout: float | None = 300) -> 
         "preview.read.request",
         "preview.interact.request",
         "window.read.request",
+        "mcp.setup.request",
     }:
         _emit(
             f"{event.removesuffix('.request')}.expire",
@@ -3410,7 +3668,7 @@ def _pet_sig() -> tuple:
     hatch flow rebuilds a sheet, or the scale changes."""
     display = _load_cfg().get("display") or {}
     pet_cfg = display.get("pet") if isinstance(display.get("pet"), dict) else {}
-    if not pet_cfg or not pet_cfg.get("enabled"):
+    if not pet_cfg or not is_truthy_value(pet_cfg.get("enabled"), default=False):
         return ("off",)
     try:
         enabled, pet, scale = _pet_active_selection()
@@ -3726,9 +3984,16 @@ def _resolve_startup_runtime() -> tuple[str, str | None]:
     return model, None
 
 
-# Bare billing buckets are not routable provider identities (kept in parity with the
-# provider gate in agent_init). Restoring one as a session provider override breaks resume.
-_BARE_BILLING_PROVIDERS = {"auto", "openrouter", "custom"}
+# Bare billing buckets are not routable provider identities; restoring one as a
+# session provider override breaks resume. (agent_init's fail-fast gate is a
+# DIFFERENT set that also skips "openrouter" — there it means "default route,
+# don't fail fast", not "unroutable".)
+# ``openrouter`` is deliberately excluded here — it is a fully routable provider
+# with its own API key and base_url. Sessions that used OpenRouter store
+# ``billing_provider="openrouter"``; dropping it forces resume to the current
+# global model (e.g. a custom endpoint), which is the wrong provider for the
+# stored model. See #57588.
+from hermes_state import _BARE_BILLING_PROVIDERS
 
 
 def _stored_session_runtime_overrides(row: dict | None) -> dict:
@@ -3773,6 +4038,7 @@ def _stored_session_runtime_overrides(row: dict | None) -> dict:
     api_mode = str(model_config.get("api_mode") or "").strip()
     reasoning_config = model_config.get("reasoning_config")
     service_tier = str(model_config.get("service_tier") or "").strip()
+    advisor_enabled = model_config.get("advisor_enabled")
 
     # Heal a bare ``"custom"`` provider stored by an older build (or any leak
     # site that bypassed _runtime_model_config's normalization). Bare custom is
@@ -3821,6 +4087,8 @@ def _stored_session_runtime_overrides(row: dict | None) -> dict:
         overrides["service_tier_override"] = ""
     elif service_tier:
         overrides["service_tier_override"] = service_tier
+    if isinstance(advisor_enabled, bool):
+        overrides["advisor_enabled_override"] = advisor_enabled
 
     return overrides
 
@@ -3833,6 +4101,7 @@ def _runtime_model_config(agent, existing: dict | None = None) -> dict:
     api_mode = str(getattr(agent, "api_mode", "") or "").strip()
     reasoning_config = getattr(agent, "reasoning_config", None)
     service_tier = getattr(agent, "service_tier", None)
+    advisor_settings = getattr(agent, "_advisor_settings", None)
 
     if model:
         config["model"] = model
@@ -3882,6 +4151,8 @@ def _runtime_model_config(agent, existing: dict | None = None) -> dict:
         config["service_tier"] = service_tier
     else:
         config.pop("service_tier", None)
+    if advisor_settings is not None:
+        config["advisor_enabled"] = bool(getattr(advisor_settings, "enabled", False))
 
     return config
 
@@ -3916,6 +4187,9 @@ def _persist_live_session_runtime(session: dict | None) -> None:
             # normal and would otherwise erase the distinction on every live
             # metadata persist.
             model_config["service_tier"] = create_service_tier_override or "normal"
+        create_advisor_override = session.get("create_advisor_override")
+        if create_advisor_override is not None:
+            model_config["advisor_enabled"] = bool(create_advisor_override)
         model = str(getattr(agent, "model", "") or "").strip()
         if hasattr(db, "update_session_meta"):
             db.update_session_meta(session_key, json.dumps(model_config), model or None)
@@ -3923,6 +4197,43 @@ def _persist_live_session_runtime(session: dict | None) -> None:
             db.update_session_model(session_key, model)
     except Exception:
         logger.debug("failed to persist live session runtime", exc_info=True)
+
+
+def _persist_session_advisor_override(session: dict | None) -> None:
+    """Persist an Advisor pin without materializing an abandoned draft row."""
+    if not session:
+        return
+    if session.get("agent") is not None:
+        _persist_live_session_runtime(session)
+        return
+
+    session_key = str(session.get("session_key") or "").strip()
+    if not session_key:
+        return
+    try:
+        with _session_db(session) as db:
+            if db is None or not hasattr(db, "update_session_meta"):
+                return
+            row = db.get_session(session_key)
+            if not row:
+                # A new zero-message draft intentionally has no durable row.
+                # Its in-memory override is written by _ensure_session_db_row
+                # on first submit instead of polluting the sidebar database.
+                return
+            raw_config = row.get("model_config")
+            if isinstance(raw_config, dict):
+                model_config = dict(raw_config)
+            elif isinstance(raw_config, str) and raw_config.strip():
+                parsed = json.loads(raw_config)
+                model_config = parsed if isinstance(parsed, dict) else {}
+            else:
+                model_config = {}
+            model_config["advisor_enabled"] = bool(
+                session.get("create_advisor_override")
+            )
+            db.update_session_meta(session_key, json.dumps(model_config), None)
+    except Exception:
+        logger.debug("failed to persist session Advisor override", exc_info=True)
 
 
 def _persist_live_session_system_prompt(session: dict | None) -> None:
@@ -3938,12 +4249,28 @@ def _persist_live_session_system_prompt(session: dict | None) -> None:
     if db is None or not hasattr(db, "update_system_prompt"):
         return
 
+    # Re-bind HERMES_HOME to the session's profile so load_soul_md() and
+    # build_skills_system_prompt() resolve to the correct profile.  Without
+    # this, _start_agent_build's finally block has already reset the
+    # override and the rebuilt prompt silently uses the root profile's
+    # SOUL.md and skills.  See issue #50233.
+    profile_home = session.get("profile_home")
+    home_token = (
+        set_hermes_home_override(profile_home) if profile_home else None
+    )
     try:
         prompt = agent._build_system_prompt(None)
         agent._cached_system_prompt = prompt
         db.update_system_prompt(getattr(agent, "session_id", None) or session_key, prompt)
     except Exception:
-        logger.debug("failed to persist live session system prompt", exc_info=True)
+        logger.warning(
+            "failed to persist live session system prompt for session %s",
+            session_key,
+            exc_info=True,
+        )
+    finally:
+        if home_token is not None:
+            reset_hermes_home_override(home_token)
 
 
 # Stable leading text of the model-switch marker, shared by the builder and the
@@ -3959,6 +4286,20 @@ def _is_model_switch_marker(entry: Any) -> bool:
         return False
     content = entry.get("content")
     return isinstance(content, str) and content.startswith(_MODEL_SWITCH_MARKER_PREFIX)
+
+
+def _is_pivot_marker(entry: Any) -> bool:
+    """Whether a history entry is a marker the gateway splices in mid-turn.
+
+    Model switches and personality changes both inject a ``role=user`` pivot
+    into the live history from the RPC thread while a turn may be running, so
+    either one can be the sole reason turn-start and current history differ.
+    Only the model-switch marker is self-replacing, which is why the dedup in
+    :func:`_append_model_switch_marker` stays narrower than this.
+    """
+    if _is_model_switch_marker(entry):
+        return True
+    return isinstance(entry, dict) and entry.get("display_kind") == "personality_switch"
 
 
 def _append_model_switch_marker(session: dict | None, *, model: str, provider: str) -> None:
@@ -4388,7 +4729,8 @@ def _tool_lifecycle_required_for_ui(name: str) -> bool:
     # Desktop renders the clarify choices/question from the tool-call part, then
     # wires request_id from clarify.request. If tool progress is off, suppressing
     # clarify's lifecycle events leaves only the sidebar attention dot visible.
-    return name == "clarify"
+    # setup_mcp is the same shape: its consent card mounts on the tool part.
+    return name in ("clarify", "setup_mcp")
 
 
 def _restart_slash_worker(sid: str, session: dict):
@@ -4602,9 +4944,9 @@ def _apply_model_switch(
 
     if not confirm_expensive_model:
         try:
-            from hermes_cli.model_cost_guard import expensive_model_warning
+            from hermes_cli.model_selection_guards import combined_selection_warning
 
-            warning = expensive_model_warning(
+            warning = combined_selection_warning(
                 result.new_model,
                 provider=result.target_provider,
                 base_url=result.base_url or current_base_url,
@@ -4687,6 +5029,68 @@ def _apply_model_switch(
         "confirm_required": False,
         "scope": "once" if one_turn else ("global" if persist_global else "session"),
     }
+
+
+def _sync_bot_capabilities(sid: str, session: dict) -> None:
+    """Rebuild a Bot Chat session's agent when its capability surface changed.
+
+    Bot Chats are eternal sessions; toolsets/MCP tool definitions are baked
+    into the live agent at construction, so a capability edit (Settings →
+    Capabilities, skill install, MCP toggle) would otherwise not apply until
+    /new. At turn start, hash the profile's capability surface
+    (tools/bot_mode_probe.capability_fingerprint) and, on change, swap in a
+    freshly built agent for the SAME session — history is session/DB-backed,
+    and the prompt-restore epoch check rebuilds the system prompt to match.
+    One rebuild per user-initiated change; identical state is a no-op.
+    """
+    agent = session.get("agent")
+    if agent is None:
+        return
+    try:
+        title = str(getattr(agent, "_session_title_hint", "") or "").strip()
+        if not title:
+            db = getattr(agent, "_session_db", None)
+            key = session.get("session_key") or ""
+            title = str((db.get_session_title(key) if (db and key) else None) or "").strip()
+        if title != "Bot Chat":
+            return
+        from tools.bot_mode_probe import capability_fingerprint
+
+        home = session.get("profile_home") or None
+        current = capability_fingerprint(home)
+        if current == "unavailable":
+            return
+        seen = session.get("bot_caps_seen")
+        session["bot_caps_seen"] = current
+        if seen is None or seen == current:
+            return
+    except Exception:
+        return
+
+    # Capability surface changed — rebuild the agent in place. Same
+    # session_id/key, so the DB-backed history and (epoch-refreshed) system
+    # prompt carry over; only tool definitions and prompt bytes change.
+    try:
+        tokens = _set_session_context(sid, cwd=_session_cwd(session))
+        try:
+            new_agent = _make_agent(
+                sid,
+                session["session_key"],
+                session_id=session["session_key"],
+                platform_override=_session_source(session),
+            )
+        finally:
+            _clear_session_context(tokens)
+        new_agent._session_title_hint = "Bot Chat"
+        session["agent"] = new_agent
+        session["config_model_seen"] = _config_model_target()
+        _emit(
+            "notice",
+            sid,
+            {"message": "Capabilities updated — this bot's tools and prompt were refreshed."},
+        )
+    except Exception as e:
+        logger.warning("Bot capability sync failed for %s: %s", sid, e)
 
 
 def _sync_agent_model_with_config(sid: str, session: dict) -> None:
@@ -4990,6 +5394,16 @@ def _sync_session_key_after_compress(
         # don't keep targeting the ended row.
         session["session_key"] = new_session_id
 
+    # #84417 (belt): invalidate any in-flight ``_drain_queued_prompt`` claim
+    # that captured generation under the pre-rotation session_key. A raced
+    # drain must not dispatch on the continuation with a stale claim; the
+    # claimed envelope is restored to the queue (see ``_drain_queued_prompt``)
+    # so legitimate follow-ups still survive. Complements self-duplicate
+    # scrubbing on redirect.
+    session["_queued_prompt_generation"] = int(
+        session.get("_queued_prompt_generation", 0)
+    ) + 1
+
     if clear_pending_title:
         session["pending_title"] = None
     if restart_slash_worker:
@@ -5010,6 +5424,14 @@ def _get_usage(agent) -> dict:
         "completion": g("session_completion_tokens"),
         "total": g("session_total_tokens"),
         "calls": g("session_api_calls"),
+        "cache_read": g("session_cache_read_tokens"),
+        "cache_write": g("session_cache_write_tokens"),
+        "cost_usd": float(getattr(agent, "session_estimated_cost_usd", 0.0) or 0.0),
+        "cost_status": getattr(agent, "session_cost_status", "unknown") or "unknown",
+        "cost_source": getattr(agent, "session_cost_source", "none") or "none",
+        "reference_cost_usd": float(getattr(agent, "session_reference_cost_usd", 0.0) or 0.0),
+        "reference_cost_status": getattr(agent, "session_reference_cost_status", "unknown") or "unknown",
+        "reference_cost_source": getattr(agent, "session_reference_cost_source", "none") or "none",
     }
     comp = getattr(agent, "context_compressor", None)
     if comp:
@@ -5128,7 +5550,9 @@ def _current_profile_name() -> str:
 # v3: adds approvals.mode config RPCs and session.info reconciliation.
 # v4: session.create fast=false is an explicit per-session normal-tier override.
 # v5: uvicorn ws_max_size raised for one-shot base64 file.attach frames (>16 MiB).
-DESKTOP_BACKEND_CONTRACT = 5
+# v6: plugins.manage list rows carry the canonical registry key; toggles are
+#     key-addressed (keyless rows render read-only in Desktop Settings).
+DESKTOP_BACKEND_CONTRACT = 7
 
 
 def _session_usage_snapshot(session: dict | None) -> dict:
@@ -5221,6 +5645,27 @@ def _session_info(agent, session: dict | None = None) -> dict:
     pending_switch = (session or {}).get("pending_model_switch") or {}
     pending_model = str(pending_switch.get("display_model") or "").strip()
     pending_provider = str(pending_switch.get("display_provider") or "").strip()
+    # Epoch seconds the current turn started, or None when idle. Lets the
+    # desktop preserve the turn-elapsed timer across session switches (cold
+    # resume path) instead of resetting it to 0:00.
+    inflight = (session or {}).get("inflight_turn")
+    turn_started_at = (
+        float(inflight["started_at"])
+        if isinstance(inflight, dict) and inflight.get("started_at")
+        else None
+    )
+    advisor_settings = getattr(agent, "_advisor_settings", None)
+    advisor_override = (session or {}).get("create_advisor_override")
+    advisor_enabled = (
+        bool(getattr(advisor_settings, "enabled", False))
+        if advisor_settings is not None
+        else (
+            bool(advisor_override)
+            if advisor_override is not None
+            else is_truthy_value((_load_cfg().get("advisor") or {}).get("enabled"))
+        )
+    )
+
     info: dict = {
         "model": pending_model or mirror.get("model", getattr(agent, "model", "")),
         "provider": pending_provider
@@ -5228,6 +5673,7 @@ def _session_info(agent, session: dict | None = None) -> dict:
         "reasoning_effort": reasoning_effort,
         "service_tier": service_tier,
         "fast": service_tier == "priority",
+        "advisor_enabled": advisor_enabled,
         "yolo": yolo,
         "approval_mode": approval_mode,
         "tools": dict(mirror.get("tools") or {}) if isinstance(mirror.get("tools"), dict) else {},
@@ -5238,6 +5684,7 @@ def _session_info(agent, session: dict | None = None) -> dict:
         "terminal_backend": _effective_terminal_backend(),
         "personality": str(personality or ""),
         "running": bool((session or {}).get("running")),
+        "turn_started_at": turn_started_at,
         "title": _session_live_title(session or {}, session_key) if session_key else "",
         "stored_session_id": session_key or "",
         "desktop_contract": DESKTOP_BACKEND_CONTRACT,
@@ -5820,6 +6267,9 @@ def _agent_cbs(sid: str) -> dict:
         "status_callback": lambda kind, text=None: _status_update(
             sid, str(kind), None if text is None else str(text)
         ),
+        "event_callback": lambda event_type, payload: _agent_event(
+            sid, str(event_type), payload
+        ),
         # Credits/notice spine (L1): an AgentNotice fired by the agent becomes a
         # notification.show WS event; a recovery clear becomes notification.clear.
         # Snake_case payload to match the existing gateway-event convention.
@@ -5899,6 +6349,18 @@ def _agent_cbs(sid: str) -> dict:
             {},
             timeout=30,
         ),
+        # setup_mcp tool (desktop GUI): the renderer shows an inline consent
+        # card and walks the user through install/enable/OAuth via the REST
+        # endpoints, then answers mcp.setup.respond with the JSON outcome.
+        # Long timeout on purpose — the flow can include typing an API key or
+        # a browser OAuth round-trip. Same lifecycle as clarify: on timeout
+        # the tool returns "unanswered" and a late answer is tolerated.
+        "setup_mcp_callback": lambda server, action, reason: _block(
+            "mcp.setup.request",
+            sid,
+            {"server": server, "action": action, "reason": reason},
+            timeout=600,
+        ),
     }
 
     # Interim assistant commentary (text alongside tool calls, or the attempted
@@ -5953,14 +6415,7 @@ def _apply_project_workspace(task_id: str, path: str, _name: str = "") -> None:
     session["cwd_from_settle"] = False
     _register_session_cwd(session)
 
-    with _session_db(session) as db:
-        if db is not None:
-            try:
-                db.update_session_cwd(session.get("session_key", ""), resolved)
-            except Exception:
-                logger.debug("failed to persist project workspace cwd", exc_info=True)
-
-    _persist_session_git_meta(session, resolved)
+    _persist_session_cwd_and_schedule_git_meta(session, resolved)
 
     try:
         agent = session.get("agent")
@@ -6096,8 +6551,17 @@ def _apply_personality_to_session(
                 "[System: The user has cleared the personality overlay. "
                 "From this point forward, respond in your normal default style.]"
             )
+        # Tagged like the model-switch marker (`_append_model_switch_marker`):
+        # the marker rides as role=user so strict OpenAI-compatible providers
+        # accept it mid-conversation, but `display_kind` keeps it out of the
+        # `truncate_before_user_ordinal` addressing space. Untagged, it counts
+        # as a real user turn on the gateway side while no client counts it, so
+        # every later rewind resolves one turn too early and `replace_messages`
+        # hard-deletes the difference (#82756).
         with session["history_lock"]:
-            session["history"].append({"role": "user", "content": marker})
+            session["history"].append(
+                {"role": "user", "content": marker, "display_kind": "personality_switch"}
+            )
             session["history_version"] = int(session.get("history_version", 0)) + 1
         info = _session_info(agent)
         _emit("session.info", sid, info)
@@ -6333,6 +6797,7 @@ def _reset_session_agent(sid: str, session: dict) -> dict:
         session.pop("model_override", None)
         session.pop("create_reasoning_override", None)
         session.pop("create_service_tier_override", None)
+        session.pop("create_advisor_override", None)
         session.pop("one_turn_model_restore", None)
         new_agent = _make_agent(
             sid,
@@ -6499,6 +6964,20 @@ def _resolve_runtime_with_fallback(
         raise
 
 
+def _apply_advisor_enabled_override(agent, enabled: bool | None) -> None:
+    """Apply one session's Advisor pin without touching profile config."""
+    if agent is None or enabled is None:
+        return
+    try:
+        from dataclasses import replace
+        from agent.advisor import AdvisorSettings
+
+        current = getattr(agent, "_advisor_settings", AdvisorSettings())
+        agent._advisor_settings = replace(current, enabled=bool(enabled))
+    except Exception:
+        logger.debug("failed to apply session Advisor override", exc_info=True)
+
+
 def _make_agent(
     sid: str,
     key: str,
@@ -6508,6 +6987,7 @@ def _make_agent(
     provider_override: str | None = None,
     reasoning_config_override: dict | None = None,
     service_tier_override: str | None = None,
+    advisor_enabled_override: bool | None = None,
     platform_override: str | None = None,
 ):
     # AC-4 test seam: dead unless explicitly armed by the isolated certify
@@ -6517,6 +6997,7 @@ def _make_agent(
 
     synthetic = maybe_build_synthetic_agent(session_id or key, model_override)
     if synthetic is not None:
+        _apply_advisor_enabled_override(synthetic, advisor_enabled_override)
         return synthetic
 
     from run_agent import AIAgent
@@ -6638,7 +7119,7 @@ def _make_agent(
                 raise RuntimeError("Auth fallback resolved without a model")
             model = resolution.selected_model
     _pr = _load_provider_routing()
-    return AIAgent(
+    agent = AIAgent(
         model=model,
         max_iterations=_cfg_max_turns(cfg, 500),
         provider=runtime.get("provider"),
@@ -6685,6 +7166,8 @@ def _make_agent(
         fallback_model=_load_fallback_model(),
         **_agent_cbs(sid),
     )
+    _apply_advisor_enabled_override(agent, advisor_enabled_override)
+    return agent
 
 
 def _init_session(
@@ -6756,9 +7239,9 @@ def _init_session(
                 try:
                     _cwd = _sessions[sid]["cwd"]
                     if hasattr(db, "update_session_cwd"):
-                        db.update_session_cwd(key, _cwd)
-                    # git branch/root probes run off the hot path (see _set_session_cwd).
-                    _persist_session_git_meta(_sessions[sid], _cwd)
+                        _persist_session_cwd_and_schedule_git_meta(
+                            _sessions[sid], _cwd, db=db
+                        )
                 except Exception:
                     logger.debug(
                         "failed to persist resumed session cwd", exc_info=True
@@ -6836,35 +7319,33 @@ def _active_image_routing_identity(agent: Any) -> tuple[str, str]:
     )
 
 
-def _enrich_with_attached_images(user_text: str, image_paths: list[str]) -> str:
-    """Pre-analyze attached images via vision and prepend descriptions to user text."""
-    import asyncio, json as _json
-    from tools.vision_tools import vision_analyze_tool
+def _build_image_ref_message(user_text: str, image_paths: list[str]) -> str:
+    """Reference attached images by path so the agent analyzes them in-loop.
 
-    prompt = (
-        "Describe everything visible in this image in thorough detail. "
-        "Include any text, code, data, objects, people, layout, colors, "
-        "and any other notable visual information."
-    )
+    This used to pre-analyze every image with the auxiliary vision model
+    *before* the turn was dispatched (``_enrich_with_attached_images``):
+    serial blocking calls on the submit path — 60-90s per large photo —
+    with failures silently swallowed and an interrupt during the window
+    killing the turn with zero API calls (#83291). It also prepended the
+    vision description to the first user message, poisoning session
+    auto-titles (#82339). The CLI never gates turn dispatch on vision
+    like this, which is why the same message was seconds there and
+    minutes on desktop.
 
+    Now the turn starts immediately. The agent examines each image itself
+    with ``vision_analyze`` — its own retries, visible tool progress —
+    exactly how the ``@folder:`` reference path already behaves, which
+    responds in seconds for the same images.
+    """
     parts: list[str] = []
     for path in image_paths:
         p = Path(path)
         if not p.exists():
             continue
-        hint = f"[You can examine it with vision_analyze using image_url: {p}]"
-        try:
-            r = _json.loads(
-                asyncio.run(vision_analyze_tool(image_url=str(p), user_prompt=prompt))
-            )
-            desc = r.get("analysis", "") if r.get("success") else None
-            parts.append(
-                f"[The user attached an image:\n{desc}]\n{hint}"
-                if desc
-                else f"[The user attached an image but analysis failed.]\n{hint}"
-            )
-        except Exception:
-            parts.append(f"[The user attached an image but analysis failed.]\n{hint}")
+        parts.append(
+            f"[The user attached an image: {p.name}]\n"
+            f"[Examine it with the vision_analyze tool using image_url: {p}]"
+        )
 
     text = user_text or ""
     prefix = "\n\n".join(parts)
@@ -6878,8 +7359,8 @@ def _build_persist_message_with_image_refs(user_text: str, image_paths: list[str
     persisting to session history. Uses ``@image:<path>`` directives — the
     format the desktop client (directive-text.tsx / HERMES_DIRECTIVE_RE)
     actually parses and renders as an image — unlike
-    ``_enrich_with_attached_images``, which embeds a vision description and
-    an ``image_url:`` hint meant only for the model and must never be
+    ``_build_image_ref_message``, which embeds an
+    ``image_url:`` hint meant only for the model and must never be
     persisted as-is (it silently breaks image rendering after a full
     restart, and reorders image/text on live session-switch reconciliation).
 
@@ -7212,6 +7693,11 @@ def _history_to_messages(history: list[dict]) -> list[dict]:
         if not content_text.strip() and not has_reasoning:
             continue
         msg = {"role": role, "text": content_text}
+        # Persisted authoring time (Unix seconds) for display.timestamps
+        # renderers (#41531). Display-only: never fed back into model context.
+        ts = m.get("timestamp")
+        if isinstance(ts, (int, float)) and ts > 0:
+            msg["timestamp"] = float(ts)
         # Durable row identity, stamped by _rows_to_conversation. The renderer's
         # own message ids are ephemeral (timestamp+index derived, and a
         # different shape for live vs rehydrated vs optimistic rows), so
@@ -7345,6 +7831,13 @@ def _record_inflight_correction(session: dict, text: Any) -> None:
     corrections = list(turn.get("corrections") or [])
     corrections.append(correction)
     turn["corrections"] = corrections
+    # Arrival-order boundary: how much assistant text had already streamed
+    # when this correction was accepted. Resuming clients use it to place the
+    # correction bubble AFTER the output the user had already seen and BEFORE
+    # the output it redirected (#73793) instead of above the whole reply.
+    offsets = list(turn.get("correction_offsets") or [])
+    offsets.append(len(str(turn.get("assistant") or "")))
+    turn["correction_offsets"] = offsets
     turn["updated_at"] = time.time()
     session["inflight_turn"] = turn
 
@@ -7552,6 +8045,20 @@ def _enqueue_prompt(
     sent it even if the session transport is rebound meanwhile.
     """
     image_paths = list(image_paths or [])
+    # #84417: scrub any live-turn self-duplicates first so the consecutive-text
+    # merge below cannot glue "{original}\\n\\n{later}" and re-fire original
+    # on drain after a later correction settles.
+    _drop_queued_duplicates_of_inflight_user(session)
+    # Never queue a text-only self-copy of the live inflight user prompt. The
+    # live turn already owns that text; draining it after settle would restart
+    # the same user turn as a fresh agent invocation.
+    if not image_paths and isinstance(text, str):
+        turn = session.get("inflight_turn")
+        original = (
+            str(turn.get("user") or "").strip() if isinstance(turn, dict) else ""
+        )
+        if original and text.strip() == original:
+            return
     queued = {"text": text, "transport": transport}
     if image_paths:
         queued["image_paths"] = image_paths
@@ -7571,6 +8078,82 @@ def _enqueue_prompt(
         session.setdefault("queued_prompts", []).append(queued)
         return
     session["queued_prompt"] = queued
+
+
+def _sanitize_queued_entry_vs_inflight_user(
+    entry: Any, original: str
+) -> dict | None:
+    """Drop or rewrite a queue envelope that re-carries the live user text.
+
+    Returns ``None`` to drop the envelope, or a (possibly rewritten) dict to
+    keep. Text-only self-duplicates of ``original`` are dropped. A merged
+    slot ``"{original}\\n\\n{later}"`` (from ``_enqueue_prompt``'s consecutive
+    text merge) is rewritten to just ``later`` so a later correction is not
+    lost and the original is not re-fired (#84417). Image-bearing envelopes
+    are left alone — their chronology/ownership is load-bearing.
+    """
+    if not original or not isinstance(entry, dict):
+        return entry if isinstance(entry, dict) else None
+    if entry.get("image_paths"):
+        return entry
+    text = entry.get("text")
+    if not isinstance(text, str):
+        return entry
+    stripped = text.strip()
+    if not stripped:
+        return None
+    if stripped == original:
+        return None
+    # Lossless text-merge glued the live original onto a later follow-up.
+    for sep in ("\n\n", "\n"):
+        prefix = original + sep
+        if text.startswith(prefix):
+            rest = text[len(prefix) :].strip()
+            if not rest or rest == original:
+                return None
+            cleaned = dict(entry)
+            cleaned["text"] = rest
+            return cleaned
+    return entry
+
+
+def _drop_queued_duplicates_of_inflight_user(session: dict) -> None:
+    """Remove server-queue copies of the live turn's original user text.
+
+    A mid-turn ``prompt.submit`` of the same text can land in
+    ``queued_prompt`` when redirect is not yet available (model not active,
+    build window, tool boundary). If the user then corrects the turn with a
+    different prompt via redirect, that stale self-duplicate must not
+    ``_drain_queued_prompt`` after the redirected turn completes — otherwise
+    the original prompt restarts as a fresh agent turn (#84417).
+
+    Unrelated follow-ups (different text, image-bearing envelopes) stay.
+    Merged ``original + later`` slots are rewritten to ``later`` only.
+    """
+    turn = session.get("inflight_turn")
+    if not isinstance(turn, dict):
+        return
+    original = str(turn.get("user") or "").strip()
+    if not original:
+        return
+
+    head = session.get("queued_prompt")
+    rest = list(session.get("queued_prompts") or [])
+    kept: list[dict] = []
+    for entry in ([head] if head else []) + rest:
+        cleaned = _sanitize_queued_entry_vs_inflight_user(entry, original)
+        if cleaned is not None:
+            kept.append(cleaned)
+
+    if not kept:
+        session["queued_prompt"] = None
+        session.pop("queued_prompts", None)
+        return
+    session["queued_prompt"] = kept[0]
+    if len(kept) > 1:
+        session["queued_prompts"] = kept[1:]
+    else:
+        session.pop("queued_prompts", None)
 
 
 def _interrupt_busy_session(sid: str, session: dict, agent: Any) -> None:
@@ -7651,6 +8234,8 @@ def _handle_busy_submit(
         try:
             if agent.steer(plain_text):
                 with session["history_lock"]:
+                    _record_inflight_correction(session, plain_text)
+                    _drop_queued_duplicates_of_inflight_user(session)
                     session["last_active"] = time.time()
                 return _ok(rid, {"status": "steered"})
         except Exception:
@@ -7670,6 +8255,9 @@ def _handle_busy_submit(
             if agent.redirect(plain_text):
                 with session["history_lock"]:
                     _record_inflight_correction(session, plain_text)
+                    # #84417: do not re-fire the live turn's original user text
+                    # from a stale server-queue self-duplicate after settle.
+                    _drop_queued_duplicates_of_inflight_user(session)
                     session["last_active"] = time.time()
                 return _ok(rid, {"status": "redirected"})
         except Exception:
@@ -7687,7 +8275,16 @@ def _handle_busy_submit(
 
     # Attachments need a separate model invocation. Queue them without
     # cancelling the active turn so the user gets both results in order.
-    if mode != "queue" and not image_paths:
+    #
+    # #86134: ``steer`` mode must NEVER escalate to a hard interrupt. A burst
+    # of user messages while the agent is busy can land as a mix of accepted
+    # steers (stashed in ``AIAgent._pending_steer``) and fall-through queue
+    # envelopes (payload not steerable, ``steer()`` rejected/raised). A hard
+    # interrupt here kills the live turn AND ``AIAgent.interrupt()`` drops
+    # the pending steer buffer — silently destroying the earlier messages of
+    # the burst. Steer-mode fall-throughs keep queue semantics: preserved
+    # FIFO in ``queued_prompt``/``queued_prompts`` and drained on turn end.
+    if mode == "interrupt" and not image_paths:
         _interrupt_busy_session(sid, session, agent)
     return _ok(rid, {"status": "queued"})
 
@@ -7700,6 +8297,8 @@ def _drain_queued_prompt(rid, sid: str, session: dict) -> bool:
     claim-under-lock pattern used by the goal-continuation re-fire.
     """
     with session["history_lock"]:
+        if session.get("_closing"):
+            return False
         queued = session.get("queued_prompt")
         if not queued or session.get("running"):
             return False
@@ -7714,6 +8313,21 @@ def _drain_queued_prompt(rid, sid: str, session: dict) -> bool:
     use_compute_host = _session_uses_compute_host(session)
     with session["history_lock"]:
         if int(session.get("_queued_prompt_generation", 0)) != queue_generation:
+            # Generation cancelled the claim (Stop, compress re-anchor, …).
+            # Do not dispatch — but put the claimed envelope back so a
+            # legitimate follow-up is not silently dropped. Order: claimed
+            # head first, then whatever advanced into the slot while we held
+            # the claim (#84417 belt accuracy).
+            rest: list = []
+            advanced = session.get("queued_prompt")
+            if advanced:
+                rest.append(advanced)
+            rest.extend(session.get("queued_prompts") or [])
+            session["queued_prompt"] = queued
+            if rest:
+                session["queued_prompts"] = rest
+            else:
+                session.pop("queued_prompts", None)
             session["running"] = False
             return True
     dispatch_failed = False
@@ -7791,11 +8405,23 @@ def _inflight_snapshot(session: dict) -> dict | None:
         "streaming": streaming,
         "user": user,
     }
-    corrections = [c for c in (turn.get("corrections") or []) if str(c).strip()]
-    if corrections:
+    raw_corrections = turn.get("corrections") or []
+    raw_offsets = turn.get("correction_offsets") or []
+    correction_pairs = [
+        (str(c), raw_offsets[i] if i < len(raw_offsets) else None)
+        for i, c in enumerate(raw_corrections)
+        if str(c).strip()
+    ]
+    if correction_pairs:
         # Mid-turn redirects. Carried alongside the original prompt (not over
         # it) so resume can rebuild every user bubble the turn produced.
-        snapshot["corrections"] = [str(c) for c in corrections]
+        snapshot["corrections"] = [c for c, _ in correction_pairs]
+        # Assistant-text lengths at each correction boundary (parallel list).
+        # Only sent when every correction has one, so clients can trust the
+        # pairing; older in-memory turns without offsets omit the field and
+        # clients fall back to placing corrections after the assistant dump.
+        if all(isinstance(offset, int) and offset >= 0 for _, offset in correction_pairs):
+            snapshot["correction_offsets"] = [int(offset) for _, offset in correction_pairs]  # type: ignore[arg-type]
     if error:
         # Retained failed turn (see _fail_inflight_turn): carry the error
         # semantics so a resuming client can rebuild the failed-turn bubble
@@ -7882,6 +8508,7 @@ def _lazy_resume_info(
     model: str = "",
     provider: str = "",
     profile: str | None = None,
+    advisor_enabled: bool | None = None,
 ) -> dict:
     """session.info for a not-yet-built session (the shape session.create
     returns). tools/skills land later when the deferred build emits session.info."""
@@ -7898,6 +8525,8 @@ def _lazy_resume_info(
     }
     if provider:
         info["provider"] = provider
+    if isinstance(advisor_enabled, bool):
+        info["advisor_enabled"] = advisor_enabled
     return info
 
 
@@ -7940,6 +8569,11 @@ def _deferred_session_record(
         "last_active": now,
         "lazy": lazy,
         "model_override": model_override,
+        "create_advisor_override": (
+            resume_runtime_overrides.get("advisor_enabled_override")
+            if isinstance(resume_runtime_overrides, dict)
+            else None
+        ),
         "pending_title": None,
         "profile_home": str(profile_home) if profile_home is not None else None,
         "resume_runtime_overrides": resume_runtime_overrides,
@@ -7985,6 +8619,75 @@ def _schedule_agent_build(sid: str, delay: float = 0.05) -> None:
     timer = threading.Timer(delay, _run)
     timer.daemon = True
     timer.start()
+
+
+def _schedule_resume_hydration(
+    sid: str, stored_id: str, db, *, close_db: bool = False
+) -> None:
+    """Load a cold resume's transcript off the JSON-RPC response path."""
+
+    def _run() -> None:
+        session = _sessions.get(sid)
+        try:
+            if session is None:
+                return
+            _emit(
+                "session.resume_progress",
+                sid,
+                {"phase": "history", "status": "loading"},
+            )
+            db.reopen_session(stored_id)
+            raw_history, display_history = db.get_resume_conversations(stored_id)
+            prefix = db.get_ancestor_display_prefix(stored_id)
+            history = sanitize_replay_history(raw_history)
+
+            if _sessions.get(sid) is not session:
+                return
+            with session["history_lock"]:
+                session["history"] = history
+                session["display_history_prefix"] = prefix
+                session["resume_hydrating"] = False
+                session["resume_message_count"] = len(display_history)
+            session["resume_history_ready"].set()
+            _emit(
+                "session.resume_progress",
+                sid,
+                {
+                    "message_count": len(display_history),
+                    "phase": "history",
+                    "status": "complete",
+                },
+            )
+            _maybe_schedule_auto_continue(sid, session, stored_id)
+            _start_agent_build(sid, session)
+        except Exception as exc:
+            if _sessions.get(sid) is not session:
+                return
+            message = f"resume failed: {exc}"
+            session["resume_hydrating"] = False
+            session["resume_history_error"] = message
+            session["agent_error"] = message
+            session["resume_history_ready"].set()
+            session["agent_ready"].set()
+            _emit(
+                "session.resume_progress",
+                sid,
+                {"message": message, "phase": "history", "status": "failed"},
+            )
+            _emit("error", sid, {"message": message})
+            with _sessions_lock:
+                discarded = _sessions.pop(sid, None) if _sessions.get(sid) is session else None
+            lease = (discarded or {}).get("active_session_lease")
+            if lease is not None:
+                lease.release()
+        finally:
+            if close_db and hasattr(db, "close"):
+                try:
+                    db.close()
+                except Exception:
+                    logger.debug("failed to close resume db for %s", sid, exc_info=True)
+
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def _session_pending_kind(sid: str) -> str:
@@ -8088,7 +8791,7 @@ def _fallback_session_info(session: dict) -> dict:
     # repo) so a client can clear a stale label instead of retaining it — the
     # same contract `_lazy_session_info` above already follows.
     cwd = _session_cwd(session)
-    return {
+    info = {
         "cwd": cwd,
         "branch": _git_branch_for_cwd(cwd),
         "project": _project_info_for_cwd(cwd),
@@ -8096,7 +8799,17 @@ def _fallback_session_info(session: dict) -> dict:
         "model": _resolve_model(),
         "skills": {},
         "tools": {},
+        # A lazy session (agent not built yet) is still served by *this* backend,
+        # so it must advertise the current contract. Desktop feeds this straight
+        # into reportBackendContract(); a missing field is read as contract 0 and
+        # a current backend is falsely flagged "out of date" (#68392). The sibling
+        # session.create shape (_lazy_resume_info) already carries it (#36112).
+        "desktop_contract": DESKTOP_BACKEND_CONTRACT,
     }
+    advisor_override = session.get("create_advisor_override")
+    if isinstance(advisor_override, bool):
+        info["advisor_enabled"] = advisor_override
+    return info
 
 
 def _reconcile_display_with_live(
@@ -8192,20 +8905,32 @@ def _live_session_payload(
         inflight = _inflight_snapshot(session)
         queued = _queued_prompt_snapshot(session)
         running = bool(session.get("running"))
+        inflight_turn = session.get("inflight_turn")
+        turn_started_at = (
+            float(inflight_turn["started_at"])
+            if isinstance(inflight_turn, dict) and inflight_turn.get("started_at")
+            else None
+        )
     # Prefer the persisted display lineage (candidate-inclusive) so this payload
-    # matches the eager session.resume + REST transcript; the DB has its own
-    # lock, so read it outside the session history lock.
-    history = (
-        in_memory_history
-        if omit_messages
-        else _live_visible_history(session, _get_db(), in_memory_history)
-    )
+    # matches the eager session.resume + REST transcript. Use the session's
+    # profile-aware DB (not launch ``_get_db()``): app-global remote profile
+    # sessions store candidates in ``profile_home``/state.db, and reading the
+    # launch DB here falls back to collapsed in-memory history and drops them.
+    # The DB has its own lock, so read it outside the session history lock.
+    # ``omit_messages`` skips the DB read entirely (callers only need counts /
+    # status); keep that fast path from main.
+    if omit_messages:
+        history = in_memory_history
+    else:
+        with _session_db(session) as db:
+            history = _live_visible_history(session, db, in_memory_history)
     payload = {
         "info": _fallback_session_info(session),
         "message_count": len(history),
         "messages": [] if omit_messages else _history_to_messages(history),
         "messages_omitted": omit_messages,
         "running": running,
+        "turn_started_at": turn_started_at,
         "session_id": sid,
         "session_key": _session_lookup_key(session, fallback=sid),
         "started_at": float(session.get("created_at") or time.time()),
@@ -8215,6 +8940,10 @@ def _live_session_payload(
         payload["inflight"] = inflight
     if queued:
         payload["queued"] = queued
+    if approval := _pending_approval_request_payload(str(session.get("session_key") or "")):
+        payload["pending_approval"] = approval
+    if clarify := _pending_clarify_request_payload(sid):
+        payload["pending_clarify"] = clarify
     return payload
 
 
@@ -8391,7 +9120,7 @@ def _pet_active_selection():
     except Exception:
         pet_cfg = {}
 
-    enabled = bool(pet_cfg.get("enabled"))
+    enabled = is_truthy_value(pet_cfg.get("enabled"), default=False)
     configured_slug = str(pet_cfg.get("slug", "") or "")
     pet = store.resolve_active_pet(configured_slug) if enabled else None
     scale = float(pet_cfg.get("scale", constants.DEFAULT_SCALE) or constants.DEFAULT_SCALE)
@@ -9080,6 +9809,101 @@ _KANBAN_NOTIFY_KINDS = (
 )
 _KANBAN_SILENT_KINDS = frozenset({"archived", "unblocked"})
 _KANBAN_POLL_SECONDS = 5.0
+_LOOP_POLL_SECONDS = 5.0
+
+
+def _maybe_fire_tui_loop_tick(sid: str, session: dict) -> None:
+    """Fire a due /loop wakeup for an idle TUI/Desktop/dashboard session.
+
+    Called from the per-session notification poller thread on a coarse
+    cadence. Claims the session under history_lock (running=True) before
+    dispatching so a racing user prompt wins cleanly. The post-turn hook
+    in the turn dispatcher completes the tick.
+    """
+    try:
+        from hermes_cli.loops import LoopManager, goal_blocks_loop_tick
+    except Exception:
+        return
+
+    sid_key = session.get("session_key") or ""
+    if not sid_key:
+        return
+    mgr = LoopManager(session_id=sid_key)
+    if not mgr.is_due():
+        return
+    if goal_blocks_loop_tick(sid_key):
+        return
+
+    with session["history_lock"]:
+        if session.get("running"):
+            return  # busy — stays due, next poll retries
+        session["running"] = True
+
+    wakeup = mgr.fire_tick()
+    if not wakeup:
+        with session["history_lock"]:
+            session["running"] = False
+        return
+
+    tick_no = mgr.state.ticks_fired if mgr.state else "?"
+    rid = f"__loop__{int(time.time() * 1000)}"
+    try:
+        _emit(
+            "status.update",
+            sid,
+            {"kind": "loop", "text": f"↻ /loop wakeup #{tick_no} firing…"},
+        )
+        if wakeup.lstrip().startswith("/"):
+            # Slash-command loop: route through the slash pipeline instead of
+            # the model. No model reply to evaluate — complete immediately.
+            with session["history_lock"]:
+                session["running"] = False
+            try:
+                parts = wakeup.lstrip()[1:].split(None, 1)
+                resp = _methods["command.dispatch"](
+                    rid,
+                    {
+                        "name": parts[0] if parts else "",
+                        "arg": parts[1] if len(parts) > 1 else "",
+                        "session_id": sid,
+                    },
+                )
+                payload = (resp or {}).get("result") or {}
+                out = str(payload.get("output") or "").strip()
+                if out:
+                    _emit("status.update", sid, {"kind": "loop", "text": out})
+                if payload.get("type") == "send" and payload.get("message"):
+                    # The command resolves to a prompt (skill command etc.) —
+                    # run it as a normal turn; the post-turn hook completes
+                    # the tick.
+                    with session["history_lock"]:
+                        if session.get("running"):
+                            mgr.abandon_tick()
+                            return
+                        session["running"] = True
+                    _emit("message.start", sid)
+                    _run_prompt_submit(rid, sid, session, payload["message"])
+                    return
+            except Exception:
+                pass
+            decision = mgr.complete_tick("")
+            if decision.get("message"):
+                _emit("status.update", sid, {"kind": "loop", "text": decision["message"]})
+            return
+        _emit("message.start", sid)
+        _run_prompt_submit(rid, sid, session, wakeup)
+    except Exception as exc:
+        print(
+            f"[tui_gateway] loop wakeup dispatch failed: "
+            f"{type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        with session["history_lock"]:
+            session["running"] = False
+        try:
+            mgr.abandon_tick()
+        except Exception:
+            pass
 
 
 def _format_kanban_event_text(sub: dict, task, ev, board_slug: str) -> Optional[str]:
@@ -9217,11 +10041,11 @@ def _collect_kanban_notifications(session: dict) -> list:
                     text = _format_kanban_event_text(sub, task, ev, slug)
                     if text:
                         texts.append(text)
-                # Unsubscribe only at a truly final status (done/archived);
-                # blocked/crashed subs stay live so a respawned task's next
-                # terminal event still reaches the user (same rule as the
-                # gateway notifier).
-                if task and getattr(task, "status", "") in {"done", "archived"}:
+                # Unsubscribe only on archive. ``done`` is reversible in
+                # review/controller flows, so retaining the subscription lets
+                # a later reopen notify the same originating TUI/Desktop
+                # session. The claimed cursor prevents historical replay.
+                if task and getattr(task, "status", "") == "archived":
                     try:
                         _kb.remove_notify_sub(
                             conn,
@@ -9259,8 +10083,23 @@ def _notification_poller_loop(
 
     _emitted = set()  # dedup re-queued events so same completion isn't emitted 50 times while session is busy
     _last_kanban_poll = 0.0
+    _last_loop_poll = 0.0
     while not stop_event.is_set() and not session.get("_finalized"):
         _now = time.monotonic()
+        # ── /loop wakeup driver ──────────────────────────────────────
+        # Fire a due /loop tick for THIS session while it's idle. Same
+        # claim-under-lock pattern as the kanban dispatch below. Active
+        # non-parked /goal owns the idle boundary and defers the tick.
+        if _now - _last_loop_poll >= _LOOP_POLL_SECONDS:
+            _last_loop_poll = _now
+            try:
+                _maybe_fire_tui_loop_tick(sid, session)
+            except Exception as _loop_exc:
+                print(
+                    f"[tui_gateway] loop wakeup poll failed: "
+                    f"{type(_loop_exc).__name__}: {_loop_exc}",
+                    file=sys.stderr,
+                )
         if _now - _last_kanban_poll >= _KANBAN_POLL_SECONDS:
             _last_kanban_poll = _now
             try:
@@ -9575,6 +10414,12 @@ def _wire_desktop_ui() -> None:
     _desktop_ui_wired = True
 
 
+# (stop_event, thread) for every poller ever started in this process.
+# Pruned of dead threads on each spawn; consumed by test teardowns to reap
+# leaked pollers (see _start_notification_poller).
+_notification_pollers: list = []
+
+
 def _start_notification_poller(sid: str, session: dict) -> threading.Event:
     """Start the background notification poller for a TUI session."""
     _wire_agent_terminal_output()
@@ -9584,7 +10429,18 @@ def _start_notification_poller(sid: str, session: dict) -> threading.Event:
         target=_notification_poller_loop,
         args=(stop, sid, session),
         daemon=True,
+        # Stable, greppable name for debuggers and test teardowns.
+        name=f"tui-notif-poller-{sid}",
     )
+    # Registry of (stop, thread) pairs so test teardowns can reap pollers
+    # leaked by session.init/create tests — an unjoined poller steals
+    # events off the process-global completion_queue mid-assertion in a
+    # LATER test (flaky test_run_prompt_submit_requeues_all_unstarted_...).
+    # Bounded: entries for dead threads are pruned on each spawn.
+    _notification_pollers[:] = [
+        (s, th) for (s, th) in _notification_pollers if th.is_alive()
+    ]
+    _notification_pollers.append((stop, t))
     t.start()
     return stop
 
@@ -9711,6 +10567,70 @@ def _plan_goal_compression_recovery(
     )
 
 
+# Captured at import time. Several _run_prompt_submit tests monkeypatch
+# threading.Thread with a stub that runs the target synchronously to keep the
+# turn deterministic. This ticker's loop only exits once the caller sets `stop`
+# *after* run_conversation returns, so running it inline would spin forever.
+# It's a non-critical, fire-and-forget background poller, so it always uses a
+# real daemon thread regardless of any such patch.
+_RealThread = threading.Thread
+
+
+def _start_usage_ticker(
+    sid: str, agent, interval: float = 1.0
+) -> tuple[threading.Event, threading.Thread]:
+    """Push live usage snapshots while a turn runs.
+
+    The desktop/TUI status-bar context-window figure is otherwise refreshed
+    only at ``message.complete``, so it stays frozen for the whole (often
+    multi-minute, multi-tool) turn. On the standard chat-completions path the
+    agent's token counters grow after every internal API call, so this daemon
+    emits a lightweight ``session.usage`` event every ``interval`` seconds and
+    the bar tracks context growth live. (The codex app-server runtime folds
+    usage into the counters only at turn end — codex_runtime.
+    _record_codex_app_server_usage — so it gets no mid-turn ticks; its final
+    value still lands via ``message.complete``.)
+
+    The caller must set the returned Event AND join the returned thread
+    before emitting ``message.complete``: a tick that survived past it would
+    roll the client's final usage back to a stale mid-turn snapshot.
+    """
+    stop = threading.Event()
+
+    # Sample the dedup baseline BEFORE the thread starts: the client already
+    # has the turn-start values from the previous message.complete /
+    # session.info. Seeding here (not in the thread) guarantees the baseline
+    # predates the turn's first API call — a late-scheduled thread would
+    # otherwise absorb that first counter growth and never emit it.
+    try:
+        baseline: dict | None = _get_usage(agent)
+    except Exception:
+        baseline = None
+
+    def _loop() -> None:
+        last = baseline
+        while not stop.wait(interval):
+            try:
+                usage = _get_usage(agent)
+                if usage == last:
+                    # Counters frozen (e.g. one long API call in flight) —
+                    # skip the redundant frame so idle ticks don't re-render
+                    # the client status bar every second.
+                    continue
+                last = usage
+                if stop.is_set():
+                    # Turn ended while snapshotting — drop the tick;
+                    # message.complete carries the authoritative usage.
+                    break
+                _emit("session.usage", sid, {"usage": usage})
+            except Exception:
+                pass
+
+    thread = _RealThread(target=_loop, daemon=True)
+    thread.start()
+    return stop, thread
+
+
 def _run_prompt_submit(
     rid,
     sid: str,
@@ -9721,14 +10641,17 @@ def _run_prompt_submit(
     display_metadata: dict | None = None,
     image_paths: list[str] | None = None,
     queued_prompt_generation: int | None = None,
-) -> None:
+) -> bool:
     with session["history_lock"]:
+        if session.get("_closing"):
+            session["running"] = False
+            return False
         if (
             queued_prompt_generation is not None
             and int(session.get("_queued_prompt_generation", 0)) != queued_prompt_generation
         ):
             session["running"] = False
-            return
+            return False
         if image_paths is None:
             images = list(session.get("attached_images", []))
             session["attached_images"] = []
@@ -9745,6 +10668,25 @@ def _run_prompt_submit(
                 agent.clear_interrupt()
             except Exception:
                 pass
+    # Desktop/TUI observability (#86647): this is the ONE INFO record proving
+    # a Desktop/TUI prompt was accepted by THIS process, and it ties together
+    # every id a rotation-mute trace needs — the UI session id, the gateway
+    # session_key, and the agent's live session_id (which compression rotates
+    # independently of the other two). Before this line a Desktop request left
+    # no trace in agent.log at all ("0 platform=desktop" — see #86647), so a
+    # muted window was structurally indistinguishable from a request that
+    # never arrived. No prompt content is logged.
+    _turn_started_monotonic = time.monotonic()
+    logger.info(
+        "tui prompt accepted: ui_session=%s session_key=%s agent_session_id=%s "
+        "kind=%s chars=%s images=%d",
+        sid,
+        session.get("session_key") or "",
+        getattr(agent, "session_id", "") or "",
+        display_kind or "user",
+        len(text) if isinstance(text, str) else "-",
+        len(images),
+    )
     _emit("message.start", sid)
 
     def run():
@@ -9754,6 +10696,10 @@ def _run_prompt_submit(
         # child; delegate_task then captures it as non-serializable authority.
         transport_token = bind_transport(session.get("transport"))
         runtime_session_token = _current_runtime_session_record.set(session)
+        # Bound eagerly so the except/finally paths below always have an agent
+        # even if turn setup throws; re-read after _sync_bot_capabilities,
+        # which may swap in a rebuilt agent for Bot Chat sessions.
+        agent = session["agent"]
         approval_token = None
         session_tokens = []
         home_token = None  # per-turn HERMES_HOME override for a resumed remote profile
@@ -9814,6 +10760,11 @@ def _run_prompt_submit(
                 # config sync so an explicit pick wins over a config.yaml change.
                 _apply_pending_model_switch(sid, session)
                 _sync_agent_model_with_config(sid, session)
+            # Bot Chat capability sync — adopt Settings→Capabilities edits
+            # (skills/toolsets/MCP/SOUL) into the eternal bot session before
+            # the turn runs. No-op for every other session shape.
+            _sync_bot_capabilities(sid, session)
+            agent = session["agent"]
             # Snapshot after turn-start model sync. A deferred switch mutates
             # history and its version; that mutation belongs to this turn.
             with session["history_lock"]:
@@ -9859,7 +10810,9 @@ def _run_prompt_submit(
             # Decide image routing per-turn based on active provider/model.
             # "native" → pass pixels to the main model as OpenAI-style content
             # parts (adapters translate for Anthropic/Gemini/Bedrock/etc.).
-            # "text"   → pre-analyze with vision_analyze and prepend the text.
+            # "text"   → reference the image paths in the message so the agent
+            #            analyzes them in-loop with vision_analyze (never
+            #            blocking the submit path on vision calls — #83291).
             # See agent/image_routing.py for the full decision table.
             run_message: Any = prompt
             if images:
@@ -9903,15 +10856,15 @@ def _run_prompt_submit(
                         if any(p.get("type") == "image_url" for p in _parts):
                             run_message = _parts
                         else:
-                            run_message = _enrich_with_attached_images(prompt, images)
+                            run_message = _build_image_ref_message(prompt, images)
                     except Exception as _img_exc:
                         print(
                             f"[tui_gateway] native attach failed, falling back to text: {_img_exc}",
                             file=sys.stderr,
                         )
-                        run_message = _enrich_with_attached_images(prompt, images)
+                        run_message = _build_image_ref_message(prompt, images)
                 else:
-                    run_message = _enrich_with_attached_images(prompt, images)
+                    run_message = _build_image_ref_message(prompt, images)
 
             # Streaming TTS: voice-mode replies are spoken sentence-by-sentence
             # as tokens arrive (CLI parity) instead of after the full turn.
@@ -10028,7 +10981,21 @@ def _run_prompt_submit(
             agent._on_session_title = lambda t, _src, _k=_title_key: _emit(
                 "session.title", sid, {"session_id": _k, "title": t}
             )
-            result = agent.run_conversation(run_message, **run_kwargs)
+            _usage_stop, _usage_thread = _start_usage_ticker(sid, agent)
+            try:
+                result = agent.run_conversation(run_message, **run_kwargs)
+            finally:
+                # Stop AND join before anything below emits: an in-flight tick
+                # surviving past message.complete would roll the client's final
+                # usage back to a stale mid-turn snapshot. The join is
+                # deliberately unbounded — once stop is set it only ever waits
+                # out one in-flight _get_usage/_emit, and the worst case there
+                # (a stalled transport write, up to _WS_WRITE_TIMEOUT_S) would
+                # stall the message.complete emit below just the same. A
+                # timed-out join would abandon the tick to land after
+                # message.complete.
+                _usage_stop.set()
+                _usage_thread.join()
             if display_kind and isinstance(text, str):
                 db = getattr(agent, "_session_db", None)
                 current_session_id = getattr(agent, "session_id", None) or session.get("session_key")
@@ -10103,10 +11070,15 @@ def _run_prompt_submit(
                             session["history_version"] = history_version + 1
                         else:
                             # History mutated externally during the turn.
-                            # Check if the only mutation was a model-switch
-                            # marker inserted mid-turn (#76870).  If so the
-                            # agent output is still valid — merge it into the
-                            # current history that now contains the marker.
+                            # Check if the only mutation was a pivot marker
+                            # the gateway itself inserted mid-turn (#76870).
+                            # If so the agent output is still valid — merge it
+                            # into the current history that now contains the
+                            # marker. A personality change counts here too:
+                            # unlike a model switch it has no pending queue, so
+                            # `/personality` during a running turn lands
+                            # immediately and used to read as a genuine desync,
+                            # dropping the finished turn (#82756).
                             #
                             # _append_model_switch_marker strips prior markers
                             # in-place then appends a new one, so the delta
@@ -10114,19 +11086,19 @@ def _run_prompt_submit(
                             # content, not indices.
                             current_history = list(session["history"])
                             history_no_markers = [
-                                e for e in history if not _is_model_switch_marker(e)
+                                e for e in history if not _is_pivot_marker(e)
                             ]
                             current_no_markers = [
-                                e for e in current_history if not _is_model_switch_marker(e)
+                                e for e in current_history if not _is_pivot_marker(e)
                             ]
-                            model_switch_only = (
+                            pivot_only = (
                                 current_no_markers == history_no_markers
                                 and any(
-                                    _is_model_switch_marker(e)
+                                    _is_pivot_marker(e)
                                     for e in current_history
                                 )
                             )
-                            if model_switch_only:
+                            if pivot_only:
                                 # The agent's new messages start after the
                                 # turn-start history.  Guard against
                                 # auto-compression making result["messages"]
@@ -10319,6 +11291,36 @@ def _run_prompt_submit(
                         file=sys.stderr,
                     )
 
+            # ── /loop tick completion ──────────────────────────────────
+            # If the turn that just finished was a /loop wakeup (fired by
+            # the notification poller), evaluate it: LOOP_COMPLETE marker,
+            # --until judge, --times / max_ticks caps, next-tick schedule.
+            if status == "complete":
+                try:
+                    from hermes_cli.loops import LoopManager
+
+                    loop_sid_key = session.get("session_key") or ""
+                    if loop_sid_key:
+                        loop_mgr = LoopManager(session_id=loop_sid_key)
+                        loop_state = loop_mgr.state
+                        if loop_state is not None and loop_state.awaiting_response:
+                            loop_decision = loop_mgr.complete_tick(
+                                raw if isinstance(raw, str) else ""
+                            )
+                            loop_msg = loop_decision.get("message") or ""
+                            if loop_msg:
+                                _emit(
+                                    "status.update",
+                                    sid,
+                                    {"kind": "loop", "text": loop_msg},
+                                )
+                except Exception as _loop_exc:
+                    print(
+                        f"[tui_gateway] loop completion hook failed: "
+                        f"{type(_loop_exc).__name__}: {_loop_exc}",
+                        file=sys.stderr,
+                    )
+
             # Apply pending_title now that the DB row exists — in the
             # session-owned profile store (not the launch profile).
             _pending = session.get("pending_title")
@@ -10456,6 +11458,32 @@ def _run_prompt_submit(
                 session["last_active"] = time.time()
                 if not turn_error_retained:
                     _clear_inflight_turn(session)
+            # Closing bookend of the "tui prompt accepted" record above —
+            # fires on every path (success, returned error, exception,
+            # interrupt), so one accepted prompt always produces exactly one
+            # finished record. agent.session_id is re-read here because
+            # compression may have rotated it mid-turn: an accepted/finished
+            # pair whose agent_session_id changed IS a rotation trace
+            # (#86647). A missing finished record means the turn thread died
+            # without reaching this finally.
+            logger.info(
+                "tui turn finished: ui_session=%s session_key=%s "
+                "agent_session_id=%s status=%s error_retained=%s duration=%.1fs",
+                sid,
+                session.get("session_key") or "",
+                getattr(agent, "session_id", "") or "",
+                (
+                    result.get("interrupted")
+                    and "interrupted"
+                    or result.get("error")
+                    and "error"
+                    or "complete"
+                )
+                if isinstance(result, dict)
+                else ("error" if turn_error_retained else "complete"),
+                turn_error_retained,
+                time.monotonic() - _turn_started_monotonic,
+            )
             # Backstop for turns that never reached a terminal frame (the
             # frame paths retire the marker as they emit).
             _retire_turn_marker(session, marker_key)
@@ -10558,8 +11586,19 @@ def _run_prompt_submit(
             )
 
     run_thread = threading.Thread(target=run, daemon=True)
-    session["_run_thread"] = run_thread
-    run_thread.start()
+    with _sessions_lock:
+        registered = _sessions.get(sid)
+        can_start = (
+            not session.get("_closing")
+            and (registered is None or registered is session)
+        )
+        if can_start:
+            session["_run_thread"] = run_thread
+            run_thread.start()
+    if not can_start:
+        with session["history_lock"]:
+            session["running"] = False
+    return can_start
 
 
 # Byte-upload attach caps. 25 MB matches Anthropic's per-image limit; 50 MB / 25
@@ -11034,6 +12073,63 @@ def _(rid, params: dict) -> dict:
                 _session_info(agent, session),
             )
         return _ok(rid, {"key": key, "value": nv})
+
+    if key == "advisor":
+        requested_session_id = str(params.get("session_id") or "").strip()
+        if requested_session_id and session is None:
+            # A stale pane must never fall through to the global-profile path.
+            # The Desktop will roll its optimistic switch back on this error.
+            return _err(rid, 4041, "session not found")
+        raw = str(value or "").strip().lower()
+        agent = session.get("agent") if session else None
+        advisor_settings = getattr(agent, "_advisor_settings", None)
+        session_override = session.get("create_advisor_override") if session else None
+        if advisor_settings is not None:
+            current_enabled = bool(getattr(advisor_settings, "enabled", False))
+        elif session_override is not None:
+            current_enabled = bool(session_override)
+        else:
+            current_enabled = is_truthy_value(
+                (_load_cfg().get("advisor") or {}).get("enabled")
+            )
+
+        if raw == "status":
+            return _ok(
+                rid,
+                {"key": key, "value": "on" if current_enabled else "off"},
+            )
+        if raw in {"", "toggle"}:
+            enabled = not current_enabled
+        elif raw in {"on", "true", "enabled"}:
+            enabled = True
+        elif raw in {"off", "false", "disabled"}:
+            enabled = False
+        else:
+            return _err(rid, 4002, f"unknown advisor mode: {value}")
+
+        if session is not None:
+            session["create_advisor_override"] = enabled
+            if agent is None:
+                _persist_session_advisor_override(session)
+        else:
+            _write_config_key("advisor.enabled", enabled)
+        if agent is not None:
+            _apply_advisor_enabled_override(agent, enabled)
+            _persist_session_advisor_override(session)
+            _emit(
+                "session.info",
+                params.get("session_id", ""),
+                _session_info(agent, session),
+            )
+        return _ok(
+            rid,
+            {
+                "key": key,
+                "value": "on" if enabled else "off",
+                "scope": "session" if session is not None else "global",
+                "deferred": bool(session and session.get("running")),
+            },
+        )
 
     if key == "busy":
         raw = str(value or "").strip().lower()
@@ -11943,6 +13039,11 @@ def _project_tree_row(r: dict) -> dict:
         "tool_call_count": r.get("tool_call_count") or 0,
         "input_tokens": r.get("input_tokens") or 0,
         "output_tokens": r.get("output_tokens") or 0,
+        # Cost is one of the fields SidebarSessionRow renders, so a lane row has
+        # to carry it too — without it, switching Show → cost filled in every
+        # figure in Recents and left the same sessions blank under a project.
+        "actual_cost_usd": r.get("actual_cost_usd"),
+        "estimated_cost_usd": r.get("estimated_cost_usd"),
         "model": r.get("model"),
         "is_active": False,
         "cwd": r.get("cwd"),
@@ -12177,6 +13278,8 @@ _PENDING_INPUT_COMMANDS: frozenset[str] = frozenset(
         "steer",
         "plan",
         "goal",
+        "loop",
+        "proactive",
         "moa",
         "undo",
         "learn",
@@ -14410,12 +15513,35 @@ def _browser_disconnect(rid) -> dict:
 
 
 
+# Per-profile MCP lifecycle helpers (mcp.servers.* handlers). Defined on THIS
+# namespace so the rebound handler bodies (register() below) can resolve them,
+# same as _ok/_err — a plain def in methods_tools would be unreachable.
+from .mcp_rpc_helpers import (  # noqa: E402
+    reset_profile as _mcp_reset_profile,
+    summarize_server as _mcp_summarize_server_impl,
+)
+
+
+def _mcp_resolve_profile(rid, params):  # noqa: E402
+    # Bind this namespace's _err so the helper's error envelopes match every
+    # other handler's shape; handlers call this with just (rid, params).
+    from .mcp_rpc_helpers import resolve_profile as _rp
+
+    return _rp(rid, params, _err)
+
+
+def _mcp_summarize_server(name, cfg):  # noqa: E402
+    return _mcp_summarize_server_impl(name, cfg)
+
+
 # ── Split @method handler modules (see method_ctx.py) ────────────────
 # Imported at the end of this module so every global the handlers close
 # over already exists; register() rebinds them onto this namespace.
 from . import (  # noqa: E402
     methods_complete as _methods_complete,
     methods_config as _methods_config,
+    methods_images as _methods_images,
+    methods_profiles as _methods_profiles,
     methods_prompt as _methods_prompt,
     methods_session as _methods_session,
     methods_tools as _methods_tools,
@@ -14427,6 +15553,8 @@ for _m in (
     _methods_config,
     _methods_complete,
     _methods_tools,
+    _methods_profiles,
+    _methods_images,
 ):
     _m.register(sys.modules[__name__])
 del _m

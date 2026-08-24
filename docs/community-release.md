@@ -1,4 +1,4 @@
-# Quy trình phát hành Hermes tiếng Việt đa nền tảng
+# Quy trình phát hành Hermes Vietnamese đa nền tảng
 
 ## Hồ sơ vận hành hiện tại
 
@@ -31,6 +31,32 @@ Workflow `.github/workflows/release-vietnamese.yml` có ba cổng:
 3. **Release:** chỉ chạy khi cả sáu build đạt, tải toàn bộ artifact, tạo bảng SHA-256 chung rồi tạo GitHub Release mới.
 
 Một nhãn đã phát hành là bất biến. Workflow từ chối ghi đè tệp của nhãn cũ; bản sửa lỗi phải dùng số phát hành mới.
+
+## Cập nhật thuận tiện trong ứng dụng
+
+Sau khi sáu target được gom về staging, workflow tạo bốn manifest cập nhật từ
+đúng byte đã dựng: `latest.yml`, `latest-mac.yml`, `latest-linux.yml` và
+`latest-linux-arm64.yml`. Từng mục ghi tên tệp chuẩn hóa, kích thước và SHA-512;
+bốn manifest tiếp tục được đưa vào `SHA256SUMS.txt` trước khi upload draft.
+
+Hermes Vietnamese đóng gói đọc danh sách GitHub Releases công khai, bỏ qua draft và release
+không có manifest dành cho nền tảng đang chạy, rồi ghim bộ cập nhật vào URL của
+release bất biến đã chọn. Windows tải trọn bộ cài đã nghiệm thu, xác minh hash,
+đóng ứng dụng, cài yên lặng và mở lại. `appId`, package product name, executable,
+protocol và vùng dữ liệu kỹ thuật được giữ nguyên. Tên cửa sổ, shortcut và tên
+trình gỡ cài đặt được đổi thành Hermes Vietnamese mà cấu hình, bí mật, cuộc trò
+chuyện, lịch định kỳ và trạng thái onboarding không bị chuyển sang vùng dữ liệu
+mới.
+
+Exact-artifact update phải giữ cả marker bootstrap do bản cũ tạo. Với gói
+resident đầy đủ, marker schema 1 hợp lệ vẫn là bằng chứng cài đặt dù chưa có
+`desktopVersion`; Hermes phải mở thẳng runtime tích hợp và không được đưa người
+dùng về bootstrap hoặc tải/chạy `uv` trong AppData.
+
+`vi-v0.20.4-34` chưa mang các manifest này và code updater trong bản đó chưa đọc
+được nhãn cộng đồng. Vì vậy người dùng v28 cần cài thủ công bản sửa đầu tiên một
+lần; từ bản sửa đó trở đi dùng **Cài đặt → Giới thiệu → Cập nhật ngay**. Đường
+chuyển tiếp này phải được kiểm thử exact-artifact từ v28 trước khi promotion.
 
 ## Ma trận build
 

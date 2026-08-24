@@ -1,6 +1,8 @@
 """Phase 4: lifecycle guard + per-profile observability."""
 import pytest
 
+from gateway.config import GatewayConfig
+
 
 class TestServedProfilesStatus:
     def test_write_and_read_served_profiles(self, tmp_path, monkeypatch):
@@ -16,6 +18,48 @@ class TestServedProfilesStatus:
             assert rec.get("served_profiles") == ["default", "coder"]
         finally:
             importlib.reload(status)
+
+    def test_single_start_can_clear_stale_multiplex_membership(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+        import importlib
+        import gateway.status as status
+
+        importlib.reload(status)
+        try:
+            status.write_runtime_status(
+                gateway_state="running",
+                served_profiles=["default", "coder"],
+            )
+            status.write_runtime_status(
+                gateway_state="starting",
+                served_profiles=[],
+            )
+
+            assert status.read_runtime_status().get("served_profiles") == []
+        finally:
+            importlib.reload(status)
+
+
+def test_cron_profile_homes_follow_allowlist(tmp_path, monkeypatch):
+    """The helper wired into in-process cron returns only selected profiles."""
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path)
+    default_home = tmp_path / ".hermes"
+    monkeypatch.setenv("HERMES_HOME", str(default_home))
+    for name in ("worker", "guest"):
+        (default_home / "profiles" / name).mkdir(parents=True)
+
+    import gateway.run as gateway_run
+
+    homes = gateway_run._multiplex_profile_homes(
+        GatewayConfig(
+            multiplex_profiles=True,
+            multiplex_profile_allowlist=["worker"],
+        )
+    )
+
+    assert [name for name, _home in homes] == ["default", "worker"]
 
 
 class TestNamedProfileMultiplexerGuard:
@@ -51,4 +95,63 @@ class TestNamedProfileMultiplexerGuard:
         monkeypatch.setattr(status, "_pid_from_record", lambda rec: 12345)
         monkeypatch.setattr(status, "_pid_exists", lambda pid: True)
 
+    def test_unset_allowlist_preserves_historical_guard(self, monkeypatch, tmp_path):
+        self._fake_running_default_gateway(monkeypatch, tmp_path)
+        (tmp_path / "config.yaml").write_text(
+            "gateway:\n  multiplex_profiles: true\n",
+            encoding="utf-8",
+        )
 
+        from hermes_cli import gateway as gw
+
+        with pytest.raises(SystemExit, match="1"):
+            gw._guard_named_profile_under_multiplexer(force=False)
+
+    def test_served_profile_is_still_guarded(self, monkeypatch, tmp_path):
+        self._fake_running_default_gateway(monkeypatch, tmp_path)
+        (tmp_path / "config.yaml").write_text(
+            "gateway:\n"
+            "  multiplex_profiles: true\n"
+            "  multiplex_profile_allowlist:\n"
+            "    - Coder\n",
+            encoding="utf-8",
+        )
+
+        from hermes_cli import gateway as gw
+
+        with pytest.raises(SystemExit, match="1"):
+            gw._guard_named_profile_under_multiplexer(force=False)
+
+    def test_top_level_false_overrides_nested_multiplex_true(
+        self, monkeypatch, tmp_path
+    ):
+        self._fake_running_default_gateway(monkeypatch, tmp_path)
+        (tmp_path / "config.yaml").write_text(
+            "multiplex_profiles: false\n"
+            "gateway:\n"
+            "  multiplex_profiles: true\n",
+            encoding="utf-8",
+        )
+
+        from hermes_cli import gateway as gw
+
+        gw._guard_named_profile_under_multiplexer(force=False)
+
+    @pytest.mark.parametrize(
+        "allowlist_yaml",
+        ["[]", "[worker]", "coder"],
+    )
+    def test_unserved_profile_may_run_standalone(
+        self, monkeypatch, tmp_path, allowlist_yaml
+    ):
+        self._fake_running_default_gateway(monkeypatch, tmp_path)
+        (tmp_path / "config.yaml").write_text(
+            "gateway:\n"
+            "  multiplex_profiles: true\n"
+            f"  multiplex_profile_allowlist: {allowlist_yaml}\n",
+            encoding="utf-8",
+        )
+
+        from hermes_cli import gateway as gw
+
+        gw._guard_named_profile_under_multiplexer(force=False)

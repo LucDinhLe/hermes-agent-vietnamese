@@ -94,11 +94,14 @@ export interface HermesPlugin {
   /** Human name for settings / about UI. */
   name?: string
   /** One-liner for the settings inventory (what the plugin adds). */
-  description?: string
+  description?: string | (() => string)
   /** Registers on load when the user hasn't chosen (default true). Set false
    *  for opt-in plugins: they inventory in Settings ▸ Plugins, off until the
    *  user flips the switch. */
   defaultEnabled?: boolean
+  /** Product-critical bundled feature that must stay registered. Settings
+   *  shows it as enabled but does not offer a disable switch. */
+  required?: boolean
   /** Called once at load; wire contributions through `ctx`. */
   register: (ctx: PluginContext) => void
 }

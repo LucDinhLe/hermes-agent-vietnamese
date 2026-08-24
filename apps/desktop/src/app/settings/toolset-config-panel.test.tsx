@@ -45,24 +45,56 @@ const saveHermesConfig = vi.fn()
 const getElevenLabsVoices = vi.fn()
 
 vi.mock('@/hermes', () => ({
-  getToolsetConfig: (name: string) => getToolsetConfig(name),
-  getToolsetModels: (name: string, provider?: string) => getToolsetModels(name, provider),
-  selectToolsetModel: (name: string, model: string, provider?: string) => selectToolsetModel(name, model, provider),
-  selectToolsetProvider: (name: string, provider: string, capability?: string) =>
-    capability === undefined
-      ? selectToolsetProvider(name, provider)
-      : selectToolsetProvider(name, provider, capability),
-  setEnvVar: (key: string, value: string) => setEnvVar(key, value),
-  deleteEnvVar: (key: string) => deleteEnvVar(key),
-  revealEnvVar: (key: string) => revealEnvVar(key),
-  runToolsetPostSetup: (name: string, key: string) => runToolsetPostSetup(name, key),
-  getActionStatus: (name: string, lines?: number) => getActionStatus(name, lines),
-  startOAuthLogin: (providerId: string) => startOAuthLogin(providerId),
-  pollOAuthSession: (providerId: string, sessionId: string) => pollOAuthSession(providerId, sessionId),
-  getHermesConfigRecord: () => getHermesConfigRecord(),
-  getHermesConfigSchema: () => getHermesConfigSchema(),
-  saveHermesConfig: (config: unknown) => saveHermesConfig(config),
-  getElevenLabsVoices: () => getElevenLabsVoices()
+  getToolsetConfig: (name: string, profile?: null | string, connectionId?: null | string) =>
+    getToolsetConfig(name, profile, connectionId),
+  getToolsetModels: (name: string, provider?: string, profile?: null | string, connectionId?: null | string) =>
+    getToolsetModels(name, provider, profile, connectionId),
+  selectToolsetModel: (
+    name: string,
+    model: string,
+    provider?: string,
+    profile?: null | string,
+    connectionId?: null | string
+  ) => selectToolsetModel(name, model, provider, profile, connectionId),
+  selectToolsetProvider: (
+    name: string,
+    provider: string,
+    capability?: string,
+    profile?: null | string,
+    connectionId?: null | string
+  ) => selectToolsetProvider(name, provider, capability, profile, connectionId),
+  setEnvVar: (key: string, value: string, profile?: null | string, connectionId?: null | string) =>
+    setEnvVar(key, value, profile, connectionId),
+  deleteEnvVar: (key: string, profile?: null | string, connectionId?: null | string) =>
+    deleteEnvVar(key, profile, connectionId),
+  revealEnvVar: (key: string, profile?: null | string, connectionId?: null | string) =>
+    revealEnvVar(key, profile, connectionId),
+  runToolsetPostSetup: (name: string, key: string, profile?: null | string, connectionId?: null | string) =>
+    runToolsetPostSetup(name, key, profile, connectionId),
+  getActionStatus: (name: string, lines?: number, profile?: null | string, connectionId?: null | string) =>
+    getActionStatus(name, lines, profile, connectionId),
+  startOAuthLogin: (providerId: string, profile?: null | string, connectionId?: null | string) =>
+    startOAuthLogin(providerId, profile, connectionId),
+  pollOAuthSession: (
+    providerId: string,
+    sessionId: string,
+    profile?: null | string,
+    connectionId?: null | string
+  ) => pollOAuthSession(providerId, sessionId, profile, connectionId),
+  getHermesConfigRecord: (profile?: null | string, connectionId?: null | string) =>
+    getHermesConfigRecord(profile, connectionId),
+  getHermesConfigSchema: (profile?: null | string, connectionId?: null | string) =>
+    getHermesConfigSchema(profile, connectionId),
+  saveHermesConfig: (config: unknown, profile?: null | string, connectionId?: null | string) =>
+    saveHermesConfig(config, profile, connectionId),
+  getElevenLabsVoices: (profile?: null | string, connectionId?: null | string) =>
+    getElevenLabsVoices(profile, connectionId),
+  // @/store/profile (pulled in transitively via use-config-record's
+  // normalizeProfileKey import) calls this at module-init; the full-replacement
+  // mock must provide it or the module graph throws on load.
+  setApiRequestProfile: () => undefined,
+  setApiRequestConnection: () => undefined,
+  getApiRequestProfile: () => null
 }))
 
 vi.mock('@/store/notifications', () => ({
@@ -153,6 +185,32 @@ afterEach(() => {
 })
 
 describe('ToolsetConfigPanel', () => {
+  it('keeps capability reads and writes on the captured backend source', async () => {
+    const { ToolsetConfigPanel } = await import('./toolset-config-panel')
+    render(
+      <ToolsetConfigPanel
+        connectionId="source-b"
+        onConfiguredChange={vi.fn()}
+        profile="default"
+        toolset="tts"
+      />
+    )
+
+    await waitFor(() => expect(getToolsetConfig).toHaveBeenCalledWith('tts', 'default', 'source-b'))
+    fireEvent.click(await screen.findByRole('button', { name: /ElevenLabs/ }))
+    fireEvent.click(await screen.findByRole('button', { name: /Use this backend/i }))
+
+    await waitFor(() =>
+      expect(selectToolsetProvider).toHaveBeenCalledWith(
+        'tts',
+        'ElevenLabs',
+        undefined,
+        'default',
+        'source-b'
+      )
+    )
+  })
+
   it('renders inline voice/model fields for a TTS provider row carrying tts_provider', async () => {
     // The Capabilities gap: provider rows only showed API keys — voice/model
     // settings lived exclusively in Settings → Voice. Rows now carry the
@@ -208,7 +266,7 @@ describe('ToolsetConfigPanel', () => {
 
     expect(await screen.findByText('Microsoft Edge TTS')).toBeTruthy()
     expect(screen.getByText('ElevenLabs')).toBeTruthy()
-    expect(getToolsetConfig).toHaveBeenCalledWith('tts')
+    expect(getToolsetConfig).toHaveBeenCalledWith('tts', undefined, undefined)
   })
 
   it('expands a provider on row click and activates it via the explicit button', async () => {
@@ -223,7 +281,9 @@ describe('ToolsetConfigPanel', () => {
     // The explicit activation button is what persists the backend choice.
     fireEvent.click(await screen.findByRole('button', { name: /Use this backend/ }))
 
-    await waitFor(() => expect(selectToolsetProvider).toHaveBeenCalledWith('tts', 'ElevenLabs'))
+    await waitFor(() =>
+      expect(selectToolsetProvider).toHaveBeenCalledWith('tts', 'ElevenLabs', undefined, undefined, undefined)
+    )
   })
 
   it('serializes provider selection while a previous choice is pending', async () => {
@@ -243,7 +303,15 @@ describe('ToolsetConfigPanel', () => {
     const useBackend = await screen.findByRole('button', { name: /Use this backend/ })
     fireEvent.click(useBackend)
 
-    await waitFor(() => expect(selectToolsetProvider).toHaveBeenCalledWith('tts', 'Microsoft Edge TTS'))
+    await waitFor(() =>
+      expect(selectToolsetProvider).toHaveBeenCalledWith(
+        'tts',
+        'Microsoft Edge TTS',
+        undefined,
+        undefined,
+        undefined
+      )
+    )
     // While the first selection is pending, the activation CTA is disabled —
     // a second click must not fire another PUT.
     expect(useBackend.hasAttribute('disabled')).toBe(true)
@@ -293,11 +361,13 @@ describe('ToolsetConfigPanel', () => {
     // Both catalog rows render with their picker metadata.
     expect(await screen.findByText('Z-Image Turbo')).toBeTruthy()
     expect(screen.getByText('FLUX 2 Pro')).toBeTruthy()
-    expect(getToolsetModels).toHaveBeenCalledWith('image_gen', 'FAL.ai')
+    expect(getToolsetModels).toHaveBeenCalledWith('image_gen', 'FAL.ai', undefined, undefined)
 
     // Picking a different model persists via the model endpoint.
     fireEvent.click(screen.getByRole('button', { name: /FLUX 2 Pro/ }))
-    await waitFor(() => expect(selectToolsetModel).toHaveBeenCalledWith('image_gen', 'flux-2-pro', 'FAL.ai'))
+    await waitFor(() =>
+      expect(selectToolsetModel).toHaveBeenCalledWith('image_gen', 'flux-2-pro', 'FAL.ai', undefined, undefined)
+    )
   })
 
   it('does not fetch model catalogs for toolsets without them', async () => {
@@ -325,7 +395,9 @@ describe('ToolsetConfigPanel', () => {
     fireEvent.change(input, { target: { value: 'sk-test-123' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    await waitFor(() => expect(setEnvVar).toHaveBeenCalledWith('ELEVENLABS_API_KEY', 'sk-test-123'))
+    await waitFor(() =>
+      expect(setEnvVar).toHaveBeenCalledWith('ELEVENLABS_API_KEY', 'sk-test-123', undefined, undefined)
+    )
   })
 
   it('expands the active provider on load, not just the first configured one', async () => {
@@ -420,10 +492,12 @@ describe('ToolsetConfigPanel', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Run setup/ }))
 
-    await waitFor(() => expect(runToolsetPostSetup).toHaveBeenCalledWith('browser', 'camofox'))
+    await waitFor(() =>
+      expect(runToolsetPostSetup).toHaveBeenCalledWith('browser', 'camofox', undefined, undefined)
+    )
     // The install log is tailed inline. The first poll fires after a 1200ms
     // delay (mirrors command-center's poll cadence), so allow >1200ms here.
-    await waitFor(() => expect(getActionStatus).toHaveBeenCalledWith('tools-post-setup', 300), {
+    await waitFor(() => expect(getActionStatus).toHaveBeenCalledWith('tools-post-setup', 300, undefined, undefined), {
       timeout: 4000
     })
   })
@@ -454,7 +528,9 @@ describe('ToolsetConfigPanel', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Run setup/ }))
 
-    await waitFor(() => expect(runToolsetPostSetup).toHaveBeenCalledWith('browser', 'camofox'))
+    await waitFor(() =>
+      expect(runToolsetPostSetup).toHaveBeenCalledWith('browser', 'camofox', undefined, undefined)
+    )
     // Give the would-be first poll delay (1200ms) time to NOT fire.
     await new Promise(resolve => setTimeout(resolve, 1500))
     expect(getActionStatus).not.toHaveBeenCalled()
@@ -496,7 +572,7 @@ describe('ToolsetConfigPanel', () => {
     // The failing install log is still tailed and shown; exit_code:1 routes to
     // the error notify branch (asserted via the poll completing on a non-zero
     // status without throwing).
-    await waitFor(() => expect(getActionStatus).toHaveBeenCalledWith('tools-post-setup', 300), {
+    await waitFor(() => expect(getActionStatus).toHaveBeenCalledWith('tools-post-setup', 300, undefined, undefined), {
       timeout: 4000
     })
     await waitFor(() => expect(screen.getByText(/npm ERR! install failed/)).toBeTruthy(), {
@@ -754,7 +830,9 @@ describe('ToolsetConfigPanel', () => {
 
       fireEvent.click(await screen.findByRole('button', { name: /Re-run setup/ }))
 
-      await waitFor(() => expect(runToolsetPostSetup).toHaveBeenCalledWith('browser', 'agent_browser'))
+      await waitFor(() =>
+        expect(runToolsetPostSetup).toHaveBeenCalledWith('browser', 'agent_browser', undefined, undefined)
+      )
     })
 
     it('keeps the primary Run setup CTA when the server says needs_setup', async () => {
@@ -833,7 +911,13 @@ describe('ToolsetConfigPanel', () => {
       fireEvent.click(await screen.findByRole('button', { name: /Use this backend/ }))
 
       await waitFor(() =>
-        expect(selectToolsetProvider).toHaveBeenCalledWith('browser', 'Nous Subscription (Browser Use cloud)')
+        expect(selectToolsetProvider).toHaveBeenCalledWith(
+          'browser',
+          'Nous Subscription (Browser Use cloud)',
+          undefined,
+          undefined,
+          undefined
+        )
       )
       await waitFor(() =>
         expect(notify).toHaveBeenCalledWith(
@@ -889,14 +973,17 @@ describe('ToolsetConfigPanel', () => {
         getToolsetConfig.mockClear()
         warning!.action!.onClick()
 
-        await waitFor(() => expect(startOAuthLogin).toHaveBeenCalledWith('nous'))
+        await waitFor(() => expect(startOAuthLogin).toHaveBeenCalledWith('nous', undefined, undefined))
         expect(openSpy).toHaveBeenCalledWith(
           'https://portal.nousresearch.com/device?user_code=NOUS-1234',
           '_blank',
           'noopener,noreferrer'
         )
         // Approved poll → the panel refetches the config so status flips.
-        await waitFor(() => expect(pollOAuthSession).toHaveBeenCalledWith('nous', 'sess-1'), { timeout: 8000 })
+        await waitFor(() =>
+          expect(pollOAuthSession).toHaveBeenCalledWith('nous', 'sess-1', undefined, undefined),
+          { timeout: 8000 }
+        )
         await waitFor(() => expect(getToolsetConfig).toHaveBeenCalled(), { timeout: 8000 })
       } finally {
         openSpy.mockRestore()
@@ -1051,7 +1138,9 @@ describe('ToolsetConfigPanel', () => {
       const useForSearch = await screen.findByRole('button', { name: 'Use for Search' })
       fireEvent.click(useForSearch)
 
-      await waitFor(() => expect(selectToolsetProvider).toHaveBeenCalledWith('web', 'Firecrawl', 'search'))
+      await waitFor(() =>
+        expect(selectToolsetProvider).toHaveBeenCalledWith('web', 'Firecrawl', 'search', undefined, undefined)
+      )
       // Badge tracks the local write without a refetch.
       await waitFor(() => expect(screen.getByText('Search: firecrawl')).toBeTruthy())
     })

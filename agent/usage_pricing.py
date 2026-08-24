@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -7,13 +8,55 @@ from decimal import Decimal
 from typing import Any, Dict, Literal, Optional
 
 from agent.model_metadata import fetch_endpoint_model_metadata, fetch_model_metadata
-from utils import base_url_host_matches
+from utils import base_url_host_matches, base_url_hostname
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_PRICING = {"input": 0.0, "output": 0.0}
 
 _ZERO = Decimal("0")
 _ONE_MILLION = Decimal("1000000")
 _NOUS_DEFAULT_BASE_URL = "https://inference-api.nousresearch.com/v1"
+
+# Sub-cent cost threshold: below $0.01, render at 4 decimal places so
+# the display is non-zero (e.g. $0.0046 instead of $0.00). See #79220.
+_SUBCENT_THRESHOLD = Decimal("0.01")
+
+# Attached to every CostResult with status="included" so consumers can
+# distinguish "free because subscription" from "free because $0 pricing".
+_INCLUDED_NOTE = "subscription-included; no provider invoice for usage"
+
+
+def format_cost_label(amount: Decimal) -> str:
+    """Format a cost amount as a display label.
+
+    Scales precision to magnitude:
+    - Zero → "$0.00"
+    - Sub-cent (< $0.01) → "~$0.0046" (4 dp; amounts that ROUND to
+      0.0000 at 4 dp — i.e. at or below $0.00005 under banker's
+      rounding — fall back to "~$<0.0001" so the label never reads
+      as zero)
+    - Normal → "~$1.23" (2 dp)
+
+    This fixes #79220 where sub-cent per-turn costs on cheap models
+    (DeepSeek, etc.) rendered as "$0.00" despite amount_usd carrying
+    full Decimal precision.
+
+    Shared by per-response cost labels (estimate_usage_cost) and the
+    insights cost-bucket formatters — keep both surfaces on this one
+    implementation so sub-cent honesty can't regress on one of them.
+    """
+    if amount == _ZERO:
+        return "$0.00"
+    if amount < _SUBCENT_THRESHOLD:
+        label = f"~${amount:.4f}"
+        # A positive amount that rounds to 0.0000 at 4 dp would render
+        # "~$0.0000" — a zero-looking label, the exact #79220 dishonesty.
+        # Comparing the rendered label checks the truth directly (a naive
+        # `< 0.00005` threshold misses the exact boundary under
+        # ROUND_HALF_EVEN).
+        return label if label != "~$0.0000" else "~$<0.0001"
+    return f"~${amount:.2f}"
 
 CostStatus = Literal["actual", "estimated", "included", "unknown"]
 CostSource = Literal[
@@ -103,18 +146,42 @@ _UTC_NOW = lambda: datetime.now(timezone.utc)
 # Official docs snapshot entries. Models whose published pricing and cache
 # semantics are stable enough to encode exactly.
 _OFFICIAL_DOCS_PRICING: Dict[tuple[str, str], PricingEntry] = {
+    # ── OpenAI GPT-5.5 series ────────────────────────────────────────────
+    # Standard API list prices. GPT-5.5 Pro has no separately published
+    # cached-input rate, so that field intentionally stays unknown.
+    # Source: https://developers.openai.com/api/docs/models/gpt-5.5
+    (
+        "openai",
+        "gpt-5.5",
+    ): PricingEntry(
+        input_cost_per_million=Decimal("5.00"),
+        output_cost_per_million=Decimal("30.00"),
+        cache_read_cost_per_million=Decimal("0.50"),
+        source="official_docs_snapshot",
+        source_url="https://developers.openai.com/api/docs/models/gpt-5.5",
+        pricing_version="openai-gpt-5.5-2026-08-20",
+    ),
+    (
+        "openai",
+        "gpt-5.5-pro",
+    ): PricingEntry(
+        input_cost_per_million=Decimal("30.00"),
+        output_cost_per_million=Decimal("180.00"),
+        source="official_docs_snapshot",
+        source_url="https://developers.openai.com/api/docs/models/gpt-5.5-pro",
+        pricing_version="openai-gpt-5.5-pro-2026-08-20",
+    ),
     # ── OpenAI GPT-5.6 series (Sol/Terra/Luna) ───────────────────────────
-    # Announced in limited preview 2026-06-26; GA 2026-07-09 at the same
-    # rates (Sol $5/$30, Terra $2.50/$15, Luna $1/$6 per 1M in/out). Cache
-    # writes are billed at 1.25x the uncached input rate; cache reads get the
-    # standard 90% discount (0.10x input, confirmed: Sol $0.50/M cached).
+    # Current direct-API rates per 1M tokens: Sol $5/$30, Terra $2/$12,
+    # Luna $0.20/$1.20 input/output. Cache writes are billed at 1.25x the
+    # uncached input rate; cache reads get the standard 90% discount.
     # Note: "Sol Fast mode" ($12.5/$75, up to 750 tok/s via Cerebras) is a
     # separate serving tier, not covered by these entries. The "-pro"
     # variants (high-effort modes, GA alongside base tiers) bill at the
     # SAME per-token rates and are aliased onto these entries below the
     # dict (they cost more per task by consuming more tokens, not by a
     # higher rate — verified against OpenRouter's live pricing 2026-07-09).
-    # Source: https://openai.com/index/previewing-gpt-5-6-sol/
+    # Source: https://developers.openai.com/api/docs/models/compare
     (
         "openai",
         "gpt-5.6-sol",
@@ -124,32 +191,32 @@ _OFFICIAL_DOCS_PRICING: Dict[tuple[str, str], PricingEntry] = {
         cache_read_cost_per_million=Decimal("0.50"),
         cache_write_cost_per_million=Decimal("6.25"),
         source="official_docs_snapshot",
-        source_url="https://openai.com/index/previewing-gpt-5-6-sol/",
-        pricing_version="openai-gpt-5.6-2026-07",
+        source_url="https://developers.openai.com/api/docs/models/gpt-5.6-sol",
+        pricing_version="openai-gpt-5.6-2026-08-20",
     ),
     (
         "openai",
         "gpt-5.6-terra",
     ): PricingEntry(
-        input_cost_per_million=Decimal("2.50"),
-        output_cost_per_million=Decimal("15.00"),
-        cache_read_cost_per_million=Decimal("0.25"),
-        cache_write_cost_per_million=Decimal("3.125"),
+        input_cost_per_million=Decimal("2.00"),
+        output_cost_per_million=Decimal("12.00"),
+        cache_read_cost_per_million=Decimal("0.20"),
+        cache_write_cost_per_million=Decimal("2.50"),
         source="official_docs_snapshot",
-        source_url="https://openai.com/index/previewing-gpt-5-6-sol/",
-        pricing_version="openai-gpt-5.6-2026-07",
+        source_url="https://developers.openai.com/api/docs/models/gpt-5.6-terra",
+        pricing_version="openai-gpt-5.6-2026-08-20",
     ),
     (
         "openai",
         "gpt-5.6-luna",
     ): PricingEntry(
-        input_cost_per_million=Decimal("1.00"),
-        output_cost_per_million=Decimal("6.00"),
-        cache_read_cost_per_million=Decimal("0.10"),
-        cache_write_cost_per_million=Decimal("1.25"),
+        input_cost_per_million=Decimal("0.20"),
+        output_cost_per_million=Decimal("1.20"),
+        cache_read_cost_per_million=Decimal("0.02"),
+        cache_write_cost_per_million=Decimal("0.25"),
         source="official_docs_snapshot",
-        source_url="https://openai.com/index/previewing-gpt-5-6-sol/",
-        pricing_version="openai-gpt-5.6-2026-07",
+        source_url="https://developers.openai.com/api/docs/models/gpt-5.6-luna",
+        pricing_version="openai-gpt-5.6-2026-08-20",
     ),
     # ── Anthropic Claude 4.8 ─────────────────────────────────────────────
     # Same $5/$25 base pricing as 4.6/4.7.  Fast-mode variant is a separate
@@ -180,9 +247,8 @@ _OFFICIAL_DOCS_PRICING: Dict[tuple[str, str], PricingEntry] = {
         pricing_version="anthropic-pricing-2026-05",
     ),
     # ── Anthropic Claude Sonnet 5 ────────────────────────────────────────
-    # Launched 2026-06-30. Introductory pricing ($2/$10 per MTok) runs
-    # through 2026-08-31, after which it reverts to $3/$15 (matching
-    # Sonnet 4.6). Update this entry when the intro window closes.
+    # $2/$10 per MTok is now the standard price. Anthropic explicitly
+    # cancelled the previously announced September increase.
     # Source: https://platform.claude.com/docs/en/about-claude/pricing
     (
         "anthropic",
@@ -194,7 +260,7 @@ _OFFICIAL_DOCS_PRICING: Dict[tuple[str, str], PricingEntry] = {
         cache_write_cost_per_million=Decimal("2.50"),
         source="official_docs_snapshot",
         source_url="https://platform.claude.com/docs/en/about-claude/pricing",
-        pricing_version="anthropic-pricing-2026-06-intro",
+        pricing_version="anthropic-pricing-2026-08-20",
     ),
     # ── Anthropic Claude 4.7 ─────────────────────────────────────────────
     # Opus 4.5/4.6/4.7 share $5/$25 pricing (new tokenizer, up to 35% more
@@ -958,6 +1024,16 @@ for _base_56 in ("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"):
     ]
 del _base_56
 
+# Published aliases/snapshots share the base model's list price.
+for _alias, _canonical in {
+    "gpt-5.5-2026-04-23": "gpt-5.5",
+    "gpt-5.6": "gpt-5.6-sol",
+}.items():
+    _OFFICIAL_DOCS_PRICING[("openai", _alias)] = _OFFICIAL_DOCS_PRICING[
+        ("openai", _canonical)
+    ]
+del _alias, _canonical
+
 # The direct Gemini provider currently exposes preview IDs for these two
 # models. Keep the official snapshot keyed by both their documented stable
 # names and the provider's emitted IDs so a catalog selection is billable.
@@ -985,6 +1061,29 @@ def _to_int(value: Any) -> int:
         return int(value or 0)
     except Exception:
         return 0
+
+
+def _usage_get(obj: Any, name: str, default: Any = 0) -> Any:
+    """Read a field from a usage object that may be a dict or an attribute object.
+
+    The Responses API can return usage as either a typed SDK object (accessible
+    via ``getattr``) or a plain ``dict`` (from JSON deserialisation).  Using
+    ``getattr`` on a dict silently yields the default, zeroing out all token
+    counts.  This helper normalises access so both shapes work transparently.
+    """
+    if isinstance(obj, dict):
+        return obj.get(name, default)
+    return getattr(obj, name, default)
+
+
+def _usage_count(value: Any) -> int:
+    """Coerce a usage counter to a non-negative integer.
+
+    Providers occasionally emit malformed negative counters; clamp them to 0
+    so a bad field cannot corrupt session accounting (#85706).
+    """
+    return max(0, _to_int(value))
+
 
 
 def resolve_billing_route(
@@ -1032,7 +1131,7 @@ def resolve_billing_route(
         # Fireworks model ids look like accounts/fireworks/models/<name>;
         # rsplit("/", 1)[-1] yields just <name> which is what the dict keys on.
         return BillingRoute(provider="fireworks", model=model.rsplit("/", 1)[-1], base_url=base_url or "", billing_mode="official_docs_snapshot")
-    if provider_name in {"custom", "local"} or (base and "localhost" in base):
+    if provider_name in {"custom", "local"} or (base and base_url_hostname(base) in ("localhost", "127.0.0.1")):
         return BillingRoute(provider=provider_name or "custom", model=model, base_url=base_url or "", billing_mode="unknown")
     return BillingRoute(provider=provider_name or "unknown", model=model.split("/")[-1] if model else "", base_url=base_url or "", billing_mode="unknown")
 
@@ -1226,47 +1325,89 @@ def normalize_usage(
     mode = (api_mode or "").strip().lower()
 
     if mode == "anthropic_messages" or provider_name == "anthropic":
-        input_tokens = _to_int(getattr(response_usage, "input_tokens", 0))
-        output_tokens = _to_int(getattr(response_usage, "output_tokens", 0))
-        cache_read_tokens = _to_int(getattr(response_usage, "cache_read_input_tokens", 0))
-        cache_write_tokens = _to_int(getattr(response_usage, "cache_creation_input_tokens", 0))
-    elif mode == "codex_responses":
-        input_total = _to_int(getattr(response_usage, "input_tokens", 0))
-        output_tokens = _to_int(getattr(response_usage, "output_tokens", 0))
-        details = getattr(response_usage, "input_tokens_details", None)
-        cache_read_tokens = _to_int(getattr(details, "cached_tokens", 0) if details else 0)
-        cache_write_tokens = _to_int(
-            getattr(details, "cache_creation_tokens", 0) if details else 0
+        input_tokens = _usage_count(_usage_get(response_usage, "input_tokens", 0))
+        output_tokens = _usage_count(_usage_get(response_usage, "output_tokens", 0))
+        cache_read_tokens = _usage_count(_usage_get(response_usage, "cache_read_input_tokens", 0))
+        cache_write_tokens = _usage_count(
+            _usage_get(response_usage, "cache_creation_input_tokens", 0)
         )
+    elif mode == "codex_responses":
+        input_total = _usage_count(_usage_get(response_usage, "input_tokens", 0))
+        output_tokens = _usage_count(_usage_get(response_usage, "output_tokens", 0))
+        details = _usage_get(response_usage, "input_tokens_details", None)
+        cache_read_tokens = _usage_count(
+            _usage_get(details, "cached_tokens", 0) if details else 0
+        )
+        # OpenAI's documented field for GPT-5.6+ explicit cache writes is
+        # `cache_write_tokens` (billed at 1.25x); `cache_creation_tokens` is
+        # kept as a fallback for older/alternate Responses-compatible
+        # endpoints (#70543).
+        cache_write_tokens = _usage_count(
+            _usage_get(details, "cache_write_tokens", 0) if details else 0
+        )
+        if not cache_write_tokens:
+            cache_write_tokens = _usage_count(
+                _usage_get(details, "cache_creation_tokens", 0) if details else 0
+            )
         input_tokens = max(0, input_total - cache_read_tokens - cache_write_tokens)
     else:
-        prompt_total = _to_int(getattr(response_usage, "prompt_tokens", 0))
-        output_tokens = _to_int(getattr(response_usage, "completion_tokens", 0))
-        details = getattr(response_usage, "prompt_tokens_details", None)
+        # OpenAI-style names first; fall back to Anthropic-style
+        # (input_tokens/output_tokens). Local OpenAI-compatible servers like
+        # mlx_vlm.server emit the Anthropic names in chat_completions responses,
+        # and the OpenAI Python client preserves them as extra attributes.
+        prompt_total = _usage_count(
+            _usage_get(response_usage, "prompt_tokens", 0)
+        ) or _usage_count(_usage_get(response_usage, "input_tokens", 0))
+        output_tokens = _usage_count(
+            _usage_get(response_usage, "completion_tokens", 0)
+        ) or _usage_count(_usage_get(response_usage, "output_tokens", 0))
+        details = _usage_get(response_usage, "prompt_tokens_details", None)
         # Primary: OpenAI-style prompt_tokens_details. Fallback: Anthropic-style
         # top-level fields that some OpenAI-compatible proxies (OpenRouter, Vercel
         # AI Gateway, Cline) expose when routing Claude models — without this
         # fallback, cache writes are undercounted as 0 and cache reads can be
         # missed when the proxy only surfaces them at the top level.
         # Port of cline/cline#10266.
-        cache_read_tokens = _to_int(getattr(details, "cached_tokens", 0) if details else 0)
+        cache_read_tokens = _usage_count(
+            _usage_get(details, "cached_tokens", 0) if details else 0
+        )
         if not cache_read_tokens:
-            cache_read_tokens = _to_int(getattr(response_usage, "cache_read_input_tokens", 0))
+            cache_read_tokens = _usage_count(
+                _usage_get(response_usage, "cache_read_input_tokens", 0)
+            )
         if not cache_read_tokens:
             # DeepSeek's native API (api.deepseek.com) reports context-cache
             # hits as top-level prompt_cache_hit_tokens (+ the complementary
             # prompt_cache_miss_tokens; prompt_tokens = hit + miss), not the
             # OpenAI nested shape. Without this, direct DeepSeek sessions
             # always showed 0 cache-hit tokens (#61871).
-            cache_read_tokens = _to_int(
-                getattr(response_usage, "prompt_cache_hit_tokens", 0)
+            cache_read_tokens = _usage_count(
+                _usage_get(response_usage, "prompt_cache_hit_tokens", 0)
             )
-        cache_write_tokens = _to_int(
-            getattr(details, "cache_write_tokens", 0) if details else 0
+        if not cache_read_tokens:
+            # Kimi/Moonshot's native API (api.moonshot.cn / .ai) reports
+            # context-cache hits as a top-level usage.cached_tokens, not the
+            # OpenAI nested prompt_tokens_details.cached_tokens shape. Without
+            # this, direct Kimi sessions always showed 0 cache-hit tokens and
+            # the hits were billed at the full input rate (#65722).
+            cache_read_tokens = _usage_count(
+                _usage_get(response_usage, "cached_tokens", 0)
+            )
+        cache_write_tokens = _usage_count(
+            _usage_get(details, "cache_write_tokens", 0) if details else 0
         )
         if not cache_write_tokens:
-            cache_write_tokens = _to_int(
-                getattr(response_usage, "cache_creation_input_tokens", 0)
+            cache_write_tokens = _usage_count(
+                _usage_get(details, "cache_creation_input_tokens", 0)
+                if details else 0
+            )
+        if not cache_write_tokens:
+            cache_write_tokens = _usage_count(
+                _usage_get(response_usage, "cache_creation_input_tokens", 0)
+            )
+        if not cache_write_tokens:
+            cache_write_tokens = _usage_count(
+                _usage_get(response_usage, "cache_write_tokens", 0)
             )
         input_tokens = max(0, prompt_total - cache_read_tokens - cache_write_tokens)
 
@@ -1278,15 +1419,33 @@ def normalize_usage(
     # hidden thinking was invisible in session accounting even though it
     # dominates output spend on models like deepseek-v4-flash (measured:
     # single calls burning 21K reasoning tokens to emit 500 visible tokens).
-    output_details = getattr(response_usage, "output_tokens_details", None)
+    output_details = _usage_get(response_usage, "output_tokens_details", None)
     if output_details:
-        reasoning_tokens = _to_int(getattr(output_details, "reasoning_tokens", 0))
+        reasoning_tokens = _usage_count(_usage_get(output_details, "reasoning_tokens", 0))
     if not reasoning_tokens:
-        completion_details = getattr(response_usage, "completion_tokens_details", None)
+        completion_details = _usage_get(response_usage, "completion_tokens_details", None)
         if completion_details:
-            reasoning_tokens = _to_int(
-                getattr(completion_details, "reasoning_tokens", 0)
+            reasoning_tokens = _usage_count(
+                _usage_get(completion_details, "reasoning_tokens", 0)
             )
+
+    # Cache observability for MiniMax's Anthropic wire: on MiniMax-M3,
+    # usage.cache_read_input_tokens carries a constant +128 floor and
+    # cache_creation_input_tokens is always 0, so cache_read is NOT a
+    # reliable hit signal — the signal that survives is the input_tokens
+    # drop between consecutive calls. Standard level-gated logger.debug;
+    # enable via logging config to confirm cache behavior.
+    # Docs: https://platform.minimax.io/docs/api-reference/text-prompt-caching
+    if provider_name in {"minimax", "minimax-cn"} and mode == "anthropic_messages":
+        logger.debug(
+            "cache_observability provider=%s mode=%s input_tokens=%s "
+            "output_tokens=%s cache_read_tokens=%s cache_write_tokens=%s "
+            "(note: on MiniMax-M3 cache_read carries a +128 constant "
+            "floor and is not a reliable hit signal — track input_tokens "
+            "drops across calls instead)",
+            provider_name, mode, input_tokens, output_tokens,
+            cache_read_tokens, cache_write_tokens,
+        )
 
     return CanonicalUsage(
         input_tokens=input_tokens,
@@ -1313,6 +1472,7 @@ def estimate_usage_cost(
             source="none",
             label="included",
             pricing_version="included-route",
+            notes=(_INCLUDED_NOTE,),
         )
 
     entry = get_pricing_entry(model_name, provider=provider, base_url=base_url, api_key=api_key)
@@ -1321,6 +1481,21 @@ def estimate_usage_cost(
 
     notes: list[str] = []
     amount = _ZERO
+
+    # Apply OpenAI's >272K prompt multiplier per provider request. Applying it
+    # later to a cumulative session total would overprice multi-turn sessions.
+    normalized_model = route.model.lower()
+    openai_long_context = route.provider == "openai" and (
+        normalized_model == "gpt-5.5"
+        or normalized_model == "gpt-5.5-2026-04-23"
+        or normalized_model == "gpt-5.6"
+        or normalized_model.startswith("gpt-5.6-")
+    )
+    long_context = openai_long_context and usage.prompt_tokens > 272_000
+    input_multiplier = Decimal("2") if long_context else Decimal("1")
+    output_multiplier = Decimal("1.5") if long_context else Decimal("1")
+    if long_context:
+        notes.append("OpenAI long-context pricing applied (>272K input tokens).")
 
     if usage.input_tokens and entry.input_cost_per_million is None:
         return CostResult(amount_usd=None, status="unknown", source=entry.source, label="n/a")
@@ -1346,21 +1521,22 @@ def estimate_usage_cost(
             )
 
     if entry.input_cost_per_million is not None:
-        amount += Decimal(usage.input_tokens) * entry.input_cost_per_million / _ONE_MILLION
+        amount += Decimal(usage.input_tokens) * entry.input_cost_per_million * input_multiplier / _ONE_MILLION
     if entry.output_cost_per_million is not None:
-        amount += Decimal(usage.output_tokens) * entry.output_cost_per_million / _ONE_MILLION
+        amount += Decimal(usage.output_tokens) * entry.output_cost_per_million * output_multiplier / _ONE_MILLION
     if entry.cache_read_cost_per_million is not None:
-        amount += Decimal(usage.cache_read_tokens) * entry.cache_read_cost_per_million / _ONE_MILLION
+        amount += Decimal(usage.cache_read_tokens) * entry.cache_read_cost_per_million * input_multiplier / _ONE_MILLION
     if entry.cache_write_cost_per_million is not None:
-        amount += Decimal(usage.cache_write_tokens) * entry.cache_write_cost_per_million / _ONE_MILLION
+        amount += Decimal(usage.cache_write_tokens) * entry.cache_write_cost_per_million * input_multiplier / _ONE_MILLION
     if entry.request_cost is not None and usage.request_count:
         amount += Decimal(usage.request_count) * entry.request_cost
 
     status: CostStatus = "estimated"
-    label = f"~${amount:.2f}"
+    label = format_cost_label(amount)
     if entry.source == "none" and amount == _ZERO:
         status = "included"
         label = "included"
+        notes.append(_INCLUDED_NOTE)
 
     if route.provider == "openrouter":
         notes.append("OpenRouter cost is estimated from the models API until reconciled.")
@@ -1373,6 +1549,37 @@ def estimate_usage_cost(
         fetched_at=entry.fetched_at,
         pricing_version=entry.pricing_version,
         notes=tuple(notes),
+    )
+
+
+def estimate_reference_api_cost(
+    model_name: str,
+    usage: CanonicalUsage,
+    *,
+    provider: Optional[str] = None,
+    base_url: Optional[str] = None,
+    api_key: Optional[str] = None,
+) -> CostResult:
+    """Return a public-API price reference for subscription-included usage."""
+    route = resolve_billing_route(model_name, provider=provider, base_url=base_url)
+    if route.provider != "openai-codex" or route.billing_mode != "subscription_included":
+        return estimate_usage_cost(
+            model_name, usage, provider=provider, base_url=base_url, api_key=api_key
+        )
+
+    result = estimate_usage_cost(model_name, usage, provider="openai")
+    if result.amount_usd is None:
+        return result
+
+    return CostResult(
+        amount_usd=result.amount_usd,
+        status="estimated",
+        source=result.source,
+        label=result.label,
+        fetched_at=result.fetched_at,
+        pricing_version=result.pricing_version,
+        notes=result.notes
+        + ("API-equivalent reference; current Codex subscription is not billed per token.",),
     )
 
 

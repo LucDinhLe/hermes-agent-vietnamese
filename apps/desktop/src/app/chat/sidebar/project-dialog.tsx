@@ -248,6 +248,7 @@ export function ProjectDialog() {
                 onGenerate={() => void generateIdea()}
               />
             </div>
+            <p className="text-[0.6875rem] leading-4 text-(--ui-text-quaternary)">{p.ideaHint}</p>
             <div className="flex flex-wrap items-center gap-1">
               {templates.map(template => (
                 <button

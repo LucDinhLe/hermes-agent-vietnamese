@@ -1,6 +1,8 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 
+import { useBackendOwnerGuard } from '@/app/hooks/use-backend-owner-guard'
 import { getHermesConfigRecord, type HermesConfigRecord, saveHermesConfig } from '@/hermes'
+import type { BackendOwner } from '@/store/backend-owner'
 
 import { TRANSLATIONS } from './catalog'
 import { DEFAULT_LOCALE, localeConfigValue, normalizeLocale } from './languages'
@@ -10,24 +12,24 @@ import type { Locale, Translations } from './types'
 export { LOCALE_META } from './languages'
 
 export interface I18nConfigClient {
-  getConfig: () => Promise<HermesConfigRecord>
-  saveConfig: (config: HermesConfigRecord) => Promise<{ ok: boolean }>
+  getConfig: (owner?: BackendOwner) => Promise<HermesConfigRecord>
+  saveConfig: (config: HermesConfigRecord, owner?: BackendOwner) => Promise<{ ok: boolean }>
 }
 
 const defaultConfigClient: I18nConfigClient = {
-  getConfig: () => {
+  getConfig: owner => {
     if (typeof window === 'undefined' || !window.hermesDesktop?.api) {
       return Promise.resolve({})
     }
 
-    return getHermesConfigRecord()
+    return getHermesConfigRecord(owner?.profile, owner?.connectionId)
   },
-  saveConfig: config => {
+  saveConfig: (config, owner) => {
     if (typeof window === 'undefined' || !window.hermesDesktop?.api) {
       return Promise.resolve({ ok: true })
     }
 
-    return saveHermesConfig(config)
+    return saveHermesConfig(config, owner?.profile, owner?.connectionId)
   }
 }
 
@@ -121,28 +123,58 @@ const I18nContext = createContext<I18nContextValue>({
 })
 
 export interface I18nProviderProps {
+  backendOwner?: BackendOwner | null
   children: ReactNode
   configClient?: I18nConfigClient | null
   initialLocale?: unknown
 }
 
-export function I18nProvider({ children, configClient = defaultConfigClient, initialLocale }: I18nProviderProps) {
-  const [locale, setLocaleState] = useState<Locale>(() =>
-    normalizeLocale(initialLocale ?? readFirstRunLocale() ?? FIRST_RUN_LOCALE)
-  )
+export function I18nProvider({
+  backendOwner = null,
+  children,
+  configClient = defaultConfigClient,
+  initialLocale
+}: I18nProviderProps) {
+  const isCurrentOwner = useBackendOwnerGuard(backendOwner)
+
+  const [locale, setLocaleState] = useState<Locale>(() => {
+    const initial = normalizeLocale(initialLocale ?? readFirstRunLocale() ?? FIRST_RUN_LOCALE)
+
+    // Module-level translators (plugin manifest/palette callbacks and
+    // imperative notifications) run while descendants render. Publish the
+    // initial locale before that first child render instead of waiting for a
+    // passive effect, which would leave them one locale behind.
+    setRuntimeI18nLocale(initial)
+
+    return initial
+  })
 
   const [isLoadingConfig, setIsLoadingConfig] = useState(false)
   const [isSavingLocale, setIsSavingLocale] = useState(false)
   const [configLoadError, setConfigLoadError] = useState<Error | null>(null)
   const [saveError, setSaveError] = useState<Error | null>(null)
   const localeRef = useRef(locale)
+  const saveGenerationRef = useRef(0)
 
-  // eslint-disable-next-line no-restricted-syntax -- legitimate non-atom ref write (see eslint rule comment)
+  const publishLocale = useCallback((next: Locale) => {
+    // Keep render-time callbacks synchronous with the context update. A
+    // passive effect changes the plain runtime variable only after children
+    // have already rendered, and that mutation does not schedule a repaint.
+    localeRef.current = next
+    setRuntimeI18nLocale(next)
+    setLocaleState(next)
+  }, [])
+
   useEffect(() => {
-    localeRef.current = locale
-    setRuntimeI18nLocale(locale)
     applyDocumentLocale(locale)
   }, [locale])
+
+  // eslint-disable-next-line no-restricted-syntax -- generation prevents a stale save from rolling back a newer owner's locale
+  useEffect(() => {
+    saveGenerationRef.current += 1
+    setIsSavingLocale(false)
+    setSaveError(null)
+  }, [backendOwner?.connectionId, backendOwner?.profile])
 
   useEffect(() => {
     if (!configClient) {
@@ -154,16 +186,17 @@ export function I18nProvider({ children, configClient = defaultConfigClient, ini
     setIsLoadingConfig(true)
     setConfigLoadError(null)
 
-    configClient
-      .getConfig()
+    const load = backendOwner ? configClient.getConfig(backendOwner) : configClient.getConfig()
+
+    load
       .then(config => {
-        if (!cancelled) {
+        if (!cancelled && isCurrentOwner()) {
           const configuredLanguage = getConfigDisplayLanguage(config)
 
           // The community build opens in Vietnamese on a fresh profile while
           // preserving English as the technical fallback for missing strings,
           // plugins, unsupported values, and config-load failures.
-          setLocaleState(
+          publishLocale(
             configuredLanguage == null
               ? (readFirstRunLocale() ?? FIRST_RUN_LOCALE)
               : normalizeLocale(configuredLanguage)
@@ -171,17 +204,17 @@ export function I18nProvider({ children, configClient = defaultConfigClient, ini
         }
       })
       .catch(error => {
-        if (!cancelled) {
+        if (!cancelled && isCurrentOwner()) {
           setConfigLoadError(toError(error))
           // The backend is intentionally unavailable during first install and
           // managed release refreshes. Keep the cached choice (Vietnamese on a
           // fresh community profile) so the setup/progress UI does not flash
           // back to English while Hermes is being prepared.
-          setLocaleState(readFirstRunLocale() ?? FIRST_RUN_LOCALE)
+          publishLocale(readFirstRunLocale() ?? FIRST_RUN_LOCALE)
         }
       })
       .finally(() => {
-        if (!cancelled) {
+        if (!cancelled && isCurrentOwner()) {
           setIsLoadingConfig(false)
         }
       })
@@ -189,20 +222,26 @@ export function I18nProvider({ children, configClient = defaultConfigClient, ini
     return () => {
       cancelled = true
     }
-  }, [configClient, initialLocale])
+  }, [backendOwner, configClient, initialLocale, isCurrentOwner, publishLocale])
 
-  const previewLocale = useCallback((next: Locale) => {
-    setSaveError(null)
-    setLocaleState(next)
-    writeFirstRunLocale(next)
-  }, [])
+  const previewLocale = useCallback(
+    (next: Locale) => {
+      setSaveError(null)
+      publishLocale(next)
+      writeFirstRunLocale(next)
+    },
+    [publishLocale]
+  )
 
   const setLocale = useCallback(
     async (next: Locale) => {
       const previousLocale = localeRef.current
+      const generation = saveGenerationRef.current + 1
+      saveGenerationRef.current = generation
+      const owner = backendOwner
 
       setSaveError(null)
-      setLocaleState(next)
+      publishLocale(next)
 
       if (!configClient) {
         return
@@ -211,8 +250,21 @@ export function I18nProvider({ children, configClient = defaultConfigClient, ini
       setIsSavingLocale(true)
 
       try {
-        const latestConfig = await configClient.getConfig()
-        const result = await configClient.saveConfig(withConfigDisplayLanguage(latestConfig, next))
+        const latestConfig = owner ? await configClient.getConfig(owner) : await configClient.getConfig()
+
+        if (!isCurrentOwner() || saveGenerationRef.current !== generation) {
+          return
+        }
+
+        const nextConfig = withConfigDisplayLanguage(latestConfig, next)
+
+        const result = owner
+          ? await configClient.saveConfig(nextConfig, owner)
+          : await configClient.saveConfig(nextConfig)
+
+        if (!isCurrentOwner() || saveGenerationRef.current !== generation) {
+          return
+        }
 
         if (!result.ok) {
           throw new Error('Failed to save language')
@@ -225,15 +277,21 @@ export function I18nProvider({ children, configClient = defaultConfigClient, ini
       } catch (error) {
         const nextError = toError(error)
 
-        setLocaleState(previousLocale)
+        if (!isCurrentOwner() || saveGenerationRef.current !== generation) {
+          return
+        }
+
+        publishLocale(previousLocale)
         setSaveError(nextError)
 
         throw nextError
       } finally {
-        setIsSavingLocale(false)
+        if (isCurrentOwner() && saveGenerationRef.current === generation) {
+          setIsSavingLocale(false)
+        }
       }
     },
-    [configClient]
+    [backendOwner, configClient, isCurrentOwner, publishLocale]
   )
 
   const value = useMemo<I18nContextValue>(

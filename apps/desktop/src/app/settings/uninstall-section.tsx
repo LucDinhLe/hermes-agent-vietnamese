@@ -115,7 +115,7 @@ export function UninstallSection() {
         },
         {
           mode: 'full',
-          title: 'Gỡ toàn bộ Hermes',
+          title: 'Gỡ toàn bộ Hermes Vietnamese',
           description:
             'Gỡ ứng dụng, AI agent và toàn bộ dữ liệu người dùng gồm cấu hình, cuộc trò chuyện, tác vụ định kỳ, thông tin bí mật và nhật ký.',
           consequence:
@@ -190,7 +190,9 @@ export function UninstallSection() {
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            <p className="text-sm font-medium">{isVi ? 'Gỡ cài đặt Hermes' : 'Uninstall Hermes'}</p>
+            <p className="text-sm font-medium">
+              {isVi ? 'Gỡ cài đặt Hermes Vietnamese' : 'Uninstall Hermes Vietnamese'}
+            </p>
             <p className="text-xs text-muted-foreground">
               {isVi
                 ? 'Chọn mức cần gỡ. Ứng dụng sẽ đóng để hoàn tất; bạn có thể mở lại trình cài đặt bất cứ lúc nào.'

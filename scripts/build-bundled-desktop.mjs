@@ -6,7 +6,7 @@
 //   1. preflight: uv, git, npm exist; a release tag is resolvable
 //   2. npm ci at the repo root (skip with --no-install)
 //   3. build ui-tui (with hermes-ink) and the dashboard SPA
-//   4. download the digest-pinned payload Node dist for this platform
+//   4. download the digest-pinned payload Node dist and agent-browser package
 //   5. npm run build in apps/desktop with HERMES_DESKTOP_BUNDLED=1
 //   6. npm run builder -- <platform targets>   (skip with --no-package)
 //
@@ -23,11 +23,12 @@ import path from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { hostTarBin } from "../apps/desktop/scripts/stage-agent-payloads.mjs"
-import { prepareAgentBrowserNative } from "./prepare-agent-browser-native.mjs"
+import { prepareAgentBrowserPackage } from "./prepare-agent-browser-native.mjs"
 import {
-  parseVietnameseReleaseTag,
   payloadNodeDescriptor,
+  resolveVietnameseReleaseCandidate,
   sha256File,
+  validateVietnameseCandidateCheckout,
 } from "./vietnamese-release.mjs"
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
@@ -77,25 +78,42 @@ if (!tag) {
 }
 let release
 try {
-  release = parseVietnameseReleaseTag(tag)
+  release = resolveVietnameseReleaseCandidate(tag)
 } catch (error) {
   fail(error.message)
 }
 
-// The canonical Hermes version is owned by pyproject.toml (the same rule
-// the Nix derivation applies). electron-builder gets it via extraMetadata,
-// so app.getVersion(), the artifact names, and the latest*.yml feed all
-// carry the real release version instead of the UI manifest's stale one.
-// The tag must agree with it: a v0.21.0 payload inside an app that
-// announces 0.20.0 would make electron-updater blind to the mismatch.
+// A local tag is sufficient here: the caller can validate the exact bytes
+// before pushing anything public. Staging separately proves the pushed tag
+// and checkout commit. What must never happen locally is packaging a dirty
+// tree or passing a candidate label that points somewhere other than HEAD.
+let checkout
+try {
+  checkout = validateVietnameseCandidateCheckout({
+    tag,
+    tagCommit: capture(`git rev-list -n 1 refs/tags/${tag}`),
+    headCommit: capture("git rev-parse HEAD"),
+    status: capture("git status --porcelain=v1 --untracked-files=normal"),
+  })
+} catch (error) {
+  fail(error.message)
+}
+
+// Hermes Vietnamese owns a product/technical version distinct from the
+// embedded upstream Hermes Agent core. resolveVietnameseReleaseCandidate()
+// already locked the tag to product-metadata.json's technicalVersion.
+// Keep pyproject.toml aligned with the separately-displayed upstream version
+// so a product version bump never claims that upstream itself changed.
 const pyprojectVersion = fs
   .readFileSync(path.join(REPO_ROOT, "pyproject.toml"), "utf8")
   .match(/^version\s*=\s*"([^"]+)"/m)?.[1]
 if (!pyprojectVersion) {
   fail("could not read version from pyproject.toml")
 }
-if (release.baseVersion !== pyprojectVersion) {
-  fail(`tag ${tag} does not match pyproject.toml version ${pyprojectVersion}`)
+if (release.upstreamVersion !== pyprojectVersion) {
+  fail(
+    `product metadata upstream version ${release.upstreamVersion} does not match pyproject.toml version ${pyprojectVersion}`,
+  )
 }
 
 const targets = { linux: "--linux AppImage deb rpm", darwin: "--mac dmg zip", win32: "--win nsis" }[process.platform]
@@ -103,7 +121,7 @@ if (!targets) {
   fail(`unsupported platform: ${process.platform}`)
 }
 
-console.log(`[build-bundled] tag=${tag} platform=${process.platform}-${process.arch}`)
+console.log(`[build-bundled] tag=${tag} commit=${checkout.commit} platform=${process.platform}-${process.arch}`)
 
 // ── 2-3. deps + JS surfaces ─────────────────────────────────────────────────
 
@@ -144,6 +162,12 @@ if (!fs.existsSync(nodeBinary)) {
   fail(`extracted node dist has no runnable node at ${nodeBinary}`)
 }
 
+const browserPackage = prepareAgentBrowserPackage(
+  path.join(work, "agent-browser-package"),
+  process.platform,
+  process.arch
+)
+
 // ── 5-6. bundled desktop build + package ────────────────────────────────────
 
 const env = {
@@ -152,10 +176,10 @@ const env = {
   HERMES_PAYLOAD_TAG: tag,
   HERMES_PAYLOAD_PYTHON: process.env.HERMES_PAYLOAD_PYTHON || "3.11",
   HERMES_PAYLOAD_NODE_DIST: nodeDir,
+  HERMES_AGENT_BROWSER_PACKAGE_ROOT: browserPackage,
 }
 
 const desktop = path.join(REPO_ROOT, "apps", "desktop")
-prepareAgentBrowserNative(process.platform, process.arch)
 run("npm", ["run", "build"], { cwd: desktop, env })
 
 if (skipPackage) {

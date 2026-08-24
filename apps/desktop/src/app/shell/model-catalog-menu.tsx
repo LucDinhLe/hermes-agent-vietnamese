@@ -40,6 +40,14 @@ import type { ModelOptionProvider, ModelOptionsResponse } from '@/types/hermes'
 
 import { type FastControl, ModelEditSubmenu, resolveFastControl } from './model-edit-submenu'
 
+/** Whether a catalog row represents the session's current provider. Custom
+ *  providers report the canonical `custom:<key>` identity from `model.options`
+ *  while the row's slug is the bare config key, so exact slug equality never
+ *  matches — check the row's alias set too (#87035). */
+function isCurrentProvider(provider: ModelOptionProvider, currentProvider: string): boolean {
+  return provider.slug === currentProvider || (provider.aliases?.includes(currentProvider) ?? false)
+}
+
 // Lets the host dropdown (model-pill, a kanban field trigger, …) hand the panel
 // a way to dismiss itself so clicking a model row commits + closes, while the
 // hover-revealed edit submenu (reasoning/fast) stays open to play with (its
@@ -81,6 +89,10 @@ export interface ModelMenuController {
 }
 
 interface ModelCatalogMenuProps {
+  /** Show every model returned by configured providers instead of the user's
+   *  curated composer shortlist. Useful for narrow, task-specific pickers
+   *  where the menu itself is the complete configuration surface. */
+  allModels?: boolean
   controller: ModelMenuController
   /** Rows appended under the catalog (Refresh Models, Edit Models, …). */
   footer?: ReactNode
@@ -89,11 +101,16 @@ interface ModelCatalogMenuProps {
    *  Off for override surfaces, where a MoA preset isn't a worker model. */
   includeMoa?: boolean
   profile?: string
+  /** Render plain selectable rows without the reasoning/fast edit submenu. */
+  selectionOnly?: boolean
   /** Session whose catalog to fetch. A live session's catalog can differ from
    *  the profile-global one, and the app invalidates the SESSION-scoped query
    *  key on model changes — a surface bound to a session must pass it or its
    *  menu goes stale. Detached surfaces (per-task overrides) omit it. */
   sessionId?: null | string
+  /** Keep the shared "Edit models" footer. Task-specific full-catalog pickers
+   *  can hide it because their inventory is intentionally not curated. */
+  showManageModels?: boolean
 }
 
 interface ProviderGroup {
@@ -109,12 +126,15 @@ interface ProviderGroup {
  * can never drift apart.
  */
 export function ModelCatalogMenu({
+  allModels = false,
   controller,
   footer,
   gateway,
   includeMoa = false,
   profile = 'default',
-  sessionId = null
+  selectionOnly = false,
+  sessionId = null,
+  showManageModels = true
 }: ModelCatalogMenuProps) {
   const { locale, t } = useI18n()
   const copy = t.shell.modelMenu
@@ -163,10 +183,17 @@ export function ModelCatalogMenu({
   // Resolve visibility HERE, against the catalog we actually fetched: an empty
   // provider list would otherwise resolve to an empty key set that reads as
   // "user hid everything" and blanks the menu on first open.
-  const shownKeys = useMemo(
-    () => effectiveVisibleKeys(visibleModels, pickerProviders),
-    [visibleModels, pickerProviders]
-  )
+  const shownKeys = useMemo(() => {
+    if (!allModels) {
+      return effectiveVisibleKeys(visibleModels, pickerProviders)
+    }
+
+    return new Set(
+      pickerProviders.flatMap(provider =>
+        collapseModelFamilies(provider.models ?? []).map(family => modelVisibilityKey(provider.slug, family.id))
+      )
+    )
+  }, [allModels, visibleModels, pickerProviders])
 
   const groups = useMemo(
     () => groupModels(pickerProviders, search, { model: current.model, provider: current.provider }, shownKeys),
@@ -224,7 +251,7 @@ export function ModelCatalogMenu({
   const kbRows = useMemo<KbRow[]>(
     () => [
       ...groups.flatMap(group =>
-        collapsedProviders.includes(group.provider.slug) && !search
+        !allModels && collapsedProviders.includes(group.provider.slug) && !search
           ? []
           : group.families.map((family): KbRow => ({
               family,
@@ -235,7 +262,7 @@ export function ModelCatalogMenu({
       ),
       ...shownMoaPresets.map((preset): KbRow => ({ key: `moa:${preset}`, kind: 'moa', preset }))
     ],
-    [groups, collapsedProviders, search, shownMoaPresets]
+    [allModels, groups, collapsedProviders, search, shownMoaPresets]
   )
 
   const [kbOverride, setKbOverride] = useState<null | number>(null)
@@ -243,13 +270,17 @@ export function ModelCatalogMenu({
   // hover can't take rows out from under the keyboard.
   const pointerQuiet = usePointerQuiet()
 
-  const currentKey = current.provider === 'moa' ? `moa:${current.model}` : `${current.provider}:${current.model}`
+  const rowIsCurrent = (row: KbRow) =>
+    row.kind === 'moa'
+      ? current.provider === 'moa' && row.preset === current.model
+      : isCurrentProvider(row.provider, current.provider) &&
+        (row.family.id === current.model || row.family.fastId === current.model)
 
   const autoIndex = q
     ? kbRows.length > 0
       ? 0
       : -1
-    : kbRows.findIndex(row => row.key === currentKey || (row.kind === 'family' && row.family.fastId === current.model))
+    : kbRows.findIndex(row => rowIsCurrent(row) || (row.kind === 'family' && row.family.fastId === current.model))
 
   const kbIndex = kbOverride !== null && kbOverride < kbRows.length ? kbOverride : autoIndex
   const kbActiveKey = kbIndex >= 0 ? kbRows[kbIndex].key : null
@@ -277,7 +308,7 @@ export function ModelCatalogMenu({
       return
     }
 
-    if (row.key !== currentKey && row.family.fastId !== current.model) {
+    if (!rowIsCurrent(row) && row.family.fastId !== current.model) {
       void selectFamily(row.family, row.provider)
     }
 
@@ -358,7 +389,7 @@ export function ModelCatalogMenu({
 
             // Collapsed when the user stored it (and not while searching, which
             // spans every model regardless of collapse state).
-            const collapsed = collapsedProviders.includes(slug) && !search
+            const collapsed = !allModels && collapsedProviders.includes(slug) && !search
 
             return (
               <DropdownMenuGroup className="py-0.5" key={slug}>
@@ -377,18 +408,14 @@ export function ModelCatalogMenu({
                   <span aria-hidden className="shrink-0 font-mono font-normal normal-case tracking-normal">
                     · {group.families.length}
                   </span>
-                  <DisclosureCaret
-                    className="shrink-0 text-(--ui-text-tertiary)"
-                    open={!collapsed}
-                    size="0.625rem"
-                  />
+                  <DisclosureCaret className="shrink-0 text-(--ui-text-tertiary)" open={!collapsed} size="0.625rem" />
                 </DropdownMenuItem>
                 {!collapsed &&
                   group.families.map(family => {
                     // The active id may be the base or its -fast sibling; either
                     // way this one family row represents both.
                     const activeId =
-                      group.provider.slug === current.provider &&
+                      isCurrentProvider(group.provider, current.provider) &&
                       (current.model === family.id || current.model === family.fastId)
                         ? current.model
                         : null
@@ -427,6 +454,26 @@ export function ModelCatalogMenu({
                       }
 
                       closeMenu()
+                    }
+
+                    if (selectionOnly) {
+                      return (
+                        <DropdownMenuItem
+                          key={`${group.provider.slug}:${family.id}`}
+                          onSelect={event => {
+                            event.preventDefault()
+                            activate()
+                          }}
+                          {...kbRowProps(`${group.provider.slug}:${family.id}`)}
+                        >
+                          <span className="min-w-0 flex-1 truncate">
+                            <HighlightMatches query={search} text={name} />
+                          </span>
+                          {isCurrent ? (
+                            <Codicon className="ml-auto text-foreground" name="check" size="0.75rem" />
+                          ) : null}
+                        </DropdownMenuItem>
+                      )
                     }
 
                     return (
@@ -509,15 +556,21 @@ export function ModelCatalogMenu({
           host footer's group rather than opening a second one, so a host that
           contributes rows (the composer's Refresh Models) keeps the single
           trailing block it has always rendered. */}
-      <DropdownMenuSeparator className="mx-0" />
-      {footer}
-      <DropdownMenuItem
-        className={cn(dropdownMenuRow, 'text-(--ui-text-tertiary)')}
-        onSelect={() => setModelVisibilityOpen(true)}
-      >
-        <Codicon name="settings-gear" size="0.75rem" />
-        {copy.editModels}
-      </DropdownMenuItem>
+      {(footer || showManageModels) && (
+        <>
+          <DropdownMenuSeparator className="mx-0" />
+          {footer}
+          {showManageModels && (
+            <DropdownMenuItem
+              className={cn(dropdownMenuRow, 'text-(--ui-text-tertiary)')}
+              onSelect={() => setModelVisibilityOpen(true)}
+            >
+              <Codicon name="settings-gear" size="0.75rem" />
+              {copy.editModels}
+            </DropdownMenuItem>
+          )}
+        </>
+      )}
     </>
   )
 }
@@ -567,7 +620,7 @@ function groupModels(
     // stable curated order, so selecting a model can't shuffle the list. While
     // SEARCHING the pin is skipped: a query means "show me matches".
     const activeId =
-      !q && provider.slug === current.provider && current.model
+      !q && isCurrentProvider(provider, current.provider) && current.model
         ? allFamilies.find(family => family.id === current.model || family.fastId === current.model)?.id
         : undefined
 

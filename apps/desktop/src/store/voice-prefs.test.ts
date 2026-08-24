@@ -1,11 +1,28 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-vi.mock('@/hermes', () => ({
+import type { HermesConnection } from '@/global'
+
+const { getHermesConfigRecord, saveHermesConfig } = vi.hoisted(() => ({
   getHermesConfigRecord: vi.fn(async () => ({})),
   saveHermesConfig: vi.fn(async () => undefined)
 }))
 
-import { $voiceStopPhrase, applyVoiceStopPhraseFromConfig } from './voice-prefs'
+vi.mock('@/hermes', async importOriginal => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getHermesConfigRecord,
+  saveHermesConfig
+}))
+
+import { $activeGatewayProfile } from './profile'
+import { $connection } from './session'
+import { $autoSpeakReplies, $voiceStopPhrase, applyVoiceStopPhraseFromConfig, setAutoSpeakReplies } from './voice-prefs'
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  $autoSpeakReplies.set(false)
+  $activeGatewayProfile.set('default')
+  $connection.set({ connectionId: 'local', mode: 'local', profile: 'default' } as HermesConnection)
+})
 
 describe('applyVoiceStopPhraseFromConfig', () => {
   it('defaults to "stop" when the key is absent (backend default applies)', () => {
@@ -34,5 +51,30 @@ describe('applyVoiceStopPhraseFromConfig', () => {
   it('malformed entries are skipped; all-blank list disables', () => {
     applyVoiceStopPhraseFromConfig({ voice: { stop_phrases: ['  ', ''] } })
     expect($voiceStopPhrase.get()).toBeNull()
+  })
+})
+
+describe('setAutoSpeakReplies', () => {
+  it('keeps a whole-config write on the captured source after a same-profile switch', async () => {
+    let finishRead: ((value: { voice: { speed: number } }) => void) | undefined
+    getHermesConfigRecord.mockImplementationOnce(
+      () => new Promise(resolve => {
+        finishRead = resolve
+      })
+    )
+    $connection.set({ connectionId: 'source-a', mode: 'remote', profile: 'default' } as HermesConnection)
+
+    const saving = setAutoSpeakReplies(true)
+    await Promise.resolve()
+    $connection.set({ connectionId: 'source-b', mode: 'remote', profile: 'default' } as HermesConnection)
+    finishRead?.({ voice: { speed: 1 } })
+    await saving
+
+    expect(getHermesConfigRecord).toHaveBeenCalledWith('default', 'source-a')
+    expect(saveHermesConfig).toHaveBeenCalledWith(
+      { voice: { auto_tts: true, speed: 1 } },
+      'default',
+      'source-a'
+    )
   })
 })

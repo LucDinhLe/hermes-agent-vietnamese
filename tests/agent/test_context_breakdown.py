@@ -13,9 +13,11 @@ def _make_agent(
     tools: list | None = None,
     context_length: int = 200_000,
     last_prompt_tokens: int = 0,
+    model: str = "openai/gpt-5.4",
+    threshold_tokens: int = 100_000,
 ):
     agent = MagicMock()
-    agent.model = "openai/gpt-5.4"
+    agent.model = model
     agent.tools = tools or [
         {"type": "function", "function": {"name": "terminal", "description": "run"}},
         {"type": "function", "function": {"name": "mcp_demo_tool", "description": "mcp"}},
@@ -27,6 +29,7 @@ def _make_agent(
     agent.context_compressor = MagicMock(
         context_length=context_length,
         last_prompt_tokens=last_prompt_tokens,
+        threshold_tokens=threshold_tokens,
     )
     return agent, {"stable": stable, "context": context, "volatile": volatile}
 
@@ -48,6 +51,52 @@ def test_breakdown_includes_major_categories():
     assert {"system_prompt", "tool_definitions", "rules", "skills", "mcp", "subagent_definitions", "conversation"} <= ids
     assert data["context_max"] == 200_000
     assert data["estimated_total"] > 0
+
+
+def test_breakdown_separates_published_window_from_effective_route_limit():
+    agent, parts = _make_agent(
+        context_length=900_000,
+        last_prompt_tokens=460_000,
+        model="gpt-5.6-sol",
+        threshold_tokens=450_000,
+    )
+
+    with patch("agent.system_prompt.build_system_prompt_parts", return_value=parts):
+        data = compute_session_context_breakdown(agent, [])
+
+    assert data["published_context_max"] == 1_050_000
+    assert data["published_context_source"] == "openai"
+    assert data["published_context_reference"].endswith("/gpt-5.6-sol")
+    assert data["context_max"] == 900_000
+    assert data["compact_threshold_tokens"] == 450_000
+    assert data["compact_recommended"] is True
+    assert data["context_measurement"] == "measured"
+
+
+def test_breakdown_uses_the_published_claude_window_class():
+    one_million, parts = _make_agent(model="claude-sonnet-5", context_length=1_000_000)
+    two_hundred_thousand, _ = _make_agent(model="claude-sonnet-4-5", context_length=200_000)
+
+    with patch("agent.system_prompt.build_system_prompt_parts", return_value=parts):
+        large = compute_session_context_breakdown(one_million, [])
+        small = compute_session_context_breakdown(two_hundred_thousand, [])
+
+    assert large["published_context_max"] == 1_000_000
+    assert small["published_context_max"] == 200_000
+    assert large["published_context_source"] == "anthropic"
+    assert small["published_context_source"] == "anthropic"
+    assert "context-windows" in large["published_context_reference"]
+
+
+def test_breakdown_falls_back_to_the_effective_limit_without_claiming_an_official_source():
+    agent, parts = _make_agent(model="custom-model", context_length=333_000)
+
+    with patch("agent.system_prompt.build_system_prompt_parts", return_value=parts):
+        data = compute_session_context_breakdown(agent, [])
+
+    assert data["published_context_max"] == 333_000
+    assert data["published_context_source"] == "runtime"
+    assert data["published_context_reference"] == ""
 
 
 
@@ -124,5 +173,3 @@ def test_details_lines_caps_listing():
     }
     lines = render_context_details_lines(details)
     assert any("… and 5 more" in line for line in lines)
-
-

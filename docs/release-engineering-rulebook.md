@@ -84,6 +84,23 @@ chuỗi trên.
     thay.
 13. **Hậu kiểm public:** sau promotion phải kiểm tag/Latest, asset count, digest,
     manifest, HTTP đường tải và thời điểm tạo/cập nhật asset.
+14. **Cập nhật là một artifact đã nghiệm thu:** mỗi release đóng gói phải mang
+    đủ `latest*.yml` theo nền tảng. Manifest dùng SHA-512 của đúng installer đã
+    staging, nằm trong `SHA256SUMS.txt`, và feed trong ứng dụng phải ghim vào
+    URL của một release bất biến thay vì nhánh hoặc nhãn động.
+15. **Lifecycle theo đúng nguồn:** control Gateway gắn với phiên phải giữ owner
+    `connectionId + profile` bất biến qua mọi await. Backend phải serialize
+    start/restart/stop theo canonical lifecycle owner; phản hồi muộn hoặc owner
+    mơ hồ phải fail closed, không được repaint hay điều khiển Gateway foreground.
+16. **Cookie permission và phân vùng phải fail closed:** Connector Chromium
+    phải xin đúng hostname ở cả HTTP/HTTPS mà không giữ cổng hoặc tự mở rộng
+    wildcard/eTLD+1; revoke phải xóa hai pattern hiện tại cùng grant
+    origin-có-cổng cũ, kiểm tra lại hậu điều kiện và fail closed nếu quyền còn
+    tồn tại. Cookie được liệt kê bằng truy vấn phân vùng tường minh,
+    coi `partitionKey` thiếu hoặc `null` là không phân vùng, đếm object phân
+    vùng thực sự là không hỗ trợ và chỉ chuyển cookie không phân vùng còn hiệu
+    lực. Không được coi kết quả rỗng là bằng chứng website hoặc miền cha không
+    có cookie.
 
 ## Cổng bắt buộc
 
@@ -98,6 +115,17 @@ chuỗi trên.
 
 - [ ] Lockfile cập nhật và khóa.
 - [ ] Typecheck, lint, unit, integration, UI và security scan phù hợp đều đạt.
+- [ ] Control đa nguồn chứng minh exact-owner routing, loại phản hồi cũ và
+      serialize các lifecycle verb xung đột theo cùng canonical owner.
+- [ ] Regression Connector chứng minh Chrome/Edge nhìn thấy cookie do website
+      tạo, normalize cùng kết quả cho `partitionKey` thiếu/`null`, chỉ chuyển
+      cookie không phân vùng còn hiệu lực, đếm đúng cookie phân vùng/hết hạn và
+      không ghi giá trị cookie vào log hoặc evidence.
+- [ ] Permission regression chứng minh HTTP/HTTPS exact-host bỏ cổng, không
+      mở wildcard/eTLD+1, nhận partial/legacy grant và revoke đủ hai pattern mới
+      cùng origin-có-cổng cũ. Kết quả `false`, no-op, lỗi API hoặc grant chồng
+      lấp phải được kiểm tra lại; UI không được báo thành công hay giữ payload
+      ghép nối khi quyền đích còn tồn tại.
 - [ ] Không còn lỗ hổng runtime nghiêm trọng chưa được chấp nhận.
 - [ ] Artifact không chứa secret, hồ sơ, database, log hoặc đường dẫn riêng tư.
 - [ ] Mọi tải xuống cần thiết đều dùng nguồn bất biến và kiểm digest.
@@ -108,7 +136,14 @@ chuỗi trên.
 - [ ] Executable và module native đúng kiến trúc.
 - [ ] Python, Hermes payload, dependency, installer metadata, icon và license
       hiện diện.
+- [ ] Gói resident đầy đủ nhận marker bootstrap schema 1 hợp lệ từ bản cũ kể
+      cả khi marker chưa có `desktopVersion`; không quay lại network bootstrap
+      hoặc chạy runtime quản lý trong AppData.
 - [ ] Windows giữ ổn định upgrade identity và install location.
+- [ ] Metadata cập nhật có đủ filename, byte size, SHA-512 và SemVer cộng đồng;
+      resolver bỏ qua draft và release thiếu manifest của target đang chạy.
+- [ ] `latest-mac.yml` phân biệt đúng Intel và Apple Silicon nhưng cả hai URL
+      vẫn tải đúng byte ZIP đã chuẩn hóa và nghiệm thu.
 - [ ] macOS kiểm cấu trúc app, DMG, signing và notarization.
 - [ ] Manifest ghi filename, byte size và SHA-256.
 
@@ -120,6 +155,9 @@ Chỉ dùng user/hồ sơ cô lập. Không đọc, nhập hoặc khôi phục d
 - [ ] Cài và mở bằng đường người dùng thực tế, không cần developer tools.
 - [ ] Runtime/bootstrap, gateway và onboarding đạt.
 - [ ] Tạo/đổi tên phiên, kiểm tab phiên/Browser và panel phải.
+- [ ] Connector Chrome và Edge dùng profile cô lập phải vượt fixture HTTP và
+      HTTPS có non-default port: preview chỉ có metadata, import, persistence
+      sau restart, revoke cả grant cũ/mới và quét redaction.
 - [ ] Chạy một tool an toàn bằng provider thử hoặc mock phù hợp.
 - [ ] Khởi động lại và xác nhận giữ trạng thái.
 - [ ] Lưu OS build, kiến trúc, log sạch và ảnh bằng chứng.
@@ -128,6 +166,11 @@ Chỉ dùng user/hồ sơ cô lập. Không đọc, nhập hoặc khôi phục d
 
 - [ ] Cài bản trước trên hồ sơ sạch và tạo dữ liệu đại diện.
 - [ ] Update qua đúng đường người dùng; shutdown, thay thế, relaunch thành công.
+- [ ] Update Windows dùng handoff silent; không hiện lại wizard cài mới sau khi
+      người dùng đã bấm cập nhật trong Hermes.
+- [ ] Fixture nâng cấp giữ nguyên marker do `install.ps1`/`install.sh` bản cũ
+      tạo ra và chứng minh bản resident mở thẳng runtime tích hợp, không hiện
+      lại trình thiết lập lần đầu.
 - [ ] Gateway khỏe và dữ liệu còn nguyên sau update.
 - [ ] Kiểm mất mạng hoặc update gián đoạn.
 - [ ] Repair một fixture có thể phục hồi.

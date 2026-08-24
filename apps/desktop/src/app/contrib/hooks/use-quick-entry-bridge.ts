@@ -1,14 +1,16 @@
 import { useEffect, useRef } from 'react'
 
+import { activeBackendOwner } from '@/store/backend-owner'
 import {
   initQuickEntryBridge,
   QUICK_TARGET_CURRENT,
   QUICK_TARGET_NEW,
   type QuickEntrySessionOption,
+  quickEntrySessionTarget,
   setQuickEntrySubmitHandler
 } from '@/store/quick-entry'
 import { $gatewayState, $sessions } from '@/store/session'
-import { sessionTileDelegate } from '@/store/session-states'
+import { parseSessionTileIdentity, sessionTileDelegate, sessionTileIdentity } from '@/store/session-states'
 import { isAuxiliaryWindow } from '@/store/windows'
 
 interface QuickEntryBridgeParams {
@@ -19,16 +21,50 @@ interface QuickEntryBridgeParams {
 // The picker is a capture aid, not a session browser — a handful of recent
 // rows is the whole point.
 const QUICK_ENTRY_SESSION_OPTIONS = 5
+let publishedSessionOptions: QuickEntrySessionOption[] = []
+
+export function resolveQuickEntrySubmissionTarget(
+  target: string,
+  options: readonly QuickEntrySessionOption[] = publishedSessionOptions
+): null | { owner: { connectionId: string; profile: string }; storedSessionId: string } {
+  const encoded = target.startsWith('session:') ? parseSessionTileIdentity(target.slice('session:'.length)) : null
+
+  if (encoded) {
+    return { owner: encoded.owner, storedSessionId: encoded.storedSessionId }
+  }
+
+  // Legacy Quick Entry windows sent a bare stored id. Keep that shape only
+  // while the current published list identifies one exact source; never infer
+  // an owner from the renderer's now-active connection after a source switch.
+  const matches = options.filter(option => quickEntrySessionTarget(option) === target || option.id === target)
+  const option = matches.length === 1 ? matches[0] : null
+
+  return option?.connectionId
+    ? {
+        owner: { connectionId: option.connectionId, profile: option.profile || 'default' },
+        storedSessionId: option.id
+      }
+    : null
+}
 
 function sessionOptions(): QuickEntrySessionOption[] {
+  const owner = activeBackendOwner()
+
   return $sessions
     .get()
     .filter(session => !session.archived)
     .slice(0, QUICK_ENTRY_SESSION_OPTIONS)
-    .map(session => ({
-      id: session.id,
-      title: session.title?.trim() || session.preview?.trim() || session.id
-    }))
+    .map(session => {
+      const profile = owner?.profile ?? session.profile ?? 'default'
+
+      return {
+        connectionId: owner?.connectionId,
+        id: session.id,
+        profile,
+        target: owner ? `session:${sessionTileIdentity(owner, session.id)}` : session.id,
+        title: session.title?.trim() || session.preview?.trim() || session.id
+      }
+    })
 }
 
 /**
@@ -75,11 +111,14 @@ export function useQuickEntryBridge({ startFreshSessionDraft, submitText }: Quic
         // A picked stored session: resume + submit in the background through
         // the session-tile delegate so the primary view stays where it is.
         const delegate = sessionTileDelegate()
+        const resolved = resolveQuickEntrySubmissionTarget(target)
 
-        if (delegate) {
+        if (delegate && resolved) {
+          const { owner, storedSessionId } = resolved
+
           void delegate
-            .resumeTile(target)
-            .then(runtimeId => delegate.submitToSession(runtimeId, text))
+            .resumeTile(storedSessionId, owner)
+            .then(runtimeId => delegate.submitToSession(runtimeId, text, owner))
             // A dead/undeliverable target must not swallow the prompt.
             .catch(() => void submitTextRef.current(text))
 
@@ -112,7 +151,8 @@ export function useQuickEntryBridge({ startFreshSessionDraft, submitText }: Quic
     }
 
     const push = () => {
-      api.pushState({ connected: $gatewayState.get() === 'open', sessions: sessionOptions() })
+      publishedSessionOptions = sessionOptions()
+      api.pushState({ connected: $gatewayState.get() === 'open', sessions: publishedSessionOptions })
     }
 
     push()

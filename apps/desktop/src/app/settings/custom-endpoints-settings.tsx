@@ -14,12 +14,16 @@ import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { Check, Globe, Loader2, Plus, Save, Trash2, Zap } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+import type { BackendOwner } from '@/store/backend-owner'
 import { notify, notifyError } from '@/store/notifications'
 import type { CustomEndpoint, CustomEndpointUpdate } from '@/types/hermes'
+
+import { useBackendOwnerGuard } from '../hooks/use-backend-owner-guard'
 
 import { EmptyState, Pill, SectionHeading, SettingsContent, SettingsSkeleton } from './primitives'
 
 interface CustomEndpointsSettingsProps {
+  backendOwner?: BackendOwner | null
   onConfigSaved?: () => void
   onMainModelChanged?: (provider: string, model: string) => void
 }
@@ -75,7 +79,11 @@ function toPayload(form: EndpointForm, models?: string[]): CustomEndpointUpdate 
   }
 }
 
-export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: CustomEndpointsSettingsProps) {
+export function CustomEndpointsSettings({
+  backendOwner = null,
+  onConfigSaved,
+  onMainModelChanged
+}: CustomEndpointsSettingsProps) {
   const { locale, t } = useI18n()
   const isVi = locale === 'vi'
   const [loading, setLoading] = useState(true)
@@ -86,10 +94,14 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
   const [endpoints, setEndpoints] = useState<CustomEndpoint[]>([])
   const [form, setForm] = useState<EndpointForm>(EMPTY_FORM)
   const [discoveredModels, setDiscoveredModels] = useState<string[]>([])
+  const isCurrentOwner = useBackendOwnerGuard(backendOwner)
 
   async function refresh() {
-    const data = await getCustomEndpoints()
-    setEndpoints(data.endpoints)
+    const data = await getCustomEndpoints(backendOwner?.profile, backendOwner?.connectionId)
+
+    if (isCurrentOwner()) {
+      setEndpoints(data.endpoints)
+    }
   }
 
   useEffect(() => {
@@ -97,9 +109,9 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
 
     async function load() {
       try {
-        const data = await getCustomEndpoints()
+        const data = await getCustomEndpoints(backendOwner?.profile, backendOwner?.connectionId)
 
-        if (cancelled) {
+        if (cancelled || !isCurrentOwner()) {
           return
         }
 
@@ -111,9 +123,11 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
           setDiscoveredModels(current.models)
         }
       } catch (err) {
-        notifyError(err, isVi ? 'Không thể tải máy chủ tùy chỉnh' : 'Could not load custom endpoints')
+        if (!cancelled && isCurrentOwner()) {
+          notifyError(err, isVi ? 'Không thể tải máy chủ tùy chỉnh' : 'Could not load custom endpoints')
+        }
       } finally {
-        if (!cancelled) {
+        if (!cancelled && isCurrentOwner()) {
           setLoading(false)
         }
       }
@@ -124,12 +138,22 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
     return () => {
       cancelled = true
     }
-  }, [isVi])
+  }, [backendOwner?.connectionId, backendOwner?.profile, isCurrentOwner, isVi])
 
   async function handleSave() {
     try {
       setSaving(true)
-      const response = await saveCustomEndpoint(toPayload(form, discoveredModels))
+
+      const response = await saveCustomEndpoint(
+        toPayload(form, discoveredModels),
+        backendOwner?.profile,
+        backendOwner?.connectionId
+      )
+
+      if (!isCurrentOwner()) {
+        return
+      }
+
       setEndpoints(response.endpoints)
       const saved = response.endpoints.find(endpoint => endpoint.id === response.id)
 
@@ -146,16 +170,25 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
       onConfigSaved?.()
       notify({ kind: 'success', message: isVi ? 'Đã lưu máy chủ tùy chỉnh.' : 'Custom endpoint saved.' })
     } catch (err) {
-      notifyError(err, isVi ? 'Lưu thất bại' : 'Save failed')
+      if (isCurrentOwner()) {
+        notifyError(err, isVi ? 'Lưu thất bại' : 'Save failed')
+      }
     } finally {
-      setSaving(false)
+      if (isCurrentOwner()) {
+        setSaving(false)
+      }
     }
   }
 
   async function handleValidate() {
     try {
       setTesting(true)
-      const response = await validateCustomEndpoint(toPayload(form))
+      const response = await validateCustomEndpoint(toPayload(form), backendOwner?.profile, backendOwner?.connectionId)
+
+      if (!isCurrentOwner()) {
+        return
+      }
+
       setDiscoveredModels(response.models)
 
       if (response.ok) {
@@ -180,24 +213,42 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
         })
       }
     } catch (err) {
-      notifyError(err, isVi ? 'Kiểm tra thất bại' : 'Validation failed')
+      if (isCurrentOwner()) {
+        notifyError(err, isVi ? 'Kiểm tra thất bại' : 'Validation failed')
+      }
     } finally {
-      setTesting(false)
+      if (isCurrentOwner()) {
+        setTesting(false)
+      }
     }
   }
 
   async function handleActivate(endpoint: CustomEndpoint) {
     try {
       setActivating(endpoint.id)
-      const response = await activateCustomEndpoint(endpoint.id)
+      const response = await activateCustomEndpoint(endpoint.id, backendOwner?.profile, backendOwner?.connectionId)
+
+      if (!isCurrentOwner()) {
+        return
+      }
+
       await refresh()
+
+      if (!isCurrentOwner()) {
+        return
+      }
+
       onConfigSaved?.()
       onMainModelChanged?.(response.provider, response.model)
       triggerHaptic('success')
     } catch (err) {
-      notifyError(err, isVi ? 'Kích hoạt thất bại' : 'Activation failed')
+      if (isCurrentOwner()) {
+        notifyError(err, isVi ? 'Kích hoạt thất bại' : 'Activation failed')
+      }
     } finally {
-      setActivating(null)
+      if (isCurrentOwner()) {
+        setActivating(null)
+      }
     }
   }
 
@@ -208,7 +259,12 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
 
     try {
       setDeleting(endpoint.id)
-      const response = await deleteCustomEndpoint(endpoint.id)
+      const response = await deleteCustomEndpoint(endpoint.id, backendOwner?.profile, backendOwner?.connectionId)
+
+      if (!isCurrentOwner()) {
+        return
+      }
+
       setEndpoints(response.endpoints)
 
       if (form.id === endpoint.id) {
@@ -219,9 +275,13 @@ export function CustomEndpointsSettings({ onConfigSaved, onMainModelChanged }: C
       onConfigSaved?.()
       triggerHaptic('success')
     } catch (err) {
-      notifyError(err, isVi ? 'Xóa thất bại' : 'Delete failed')
+      if (isCurrentOwner()) {
+        notifyError(err, isVi ? 'Xóa thất bại' : 'Delete failed')
+      }
     } finally {
-      setDeleting(null)
+      if (isCurrentOwner()) {
+        setDeleting(null)
+      }
     }
   }
 
