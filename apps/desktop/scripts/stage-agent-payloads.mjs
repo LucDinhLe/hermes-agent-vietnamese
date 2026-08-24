@@ -220,16 +220,28 @@ export function bannerExpectations(target) {
 }
 
 /**
- * Resolve the release tag to stage. CI passes --tag=vi-vX.Y.Z-N. Local runs can
- * fall back to `git describe` for smoke tests. When bundling was requested
- * and no tag exists, payload staging is a hard error. A bundled artifact
- * without a pinned tag produces un-adoptable, un-updatable installs.
+ * Resolve the release tag to stage. Direct CI invocations may pass
+ * --tag=vi-vX.Y.Z-N; the bundled build wrapper binds the same value through
+ * HERMES_PAYLOAD_TAG for every build subprocess. Local tagged runs can fall
+ * back to `git describe`. Conflicting explicit/environment values are a hard
+ * error so payload bytes cannot be stamped with an ambiguous release identity.
  */
-export function resolveTag(argv, describeFn) {
+export function resolveTag(argv, describeFn, env = process.env) {
   const explicit = argv.find((a) => a.startsWith("--tag="))
+  const environmentTag = String(env.HERMES_PAYLOAD_TAG || "").trim()
   if (explicit) {
     const tag = explicit.slice("--tag=".length).trim()
-    return parseVietnameseReleaseTag(tag).tag
+    const parsed = parseVietnameseReleaseTag(tag).tag
+    if (environmentTag) {
+      const parsedEnvironment = parseVietnameseReleaseTag(environmentTag).tag
+      if (parsedEnvironment !== parsed) {
+        throw new Error(`--tag ${parsed} does not match HERMES_PAYLOAD_TAG ${parsedEnvironment}`)
+      }
+    }
+    return parsed
+  }
+  if (environmentTag) {
+    return parseVietnameseReleaseTag(environmentTag).tag
   }
   const described = describeFn()
   if (described) {
@@ -240,7 +252,7 @@ export function resolveTag(argv, describeFn) {
     }
   }
   throw new Error(
-    "no Vietnamese release tag: pass --tag=vi-vX.Y.Z-N (CI) or run from an exact release tag"
+    "no Vietnamese release tag: pass --tag=vi-vX.Y.Z-N, set HERMES_PAYLOAD_TAG, or run from an exact release tag"
   )
 }
 

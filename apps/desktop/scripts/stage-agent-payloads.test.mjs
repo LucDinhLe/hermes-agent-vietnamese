@@ -118,6 +118,17 @@ test('explicit --tag wins and must be a final Vietnamese release', () => {
   assert.throws(() => resolveTag(['--tag=main'], () => null), /vi-vX.Y.Z-N/)
 })
 
+test('bundled wrapper environment resolves the tag and conflicts fail closed', () => {
+  const env = { HERMES_PAYLOAD_TAG: 'vi-v0.32.0-1' }
+  assert.equal(resolveTag([], () => null, env), 'vi-v0.32.0-1')
+  assert.equal(resolveTag(['--tag=vi-v0.32.0-1'], () => null, env), 'vi-v0.32.0-1')
+  assert.throws(
+    () => resolveTag(['--tag=vi-v0.31.0-7'], () => null, env),
+    /does not match HERMES_PAYLOAD_TAG/
+  )
+  assert.throws(() => resolveTag([], () => null, { HERMES_PAYLOAD_TAG: 'v0.32.0' }), /vi-vX.Y.Z-N/)
+})
+
 test('falls back to git describe only for exact release tags', () => {
   assert.equal(resolveTag([], () => 'vi-v0.20.0-15'), 'vi-v0.20.0-15')
   assert.throws(() => resolveTag([], () => 'vi-v0.20.0-15-14-gdeadbeef'), /no Vietnamese release tag/)
