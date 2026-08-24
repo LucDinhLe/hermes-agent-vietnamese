@@ -3250,6 +3250,15 @@ def _relay_auxiliary_metadata(
     api_mode: str | None = None,
 ) -> tuple[str, str, dict[str, Any]] | None:
     context = _RELAY_AUX_CALL_CONTEXT.get()
+    # This helper is shared by sync, async, streaming, retry, and fallback
+    # provider paths.  Reserve before relay/provider execution so transport
+    # failures consume the physical-attempt budget too.  Calls outside a
+    # governed turn remain a no-op through aux_accounting.
+    from agent.aux_accounting import reserve_aux_model_attempt
+
+    reserve_aux_model_attempt(
+        str(context.get("task") or "auxiliary") if context is not None else "auxiliary"
+    )
     if context is None:
         return None
     attempt_count = int(context.get("attempt_count") or 0)
@@ -9357,6 +9366,11 @@ def _call_llm_impl(
             # Return the provider call directly; the MoA facade converts a
             # completed response into a one-chunk delta iterator at its
             # boundary.
+            # This compatibility path deliberately bypasses Relay's stream
+            # manager, so reserve its physical request explicitly.
+            from agent.aux_accounting import reserve_aux_model_attempt
+
+            reserve_aux_model_attempt(task)
             return client.chat.completions.create(**kwargs)
         return _relay_sync_stream(
             client,
