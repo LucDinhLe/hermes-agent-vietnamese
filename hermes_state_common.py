@@ -216,7 +216,7 @@ def _sql_session_last_active_by_id(session_id_expr: str) -> str:
     )
 
 
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 27
 
 
 # FTS storage-layout version, tracked INDEPENDENTLY of SCHEMA_VERSION in the
@@ -312,6 +312,15 @@ CREATE TABLE IF NOT EXISTS sessions (
     archived INTEGER NOT NULL DEFAULT 0,
     pinned INTEGER NOT NULL DEFAULT 0,
     hidden INTEGER NOT NULL DEFAULT 0,
+    effective_context_tokens INTEGER,
+    effective_context_source TEXT,
+    active_context_tokens INTEGER NOT NULL DEFAULT 0,
+    logical_history_tokens INTEGER NOT NULL DEFAULT 0,
+    context_compaction_count INTEGER NOT NULL DEFAULT 0,
+    native_compaction_downgraded INTEGER NOT NULL DEFAULT 0,
+    last_failure_kind TEXT,
+    last_failure_code TEXT,
+    last_failure_reset_at REAL,
     last_read_at REAL,
     FOREIGN KEY (parent_session_id) REFERENCES sessions(id),
     FOREIGN KEY (system_prompt_hash) REFERENCES system_prompts(hash)

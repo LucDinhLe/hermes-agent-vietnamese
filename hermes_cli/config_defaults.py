@@ -819,16 +819,22 @@ DEFAULT_CONFIG = {
                                       # Hermes' compression threshold triggers
                                       # thread/compact/start; off = never auto-trigger
                                       # (codex may still compact natively).
-        "codex_responses_native": False,  # Opt in to OpenAI's server-side compaction
-                                      # on the Responses API. Engages ONLY for
+        "codex_responses_native": "auto",  # Use OpenAI's server-side compaction
+                                      # by default on the Responses API. The
+                                      # request gate engages ONLY for
                                       # gpt-5.6-family models on api.openai.com or
                                       # the ChatGPT Codex backend; every other
-                                      # route/model is unaffected. Hermes' local
-                                      # compression stays armed as the fallback.
-        "codex_responses_compact_threshold": 200000,  # Server-side compaction trigger
+                                      # route/model is unaffected. Set False for
+                                      # a legacy-compatible explicit opt-out.
+        "codex_responses_compact_threshold": 190000,  # Server-side compaction trigger
                                       # (input tokens). Clamped below the local
                                       # compression threshold at request time so
                                       # the server compacts before Hermes does.
+        "codex_responses_local_fallback_threshold": 208000,  # Route-specific local
+                                      # fallback cap for eligible gpt-5.6
+                                      # OpenAI/Codex sessions. Values above
+                                      # 208K are clamped to preserve headroom
+                                      # below the observed 272K route ceiling.
         "in_place": True,             # When True, compaction rewrites the message
                                       # list and rebuilds the system prompt WITHOUT
                                       # rotating the session id — the conversation

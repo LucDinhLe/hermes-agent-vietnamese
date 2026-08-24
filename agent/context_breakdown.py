@@ -86,6 +86,13 @@ def _strip_blocks(text: str, *blocks: str) -> str:
     return out.strip()
 
 
+def _nonnegative_int(value: Any, default: int = 0) -> int:
+    """Return a privacy-safe numeric telemetry value, never a mock/string."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return default
+    return max(0, int(value))
+
+
 def compute_session_context_breakdown(
     agent: Any,
     messages: Optional[List[dict]] = None,
@@ -126,6 +133,10 @@ def compute_session_context_breakdown(
     ]
 
     estimated_total = sum(tokens for _, _, tokens in categories)
+    system_context_tokens = sum(
+        tokens for category_id, _, tokens in categories
+        if category_id != "conversation"
+    )
 
     comp = getattr(agent, "context_compressor", None)
     context_max = int(getattr(comp, "context_length", 0) or 0) if comp else 0
@@ -151,6 +162,25 @@ def compute_session_context_breakdown(
         if context_max and compact_threshold_tokens
         else 0
     )
+    effective_context_source = getattr(agent, "_effective_context_source", "runtime")
+    if not isinstance(effective_context_source, str) or not effective_context_source.strip():
+        effective_context_source = "runtime"
+    else:
+        effective_context_source = effective_context_source.strip()
+    logical_history_tokens = max(
+        conversation_tokens,
+        _nonnegative_int(getattr(agent, "_logical_history_tokens", 0)),
+    )
+    compaction_count = _nonnegative_int(
+        getattr(
+            agent,
+            "_context_compaction_count",
+            getattr(comp, "compression_count", 0) if comp else 0,
+        )
+    )
+    native_compaction_downgraded = (
+        getattr(agent, "_native_compaction_downgraded", False) is True
+    )
 
     return {
         "categories": [
@@ -167,6 +197,14 @@ def compute_session_context_breakdown(
         "context_percent": context_percent,
         "context_used": context_used,
         "context_measurement": context_measurement,
+        "active_context_tokens": context_used,
+        "system_context_tokens": system_context_tokens,
+        "conversation_context_tokens": conversation_tokens,
+        "logical_history_tokens": logical_history_tokens,
+        "compaction_count": compaction_count,
+        "native_compaction_downgraded": native_compaction_downgraded,
+        "effective_context_max": context_max,
+        "effective_context_source": effective_context_source,
         "effective_remaining_tokens": max(0, context_max - context_used),
         "estimated_total": estimated_total,
         "model": model,

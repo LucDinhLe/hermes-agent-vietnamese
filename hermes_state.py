@@ -6841,6 +6841,213 @@ class SessionDB(SessionSearchMixin, SessionSchemaMixin, SessionPortabilityMixin)
             last_activity_provenance=row.get("last_activity_provenance"),
         )
 
+    _CONTEXT_FAILURE_KINDS = frozenset({
+        "auth",
+        "auth_permanent",
+        "billing",
+        "rate_limit",
+        "upstream_rate_limit",
+        "overloaded",
+        "server_error",
+        "timeout",
+        "ssl_cert_verification",
+        "context_overflow",
+        "payload_too_large",
+        "image_too_large",
+        "model_not_found",
+        "provider_policy_blocked",
+        "content_policy_blocked",
+        "format_error",
+        "invalid_encrypted_content",
+        "multimodal_tool_content_unsupported",
+        "thinking_signature",
+        "long_context_tier",
+        "oauth_long_context_beta_forbidden",
+        "llama_cpp_grammar_pattern",
+        "native_compaction_rejected",
+        "provider_error",
+        "unknown",
+    })
+    _CONTEXT_STATE_LABEL_RE = re.compile(r"^[a-z0-9][a-z0-9_.:-]{0,79}$")
+
+    @staticmethod
+    def _context_state_token_value(value: Any, *, field: str) -> int:
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"{field} must be a non-negative integer")
+        return value
+
+    @classmethod
+    def _context_state_label(cls, value: Any, *, field: str) -> str:
+        if not isinstance(value, str):
+            raise ValueError(f"{field} must be a normalized label")
+        normalized = value.strip().lower()
+        if not cls._CONTEXT_STATE_LABEL_RE.fullmatch(normalized):
+            raise ValueError(f"{field} must be a normalized label")
+        return normalized
+
+    def update_session_context_state(
+        self,
+        session_id: str,
+        *,
+        effective_context_tokens: Optional[int] = None,
+        effective_context_source: Optional[str] = None,
+        active_context_tokens: Optional[int] = None,
+        logical_history_tokens: Optional[int] = None,
+        compaction_delta: int = 0,
+        native_compaction_downgraded: Optional[bool] = None,
+    ) -> None:
+        """Persist the bounded context-recovery state for one session.
+
+        Active/effective values may change after compaction or a route probe.
+        Logical history, compaction count, and native downgrade are monotonic
+        so a relaunch cannot forget work already compacted or re-enable a
+        native feature rejected earlier in the session.
+        """
+        if not session_id:
+            raise ValueError("session_id is required")
+
+        assignments: List[str] = []
+        values: List[Any] = []
+        if effective_context_tokens is not None:
+            values.append(self._context_state_token_value(
+                effective_context_tokens, field="effective_context_tokens"
+            ))
+            assignments.append("effective_context_tokens = ?")
+        if effective_context_source is not None:
+            values.append(self._context_state_label(
+                effective_context_source, field="effective_context_source"
+            ))
+            assignments.append("effective_context_source = ?")
+        if active_context_tokens is not None:
+            values.append(self._context_state_token_value(
+                active_context_tokens, field="active_context_tokens"
+            ))
+            assignments.append("active_context_tokens = ?")
+        if logical_history_tokens is not None:
+            values.append(self._context_state_token_value(
+                logical_history_tokens, field="logical_history_tokens"
+            ))
+            assignments.append(
+                "logical_history_tokens = MAX(logical_history_tokens, ?)"
+            )
+
+        compaction_delta = self._context_state_token_value(
+            compaction_delta, field="compaction_delta"
+        )
+        if compaction_delta:
+            values.append(compaction_delta)
+            assignments.append(
+                "context_compaction_count = context_compaction_count + ?"
+            )
+        if native_compaction_downgraded is not None:
+            if not isinstance(native_compaction_downgraded, bool):
+                raise ValueError("native_compaction_downgraded must be a boolean")
+            values.append(int(native_compaction_downgraded))
+            assignments.append(
+                "native_compaction_downgraded = "
+                "MAX(native_compaction_downgraded, ?)"
+            )
+        if not assignments:
+            return
+
+        values.append(session_id)
+
+        def _do(conn):
+            conn.execute(
+                f"UPDATE sessions SET {', '.join(assignments)} WHERE id = ?",
+                values,
+            )
+
+        self._execute_write(_do)
+
+    def record_session_failure(
+        self,
+        session_id: str,
+        *,
+        kind: str,
+        code: Optional[str] = None,
+        reset_at: Optional[float] = None,
+    ) -> None:
+        """Persist normalized recovery metadata, never a raw provider body."""
+        if not session_id:
+            raise ValueError("session_id is required")
+        normalized_kind = self._context_state_label(kind, field="kind")
+        if normalized_kind not in self._CONTEXT_FAILURE_KINDS:
+            raise ValueError("kind is not a recognized failure classification")
+        normalized_code = (
+            self._context_state_label(code, field="code")
+            if code is not None
+            else None
+        )
+        normalized_reset = None
+        if reset_at is not None:
+            from math import isfinite
+
+            if isinstance(reset_at, bool) or not isinstance(reset_at, (int, float)):
+                raise ValueError("reset_at must be a non-negative timestamp")
+            normalized_reset = float(reset_at)
+            if not isfinite(normalized_reset) or normalized_reset < 0:
+                raise ValueError("reset_at must be a non-negative timestamp")
+
+        def _do(conn):
+            conn.execute(
+                "UPDATE sessions SET last_failure_kind = ?, "
+                "last_failure_code = ?, last_failure_reset_at = ? WHERE id = ?",
+                (normalized_kind, normalized_code, normalized_reset, session_id),
+            )
+
+        self._execute_write(_do)
+
+    def clear_session_failure(self, session_id: str) -> None:
+        """Clear the last normalized failure after a successful request."""
+        if not session_id:
+            return
+
+        def _do(conn):
+            conn.execute(
+                "UPDATE sessions SET last_failure_kind = NULL, "
+                "last_failure_code = NULL, last_failure_reset_at = NULL "
+                "WHERE id = ?",
+                (session_id,),
+            )
+
+        self._execute_write(_do)
+
+    def get_session_context_state(
+        self, session_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Return the durable context recovery state, or None if absent."""
+        if not session_id:
+            return None
+        row = self._conn.execute(
+            "SELECT effective_context_tokens, effective_context_source, "
+            "active_context_tokens, logical_history_tokens, "
+            "context_compaction_count, native_compaction_downgraded, "
+            "last_failure_kind, last_failure_code, last_failure_reset_at "
+            "FROM sessions WHERE id = ?",
+            (session_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        last_failure = None
+        if row["last_failure_kind"] is not None:
+            last_failure = {
+                "kind": row["last_failure_kind"],
+                "code": row["last_failure_code"],
+                "reset_at": row["last_failure_reset_at"],
+            }
+        return {
+            "effective_context_tokens": row["effective_context_tokens"],
+            "effective_context_source": row["effective_context_source"],
+            "active_context_tokens": int(row["active_context_tokens"] or 0),
+            "logical_history_tokens": int(row["logical_history_tokens"] or 0),
+            "compaction_count": int(row["context_compaction_count"] or 0),
+            "native_compaction_downgraded": bool(
+                row["native_compaction_downgraded"]
+            ),
+            "last_failure": last_failure,
+        }
+
     def update_session_meta(
         self,
         session_id: str,

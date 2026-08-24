@@ -391,6 +391,40 @@ class TestCodexOAuthContextLength:
         import agent.model_metadata as mm
         mm._codex_oauth_context_cache = {}
 
+    @pytest.mark.parametrize(
+        ("advertised", "expected"),
+        [
+            (272_000, 900_000),
+            (372_000, 372_000),
+            (900_000, 900_000),
+            (1_050_000, 1_050_000),
+        ],
+    )
+    def test_codex_effective_metadata_keeps_value_and_live_source(
+        self, advertised, expected
+    ):
+        from agent import model_metadata as mm
+
+        with patch(
+            "agent.model_metadata._fetch_codex_oauth_context_lengths_with_source",
+            return_value=({"gpt-5.6-sol": advertised}, True),
+        ):
+            tokens, source = mm._resolve_codex_oauth_context_length_with_source(
+                "gpt-5.6-sol", access_token="mock-token"
+            )
+
+        assert tokens == expected
+        assert source == "live"
+
+    def test_direct_openai_gpt56_keeps_the_105m_api_window(self):
+        from agent.model_metadata import get_model_context_length
+
+        assert get_model_context_length(
+            "gpt-5.6-sol",
+            base_url="https://api.openai.com/v1",
+            provider="openai-api",
+        ) == 1_050_000
+
 
 
     def test_live_catalogue_cache_is_scoped_to_access_token(self):

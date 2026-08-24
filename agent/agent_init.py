@@ -2156,11 +2156,40 @@ def init_agent(
     compression_threshold_tokens = _compression_cfg.get("threshold_tokens")
     if compression_threshold_tokens is not None:
         try:
+            if isinstance(compression_threshold_tokens, bool):
+                raise ValueError
             compression_threshold_tokens = int(compression_threshold_tokens)
             if compression_threshold_tokens <= 0:
                 compression_threshold_tokens = None
         except (TypeError, ValueError):
             compression_threshold_tokens = None
+    # gpt-5.6 on direct OpenAI/Codex routes has a smaller effective ceiling
+    # than its published window on some accounts. Keep Hermes' local
+    # compressor armed as a route-specific fallback before the smallest
+    # observed 272K ceiling, even when a ratio autoraise would trigger later.
+    from agent.native_compaction import (
+        DEFAULT_COMPACT_THRESHOLD as _DEFAULT_NATIVE_COMPACT_THRESHOLD,
+        DEFAULT_LOCAL_FALLBACK_THRESHOLD as _DEFAULT_LOCAL_FALLBACK_THRESHOLD,
+        coerce_native_compaction_enabled as _coerce_native_compaction_enabled,
+        local_compaction_threshold_cap as _local_compaction_threshold_cap,
+    )
+
+    _local_fallback_raw = _compression_cfg.get(
+        "codex_responses_local_fallback_threshold",
+        _DEFAULT_LOCAL_FALLBACK_THRESHOLD,
+    )
+    _route_local_cap = _local_compaction_threshold_cap(
+        agent.model,
+        agent.provider,
+        agent.base_url,
+        _local_fallback_raw,
+    )
+    if _route_local_cap is not None:
+        compression_threshold_tokens = (
+            min(compression_threshold_tokens, _route_local_cap)
+            if compression_threshold_tokens is not None
+            else _route_local_cap
+        )
     # In-place compaction: when True, compress_context() rewrites the message
     # list + rebuilds the system prompt WITHOUT rotating the session id (no
     # parent_session_id chain, no `name #N` renumber). See #38763 and
@@ -2208,18 +2237,17 @@ def init_agent(
             codex_app_server_auto_compaction,
         )
         codex_app_server_auto_compaction = "native"
-    # Native OpenAI Responses server-side compaction (opt-in). Only ever
+    # Native OpenAI Responses server-side compaction (auto by default). Only
     # engages for gpt-5.6-family models on api.openai.com or the ChatGPT
     # Codex backend — the per-request gate lives in agent/native_compaction.py.
-    # Shared truthy coercion: "false"/"off"/"no" strings stay disabled
-    # (bool("false") is True — #82777).
-    from utils import is_truthy_value as _is_truthy
-
-    codex_responses_native_compaction = _is_truthy(
-        _compression_cfg.get("codex_responses_native", False)
+    # ``auto`` and missing values enable that narrow gate; legacy explicit
+    # false values remain a durable opt-out.
+    codex_responses_native_compaction = _coerce_native_compaction_enabled(
+        _compression_cfg.get("codex_responses_native", "auto"),
+        default=True,
     )
     _native_threshold_raw = _compression_cfg.get(
-        "codex_responses_compact_threshold", 200_000
+        "codex_responses_compact_threshold", _DEFAULT_NATIVE_COMPACT_THRESHOLD
     )
     try:
         if isinstance(_native_threshold_raw, bool):
@@ -2229,10 +2257,11 @@ def init_agent(
             raise ValueError
     except (TypeError, ValueError):
         _ra().logger.warning(
-            "Invalid compression.codex_responses_compact_threshold=%r; using 200000.",
+            "Invalid compression.codex_responses_compact_threshold=%r; using %d.",
             _native_threshold_raw,
+            _DEFAULT_NATIVE_COMPACT_THRESHOLD,
         )
-        codex_responses_compact_threshold = 200_000
+        codex_responses_compact_threshold = _DEFAULT_NATIVE_COMPACT_THRESHOLD
     # Opt-in idle compaction: compact a session up front when it resumes after
     # this many seconds of inactivity (0 = disabled). Time-based, so it
     # complements the size-based threshold above. Consumed by build_turn_context().

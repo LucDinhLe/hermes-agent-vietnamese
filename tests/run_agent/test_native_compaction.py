@@ -12,9 +12,12 @@ import pytest
 
 from agent.native_compaction import (
     DEFAULT_COMPACT_THRESHOLD,
+    DEFAULT_LOCAL_FALLBACK_THRESHOLD,
+    coerce_native_compaction_enabled,
     is_direct_openai_route,
     is_native_compaction_model,
     is_native_compaction_rejection,
+    local_compaction_threshold_cap,
     native_compaction_context_management,
     resolve_compact_threshold,
 )
@@ -162,6 +165,45 @@ class TestThresholdClamp:
         assert resolve_compact_threshold(200_000, 4_000) >= 1_024
 
 
+class TestRouteSpecificLocalFallback:
+    @pytest.mark.parametrize(
+        ("model", "provider", "base_url"),
+        [
+            ("gpt-5.6-sol", "openai-codex", "https://chatgpt.com/backend-api/codex"),
+            ("gpt-5.6-terra", "openai-api", "https://api.openai.com/v1"),
+            ("openai/gpt-5.6-luna", "openai", "https://api.openai.com/v1/"),
+        ],
+    )
+    def test_eligible_routes_cap_local_fallback_before_observed_272k(
+        self, model, provider, base_url
+    ):
+        assert (
+            local_compaction_threshold_cap(model, provider, base_url)
+            == DEFAULT_LOCAL_FALLBACK_THRESHOLD
+            == 208_000
+        )
+
+    @pytest.mark.parametrize(
+        ("model", "provider", "base_url"),
+        [
+            ("gpt-5.5", "openai-codex", "https://chatgpt.com/backend-api/codex"),
+            ("gpt-5.6-sol", "openrouter", "https://openrouter.ai/api/v1"),
+            ("gpt-5.6-sol", "openai-api", "https://api.openai.com.evil.test/v1"),
+        ],
+    )
+    def test_other_routes_do_not_receive_the_safety_cap(
+        self, model, provider, base_url
+    ):
+        assert local_compaction_threshold_cap(model, provider, base_url) is None
+
+    def test_configured_cap_is_coerced_and_never_exceeds_safe_default(self):
+        route = ("gpt-5.6-sol", "openai-api", "https://api.openai.com/v1")
+        assert local_compaction_threshold_cap(*route, "200000") == 200_000
+        assert local_compaction_threshold_cap(*route, 260_000) == 208_000
+        assert local_compaction_threshold_cap(*route, True) == 208_000
+        assert local_compaction_threshold_cap(*route, "garbage") == 208_000
+
+
 class TestRejectionMatcher:
     def test_structured_param_rejection_matches(self):
         assert is_native_compaction_rejection(
@@ -226,6 +268,18 @@ class TestConfigCoercion:
 
         for raw in ("true", "1", "yes", "on", "TRUE"):
             assert is_truthy_value(raw, False), raw
+
+    @pytest.mark.parametrize("raw", (None, "auto", "AUTO", " default "))
+    def test_auto_and_missing_values_enable_the_eligible_request_gate(self, raw):
+        assert coerce_native_compaction_enabled(raw, default=True) is True
+
+    @pytest.mark.parametrize("raw", (False, 0, "false", "off", "no", "0", ""))
+    def test_legacy_false_values_remain_an_explicit_opt_out(self, raw):
+        assert coerce_native_compaction_enabled(raw, default=True) is False
+
+    @pytest.mark.parametrize("raw", (True, 1, "true", "on", "yes", "1"))
+    def test_legacy_true_values_remain_enabled(self, raw):
+        assert coerce_native_compaction_enabled(raw, default=False) is True
 
 
 class TestWirePlumbing:
@@ -382,7 +436,7 @@ class TestResponseCapture:
 
 
 class TestAgentInitConfig:
-    def test_defaults_off_and_threshold(self, monkeypatch):
+    def test_defaults_auto_and_route_safe_thresholds(self, monkeypatch):
         from run_agent import AIAgent
 
         agent = AIAgent(
@@ -396,10 +450,11 @@ class TestAgentInitConfig:
             skip_memory=True,
             enabled_toolsets=[],
         )
-        assert agent.codex_responses_native_compaction is False
-        assert agent.codex_responses_compact_threshold == 200_000
+        assert agent.codex_responses_native_compaction is True
+        assert agent.codex_responses_compact_threshold == 190_000
+        assert agent.context_compressor.threshold_tokens == 208_000
 
-    def test_kwargs_have_no_context_management_by_default(self):
+    def test_kwargs_include_context_management_by_default_on_eligible_route(self):
         from run_agent import AIAgent
 
         agent = AIAgent(
@@ -414,7 +469,30 @@ class TestAgentInitConfig:
             enabled_toolsets=[],
         )
         kwargs = agent._build_api_kwargs([{"role": "user", "content": "hi"}])
+        assert kwargs["context_management"] == [
+            {"type": "compaction", "compact_threshold": 190_000}
+        ]
+
+    def test_native_downgrade_keeps_route_local_fallback_armed(self):
+        from run_agent import AIAgent
+
+        agent = AIAgent(
+            api_key="test-key",
+            base_url="https://api.openai.com/v1",
+            api_mode="codex_responses",
+            model="gpt-5.6",
+            provider="openai-api",
+            quiet_mode=True,
+            skip_context_files=True,
+            skip_memory=True,
+            enabled_toolsets=[],
+        )
+        agent.codex_responses_native_compaction = False
+
+        kwargs = agent._build_api_kwargs([{"role": "user", "content": "hi"}])
+
         assert "context_management" not in kwargs
+        assert agent.context_compressor.threshold_tokens == 208_000
 
     def test_kwargs_include_field_when_enabled_on_eligible_route(self):
         from run_agent import AIAgent

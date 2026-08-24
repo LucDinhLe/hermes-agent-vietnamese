@@ -13,6 +13,10 @@ from __future__ import annotations
 
 import enum
 import logging
+import math
+import re
+import time
+from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
@@ -178,6 +182,19 @@ _BILLING_ERROR_CODES = frozenset({
     "member_spend_cap_exceeded",
     _XAI_SPENDING_LIMIT_ERROR_CODE,
 })
+
+_CONTEXT_ERROR_CODES = frozenset({
+    "context_length_exceeded",
+    "max_tokens_exceeded",
+})
+
+_RATE_LIMIT_ERROR_CODES = frozenset({
+    "resource_exhausted",
+    "throttled",
+    "rate_limit_exceeded",
+})
+
+_SAFE_FAILURE_CODE_RE = re.compile(r"^[a-z0-9][a-z0-9_.:-]{0,79}$")
 
 # Patterns that indicate rate limiting (transient, will resolve)
 _RATE_LIMIT_PATTERNS = [
@@ -707,6 +724,94 @@ _SSL_TRANSIENT_PATTERNS = [
 ]
 
 
+def _coerce_reset_at(value: Any) -> Optional[float]:
+    """Normalize an absolute reset timestamp without retaining source text."""
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        parsed = float(value)
+        return parsed if math.isfinite(parsed) and parsed >= 0 else None
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text or len(text) > 64:
+        return None
+    try:
+        parsed = float(text)
+    except ValueError:
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
+        except (ValueError, OverflowError):
+            return None
+    return parsed if math.isfinite(parsed) and parsed >= 0 else None
+
+
+def _normalized_error_context(
+    error: Exception,
+    body: dict,
+    error_code: str,
+) -> Dict[str, Any]:
+    """Return persistence-safe failure metadata (code/reset only).
+
+    Provider messages and raw response bodies may contain prompts, tool
+    results, bearer tokens, or other private material. This helper therefore
+    uses a strict code grammar and extracts only numeric reset metadata.
+    """
+    context: Dict[str, Any] = {}
+    code = (error_code or "").strip().lower()
+    if _SAFE_FAILURE_CODE_RE.fullmatch(code):
+        context["code"] = code
+
+    payloads = []
+    if isinstance(body, dict):
+        nested = body.get("error")
+        if isinstance(nested, dict):
+            payloads.append(nested)
+        payloads.append(body)
+
+    reset_at = None
+    retry_after = None
+    for payload in payloads:
+        for key in ("reset_at", "resets_at", "reset"):
+            reset_at = _coerce_reset_at(payload.get(key))
+            if reset_at is not None:
+                break
+        if reset_at is not None:
+            break
+        for key in ("retry_after", "retry_after_seconds"):
+            retry_after_candidate = _coerce_reset_at(payload.get(key))
+            if retry_after_candidate is not None:
+                retry_after = retry_after_candidate
+                break
+
+    response = getattr(error, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers is not None:
+        try:
+            normalized_headers = {
+                str(key).strip().lower(): value for key, value in headers.items()
+            }
+        except Exception:
+            normalized_headers = {}
+        if reset_at is None:
+            for key in (
+                "x-ratelimit-reset",
+                "x-ratelimit-reset-requests",
+                "x-ratelimit-reset-tokens",
+            ):
+                reset_at = _coerce_reset_at(normalized_headers.get(key))
+                if reset_at is not None:
+                    break
+        if retry_after is None:
+            retry_after = _coerce_reset_at(normalized_headers.get("retry-after"))
+
+    if reset_at is None and retry_after is not None:
+        reset_at = time.time() + retry_after
+    if reset_at is not None:
+        context["reset_at"] = float(reset_at)
+    return context
+
+
 # ── Classification pipeline ─────────────────────────────────────────────
 
 def classify_api_error(
@@ -750,6 +855,7 @@ def classify_api_error(
         status_code = 429
     body = _extract_error_body(error)
     error_code = _extract_error_code(body)
+    normalized_error_context = _normalized_error_context(error, body, error_code)
 
     # Build a comprehensive error message string for pattern matching.
     # str(error) alone may not include the body message (e.g. OpenAI SDK's
@@ -795,12 +901,17 @@ def classify_api_error(
     model_lower = (model or "").strip().lower()
 
     def _result(reason: FailoverReason, **overrides) -> ClassifiedError:
+        override_context = overrides.pop("error_context", None)
+        error_context = dict(normalized_error_context)
+        if isinstance(override_context, dict):
+            error_context.update(override_context)
         defaults = {
             "reason": reason,
             "status_code": status_code,
             "provider": provider,
             "model": model,
             "message": _extract_message(error, body),
+            "error_context": error_context,
         }
         defaults.update(overrides)
         return ClassifiedError(**defaults)
@@ -994,6 +1105,7 @@ def classify_api_error(
             provider=provider_lower, model=model_lower,
             approx_tokens=approx_tokens, context_length=context_length,
             num_messages=num_messages,
+            normalized_error_context=normalized_error_context,
             result_fn=_result,
         )
         if classified is not None:
@@ -1023,7 +1135,12 @@ def classify_api_error(
     # ── 3. Error code classification ────────────────────────────────
 
     if error_code:
-        classified = _classify_by_error_code(error_code, error_msg, _result)
+        classified = _classify_by_error_code(
+            error_code,
+            error_msg,
+            _result,
+            normalized_error_context=normalized_error_context,
+        )
         if classified is not None:
             return classified
 
@@ -1151,9 +1268,57 @@ def _classify_by_status(
     approx_tokens: int,
     context_length: int,
     num_messages: int = 0,
+    normalized_error_context: Optional[Dict[str, Any]] = None,
     result_fn,
 ) -> Optional[ClassifiedError]:
     """Classify based on HTTP status code with message-aware refinement."""
+
+    # A structured provider code is more specific than the overloaded HTTP
+    # status. In particular, providers surface context overflow as 400, 413,
+    # or even 429, while ``insufficient_quota`` can be either a periodic quota
+    # (when reset metadata exists) or durable billing exhaustion.
+    code_lower = (error_code or "").strip().lower()
+    if status_code in {400, 413, 429}:
+        if code_lower in _CONTEXT_ERROR_CODES:
+            return result_fn(
+                FailoverReason.context_overflow,
+                retryable=True,
+                should_compress=True,
+                should_rotate_credential=False,
+                should_fallback=False,
+            )
+        if code_lower == "insufficient_quota":
+            if (normalized_error_context or {}).get("reset_at") is not None:
+                return result_fn(
+                    FailoverReason.rate_limit,
+                    retryable=True,
+                    should_compress=False,
+                    should_rotate_credential=True,
+                    should_fallback=True,
+                )
+            return result_fn(
+                FailoverReason.billing,
+                retryable=False,
+                should_compress=False,
+                should_rotate_credential=True,
+                should_fallback=True,
+            )
+        if code_lower in _BILLING_ERROR_CODES:
+            return result_fn(
+                FailoverReason.billing,
+                retryable=False,
+                should_compress=False,
+                should_rotate_credential=True,
+                should_fallback=True,
+            )
+        if code_lower in _RATE_LIMIT_ERROR_CODES:
+            return result_fn(
+                FailoverReason.rate_limit,
+                retryable=True,
+                should_compress=False,
+                should_rotate_credential=True,
+                should_fallback=True,
+            )
 
     if status_code == 401:
         # Not retryable on its own — credential pool rotation and
@@ -1630,7 +1795,11 @@ def _classify_400(
 # ── Error code classification ───────────────────────────────────────────
 
 def _classify_by_error_code(
-    error_code: str, error_msg: str, result_fn,
+    error_code: str,
+    error_msg: str,
+    result_fn,
+    *,
+    normalized_error_context: Optional[Dict[str, Any]] = None,
 ) -> Optional[ClassifiedError]:
     """Classify by structured error codes from the response body."""
     code_lower = error_code.lower()
@@ -1649,11 +1818,22 @@ def _classify_by_error_code(
             should_fallback=True,
         )
 
-    if code_lower in {"resource_exhausted", "throttled", "rate_limit_exceeded"}:
+    if code_lower in _RATE_LIMIT_ERROR_CODES:
         return result_fn(
             FailoverReason.rate_limit,
             retryable=True,
             should_rotate_credential=True,
+        )
+
+    if (
+        code_lower == "insufficient_quota"
+        and (normalized_error_context or {}).get("reset_at") is not None
+    ):
+        return result_fn(
+            FailoverReason.rate_limit,
+            retryable=True,
+            should_rotate_credential=True,
+            should_fallback=True,
         )
 
     if code_lower in _BILLING_ERROR_CODES:
@@ -1671,7 +1851,7 @@ def _classify_by_error_code(
             should_fallback=True,
         )
 
-    if code_lower in {"context_length_exceeded", "max_tokens_exceeded"}:
+    if code_lower in _CONTEXT_ERROR_CODES:
         return result_fn(
             FailoverReason.context_overflow,
             retryable=True,

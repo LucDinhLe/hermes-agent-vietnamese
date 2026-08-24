@@ -45,7 +45,13 @@ from urllib.parse import urlsplit
 # trigger so the server always gets the first shot at compaction.
 LOCAL_TRIGGER_SAFETY_MARGIN = 8_192
 
-DEFAULT_COMPACT_THRESHOLD = 200_000
+DEFAULT_COMPACT_THRESHOLD = 190_000
+
+# Local compression remains the deterministic fallback for eligible routes.
+# Keep its absolute trigger below the smallest context ceiling observed on the
+# Codex route (272K) while leaving enough room for the provider request to
+# finish rendering before that ceiling is reached.
+DEFAULT_LOCAL_FALLBACK_THRESHOLD = 208_000
 
 # Model-family gate. Substring match on the lowercased model id so dated
 # snapshots (gpt-5.6-2026-07-xx) and variants (gpt-5.6-mini) stay eligible.
@@ -55,6 +61,32 @@ _ELIGIBLE_MODEL_MARKER = "gpt-5.6"
 def is_native_compaction_model(model: Optional[str]) -> bool:
     """True when the model is in the gpt-5.6 family."""
     return _ELIGIBLE_MODEL_MARKER in (model or "").lower()
+
+
+def coerce_native_compaction_enabled(value: Any, *, default: bool = True) -> bool:
+    """Coerce the native-compaction config without breaking legacy opt-outs.
+
+    ``auto`` is the new default mode: the per-request model/route gate decides
+    whether the field is eligible. Existing explicit true/false values retain
+    their old meaning, including the string forms emitted by older config
+    writers.
+    """
+    if value is None:
+        return bool(default)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"auto", "default"}:
+            return bool(default)
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"", "0", "false", "no", "off"}:
+            return False
+        return bool(default)
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return bool(default)
 
 
 def is_direct_openai_route(
@@ -70,6 +102,36 @@ def is_direct_openai_route(
     except ValueError:
         return False
     return hostname == "api.openai.com"
+
+
+def local_compaction_threshold_cap(
+    model: Optional[str],
+    provider: Optional[str],
+    base_url: Optional[str],
+    configured_threshold: Any = DEFAULT_LOCAL_FALLBACK_THRESHOLD,
+) -> Optional[int]:
+    """Return the route-specific local fallback cap, or ``None``.
+
+    This mirrors the native request gate using only initialization-time
+    metadata. Relays and OpenAI-compatible providers must not inherit the cap
+    merely because their model slug contains ``gpt-5.6``.
+    """
+    if not is_native_compaction_model(model):
+        return None
+    provider_name = (provider or "").strip().lower()
+    is_codex_backend = provider_name == "openai-codex"
+    if not is_direct_openai_route(
+        base_url,
+        is_codex_backend=is_codex_backend,
+    ):
+        return None
+    try:
+        configured = int(configured_threshold)
+    except (TypeError, ValueError):
+        configured = DEFAULT_LOCAL_FALLBACK_THRESHOLD
+    if isinstance(configured_threshold, bool) or configured <= 0:
+        configured = DEFAULT_LOCAL_FALLBACK_THRESHOLD
+    return min(configured, DEFAULT_LOCAL_FALLBACK_THRESHOLD)
 
 
 def resolve_compact_threshold(

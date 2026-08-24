@@ -28,6 +28,88 @@ class MockTransportError(Exception):
     pass
 
 
+class TestContextQuotaStatusMatrix:
+    @pytest.mark.parametrize("status_code", (400, 413, 429))
+    def test_structured_context_code_wins_over_ambiguous_http_status(self, status_code):
+        error = MockAPIError(
+            "request rejected",
+            status_code=status_code,
+            body={
+                "error": {
+                    "code": "context_length_exceeded",
+                    "message": "request rejected",
+                }
+            },
+        )
+
+        classified = classify_api_error(error, provider="openai-codex")
+
+        assert classified.reason == FailoverReason.context_overflow
+        assert classified.should_compress is True
+        assert classified.should_rotate_credential is False
+        assert classified.error_context == {"code": "context_length_exceeded"}
+
+    @pytest.mark.parametrize("status_code", (400, 413, 429))
+    def test_periodic_quota_with_reset_is_rate_limit_not_context(self, status_code):
+        error = MockAPIError(
+            "usage unavailable",
+            status_code=status_code,
+            body={
+                "error": {
+                    "code": "insufficient_quota",
+                    "message": "usage unavailable",
+                    "reset_at": 2_000_000_000,
+                }
+            },
+        )
+
+        classified = classify_api_error(error, provider="openai-codex")
+
+        assert classified.reason == FailoverReason.rate_limit
+        assert classified.should_compress is False
+        assert classified.error_context == {
+            "code": "insufficient_quota",
+            "reset_at": 2_000_000_000.0,
+        }
+
+    def test_structured_429_insufficient_quota_without_reset_is_billing(self):
+        error = MockAPIError(
+            "account allocation exhausted",
+            status_code=429,
+            body={
+                "error": {
+                    "code": "insufficient_quota",
+                    "message": "account allocation exhausted",
+                }
+            },
+        )
+
+        classified = classify_api_error(error, provider="openai-codex")
+
+        assert classified.reason == FailoverReason.billing
+        assert classified.should_compress is False
+        assert classified.error_context == {"code": "insufficient_quota"}
+
+    def test_normalized_context_never_copies_raw_provider_body(self):
+        secret_marker = "private-provider-payload-must-not-persist"
+        error = MockAPIError(
+            secret_marker,
+            status_code=429,
+            body={
+                "error": {
+                    "code": "rate_limit_exceeded",
+                    "message": secret_marker,
+                    "retry_after": 60,
+                }
+            },
+        )
+
+        classified = classify_api_error(error, provider="openai-codex")
+
+        assert set(classified.error_context) == {"code", "reset_at"}
+        assert secret_marker not in repr(classified.error_context)
+
+
 class ReadTimeout(MockTransportError):
     pass
 
@@ -1290,5 +1372,4 @@ class TestExpandedOverflowPatterns:
         )
         result = classify_api_error(e, provider="openrouter", model="m")
         assert result.reason == FailoverReason.context_overflow
-
 
