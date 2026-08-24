@@ -25,9 +25,10 @@ import { fileURLToPath } from "node:url"
 
 import { hostTarBin } from "../apps/desktop/scripts/stage-agent-payloads.mjs"
 import {
+  LOCAL_CANDIDATE_STATUS_COMMAND,
+  createLocalCandidateProvenanceGuard,
   resolveBundledReleaseClass,
   validateBundledBuildNode,
-  validateLocalCandidateCheckout,
 } from "./bundled-release-policy.mjs"
 import { prepareAgentBrowserPackage } from "./prepare-agent-browser-native.mjs"
 import {
@@ -134,6 +135,18 @@ try {
   fail(error.message)
 }
 
+let localCandidateProvenance = null
+if (localCandidate) {
+  try {
+    localCandidateProvenance = createLocalCandidateProvenanceGuard({
+      expectedCommit: commitArg,
+      skipInstall,
+    })
+  } catch (error) {
+    fail(error.message)
+  }
+}
+
 // Normal release builds retain the exact-tag contract. The explicit local
 // candidate path treats --tag only as a package/manifest label and archives
 // the caller-supplied immutable HEAD commit. It can never be staged or
@@ -142,13 +155,13 @@ let checkout
 try {
   const headCommit = capture("git rev-parse HEAD")
   if (localCandidate) {
-    checkout = validateLocalCandidateCheckout({
-      expectedCommit: commitArg,
+    checkout = localCandidateProvenance.check({
       headCommit,
-      // Untracked files can never enter `git archive <commit>`. Requiring the
-      // tracked index/worktree to be clean binds every packaged byte to HEAD
-      // without forcing developers to delete unrelated local evidence.
-      trackedStatus: capture("git status --porcelain=v1 --untracked-files=no"),
+      // The desktop build consumes the live checkout (including public/** and
+      // assets/**), while the Python payload is archived from the commit.
+      // Reject every tracked or untracked change so both surfaces are bound to
+      // the exact --commit bytes before any install, download, or build runs.
+      worktreeStatus: capture(LOCAL_CANDIDATE_STATUS_COMMAND),
     })
   } else {
     checkout = validateVietnameseCandidateCheckout({
@@ -255,8 +268,9 @@ const env = {
 const desktop = path.join(REPO_ROOT, "apps", "desktop")
 run("npm", ["run", "build"], { cwd: desktop, env })
 
+let completionMessage
 if (skipPackage) {
-  console.log("[build-bundled] --no-package: stopping after payload staging")
+  completionMessage = "[build-bundled] --no-package: stopped after payload staging"
 } else {
   run(
     "npm",
@@ -268,7 +282,20 @@ if (skipPackage) {
     ],
     { cwd: desktop, env }
   )
-  console.log(`[build-bundled] artifacts: ${path.join(desktop, "release")}`)
+  completionMessage = `[build-bundled] artifacts: ${path.join(desktop, "release")}`
 }
+
+if (localCandidate) {
+  try {
+    localCandidateProvenance.check({
+      headCommit: capture("git rev-parse HEAD"),
+      worktreeStatus: capture(LOCAL_CANDIDATE_STATUS_COMMAND),
+    })
+  } catch (error) {
+    fail(`final local-candidate provenance check failed: ${error.message}`)
+  }
+}
+
+console.log(completionMessage)
 
 fs.rmSync(work, { recursive: true, force: true })

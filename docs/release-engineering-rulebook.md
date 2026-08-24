@@ -113,8 +113,13 @@ chuỗi trên.
 - [ ] Worktree sạch; commit đã push và fetch được.
 - [ ] Nếu dựng local candidate chưa có tag: dùng tường minh
       `--local-candidate --commit=<full-clean-HEAD>`. Nhãn `--tag` lúc này chỉ
-      là label manifest; candidate này không được stage/promote. CI/draft vẫn
-      bắt buộc exact tag trỏ đúng commit đã fetch.
+      là label manifest; index và worktree phải sạch hoàn toàn, gồm cả file
+      chưa được Git theo dõi, vì Desktop build đọc trực tiếp source,
+      `public/**` và `assets/**`. Candidate này không được stage/promote.
+      Local candidate không được dùng `--no-install`: dependency phải được dựng
+      lại bằng `npm ci` từ lockfile đã commit. Cổng provenance phải kiểm lại
+      exact HEAD và worktree sạch sau build/package, trước khi báo thành công.
+      CI/draft vẫn bắt buộc exact tag trỏ đúng commit đã fetch.
 - [ ] Phiên bản trước và rollback target được ghi.
 
 ### B. Mã nguồn và chuỗi cung ứng

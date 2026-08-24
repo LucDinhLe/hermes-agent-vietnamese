@@ -3,7 +3,9 @@ import test from 'node:test'
 
 import {
   BUNDLED_BUILD_NODE_MIN_MAJOR,
+  LOCAL_CANDIDATE_STATUS_COMMAND,
   bundledUpdatePolicy,
+  createLocalCandidateProvenanceGuard,
   resolveBundledReleaseClass,
   resolvePayloadGitRef,
   validateBundledBuildNode,
@@ -45,23 +47,72 @@ test('community prerelease metadata disables the update feed while stable enable
   })
 })
 
-test('tagless local candidate binds a clean tracked HEAD to an explicit full commit', () => {
+test('tagless local candidate binds a fully clean HEAD to an explicit full commit', () => {
   const commit = 'a'.repeat(40)
   assert.deepEqual(
-    validateLocalCandidateCheckout({ expectedCommit: commit, headCommit: commit, trackedStatus: '' }),
+    validateLocalCandidateCheckout({ expectedCommit: commit, headCommit: commit, worktreeStatus: '' }),
     { commit, localCandidate: true }
   )
   assert.throws(
-    () => validateLocalCandidateCheckout({ expectedCommit: 'a'.repeat(39), headCommit: commit, trackedStatus: '' }),
+    () => validateLocalCandidateCheckout({ expectedCommit: 'a'.repeat(39), headCommit: commit, worktreeStatus: '' }),
     /full 40-character/
   )
   assert.throws(
-    () => validateLocalCandidateCheckout({ expectedCommit: 'b'.repeat(40), headCommit: commit, trackedStatus: '' }),
+    () => validateLocalCandidateCheckout({ expectedCommit: 'b'.repeat(40), headCommit: commit, worktreeStatus: '' }),
     /does not match HEAD/
   )
   assert.throws(
-    () => validateLocalCandidateCheckout({ expectedCommit: commit, headCommit: commit, trackedStatus: ' M tracked.js' }),
-    /clean tracked/
+    () => validateLocalCandidateCheckout({ expectedCommit: commit, headCommit: commit, worktreeStatus: ' M tracked.js' }),
+    /fully clean.*tracked and untracked/
+  )
+})
+
+test('tagless local candidate rejects untracked desktop source and package assets', () => {
+  const commit = 'd'.repeat(40)
+  assert.equal(
+    LOCAL_CANDIDATE_STATUS_COMMAND,
+    'git status --porcelain=v1 --untracked-files=all'
+  )
+
+  for (const untrackedPath of [
+    'apps/desktop/src/release-shadow.ts',
+    'apps/desktop/public/release-shadow.js',
+    'apps/desktop/assets/release-shadow.svg'
+  ]) {
+    assert.throws(
+      () => validateLocalCandidateCheckout({
+        expectedCommit: commit,
+        headCommit: commit,
+        worktreeStatus: `?? ${untrackedPath}`
+      }),
+      /fully clean.*tracked and untracked/,
+      untrackedPath
+    )
+  }
+})
+
+test('tagless local candidate installs from lock and revalidates provenance after the build', () => {
+  const commit = 'e'.repeat(40)
+  assert.throws(
+    () => createLocalCandidateProvenanceGuard({ expectedCommit: commit, skipInstall: true }),
+    /forbids --no-install.*npm ci.*committed lockfile/
+  )
+
+  const guard = createLocalCandidateProvenanceGuard({ expectedCommit: commit })
+  assert.deepEqual(
+    guard.check({ headCommit: commit, worktreeStatus: '' }),
+    { commit, localCandidate: true }
+  )
+  assert.throws(
+    () => guard.check({
+      headCommit: commit,
+      worktreeStatus: '?? apps/desktop/public/appeared-during-build.js'
+    }),
+    /fully clean.*tracked and untracked/
+  )
+  assert.throws(
+    () => guard.check({ headCommit: 'f'.repeat(40), worktreeStatus: '' }),
+    /does not match HEAD/
   )
 })
 

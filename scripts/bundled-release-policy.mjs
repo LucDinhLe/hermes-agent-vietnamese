@@ -1,5 +1,6 @@
 const RELEASE_CLASSES = new Set(['community-prerelease', 'stable'])
 export const BUNDLED_BUILD_NODE_MIN_MAJOR = 26
+export const LOCAL_CANDIDATE_STATUS_COMMAND = 'git status --porcelain=v1 --untracked-files=all'
 
 export function validateBundledBuildNode(version) {
   const normalized = String(version || '').trim().replace(/^v/i, '')
@@ -43,18 +44,43 @@ export function bundledUpdatePolicy(releaseClass) {
   })
 }
 
-export function validateLocalCandidateCheckout({ expectedCommit, headCommit, trackedStatus }) {
+export function validateLocalCandidateCheckout({ expectedCommit, headCommit, worktreeStatus }) {
   if (!/^[0-9a-f]{40}$/i.test(String(expectedCommit || ''))) {
     throw new Error('--local-candidate requires --commit=<full 40-character HEAD SHA>')
   }
   if (expectedCommit.toLowerCase() !== String(headCommit || '').toLowerCase()) {
     throw new Error(`--commit ${expectedCommit} does not match HEAD ${headCommit || '(missing)'}`)
   }
-  if (String(trackedStatus || '').trim()) {
-    throw new Error('tagless local candidate requires a clean tracked index and worktree')
+  if (String(worktreeStatus || '').trim()) {
+    throw new Error(
+      'tagless local candidate requires a fully clean index and worktree; ' +
+        'tracked and untracked files are forbidden'
+    )
   }
 
   return Object.freeze({ commit: headCommit.toLowerCase(), localCandidate: true })
+}
+
+export function createLocalCandidateProvenanceGuard({ expectedCommit, skipInstall = false }) {
+  if (skipInstall) {
+    throw new Error(
+      'tagless local candidate forbids --no-install; npm ci must materialize dependencies from the committed lockfile'
+    )
+  }
+
+  let initialCommit = null
+  return Object.freeze({
+    check({ headCommit, worktreeStatus }) {
+      const checkout = validateLocalCandidateCheckout({ expectedCommit, headCommit, worktreeStatus })
+      if (initialCommit && checkout.commit !== initialCommit) {
+        throw new Error(
+          `tagless local candidate commit changed during the build: ${initialCommit} -> ${checkout.commit}`
+        )
+      }
+      initialCommit ??= checkout.commit
+      return checkout
+    }
+  })
 }
 
 export function resolvePayloadGitRef({ commit, localCandidate = false, tag }) {

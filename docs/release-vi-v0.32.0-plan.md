@@ -157,13 +157,17 @@ phải qua smoke trước mọi staging/promotion:
 - Stable vẫn cần Authenticode/SignPath và Developer ID + notarization + stapling.
 
 Candidate cục bộ đầu tiên không cần tạo tag. Nó vẫn dùng nhãn manifest dự kiến,
-nhưng payload được archive từ đúng full commit của clean tracked HEAD:
+nhưng mọi source/asset được build hoặc đóng gói phải khớp đúng full commit của
+HEAD sạch hoàn toàn. Cổng preflight từ chối cả thay đổi tracked lẫn file
+untracked, kể cả trong `apps/desktop/src`, `public` hoặc `assets`. Local
+candidate bắt buộc chạy `npm ci` từ lockfile và kiểm lại provenance sau khi
+đóng gói, trước khi báo thành công:
 
 ```powershell
 $commit = git rev-parse HEAD
 & '<digest-pinned-node-26>\node.exe' scripts/build-bundled-desktop.mjs `
   --tag=vi-v0.32.0-1 --release-class=community-prerelease `
-  --local-candidate --commit=$commit --no-install
+  --local-candidate --commit=$commit
 ```
 
 Đây chỉ là local candidate, không phải bằng chứng tag đã tồn tại. Đường CI/draft
