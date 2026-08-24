@@ -73,8 +73,14 @@ function manifestYaml(version, releaseDate, artifacts) {
   return `${lines.join('\n')}\n`
 }
 
-export function generateCommunityUpdateMetadata({ directory, releaseDate, tag }) {
+export function generateCommunityUpdateMetadata({ directory, releaseClass, releaseDate, tag }) {
   const { appVersion } = parseVietnameseReleaseTag(tag)
+
+  if (releaseClass !== 'stable') {
+    throw new Error(
+      `update metadata is stable-only; ${releaseClass || 'missing release class'} must ship without latest*.yml`
+    )
+  }
 
   if (!releaseDate || Number.isNaN(Date.parse(releaseDate))) {
     throw new Error(`releaseDate must be an ISO timestamp, got: ${releaseDate}`)
@@ -93,21 +99,22 @@ export function generateCommunityUpdateMetadata({ directory, releaseDate, tag })
 }
 
 function usage() {
-  return 'Usage: node generate-community-update-metadata.mjs <release-assets-dir> <vi-tag> <release-date>'
+  return 'Usage: node generate-community-update-metadata.mjs <release-assets-dir> <vi-tag> <release-date> stable'
 }
 
 const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 
 if (isDirectRun) {
-  const [directory, tag, releaseDate] = process.argv.slice(2)
+  const [directory, tag, releaseDate, releaseClass] = process.argv.slice(2)
 
   try {
-    if (!directory || !tag || !releaseDate || process.argv.length !== 5) {
+    if (!directory || !tag || !releaseDate || !releaseClass || process.argv.length !== 6) {
       throw new Error(usage())
     }
 
     const outputs = generateCommunityUpdateMetadata({
       directory: path.resolve(directory),
+      releaseClass,
       releaseDate,
       tag
     })

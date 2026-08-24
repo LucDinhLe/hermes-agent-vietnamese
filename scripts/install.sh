@@ -786,21 +786,16 @@ check_git() {
     exit 1
 }
 
-# The dependency tree's real Node floor is >=22.22.0, set by react-router 8.3.0
-# (`engines.node`), with Vite ^8 next at `^20.19 || >=22.12`. Keep this in sync
-# with the root package.json — a gate looser than the manifest lets an install
-# proceed to a `npm ci` that then dies with EBADENGINE, and a gate stricter than
-# the manifest replaces a working user toolchain for nothing. Returns 0 when the
-# given `node --version` string clears the floor; anything below it is replaced
-# with the Hermes-managed Node $NODE_VERSION.
+# The v32 release toolchain floor is Node 26. Keep this in sync with the root
+# package.json and every release runner: a looser installer gate lets an install
+# proceed to a `npm ci` that then dies with EBADENGINE. Returns 0 when the given
+# `node --version` string clears the floor; anything below it is replaced with
+# the Hermes-managed Node $NODE_VERSION.
 node_satisfies_build() {
     local ver="${1#v}"
     local major="${ver%%.*}"
-    local minor="${ver#*.}"; minor="${minor%%.*}"
     case "$major" in ''|*[!0-9]*) return 1 ;; esac
-    case "$minor" in ''|*[!0-9]*) minor=0 ;; esac
-    if [ "$major" -ge 22 ] && { [ "$major" -gt 22 ] || [ "$minor" -ge 22 ]; }; then return 0; fi
-    return 1
+    [ "$major" -ge 26 ]
 }
 
 # npm 11.10.0–11.16.x honor `min-release-age` but ignore
@@ -1477,34 +1472,57 @@ EOF
     log_success "Repository ready"
 }
 
+load_venv_transaction() {
+    local helper="$INSTALL_DIR/scripts/lib/venv-transaction.sh"
+    if [ ! -r "$helper" ]; then
+        log_error "Virtual-environment transaction helper is missing: $helper"
+        return 1
+    fi
+    # shellcheck source=scripts/lib/venv-transaction.sh
+    . "$helper"
+}
+
 setup_venv() {
     if [ "$USE_VENV" = false ]; then
         log_info "Skipping virtual environment (--no-venv)"
         return 0
     fi
 
+    load_venv_transaction
+    # Recover an interrupted prior replacement before preparing a new one.
+    # The last known-good venv remains available until python-deps commits.
+    hermes_venv_restore_pending
+
+    local candidate="$INSTALL_DIR/venv.new.$(date +%Y%m%d%H%M%S)-$$"
+    if [ -e "$candidate" ]; then
+        log_error "Virtual environment candidate already exists: $candidate"
+        return 1
+    fi
+
     if [ "$DISTRO" = "termux" ]; then
         log_info "Creating virtual environment with Termux Python..."
-
-        if [ -d "venv" ]; then
-            log_info "Virtual environment already exists, recreating..."
-            rm -rf venv
+        if ! "$PYTHON_PATH" -m venv "$candidate"; then
+            log_error "Failed to prepare the replacement virtual environment"
+            return 1
         fi
+    else
+        log_info "Creating virtual environment with Python $PYTHON_VERSION..."
 
-        "$PYTHON_PATH" -m venv venv
-        log_success "Virtual environment ready ($(./venv/bin/python --version 2>/dev/null))"
-        return 0
+        # uv creates the candidate and pins the Python version in one step.
+        # The active venv is untouched until this command and the interpreter
+        # probe below have completed successfully.
+        if ! $UV_CMD venv "$candidate" --python "$PYTHON_VERSION"; then
+            log_error "Failed to prepare the replacement virtual environment"
+            return 1
+        fi
     fi
 
-    log_info "Creating virtual environment with Python $PYTHON_VERSION..."
-
-    if [ -d "venv" ]; then
-        log_info "Virtual environment already exists, recreating..."
-        rm -rf venv
+    if [ ! -x "$candidate/bin/python" ] || ! "$candidate/bin/python" -c 'import sys; raise SystemExit(0 if sys.prefix else 1)'; then
+        log_error "Prepared virtual environment failed its interpreter probe"
+        return 1
     fi
 
-    # uv creates the venv and pins the Python version in one step
-    $UV_CMD venv venv --python "$PYTHON_VERSION"
+    hermes_venv_cutover_candidate "$candidate"
 
     # Neutralize any inherited UV_PYTHON (e.g. UV_PYTHON=3.14 left in the
     # user's shell env). uv honours UV_PYTHON over an existing venv for the
@@ -1517,11 +1535,53 @@ setup_venv() {
         export UV_PYTHON="$INSTALL_DIR/venv/bin/python"
     fi
 
-    log_success "Virtual environment ready (Python $PYTHON_VERSION)"
+    log_success "Virtual environment candidate ready; previous venv retained until dependencies validate"
 }
 
-install_deps() {
+install_deps() (
     log_info "Installing dependencies..."
+
+    local _venv_transaction_open=false
+    if [ "$USE_VENV" = true ]; then
+        load_venv_transaction
+        if [ -e "$INSTALL_DIR/venv.pending-backup" ]; then
+            _venv_transaction_open=true
+        fi
+    fi
+
+    _hermes_install_deps_exit() {
+        local status="$1"
+        trap - EXIT
+        if [ "$_venv_transaction_open" = true ]; then
+            log_warn "Python dependency installation did not commit; restoring the previous virtual environment"
+            if ! hermes_venv_restore_pending; then
+                log_error "Automatic virtual-environment rollback failed; the pending marker was preserved"
+                status=1
+            elif [ "$status" -eq 0 ]; then
+                # A success path that forgot to commit is itself a release bug.
+                status=1
+            fi
+        fi
+        exit "$status"
+    }
+    trap '_hermes_install_deps_exit $?' EXIT
+
+    commit_venv_if_healthy() {
+        if [ "$USE_VENV" != true ]; then
+            trap - EXIT
+            return 0
+        fi
+        local venv_python="$INSTALL_DIR/venv/bin/python"
+        if [ ! -x "$venv_python" ] || ! "$venv_python" -c 'import hermes_cli'; then
+            log_error "Replacement virtual environment failed the Hermes import probe"
+            return 1
+        fi
+        if [ "$_venv_transaction_open" = true ]; then
+            hermes_venv_commit_pending || return 1
+            _venv_transaction_open=false
+        fi
+        trap - EXIT
+    }
 
     # Re-pin UV_PYTHON to the venv interpreter. setup_venv already does this,
     # but the bootstrap runs install stages (`venv`, `python-deps`) as separate
@@ -1584,6 +1644,7 @@ install_deps() {
         log_info "Termux note: matrix e2ee and local faster-whisper extras are excluded from .[termux-all] due to upstream Android wheel/toolchain blockers."
         log_info "Termux note: browser/WhatsApp tooling is not installed by default; see the Termux guide for optional follow-up steps."
 
+        commit_venv_if_healthy || exit 1
         log_success "All dependencies installed"
         return 0
     fi
@@ -1659,6 +1720,7 @@ install_deps() {
         # uv's own progress UI handles TTY detection and downgrades
         # gracefully when stdout/stderr aren't terminals.
         if UV_PROJECT_ENVIRONMENT="$INSTALL_DIR/venv" $UV_CMD sync --extra all --locked; then
+            commit_venv_if_healthy || exit 1
             log_success "Main package installed (hash-verified via uv.lock)"
             log_success "All dependencies installed"
             return 0
@@ -1771,8 +1833,9 @@ PY
 
     log_success "Main package installed"
 
+    commit_venv_if_healthy || exit 1
     log_success "All dependencies installed"
-}
+)
 
 setup_path() {
     log_info "Setting up hermes command..."

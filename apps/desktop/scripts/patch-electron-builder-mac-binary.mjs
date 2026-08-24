@@ -1,21 +1,18 @@
 import fs from 'node:fs'
 import path from 'node:path'
-
-if (process.platform !== 'darwin') {
-  process.exit(0)
-}
+import { fileURLToPath } from 'node:url'
 
 const desktopRoot = path.resolve(import.meta.dirname, '..')
 const repoRoot = path.resolve(desktopRoot, '..', '..')
-const electronMacPath = path.join(repoRoot, 'node_modules', 'app-builder-lib', 'out', 'electron', 'electronMac.js')
+const defaultElectronMacPath = path.join(repoRoot, 'node_modules', 'app-builder-lib', 'out', 'electron', 'electronMac.js')
 
-const marker = 'hermes-macos-electron-binary-fallback'
-const needle = `    await Promise.all([
+export const electronBuilderMacPatchMarker = 'hermes-macos-electron-binary-fallback'
+export const electronBuilderMacPatchNeedle = `    await Promise.all([
         doRename(path.join(contentsPath, "MacOS"), electronBranding.productName, appPlist.CFBundleExecutable),
         (0, builder_util_1.unlinkIfExists)(path.join(appOutDir, "LICENSE")),
         (0, builder_util_1.unlinkIfExists)(path.join(appOutDir, "LICENSES.chromium.html")),
     ]);`
-const replacement = `    // ${marker}: electron-builder 26.8.x can sometimes copy
+const replacement = `    // ${electronBuilderMacPatchMarker}: electron-builder 26.8.x can sometimes copy
     // Electron.app without its main MacOS/Electron binary before this rename.
     // Restore it from the installed Electron runtime so local desktop installs
     // do not fail with ENOENT during macOS arm64 packaging.
@@ -44,21 +41,47 @@ const replacement = `    // ${marker}: electron-builder 26.8.x can sometimes cop
         (0, builder_util_1.unlinkIfExists)(path.join(appOutDir, "LICENSES.chromium.html")),
     ]);`
 
-if (!fs.existsSync(electronMacPath)) {
-  console.warn(`[patch-electron-builder] skipped: ${electronMacPath} not found`)
-  process.exit(0)
+export function patchElectronBuilderMacBinary({
+  platform = process.platform,
+  electronMacPath = defaultElectronMacPath,
+} = {}) {
+  if (platform !== 'darwin') {
+    console.log(`[patch-electron-builder] skipped: platform ${platform} is not macOS`)
+    return 'skipped-platform'
+  }
+
+  if (!fs.existsSync(electronMacPath)) {
+    throw new Error(`required electron-builder macOS patch target not found: ${electronMacPath}`)
+  }
+
+  const source = fs.readFileSync(electronMacPath, 'utf8')
+  if (source.includes(electronBuilderMacPatchMarker)) {
+    console.log('[patch-electron-builder] macOS Electron binary fallback already applied')
+    return 'already-applied'
+  }
+
+  if (!source.includes(electronBuilderMacPatchNeedle)) {
+    throw new Error(
+      `required electron-builder macOS patch could not be applied: expected electronMac.js shape not found in ${electronMacPath}`,
+    )
+  }
+
+  fs.writeFileSync(
+    electronMacPath,
+    source.replace(electronBuilderMacPatchNeedle, replacement),
+  )
+  console.log('[patch-electron-builder] applied macOS Electron binary fallback')
+  return 'applied'
 }
 
-const source = fs.readFileSync(electronMacPath, 'utf8')
-if (source.includes(marker)) {
-  console.log('[patch-electron-builder] macOS Electron binary fallback already applied')
-  process.exit(0)
-}
+const isMain = process.argv[1] != null
+  && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))
 
-if (!source.includes(needle)) {
-  console.warn('[patch-electron-builder] skipped: expected electronMac.js shape not found')
-  process.exit(0)
+if (isMain) {
+  try {
+    patchElectronBuilderMacBinary()
+  } catch (error) {
+    console.error(`[patch-electron-builder] fatal: ${error instanceof Error ? error.message : String(error)}`)
+    process.exitCode = 1
+  }
 }
-
-fs.writeFileSync(electronMacPath, source.replace(needle, replacement))
-console.log('[patch-electron-builder] applied macOS Electron binary fallback')

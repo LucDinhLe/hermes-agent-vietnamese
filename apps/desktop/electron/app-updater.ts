@@ -34,6 +34,7 @@ export interface CommunityUpdateRelease {
 
 export interface UpdaterGateFacts {
   stampHasPayload: boolean
+  stampAllowsUpdates: boolean
   installMode: string | null // from .hermes-install.json; null = no manifest
   isPackaged: boolean
 }
@@ -41,14 +42,21 @@ export interface UpdaterGateFacts {
 /**
  * True when this launch must use electron-updater for app updates.
  *
- * All three conditions are necessary:
+ * All four conditions are necessary:
  * - the build carries payloads (a thin build has no matching feed artifacts),
+ * - release provenance explicitly enables a feed (unsigned community
+ *   candidates fail closed; only stable candidates generate update metadata),
  * - the checkout opted into desktop management (installMode bundled) — an
  *   ejected or source checkout keeps the git update path,
  * - the app is packaged (dev runs have no app-update.yml).
  */
 export function shouldUseAppUpdater(facts: UpdaterGateFacts): boolean {
-  return facts.stampHasPayload === true && facts.installMode === 'bundled' && facts.isPackaged === true
+  return (
+    facts.stampHasPayload === true &&
+    facts.stampAllowsUpdates === true &&
+    facts.installMode === 'bundled' &&
+    facts.isPackaged === true
+  )
 }
 
 export function releaseTagForAppVersion(version: string): string {

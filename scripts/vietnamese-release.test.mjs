@@ -29,7 +29,7 @@ test("Vietnamese release tags map to deterministic Electron SemVer", () => {
   assert.throws(() => parseVietnameseReleaseTag("v0.20.0"), /vi-vX.Y.Z-N/)
 })
 
-test("current Vietnamese candidate keeps product, technical, and upstream versions separate", () => {
+test("local Vietnamese candidate identity stays separate from the published v31 descriptor", () => {
   const desktopPackage = JSON.parse(
     fs.readFileSync(new URL("../apps/desktop/package.json", import.meta.url), "utf8"),
   )
@@ -41,17 +41,19 @@ test("current Vietnamese candidate keeps product, technical, and upstream versio
     ["-c", "import hermes_cli; print(hermes_cli.__version__)"],
     { cwd: new URL("..", import.meta.url), encoding: "utf8" },
   )
-  const expectedTag = `vi-v${VI_PRODUCT_RELEASE.technicalVersion}-7`
-  const candidate = resolveVietnameseReleaseCandidate(publicRelease.featuredCandidate.tag)
+  const expectedTag = `vi-v${VI_PRODUCT_RELEASE.technicalVersion}-1`
+  const candidate = resolveVietnameseReleaseCandidate(expectedTag)
 
   assert.equal(runtime.status, 0, runtime.stderr)
-  assert.equal(publicRelease.tag, "vi-v0.20.0-25")
-  assert.equal(publicRelease.featuredCandidate.tag, expectedTag)
+  assert.equal(publicRelease.tag, "vi-v0.31.0-7")
+  assert.equal(publicRelease.featuredCandidate.tag, "vi-v0.31.0-7")
+  assert.equal(publicRelease.featuredCandidate.published, true)
+  assert.notEqual(publicRelease.featuredCandidate.tag, expectedTag)
   assert.equal(candidate.tag, expectedTag)
   assert.equal(candidate.productVersion, VI_PRODUCT_RELEASE.productVersion)
   assert.equal(candidate.baseVersion, VI_PRODUCT_RELEASE.technicalVersion)
-  assert.equal(candidate.iteration, 7)
-  assert.equal(candidate.appVersion, `${VI_PRODUCT_RELEASE.technicalVersion}-vi.7`)
+  assert.equal(candidate.iteration, 1)
+  assert.equal(candidate.appVersion, `${VI_PRODUCT_RELEASE.technicalVersion}-vi.1`)
   assert.equal(candidate.releaseTitle, `Hermes Vietnamese ${VI_PRODUCT_RELEASE.productVersion}`)
   assert.equal(desktopPackage.version, VI_PRODUCT_RELEASE.technicalVersion)
   assert.equal(runtime.stdout.trim(), VI_PRODUCT_RELEASE.upstreamVersion)

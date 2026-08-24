@@ -39,6 +39,7 @@ _REPO_ROOT = Path(__file__).parent.parent.resolve()
 # so these date tags cannot masquerade as the v0.x.y SemVer boundaries.
 _SEMVER_TAG_RE = re.compile(r"^v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 _VI_RELEASE_TAG_RE = re.compile(r"^vi-v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)-(0|[1-9]\d*)$")
+_BUNDLED_RELEASE_CLASSES = {"community-prerelease", "stable"}
 _LEGACY_CALVER_TAG_RE = re.compile(r"^v20\d{2}\.\d+\.\d+(?:\.\d+)?$")
 
 FALLBACK_COMMIT = "0" * 40
@@ -182,12 +183,21 @@ def build_stamp(
     # cannot update itself.
     payload = os.environ.get("HERMES_DESKTOP_BUNDLED") == "1"
     tag = os.environ.get("HERMES_PAYLOAD_TAG") or None
+    release_class = os.environ.get("HERMES_RELEASE_CLASS") or None
+    update_channel = None
+    update_feed_enabled = False
     if payload:
         tag_match = tag and _VI_RELEASE_TAG_RE.fullmatch(tag)
         if not tag_match:
             raise SystemExit(
                 "write_install_stamp: HERMES_DESKTOP_BUNDLED=1 requires "
                 f"HERMES_PAYLOAD_TAG=vi-vX.Y.Z-N (got {tag!r})"
+            )
+        if release_class not in _BUNDLED_RELEASE_CLASSES:
+            raise SystemExit(
+                "write_install_stamp: HERMES_DESKTOP_BUNDLED=1 requires "
+                "HERMES_RELEASE_CLASS=community-prerelease|stable "
+                f"(got {release_class!r})"
             )
         # The packaged app and its updater use valid SemVer X.Y.Z-vi.N.
         # Keep About/version surfaces on that exact release identity instead
@@ -196,6 +206,8 @@ def build_stamp(
             f"{tag_match.group(1)}.{tag_match.group(2)}.{tag_match.group(3)}"
             f"-vi.{tag_match.group(4)}"
         )
+        update_feed_enabled = release_class == "stable"
+        update_channel = "stable" if update_feed_enabled else "community-prerelease"
 
     return {
         "schemaVersion": STAMP_SCHEMA_VERSION,
@@ -211,6 +223,9 @@ def build_stamp(
         "distance": distance,
         "payload": payload,
         "tag": tag if payload else None,
+        "releaseClass": release_class if payload else None,
+        "updateChannel": update_channel,
+        "updateFeedEnabled": update_feed_enabled,
     }
 
 

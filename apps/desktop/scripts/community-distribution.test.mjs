@@ -83,4 +83,7 @@ test('packaged upgrades retain the installed identity and disclose the MIT licen
     readFileSync(resolve(repoRoot, 'apps/desktop/scripts/after-pack.mjs'), 'utf8'),
     /HERMES_RELEASE_CLASS.*HERMES_DESKTOP_BUNDLED/s
   )
+  assert.match(main, /updateFeedEnabled: parsed\.updateFeedEnabled === true/)
+  assert.match(main, /stampAllowsUpdates: Boolean\(stamp && stamp\.updateFeedEnabled\)/)
+  assert.match(main, /bundledUpdateFeedBlocked\(\)[\s\S]*disabled-community-prerelease/)
 })

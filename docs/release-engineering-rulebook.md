@@ -84,10 +84,12 @@ chuỗi trên.
     thay.
 13. **Hậu kiểm public:** sau promotion phải kiểm tag/Latest, asset count, digest,
     manifest, HTTP đường tải và thời điểm tạo/cập nhật asset.
-14. **Cập nhật là một artifact đã nghiệm thu:** mỗi release đóng gói phải mang
-    đủ `latest*.yml` theo nền tảng. Manifest dùng SHA-512 của đúng installer đã
+14. **Cập nhật là một artifact đã nghiệm thu:** stable phải mang đủ
+    `latest*.yml` theo nền tảng. Manifest dùng SHA-512 của đúng installer đã
     staging, nằm trong `SHA256SUMS.txt`, và feed trong ứng dụng phải ghim vào
-    URL của một release bất biến thay vì nhánh hoặc nhãn động.
+    URL của một release bất biến thay vì nhánh hoặc nhãn động. Community
+    prerelease chưa ký phải ghi `updateFeedEnabled=false`, không sinh
+    `latest*.yml` và fail closed trước mọi updater I/O.
 15. **Lifecycle theo đúng nguồn:** control Gateway gắn với phiên phải giữ owner
     `connectionId + profile` bất biến qua mọi await. Backend phải serialize
     start/restart/stop theo canonical lifecycle owner; phản hồi muộn hoặc owner
@@ -109,6 +111,10 @@ chuỗi trên.
 - [ ] Lớp phát hành và đối tượng được nêu rõ.
 - [ ] Phạm vi đã freeze; không trộn feature ngoài blocker.
 - [ ] Worktree sạch; commit đã push và fetch được.
+- [ ] Nếu dựng local candidate chưa có tag: dùng tường minh
+      `--local-candidate --commit=<full-clean-HEAD>`. Nhãn `--tag` lúc này chỉ
+      là label manifest; candidate này không được stage/promote. CI/draft vẫn
+      bắt buộc exact tag trỏ đúng commit đã fetch.
 - [ ] Phiên bản trước và rollback target được ghi.
 
 ### B. Mã nguồn và chuỗi cung ứng
@@ -132,8 +138,16 @@ chuỗi trên.
 
 ### C. Build và cấu trúc native
 
+- [ ] Build host, workflow, package/lock và hai installer cùng chặn dưới Node 26.
 - [ ] Mỗi target build trên runner native tương ứng.
 - [ ] Executable và module native đúng kiến trúc.
+- [ ] macOS patch electron-builder xác nhận marker/shape; thiếu target hoặc sai
+      shape trên Darwin phải làm build lỗi.
+- [ ] POSIX thay venv theo transaction: dựng candidate trước, giữ backup qua
+      dependency/import probe, rollback tự động trước khi dọn replacement lỗi.
+- [ ] Windows ARM64 thiếu `get-windows` chỉ được chấp nhận cho community
+      build-only bằng flag tường minh và file limitation đã vào checksum;
+      stable phải fail. PE machine field phải khớp target arch.
 - [ ] Python, Hermes payload, dependency, installer metadata, icon và license
       hiện diện.
 - [ ] Gói resident đầy đủ nhận marker bootstrap schema 1 hợp lệ từ bản cũ kể

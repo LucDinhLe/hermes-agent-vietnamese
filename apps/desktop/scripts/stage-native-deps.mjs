@@ -182,6 +182,41 @@ export function classifyNativeBinary(filePath) {
 }
 
 /**
+ * Classify the COFF machine field of a Windows PE binary.
+ * Returns `x64`, `arm64`, `ia32`, or `null` for a malformed/unknown PE.
+ *
+ * Platform magic alone is insufficient for release staging: both x64 and
+ * arm64 addons start with `MZ`. Reading the machine field prevents a binding
+ * from being placed in an arm64-looking directory while containing x64 code.
+ */
+export function classifyPeArchitecture(filePath) {
+  let buf
+  try {
+    buf = readFileSync(filePath)
+  } catch {
+    return null
+  }
+  if (buf.length < 64 || buf[0] !== 0x4d || buf[1] !== 0x5a) return null
+
+  const peOffset = buf.readUInt32LE(0x3c)
+  if (peOffset > buf.length - 6) return null
+  if (
+    buf[peOffset] !== 0x50 ||
+    buf[peOffset + 1] !== 0x45 ||
+    buf[peOffset + 2] !== 0x00 ||
+    buf[peOffset + 3] !== 0x00
+  ) {
+    return null
+  }
+
+  const machine = buf.readUInt16LE(peOffset + 4)
+  if (machine === 0x8664) return 'x64'
+  if (machine === 0xaa64) return 'arm64'
+  if (machine === 0x014c) return 'ia32'
+  return null
+}
+
+/**
  * Scan the staged destination tree for .node files and verify each one's
  * binary platform matches the requested target. Throws on any mismatch.
  *
@@ -437,7 +472,14 @@ const GET_WINDOWS_VERSION = '9.3.0'
 export function stageGetWindowsInto(
   srcRoot,
   destRoot,
-  { platform = process.platform, arch = process.arch, rebuild } = {}
+  {
+    platform = process.platform,
+    arch = process.arch,
+    rebuild,
+    releaseClass = process.env.HERMES_RELEASE_CLASS,
+    allowMissingWinArm64 =
+      process.env.HERMES_ALLOW_WIN32_ARM64_GET_WINDOWS_LIMITATION === '1'
+  } = {}
 ) {
   // The STAGED_WINDOWS_JS rewrite mirrors this exact version's export surface.
   // A version bump must fail the build here until the rewrite is re-verified —
@@ -497,11 +539,20 @@ export function stageGetWindowsInto(
     let bindingDirs = scanBindingDirs()
     if (bindingDirs.length === 0 && arch === 'arm64') {
       // get-windows 9.3.0 publishes win32 prebuilds for ia32/x64 only.
-      // The staged windows.js deliberately fails soft when binding/ is absent,
-      // so preserve the desktop build and disable only window enumeration.
+      // An unsigned community pilot may ship this known build-only limitation,
+      // but only after the release workflow explicitly acknowledges it and
+      // emits limitation evidence. Stable releases always fail closed.
+      if (releaseClass !== 'community-prerelease' || !allowMissingWinArm64) {
+        throw new Error(
+          '[stage-native-deps] get-windows has no win32-arm64 prebuilt binding. ' +
+            'Stable releases cannot omit read_window_below. A community-prerelease ' +
+            'build-only pilot must explicitly set ' +
+            'HERMES_ALLOW_WIN32_ARM64_GET_WINDOWS_LIMITATION=1 and publish limitation evidence.'
+        )
+      }
       console.warn(
         '[stage-native-deps] get-windows has no win32-arm64 prebuilt binding; ' +
-          'staging the fail-soft JS surface without native window enumeration.'
+          'explicit community-prerelease limitation accepted: read_window_below is unavailable.'
       )
     } else if (bindingDirs.length === 0 && typeof rebuild === 'function') {
       // A plain `npm install` won't re-run an install script for a package
@@ -535,6 +586,14 @@ export function stageGetWindowsInto(
             'Refusing to stage a binary compiled for the wrong platform.'
         )
       }
+      const stagedArch = classifyPeArchitecture(destFile)
+      if (stagedArch !== arch) {
+        throw new Error(
+          `[stage-native-deps] get-windows binding ${dir}/node-get-windows.node: ` +
+            `expected win32-${arch}, got win32-${stagedArch ?? 'unknown'}. ` +
+            'Refusing to stage a native binding compiled for the wrong architecture.'
+        )
+      }
     }
   }
 
@@ -558,7 +617,10 @@ export function stageGetWindows(
   {
     platform = process.platform,
     arch = process.arch,
-    resolveRoot = resolveGetWindowsRoot
+    resolveRoot = resolveGetWindowsRoot,
+    releaseClass = process.env.HERMES_RELEASE_CLASS,
+    allowMissingWinArm64 =
+      process.env.HERMES_ALLOW_WIN32_ARM64_GET_WINDOWS_LIMITATION === '1'
   } = {}
 ) {
   const srcRoot = resolveRoot()
@@ -566,16 +628,19 @@ export function stageGetWindows(
 
   if (!srcRoot) {
     // npm may omit an optional dependency whose install script fails. That is
-    // expected on Linux and win32-arm64 because get-windows 9.3.0 publishes no
-    // native prebuilt for either target. The runtime import already fails soft,
-    // so disable only window enumeration instead of failing the Desktop build.
-    // Other Windows architectures and macOS have supported native payloads and
-    // remain fail-closed so a broken package cannot ship silently.
-    const canDegrade = platform === 'linux' || (platform === 'win32' && arch === 'arm64')
+    // expected on Linux because get-windows has no native payload there. On
+    // Windows ARM64, degradation is allowed only for an explicitly acknowledged
+    // unsigned community build-only pilot; stable always fails closed.
+    const acceptedWinArm64Limitation =
+      platform === 'win32' &&
+      arch === 'arm64' &&
+      releaseClass === 'community-prerelease' &&
+      allowMissingWinArm64
+    const canDegrade = platform === 'linux' || acceptedWinArm64Limitation
     if (canDegrade) {
       console.warn(
         `[stage-native-deps] get-windows not installed (optional dep skipped for ${platform}-${arch}); ` +
-          'read_window_below will be unavailable in this build'
+          'read_window_below will be unavailable in this explicitly limited build'
       )
       return undefined
     }
@@ -588,7 +653,13 @@ export function stageGetWindows(
   // has nothing to gain from the rebuild.
   const rebuild =
     platform === 'win32' && process.platform === 'win32' ? rebuildGetWindowsViaNpm : undefined
-  return stageGetWindowsInto(srcRoot, destRoot, { platform, arch, rebuild })
+  return stageGetWindowsInto(srcRoot, destRoot, {
+    platform,
+    arch,
+    rebuild,
+    releaseClass,
+    allowMissingWinArm64
+  })
 }
 
 // Allow direct CLI invocation: node scripts/stage-native-deps.mjs [platform] [arch]

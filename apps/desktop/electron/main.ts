@@ -665,6 +665,11 @@ function loadInstallStamp() {
           // bundled-runtime.ts and the app updater key on these two.
           payload: parsed.payload === true,
           tag: typeof parsed.tag === 'string' && parsed.tag ? parsed.tag : null,
+          releaseClass: typeof parsed.releaseClass === 'string' ? parsed.releaseClass : null,
+          updateChannel: typeof parsed.updateChannel === 'string' ? parsed.updateChannel : null,
+          // Absence is false by design: an old or malformed candidate stamp
+          // must not silently join the stable feed.
+          updateFeedEnabled: parsed.updateFeedEnabled === true,
           path: p
         })
       }
@@ -2875,6 +2880,17 @@ async function checkStableChannelUpdates() {
 }
 
 async function checkUpdates() {
+  if (bundledUpdateFeedBlocked()) {
+    return {
+      supported: false,
+      mechanism: 'disabled-community-prerelease',
+      updateAvailable: false,
+      message: 'Updates are disabled for this unsigned community prerelease build.',
+      releaseClass: INSTALL_STAMP?.releaseClass || 'community-prerelease',
+      fetchedAt: Date.now()
+    }
+  }
+
   // Bundled installs update through the app updater (GitHub Releases feed),
   // not through git. The gate reads the install manifest, so an ejected
   // checkout falls through to the git paths below.
@@ -3637,6 +3653,10 @@ async function applyUpdates(opts: { stopSafeBlockers?: boolean } = {}) {
     throw new Error('An update is already in progress.')
   }
 
+  if (bundledUpdateFeedBlocked()) {
+    throw new Error('Updates are disabled for this unsigned community prerelease build.')
+  }
+
   // Bundled installs: download the new app from the GitHub Releases feed,
   // then quit and install. After the relaunch, the marker-tag mismatch
   // triggers the offline agent rebuild — no git, no venv mutation while
@@ -4379,7 +4399,7 @@ function residentRuntimeDecision() {
  * exist) has no say.
  */
 function bundledUpdaterActive(): boolean {
-  const stamp = INSTALL_STAMP as any
+  const stamp = INSTALL_STAMP
 
   const manifest = residentRuntimeDecision().resident
     ? { installMode: 'bundled' }
@@ -4387,9 +4407,17 @@ function bundledUpdaterActive(): boolean {
 
   return shouldUseAppUpdater({
     stampHasPayload: Boolean(stamp && stamp.payload),
+    stampAllowsUpdates: Boolean(stamp && stamp.updateFeedEnabled),
     installMode: manifest && typeof manifest.installMode === 'string' ? manifest.installMode : null,
     isPackaged: app.isPackaged
   })
+}
+
+/** Unsigned community bundles carry a resident payload but no update feed. */
+function bundledUpdateFeedBlocked(): boolean {
+  const stamp = INSTALL_STAMP
+
+  return Boolean(app.isPackaged && stamp && stamp.payload && stamp.updateFeedEnabled !== true)
 }
 
 // Marker-independent: is the canonical install at ACTIVE_HERMES_ROOT actually

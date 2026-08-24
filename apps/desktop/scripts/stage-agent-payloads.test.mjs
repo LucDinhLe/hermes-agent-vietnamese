@@ -141,11 +141,15 @@ test('manifest records staged vs explicitly-skipped vs failed per item', () => {
   const manifest = buildManifest({
     tag: 'vi-v1.0.0-1',
     commit: 'a'.repeat(40),
+    releaseClass: 'community-prerelease',
     target,
     staged: ['repo', 'uv', 'python'],
     skipped: new Set(['site-packages'])
   })
   assert.equal(manifest.tag, 'vi-v1.0.0-1')
+  assert.equal(manifest.releaseClass, 'community-prerelease')
+  assert.equal(manifest.updateChannel, 'community-prerelease')
+  assert.equal(manifest.updateFeedEnabled, false)
   // Invariant: every payload item has an entry. The resident-runtime gate
   // reads presence. An absent entry is ambiguous.
   for (const item of PAYLOAD_ITEMS) {

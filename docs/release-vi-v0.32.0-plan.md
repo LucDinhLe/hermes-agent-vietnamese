@@ -136,18 +136,38 @@ prompt có một main response, không tool-loop và không background review.
 - Không dùng profile thật và không đưa credential/raw provider body/user data vào
   log, screenshot, manifest hay artifact.
 
-## Release-surface blockers phải đóng trước build
+## Release-surface gates trước build
 
-- Payload/feed đang hard-code `channel=stable`; v32 unsigned phải fail closed về
-  community prerelease/pilot.
-- Node floor giữa workflow/POSIX và Windows installer đang lệch (26 so với 22).
-- macOS electron-builder patch có đường `skip` nhưng exit 0; gate phải xác minh
-  patch thật sự áp dụng.
-- POSIX update có residual risk xóa venv trước khi dựng replacement; phải có
-  rollback proof.
-- Windows ARM64 `get-windows` fail-soft làm thiếu `read_window_below`; phải công
-  bố limitation và gate đúng kiến trúc native binary.
+Các blocker nguồn đã được đóng theo hướng fail-closed; artifact và máy thật vẫn
+phải qua smoke trước mọi staging/promotion:
+
+- Bundled stamp/manifest ghi `releaseClass`, `updateChannel` và
+  `updateFeedEnabled`. Community prerelease đặt feed là disabled, updater không
+  được gọi và workflow từ chối mọi `latest*.yml`; chỉ stable mới sinh metadata.
+- Workflow, package/lock, POSIX, Windows, Python healer và build preflight dùng
+  cùng floor Node 26. Chạy script build bằng Node dưới 26 bị chặn trước I/O.
+- Patch electron-builder macOS chỉ skip ngoài Darwin; trên Darwin thiếu target
+  hoặc sai source shape là lỗi build.
+- POSIX dựng `venv.new.*`, giữ `venv.stale.*` cùng marker qua hai stage và chỉ
+  xóa backup sau import probe; lỗi hoặc ngắt quãng khôi phục venv cũ trước khi
+  dọn replacement lỗi.
+- Windows ARM64 không được âm thầm thiếu `get-windows`: stable luôn fail;
+  community build-only chỉ được phép với flag workflow tường minh và phải mang
+  `limitations-windows-arm64.txt`. PE machine gate phải xác nhận đúng kiến trúc.
 - Stable vẫn cần Authenticode/SignPath và Developer ID + notarization + stapling.
+
+Candidate cục bộ đầu tiên không cần tạo tag. Nó vẫn dùng nhãn manifest dự kiến,
+nhưng payload được archive từ đúng full commit của clean tracked HEAD:
+
+```powershell
+$commit = git rev-parse HEAD
+& '<digest-pinned-node-26>\node.exe' scripts/build-bundled-desktop.mjs `
+  --tag=vi-v0.32.0-1 --release-class=community-prerelease `
+  --local-candidate --commit=$commit --no-install
+```
+
+Đây chỉ là local candidate, không phải bằng chứng tag đã tồn tại. Đường CI/draft
+vẫn bắt buộc exact tag trỏ đúng checkout, và source phải fetch được trước staging.
 
 ## Promotion boundary
 

@@ -95,6 +95,8 @@ jobs:
         run: >-
           node --test
           scripts/vietnamese-release.test.mjs
+          scripts/bundled-release-policy.test.mjs
+          apps/desktop/scripts/patch-electron-builder-mac-binary.test.mjs
           scripts/validate-release-evidence.test.mjs
           scripts/validate-pilot-release-evidence.test.mjs
           scripts/validate-public-release-contract.test.mjs
@@ -115,6 +117,7 @@ jobs:
           scripts/packaged-layout.test.mjs
           scripts/release-workflow-contract.test.mjs
           scripts/stage-agent-payloads.test.mjs
+          scripts/stage-native-deps.test.mjs
           scripts/browser-connector-extension.test.mjs
           electron/app-updater.test.ts
           electron/active-runtime-state.test.ts
@@ -228,6 +231,8 @@ jobs:
         run: >-
           ./scripts/run_tests.sh -q
           tests/scripts/test_write_install_stamp.py
+          tests/test_release_node_floor_contract.py
+          tests/test_install_sh_venv_transaction.py
           tests/hermes_cli/test_update_channel_stable.py
           tests/hermes_cli/test_update_eject.py
           tests/hermes_cli/test_version_info.py
@@ -397,6 +402,7 @@ jobs:
           APPLE_API_ISSUER: ${{ needs.verify.outputs.release_class == 'stable' && secrets.APPLE_API_ISSUER || '' }}
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ needs.verify.outputs.release_class == 'stable' && 'true' || 'false' }}
           HERMES_PAYLOAD_BUILD_PYTHON: ${{ matrix.platform == 'win32' && 'python' || 'python3' }}
+          HERMES_ALLOW_WIN32_ARM64_GET_WINDOWS_LIMITATION: ${{ matrix.id == 'windows-arm64' && needs.verify.outputs.release_class == 'community-prerelease' && '1' || '0' }}
         run: |
           if [ "$RELEASE_CLASS" != "stable" ]; then
             unset CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER
@@ -470,6 +476,18 @@ jobs:
             throw "Signed installer Authenticode is $($signature.Status), not Valid"
           }
 
+      - name: Ghi giới hạn build-only Windows ARM64
+        if: matrix.id == 'windows-arm64' && needs.verify.outputs.release_class == 'community-prerelease'
+        shell: bash
+        run: |
+          cat > release-assets/limitations-windows-arm64.txt <<'EOF'
+          release_class=community-prerelease
+          support_scope=build-only-pilot
+          read_window_below=unavailable
+          reason=get-windows-9.3.0-has-no-win32-arm64-native-binding
+          stable_eligible=false
+          EOF
+
       - name: Ghi lại checksum sau ký
         run: >-
           node apps/desktop/scripts/collect-community-artifacts.mjs checksums
@@ -539,13 +557,25 @@ jobs:
           merge-multiple: true
 
       - name: Lập metadata cập nhật theo đúng artifact đã dựng
+        if: needs.verify.outputs.release_class == 'stable'
         shell: bash
         env:
           TAG: ${{ needs.verify.outputs.tag }}
           COMMIT: ${{ needs.verify.outputs.commit }}
         run: >-
           node apps/desktop/scripts/generate-community-update-metadata.mjs
-          release-assets "$TAG" "$(git show -s --format=%cI "$COMMIT")"
+          release-assets "$TAG" "$(git show -s --format=%cI "$COMMIT")" stable
+
+      - name: Chặn feed cập nhật cho community prerelease chưa ký
+        if: needs.verify.outputs.release_class == 'community-prerelease'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          feeds=(release-assets/latest*.yml)
+          if (( ${#feeds[@]} != 0 )); then
+            printf '::error::community-prerelease must not publish stable update metadata: %s\n' "${feeds[*]}"
+            exit 1
+          fi
 
       - name: Lập manifest SHA-256 và provenance
         shell: bash

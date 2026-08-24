@@ -321,6 +321,16 @@ function validateResidentPayload(stamp) {
   if (!stamp.payload || stamp.tag !== manifest.tag || stamp.commit !== manifest.commit) {
     die(`Install stamp and resident manifest provenance disagree: ${JSON.stringify({ stamp, manifest })}`)
   }
+  if (
+    !['community-prerelease', 'stable'].includes(stamp.releaseClass) ||
+    stamp.releaseClass !== manifest.releaseClass ||
+    stamp.updateChannel !== manifest.updateChannel ||
+    stamp.updateFeedEnabled !== manifest.updateFeedEnabled ||
+    (stamp.releaseClass === 'community-prerelease' && stamp.updateFeedEnabled !== false) ||
+    (stamp.releaseClass === 'stable' && stamp.updateFeedEnabled !== true)
+  ) {
+    die(`Install stamp and resident manifest update policy disagree: ${JSON.stringify({ stamp, manifest })}`)
+  }
 
   const browserLauncher = path.join(
     payloadRoot,

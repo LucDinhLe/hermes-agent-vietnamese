@@ -52,6 +52,7 @@ test('generates deterministic updater manifests from normalized immutable artifa
 
   const outputs = generateCommunityUpdateMetadata({
     directory,
+    releaseClass: 'stable',
     releaseDate: '2026-08-19T08:00:00Z',
     tag: 'vi-v0.20.4-35'
   })
@@ -95,7 +96,7 @@ test('generates deterministic updater manifests from normalized immutable artifa
   assert.doesNotMatch(linuxArm, /Linux-x64/)
 
   const firstPass = Object.fromEntries(outputs.map(file => [path.basename(file), fs.readFileSync(file, 'utf8')]))
-  generateCommunityUpdateMetadata({ directory, releaseDate: '2026-08-19T08:00:00Z', tag: 'vi-v0.20.4-35' })
+  generateCommunityUpdateMetadata({ directory, releaseClass: 'stable', releaseDate: '2026-08-19T08:00:00Z', tag: 'vi-v0.20.4-35' })
   const secondPass = Object.fromEntries(outputs.map(file => [path.basename(file), fs.readFileSync(file, 'utf8')]))
   assert.deepEqual(secondPass, firstPass)
 })
@@ -108,6 +109,7 @@ test('refuses incomplete artifact sets and invalid community tags', () => {
     () =>
       generateCommunityUpdateMetadata({
         directory,
+        releaseClass: 'stable',
         releaseDate: '2026-08-19T08:00:00Z',
         tag: 'vi-v0.20.4-35'
       }),
@@ -117,9 +119,23 @@ test('refuses incomplete artifact sets and invalid community tags', () => {
     () =>
       generateCommunityUpdateMetadata({
         directory,
+        releaseClass: 'stable',
         releaseDate: '2026-08-19T08:00:00Z',
         tag: 'v0.20.4'
       }),
     /release tag must be vi-vX\.Y\.Z-N/
+  )
+})
+
+test('unsigned community prerelease cannot generate an updater feed', () => {
+  assert.throws(
+    () =>
+      generateCommunityUpdateMetadata({
+        directory: fixture(),
+        releaseClass: 'community-prerelease',
+        releaseDate: '2026-08-19T08:00:00Z',
+        tag: 'vi-v0.32.0-1'
+      }),
+    /stable-only.*must ship without latest\*\.yml/
   )
 })

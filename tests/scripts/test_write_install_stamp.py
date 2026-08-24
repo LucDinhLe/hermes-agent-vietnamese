@@ -23,16 +23,32 @@ def test_thin_build_carries_no_payload_regardless_of_tag(monkeypatch):
 def test_bundled_build_records_payload_and_tag(monkeypatch):
     monkeypatch.setenv("HERMES_DESKTOP_BUNDLED", "1")
     monkeypatch.setenv("HERMES_PAYLOAD_TAG", "vi-v0.20.0-15")
+    monkeypatch.setenv("HERMES_RELEASE_CLASS", "community-prerelease")
 
     stamp = build_stamp(commit="b" * 40)
 
     assert stamp["payload"] is True
     assert stamp["tag"] == "vi-v0.20.0-15"
     assert stamp["displayVersion"] == "0.20.0-vi.15"
+    assert stamp["releaseClass"] == "community-prerelease"
+    assert stamp["updateChannel"] == "community-prerelease"
+    assert stamp["updateFeedEnabled"] is False
+
+
+def test_stable_bundled_build_is_the_only_class_that_enables_the_feed(monkeypatch):
+    monkeypatch.setenv("HERMES_DESKTOP_BUNDLED", "1")
+    monkeypatch.setenv("HERMES_PAYLOAD_TAG", "vi-v0.20.0-15")
+    monkeypatch.setenv("HERMES_RELEASE_CLASS", "stable")
+
+    stamp = build_stamp(commit="b" * 40)
+
+    assert stamp["updateChannel"] == "stable"
+    assert stamp["updateFeedEnabled"] is True
 
 
 def test_bundled_build_rejects_upstream_or_malformed_tag(monkeypatch):
     monkeypatch.setenv("HERMES_DESKTOP_BUNDLED", "1")
+    monkeypatch.setenv("HERMES_RELEASE_CLASS", "community-prerelease")
 
     for tag in ("v0.20.0", "vi-v0.20.0", "vi-v0.20.0-rc1"):
         monkeypatch.setenv("HERMES_PAYLOAD_TAG", tag)
@@ -42,7 +58,17 @@ def test_bundled_build_rejects_upstream_or_malformed_tag(monkeypatch):
 
 def test_bundled_build_without_tag_stops_the_build(monkeypatch):
     monkeypatch.setenv("HERMES_DESKTOP_BUNDLED", "1")
+    monkeypatch.setenv("HERMES_RELEASE_CLASS", "community-prerelease")
     monkeypatch.delenv("HERMES_PAYLOAD_TAG", raising=False)
 
     with pytest.raises(SystemExit, match="HERMES_PAYLOAD_TAG"):
+        build_stamp(commit="b" * 40)
+
+
+def test_bundled_build_without_release_class_stops_the_build(monkeypatch):
+    monkeypatch.setenv("HERMES_DESKTOP_BUNDLED", "1")
+    monkeypatch.setenv("HERMES_PAYLOAD_TAG", "vi-v0.20.0-15")
+    monkeypatch.delenv("HERMES_RELEASE_CLASS", raising=False)
+
+    with pytest.raises(SystemExit, match="HERMES_RELEASE_CLASS"):
         build_stamp(commit="b" * 40)

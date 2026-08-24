@@ -38,6 +38,11 @@ import fs from "node:fs"
 import path from "node:path"
 
 import { isMain } from "./utils.mjs"
+import {
+  bundledUpdatePolicy,
+  resolveBundledReleaseClass,
+  resolvePayloadGitRef,
+} from "../../../scripts/bundled-release-policy.mjs"
 import { AGENT_BROWSER_VERSION } from "../../../scripts/prepare-agent-browser-native.mjs"
 import { parseVietnameseReleaseTag } from "../../../scripts/vietnamese-release.mjs"
 
@@ -263,7 +268,8 @@ export function parseSkips(argv) {
  * the Electron main process can require exactly the items it needs and
  * refuse to run resident from an incomplete artifact.
  */
-export function buildManifest({ tag, commit, target, staged, skipped }) {
+export function buildManifest({ tag, commit, releaseClass, target, staged, skipped }) {
+  const updatePolicy = bundledUpdatePolicy(releaseClass)
   const items = {}
   for (const item of PAYLOAD_ITEMS) {
     items[item] = staged.includes(item)
@@ -274,6 +280,7 @@ export function buildManifest({ tag, commit, target, staged, skipped }) {
     schemaVersion: PAYLOAD_SCHEMA_VERSION,
     tag,
     commit,
+    ...updatePolicy,
     platform: target.platform,
     arch: target.arch,
     builtAt: new Date().toISOString(),
@@ -380,18 +387,18 @@ function probe(cmd, args, opts = {}) {
   return result.stdout
 }
 
-export function repositoryGitQueries(tag) {
+export function repositoryGitQueries(ref) {
   return {
-    commit: ["rev-parse", `${tag}^{commit}`],
-    commitDate: ["log", "-1", "--format=%ct", tag],
+    commit: ["rev-parse", `${ref}^{commit}`],
+    commitDate: ["log", "-1", "--format=%ct", ref],
   }
 }
 
-function stageRepo(tag, outDir) {
+function stageRepo(tag, gitRef, releaseClass, outDir) {
   const repoDir = path.join(outDir, "repo")
   fs.rmSync(repoDir, { recursive: true, force: true })
   fs.mkdirSync(repoDir, { recursive: true })
-  const queries = repositoryGitQueries(tag)
+  const queries = repositoryGitQueries(gitRef)
   // Pass the peel expression as an argv item. A shell string loses the caret
   // on Windows (`tag^{commit}` becomes `tag{commit}` under cmd.exe).
   const commit = probe("git", queries.commit, { cwd: REPO_ROOT }).trim()
@@ -403,9 +410,11 @@ function stageRepo(tag, outDir) {
   // packs all refs, which leaves .git/refs/ empty, and electron-builder's
   // resource copy drops empty directories — git then refuses to recognize
   // the repository at all. git archive gives a clean tree of exactly the
-  // tag's tracked files.
+  // immutable ref's tracked files. Normal release builds use the tag. The
+  // explicit local-candidate path uses a full, caller-locked clean HEAD SHA
+  // and therefore needs no local tag.
   const archive = path.join(outDir, ".repo-archive.tar")
-  run("git", ["archive", "--format=tar", "-o", archive, tag], { cwd: REPO_ROOT })
+  run("git", ["archive", "--format=tar", "-o", archive, gitRef], { cwd: REPO_ROOT })
   run(hostTarBin(), ["-xf", archive, "-C", repoDir])
   fs.rmSync(archive, { force: true })
   // The PREBUILT JS surfaces live inside the repo tree, exactly where a
@@ -455,15 +464,22 @@ function stageRepo(tag, outDir) {
     "--distance", "0",
     "--source", "ci",
   ])
-  // The install manifest is BUILD metadata for a resident bundle: the
-  // payload repo is always desktop-managed, always the stable channel,
-  // always pinned to this tag. Shipping it statically means the Python
-  // side (update refusal, eject, channel vocabulary) reads the same file
-  // in a resident bundle as in a materialized checkout.
+  // The install manifest is BUILD metadata for a resident bundle. Stable
+  // artifacts opt into the stable updater. Unsigned community candidates are
+  // intentionally marked main + feed-disabled so no payload byte can claim a
+  // stable trust class merely because it is desktop-managed.
+  const updatePolicy = bundledUpdatePolicy(releaseClass)
   fs.writeFileSync(
     path.join(repoDir, ".hermes-install.json"),
     JSON.stringify(
-      { schemaVersion: 1, installMode: "bundled", channel: "stable", manageStyle: "adopted", pinnedTag: tag },
+      {
+        schemaVersion: 1,
+        installMode: "bundled",
+        channel: updatePolicy.updateFeedEnabled ? "stable" : "main",
+        manageStyle: "adopted",
+        pinnedTag: tag,
+        ...updatePolicy,
+      },
       null,
       2
     ) + "\n"
@@ -714,6 +730,13 @@ function main() {
       return null
     }
   })
+  const localCandidate = process.env.HERMES_LOCAL_CANDIDATE === "1"
+  const releaseClass = resolveBundledReleaseClass(process.env.HERMES_RELEASE_CLASS, { localCandidate })
+  const gitRef = resolvePayloadGitRef({
+    tag,
+    commit: process.env.HERMES_PAYLOAD_GIT_REF,
+    localCandidate,
+  })
 
   fs.mkdirSync(OUT_DIR, { recursive: true })
   const staged = []
@@ -722,7 +745,7 @@ function main() {
 
   const steps = {
     repo: () => {
-      commit = stageRepo(tag, OUT_DIR)
+      commit = stageRepo(tag, gitRef, releaseClass, OUT_DIR)
     },
     uv: () => {
       payloadPython = stageUvAndPython(target, OUT_DIR)
@@ -755,7 +778,7 @@ function main() {
     staged.push(item)
   }
 
-  const manifest = buildManifest({ tag, commit, target, staged, skipped: skips })
+  const manifest = buildManifest({ tag, commit, releaseClass, target, staged, skipped: skips })
   fs.writeFileSync(path.join(OUT_DIR, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n")
   console.log(`[stage-agent-payloads] wrote ${path.join(OUT_DIR, "manifest.json")}`)
 }

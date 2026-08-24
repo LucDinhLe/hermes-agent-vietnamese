@@ -15,6 +15,10 @@ const runtimeSmoke = readFileSync(
 )
 const jsTests = readFileSync(new URL('../../../.github/workflows/js-tests.yml', import.meta.url), 'utf8')
 const builderWrapper = readFileSync(new URL('../scripts/run-electron-builder.mjs', import.meta.url), 'utf8')
+const bundledBuild = readFileSync(
+  new URL('../../../scripts/build-bundled-desktop.mjs', import.meta.url),
+  'utf8'
+)
 
 test('candidate workflow builds the complete resident runtime on every advertised native target', () => {
   assert.match(candidate, /scripts\/validate-release-evidence\.test\.mjs/)
@@ -192,6 +196,59 @@ test('candidate workflow can only create a draft and never promotes it', () => {
   assert.doesNotMatch(candidate, /--draft=false/)
   assert.match(candidate, /--draft --prerelease/)
   assert.match(builderWrapper, /args\.push\("--publish", "never"\)/)
+})
+
+test('candidate workflow fails closed on unsigned feeds and the Windows ARM64 native limitation', () => {
+  assert.match(bundledBuild, /validateBundledBuildNode\(process\.versions\.node\)/)
+  assert.match(bundledBuild, /validateBundledBuildNode\(pathNodeProbe\.stdout\)/)
+  for (const regression of [
+    'scripts/bundled-release-policy.test.mjs',
+    'scripts/patch-electron-builder-mac-binary.test.mjs',
+    'scripts/stage-native-deps.test.mjs',
+    'tests/test_release_node_floor_contract.py',
+    'tests/test_install_sh_venv_transaction.py'
+  ]) {
+    assert.ok(candidate.includes(regression), `${regression} must run before the candidate build`)
+  }
+
+  const stableMetadata =
+    candidate.match(
+      /- name: Lập metadata cập nhật theo đúng artifact đã dựng[\s\S]*?(?=\n      - name:)/
+    )?.[0] ?? ''
+  assert.match(stableMetadata, /if: needs\.verify\.outputs\.release_class == 'stable'/)
+  assert.match(stableMetadata, /generate-community-update-metadata\.mjs[\s\S]*\)" stable/)
+
+  const communityFeedGate =
+    candidate.match(
+      /- name: Chặn feed cập nhật cho community prerelease chưa ký[\s\S]*?(?=\n      - name:)/
+    )?.[0] ?? ''
+  assert.match(
+    communityFeedGate,
+    /if: needs\.verify\.outputs\.release_class == 'community-prerelease'/
+  )
+  assert.match(communityFeedGate, /feeds=\(release-assets\/latest\*\.yml\)/)
+  assert.match(communityFeedGate, /community-prerelease must not publish stable update metadata/)
+  assert.ok(
+    candidate.indexOf('Chặn feed cập nhật cho community prerelease chưa ký') <
+      candidate.lastIndexOf(
+        'collect-community-artifacts.mjs checksums release-assets SHA256SUMS.txt'
+      ),
+    'community feed absence must be checked before the combined manifest is written'
+  )
+
+  assert.match(
+    candidate,
+    /HERMES_ALLOW_WIN32_ARM64_GET_WINDOWS_LIMITATION: \$\{\{ matrix\.id == 'windows-arm64' && needs\.verify\.outputs\.release_class == 'community-prerelease' && '1' \|\| '0' \}\}/
+  )
+  assert.match(candidate, /Ghi giới hạn build-only Windows ARM64/)
+  assert.match(candidate, /support_scope=build-only-pilot/)
+  assert.match(candidate, /read_window_below=unavailable/)
+  assert.match(candidate, /stable_eligible=false/)
+  assert.ok(
+    candidate.indexOf('Ghi giới hạn build-only Windows ARM64') <
+      candidate.indexOf('Ghi lại checksum sau ký'),
+    'the Windows ARM64 limitation must be covered by release checksums'
+  )
 })
 
 test('candidate stage rebinds the fresh tag and checkout to the verified commit before creation', () => {

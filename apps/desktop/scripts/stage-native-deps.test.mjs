@@ -9,7 +9,8 @@ import {
   stageGetWindows,
   stageGetWindowsInto,
   stageNodePtyInto,
-  classifyNativeBinary
+  classifyNativeBinary,
+  classifyPeArchitecture
 } from '../scripts/stage-native-deps.mjs'
 
 const { join } = path
@@ -21,16 +22,25 @@ const { join } = path
 // without needing actual native modules.
 
 /** Write a fake .node file with the given platform's magic bytes. */
-function makeFakeNode(filePath, platform) {
+function makeFakeNode(filePath, platform, arch = 'x64') {
   const headers = {
     linux:   Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x00, 0x00, 0x00, 0x00]), // ELF
     // On x64/arm64 Darwin, Mach-O binaries are stored little-endian on disk
     // (MH_CIGAM_64 = cffaedfe). This is the form node-pty's prebuilds ship in.
     darwin:  Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0x00, 0x00, 0x00, 0x00]), // Mach-O 64-bit LE (CIGAM_64)
-    win32:   Buffer.from([0x4d, 0x5a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),  // MZ (PE)
+  }
+  let header = headers[platform] ?? headers.linux
+  if (platform === 'win32') {
+    header = Buffer.alloc(128)
+    header[0] = 0x4d
+    header[1] = 0x5a
+    header.writeUInt32LE(0x40, 0x3c)
+    header.write('PE\0\0', 0x40, 'binary')
+    const machines = { ia32: 0x014c, x64: 0x8664, arm64: 0xaa64 }
+    header.writeUInt16LE(machines[arch], 0x44)
   }
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  fs.writeFileSync(filePath, headers[platform] ?? headers.linux)
+  fs.writeFileSync(filePath, header)
 }
 
 /** Create a minimal fake node-pty source tree in a temp dir. */
@@ -162,6 +172,19 @@ test('classifyNativeBinary returns null for unrecognized magic', () => {
 
 test('classifyNativeBinary returns null for a missing file', () => {
   assert.equal(classifyNativeBinary('/nonexistent/path/to/thing.node'), null)
+})
+
+test('classifyPeArchitecture reads the PE COFF machine instead of trusting MZ alone', () => {
+  const tmp = fs.mkdtempSync(join(os.tmpdir(), 'hermes-stage-'))
+  try {
+    for (const arch of ['ia32', 'x64', 'arm64']) {
+      const file = join(tmp, `${arch}.node`)
+      makeFakeNode(file, 'win32', arch)
+      assert.equal(classifyPeArchitecture(file), arch)
+    }
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
 })
 
 // ─── cross-target regression tests ──────────────────────────────────
@@ -370,8 +393,13 @@ function makeFakeGetWindows(srcRoot, { version = '9.3.0', bindings = [] } = {}) 
   fs.writeFileSync(join(srcRoot, 'lib', 'windows.js'), '// upstream pre-gyp loader')
   fs.writeFileSync(join(srcRoot, 'main'), '#!/bin/sh\n')
 
-  for (const { dir, platform } of bindings) {
-    makeFakeNode(join(srcRoot, 'lib', 'binding', dir, 'node-get-windows.node'), platform)
+  for (const { dir, platform, arch } of bindings) {
+    const inferredArch = arch ?? (dir.endsWith('-arm64') ? 'arm64' : dir.endsWith('-ia32') ? 'ia32' : 'x64')
+    makeFakeNode(
+      join(srcRoot, 'lib', 'binding', dir, 'node-get-windows.node'),
+      platform,
+      inferredArch
+    )
   }
 }
 
@@ -419,6 +447,25 @@ test('win32 staging rejects a binding dir that claims win32 but holds a foreign 
   }
 })
 
+test('win32 staging rejects a PE binding compiled for the wrong architecture', () => {
+  const tmp = fs.mkdtempSync(join(os.tmpdir(), 'hermes-stage-'))
+  try {
+    const srcRoot = join(tmp, 'get-windows')
+    const destRoot = join(tmp, 'dest')
+
+    makeFakeGetWindows(srcRoot, {
+      bindings: [{ dir: 'napi-9-win32-unknown-x64', platform: 'win32', arch: 'arm64' }]
+    })
+
+    assert.throws(
+      () => stageGetWindowsInto(srcRoot, destRoot, { platform: 'win32', arch: 'x64' }),
+      /expected win32-x64, got win32-arm64/
+    )
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
 test('win32-x64 staging fails when only foreign bindings exist', () => {
   const tmp = fs.mkdtempSync(join(os.tmpdir(), 'hermes-stage-'))
   try {
@@ -438,7 +485,7 @@ test('win32-x64 staging fails when only foreign bindings exist', () => {
   }
 })
 
-test('win32-arm64 staging omits incompatible bindings and keeps the fail-soft JS surface', () => {
+test('win32-arm64 staging fails closed without explicit community limitation acceptance', () => {
   const tmp = fs.mkdtempSync(join(os.tmpdir(), 'hermes-stage-'))
   try {
     const srcRoot = join(tmp, 'get-windows')
@@ -451,7 +498,42 @@ test('win32-arm64 staging omits incompatible bindings and keeps the fail-soft JS
       ]
     })
 
-    stageGetWindowsInto(srcRoot, destRoot, { platform: 'win32', arch: 'arm64' })
+    assert.throws(
+      () => stageGetWindowsInto(srcRoot, destRoot, { platform: 'win32', arch: 'arm64' }),
+      /HERMES_ALLOW_WIN32_ARM64_GET_WINDOWS_LIMITATION=1/
+    )
+
+    assert.throws(
+      () =>
+        stageGetWindowsInto(srcRoot, destRoot, {
+          platform: 'win32',
+          arch: 'arm64',
+          releaseClass: 'stable',
+          allowMissingWinArm64: true
+        }),
+      /Stable releases cannot omit read_window_below/
+    )
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})
+
+test('win32-arm64 community pilot may stage the explicitly acknowledged fail-soft JS surface', () => {
+  const tmp = fs.mkdtempSync(join(os.tmpdir(), 'hermes-stage-'))
+  try {
+    const srcRoot = join(tmp, 'get-windows')
+    const destRoot = join(tmp, 'dest')
+
+    makeFakeGetWindows(srcRoot, {
+      bindings: [{ dir: 'napi-9-win32-unknown-x64', platform: 'win32' }]
+    })
+
+    stageGetWindowsInto(srcRoot, destRoot, {
+      platform: 'win32',
+      arch: 'arm64',
+      releaseClass: 'community-prerelease',
+      allowMissingWinArm64: true
+    })
 
     assert.ok(existsSync(join(destRoot, 'lib', 'windows.js')))
     assert.ok(!existsSync(join(destRoot, 'lib', 'binding')))
@@ -539,7 +621,12 @@ test('darwin staging ships the Swift helper executable and the rewritten windows
 
     stageGetWindowsInto(srcRoot, destRoot, { platform: 'darwin' })
 
-    assert.equal(fs.statSync(join(destRoot, 'main')).mode & 0o777, 0o755)
+    // Windows does not persist POSIX executable mode bits; the release gate
+    // verifies 0755 on the native macOS runners where the helper is shipped.
+    if (process.platform !== 'win32') {
+      assert.equal(fs.statSync(join(destRoot, 'main')).mode & 0o777, 0o755)
+    }
+    assert.ok(existsSync(join(destRoot, 'main')))
     const staged = fs.readFileSync(join(destRoot, 'lib', 'windows.js'), 'utf8')
     assert.match(staged, /Rewritten by stage-native-deps\.mjs/)
     assert.ok(!staged.includes('node-pre-gyp'), 'pre-gyp loader must not survive staging')
@@ -553,8 +640,8 @@ test('darwin staging ships the Swift helper executable and the rewritten windows
 // get-windows is an optionalDependency: on Linux its node-pre-gyp install
 // script fails because no prebuilt exists. Windows ARM64 has the same package
 // state: its prebuilt URL returns 404 and npm may omit the optional dependency.
-// Staging skips those unsupported targets, but supported native targets remain
-// a hard failure when the package is missing.
+// That limitation is accepted only for an explicitly acknowledged unsigned
+// community build-only pilot; stable and implicit builds remain hard failures.
 
 test('linux staging skips when get-windows is absent (optional dep skipped by npm)', () => {
   assert.equal(stageGetWindows({ platform: 'linux', resolveRoot: () => null }), undefined)
@@ -567,10 +654,37 @@ test('darwin staging fails when get-windows is absent', () => {
   )
 })
 
-test('win32-arm64 staging skips when get-windows is absent after its optional install fails', () => {
+test('win32-arm64 staging fails when the optional package is absent without explicit policy', () => {
+  assert.throws(
+    () => stageGetWindows({ platform: 'win32', arch: 'arm64', resolveRoot: () => null }),
+    /get-windows is not installed/
+  )
+})
+
+test('win32-arm64 community pilot skips an absent package only with explicit limitation acceptance', () => {
   assert.equal(
-    stageGetWindows({ platform: 'win32', arch: 'arm64', resolveRoot: () => null }),
+    stageGetWindows({
+      platform: 'win32',
+      arch: 'arm64',
+      resolveRoot: () => null,
+      releaseClass: 'community-prerelease',
+      allowMissingWinArm64: true
+    }),
     undefined
+  )
+})
+
+test('win32-arm64 stable fails even when the limitation flag is present', () => {
+  assert.throws(
+    () =>
+      stageGetWindows({
+        platform: 'win32',
+        arch: 'arm64',
+        resolveRoot: () => null,
+        releaseClass: 'stable',
+        allowMissingWinArm64: true
+      }),
+    /get-windows is not installed/
   )
 })
 
