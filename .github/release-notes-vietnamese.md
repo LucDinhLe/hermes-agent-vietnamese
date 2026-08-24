@@ -1,131 +1,332 @@
-## Hermes Vietnamese vi-v0.20.0-25 — bản pilot cộng đồng
+<p align="center">
+  <img src="https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/70b2418fdb2b35a714d4a813c6894cdbbec0a370/assets/banner.png" alt="Hermes Vietnamese" width="100%">
+</p>
 
-Hermes Vietnamese được tạo ra để người Việt có thể cài Hermes Agent như một ứng dụng thông thường, kết nối model của mình và bắt đầu giao việc mà không phải tự dựng môi trường lập trình. Hermes có thể trò chuyện, làm việc với tệp, chạy lệnh, dùng trình duyệt, ghi nhớ qua nhiều phiên, học kỹ năng và chạy tác vụ theo lịch. Đường cài từ mã nguồn của dự án gốc phù hợp với người kỹ thuật nhưng Git, Python, Node.js, dependency, dòng lệnh và tài liệu tiếng Anh vẫn là rào cản với nhiều người dùng phổ thông.
+## Hermes Vietnamese
 
-Bản cộng đồng đóng gói phần lõi đó thành trải nghiệm Desktop Việt/Anh có hướng dẫn rõ từ lúc tải về tới phiên làm việc đầu tiên. Dự án phục vụ người dùng cá nhân, người làm nội dung, đào tạo, nghiên cứu, vận hành và các nhóm nhỏ muốn thử một AI agent có thể thao tác trên máy dưới quyền kiểm soát của chính họ.
+**Một Agent chủ trì, nhiều Agent chuyên trách cùng làm việc trong từng phiên.**
 
-Dự án được phát triển từ [Hermes Agent](https://github.com/NousResearch/hermes-agent) của Nous Research theo [giấy phép MIT](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/LICENSE), do [Lê Đình Lực](https://github.com/LucDinhLe) phát triển và duy trì như một dự án cá nhân vì cộng đồng. Đây là bản phân phối độc lập, không phải bản phát hành chính thức của Nous Research, OpenAI, Anthropic, Google, Microsoft hoặc Apple.
+Hermes Vietnamese v31.0 là ứng dụng AI agent chạy trên máy tính. Người dùng có
+thể giao một công việc cho Agent chủ trì, rồi mời thêm các Agent chuyên trách
+cùng nghiên cứu, viết, phản biện hoặc kiểm tra kết quả. Các Agent chỉ tham gia
+trong phiên hoặc dự án được chọn, nên người dùng vẫn kiểm soát model, dữ liệu,
+công cụ và chi phí. Ứng dụng cũng tích hợp tệp, Terminal, trình duyệt, dự án và
+lịch tự động trong một giao diện tiếng Việt.
 
-> **Đây là bản pilot cộng đồng và là bản tải mặc định/Latest, chưa phải bản stable.** Windows x64 đã được cài thử bằng chính tệp đang công khai. Windows ARM64, macOS Apple Silicon/Intel và Linux x64/ARM64 đã build trên runner native nhưng chưa được smoke trên máy người dùng thật. [vi-v0.20.0-14](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-14) được giữ nguyên làm bản quay lui.
+Bản phát hành này do
+[Lê Đình Lực (LucDinhLe)](https://github.com/LucDinhLe) phát triển và duy trì
+như một dự án cá nhân phục vụ cộng đồng, dựa trên mã nguồn mở
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) của Nous Research
+theo giấy phép MIT. Đây là bản phân phối độc lập, không phải bản phát hành chính
+thức của Nous Research hay của các nhà cung cấp model AI.
 
-### Bản này dành cho ai?
+| Thông tin                       | Giá trị                                                                                            |
+| ------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Tên sản phẩm                    | **Hermes Vietnamese v31.0**                                                                        |
+| Nhãn phát hành                  | `vi-v0.31.0-7`                                                                                     |
+| Phiên bản kỹ thuật Desktop      | `0.31.0-vi.7`                                                                                      |
+| Lõi mã nguồn mở                 | Hermes Agent `0.20.4`                                                                              |
+| Người phát triển bản tiếng Việt | **Lê Đình Lực (LucDinhLe)**                                                                        |
+| Giấy phép                       | MIT                                                                                                |
+| Lớp phát hành                   | **Community pilot**, chưa phải stable                                                         |
+| Bản quay lui đã diễn tập        | [`vi-v0.20.4-39`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.4-39) |
 
-- Người muốn dùng AI agent bằng giao diện tiếng Việt và vẫn có thể chuyển nhanh sang English.
-- Người muốn cài bằng giao diện, không phải tự clone mã nguồn hoặc chuẩn bị công cụ lập trình.
-- Người cần làm việc với hội thoại, tệp, Terminal, trình duyệt, bộ nhớ, kỹ năng và nhiều phiên trong cùng một ứng dụng.
-- Người có tài khoản ChatGPT, Claude Pro/Max, khóa API Gemini hoặc một nhà cung cấp AI khác và muốn tự chọn model phù hợp.
-- Người chấp nhận thử bản cộng đồng, sao lưu dữ liệu và phản hồi lỗi để dự án được hoàn thiện.
+> **Lưu ý quan trọng:** đây là bản community pilot để cộng đồng trải
+> nghiệm và phản hồi. Windows x64 đã vượt exact-artifact smoke bằng đúng tệp
+> đang phát hành. Năm target còn lại mới đạt cổng build native và chưa có smoke
+> trên máy người dùng. Bản này đang là bản tải mặc định/Latest của dự án; đây vẫn là community pilot, không phải stable.
+>
+> [`vi-v0.20.4-39`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.4-39) được giữ nguyên làm bản quay lui đã diễn tập.
 
-Bản pilot chưa phù hợp với công việc trọng yếu cần phần mềm đã ký số, hỗ trợ thương mại, bảo hành hoặc bằng chứng nghiệm thu đầy đủ trên đúng loại máy đang dùng.
+### Bản này phù hợp với ai?
 
-### Điểm mạnh so với cách tự cài Hermes Agent từ mã nguồn
+- Người muốn dùng AI agent bằng tiếng Việt và vẫn chuyển được sang English.
+- Người muốn cài một ứng dụng Desktop thay vì tự chuẩn bị Git, Python, Node.js
+  và dependency từ mã nguồn.
+- Người làm nội dung, đào tạo, nghiên cứu, vận hành, lập trình hoặc quản lý dự
+  án cần AI có thể đọc tệp, chạy lệnh, dùng trình duyệt và ghi nhớ qua nhiều
+  phiên.
+- Người muốn tổ chức nhiều Agent theo vai trò, ví dụ Agent nghiên cứu, Agent
+  viết, Agent phản biện và Agent kiểm tra kỹ thuật.
+- Người muốn dùng tài khoản hoặc API key của chính mình và kiểm soát model,
+  quyền truy cập cùng chi phí.
+- Người chấp nhận bản thử nghiệm cộng đồng, biết sao lưu dữ liệu quan trọng và
+  sẵn sàng gửi phản hồi khi gặp lỗi.
 
-| Nhu cầu                         | Hermes Vietnamese bổ sung                                                                                                                                                    |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cài như ứng dụng thông thường   | Bộ cài có giao diện cho Windows, macOS và Linux; người dùng phổ thông không phải tự cài Git, Python, Node.js hoặc chạy lệnh để hoàn tất lần đầu.                             |
-| Bắt đầu bằng tiếng Việt         | Giao diện tiếng Việt mặc định, chuyển nhanh VI/EN; tên model, thương hiệu và giá trị kỹ thuật vẫn giữ nguyên để dễ đối chiếu tài liệu quốc tế.                               |
-| Đi từ cài đặt tới giao việc     | Quy trình ba bước gồm chọn ngôn ngữ, chuẩn bị Hermes, kết nối model; có hướng dẫn riêng cho ChatGPT, Claude, Gemini, API key và model cục bộ.                                |
-| Làm nhiều việc trong một cửa sổ | Tab nhiều phiên có nút `+`/`×`, danh sách phiên, Terminal tích hợp, vùng Tệp và nhiều tab Trình duyệt dùng chung trong panel phải.                                           |
-| Giảm lỗi do môi trường máy      | Runtime thiết yếu, source snapshot và dependency của đúng bản phát hành được đóng gói hoặc khóa; lần chạy đầu không phụ thuộc một nhánh Git động hoặc source chưa công khai. |
-| Dễ kiểm tra và phục hồi         | Có SHA-256 cho artifact, luồng repair, lựa chọn giữ/xóa dữ liệu khi gỡ cài đặt, hướng dẫn sao lưu và kênh cập nhật `vi-v*` riêng.                                            |
-| Giữ năng lực lõi Hermes         | Vẫn dùng hệ thống model, công cụ, bộ nhớ, kỹ năng, lịch chạy, AI agent phụ và Gateway của dự án gốc.                                                                         |
+Bản này chưa phù hợp với hệ thống trọng yếu cần phần mềm đã ký số, hỗ trợ thương
+mại, bảo hành hoặc nghiệm thu đầy đủ trên đúng loại máy đang sử dụng.
 
-Hermes Vietnamese không tặng kèm model AI, tài khoản trả phí, API key hoặc hạn mức sử dụng.
+## Điểm mạnh so với cách tự cài Hermes Agent từ mã nguồn
 
-### 1. Kiểm tra máy và chọn đúng tệp
+Hermes Vietnamese giữ năng lực lõi của Hermes Agent, đồng thời bổ sung một lớp
+Desktop, Việt hóa, đóng gói và kiểm soát vận hành cho người dùng phổ thông.
 
-- **Windows:** nhấn Windows + I → **Hệ thống → Giới thiệu**. Máy cần Windows 10/11 bản 64-bit. `x64-based processor` chọn x64; `ARM-based processor` chọn ARM64.
-- **macOS:** mở ** → About This Mac/Giới thiệu về máy Mac**. Máy cần macOS 12 trở lên. Chip Apple M chọn Apple Silicon; chip Intel chọn bản Intel.
-- **Linux:** mở **Settings → About**. `x86_64/amd64` chọn x64; `aarch64/arm64` chọn ARM64.
+| Nhu cầu                       | Hermes Vietnamese v31.0 bổ sung                                                                                                                                  |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cài đặt dễ hơn                | Bộ cài riêng cho Windows, macOS và Linux. Runtime thiết yếu cùng dependency của đúng phiên bản được đóng gói, giảm nhu cầu tự cài công cụ lập trình.             |
+| Bắt đầu bằng tiếng Việt       | Giao diện tiếng Việt mặc định, có English đầy đủ. Tên model, nhà cung cấp và giá trị kỹ thuật vẫn được giữ để đối chiếu tài liệu quốc tế.                        |
+| Làm việc theo dự án           | Có trang Dự án, ghim và sắp xếp dự án, mở phiên đúng thư mục, giữ trạng thái sau khi khởi động lại.                                                              |
+| Nhiều phiên trong một cửa sổ  | Phiên có tab riêng, có thể đổi tên, chuyển nhanh hoặc chia panel để xử lý và đối chiếu nhiều việc song song.                                                     |
+| Panel công việc tích hợp      | Panel phải chứa Tệp, Terminal và Trình duyệt nhiều tab. Người dùng và Agent có thể cùng quan sát một không gian làm việc.                                        |
+| Agents cộng tác theo phiên    | Nút **Agents** luôn hiện trong từng phiên. Có tìm kiếm roster, mời nhiều Agent, phân biệt Agent chủ trì với Agent cộng tác và lưu phạm vi theo phiên hoặc dự án. |
+| Quản lý Agent đầy đủ          | Trang **Quản lý Agents** hỗ trợ tạo, sửa, sao chép, xóa, nhóm, năng lực, kỹ năng, công cụ, MCP và tác vụ định kỳ.                                                |
+| Kiểm soát ngữ cảnh và chi phí | Mỗi phiên hiển thị mức dùng cửa sổ ngữ cảnh, ước tính chi phí USD và model đang làm việc. Chi phí là ước tính kỹ thuật, không thay thế hóa đơn của nhà cung cấp. |
+| Advisor phản biện             | Có thể bật một model Advisor độc lập để kiểm kế hoạch, hướng phục hồi và kết quả cuối. Advisor chỉ đọc, không tự chạy công cụ thay Agent chính.                  |
+| Tự động hóa gần gũi hơn       | Có 16 mẫu tác vụ định kỳ bằng tiếng Việt cho bản tin, email, tổng kết, theo dõi, học tập, sức khỏe và công việc cá nhân.                                         |
+| Trình duyệt có phạm vi        | Hermes Connector chỉ nhập phiên đăng nhập của website sau khi người dùng chọn đúng domain và xác nhận. Có preview, thu hồi quyền và tách Electron session.       |
+| Dễ bảo trì và quay lui        | Có manifest SHA-256, cập nhật theo release bất biến, repair, gỡ giữ dữ liệu, gỡ xóa dữ liệu và mốc rollback rõ ràng.                                             |
 
-| Máy đang dùng           | Tải trực tiếp                                                                                                                                                |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Windows 10/11 x64       | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Windows-x64-Setup.exe)           |
-| Windows 10/11 ARM64     | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Windows-arm64-Setup.exe)       |
-| Mac chip Apple M-series | [Bộ cài macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
-| Mac chip Intel          | [Bộ cài macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-macOS-Intel.dmg)                 |
-| Ubuntu/Debian x64       | [Gói DEB x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-x64.deb)                          |
-| Ubuntu/Debian ARM64     | [Gói DEB ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-arm64.deb)                      |
-| Fedora/RHEL x64         | [Gói RPM x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-x64.rpm)                          |
-| Fedora/RHEL ARM64       | [Gói RPM ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-arm64.rpm)                      |
-| Linux khác x64          | [AppImage x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-x64.AppImage)                    |
-| Linux khác ARM64        | [AppImage ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-arm64.AppImage)                |
+Hermes Vietnamese không tặng kèm model, tài khoản ChatGPT/Claude/Gemini, API
+key hoặc hạn mức sử dụng. Người dùng chủ động chọn nhà cung cấp và chịu chi phí
+theo tài khoản của mình.
 
-Windows 32-bit và Linux ARM 32-bit chưa được đóng gói. Hướng dẫn chi tiết nằm tại [README tiếng Việt](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md#kiểm-tra-máy-có-phù-hợp-không).
+## Những điểm nổi bật của v31.0
 
-### 2. Cài đặt và xử lý cảnh báo trên Windows
+### 1. Agents trở thành cộng tác viên thật sự trong từng phiên
 
-Bộ cài đang chờ xét duyệt ký số nên Microsoft Edge có thể báo tệp chưa được tải xuống phổ biến và hiện `Publisher: Unknown`. Chỉ tiếp tục khi đường tải thuộc kho này, tên tệp đúng với máy và SHA-256 khớp [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/SHA256SUMS.txt).
+- Nút **Agents** nằm cố định ở thanh thông tin phiên, cạnh Context, chi phí và
+  Advisor.
+- Có thể tìm Agent trong roster dài và mời nhiều Agent vào cùng một phiên.
+- Agent được mời không thay đổi Agent chủ trì, model chính, Gateway hay system
+  prompt của phiên.
+- Thành viên có thể được lưu theo phiên hoặc dự án, phù hợp với nhóm Agent dùng
+  lặp lại cho một công việc dài hạn.
+- Trang **Quản lý Agents** gom hồ sơ, nhóm, kỹ năng, công cụ, MCP và routine về
+  một nơi ổn định.
+- Dữ liệu Bot/Agent cũ vẫn được đọc. v31 chỉ thay lớp trình bày và không tự ý
+  viết lại dữ liệu người dùng.
 
-| 1. Bấm See more                                                                                                                                                                          | 2. Chọn Keep trong menu tải xuống                                                                                                                                                 |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| ![Edge báo Hermes chưa được tải xuống phổ biến](https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/docs/assets/windows-install/edge-warning-see-more-v25.jpg)      | ![Menu tải xuống của Edge có lựa chọn Keep](https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/docs/assets/windows-install/edge-download-menu-keep-v25.jpg) |
-| **3. Kiểm tra tên tệp và nguồn tải**                                                                                                                                                     | **4. Mở mũi tên và chọn Keep anyway**                                                                                                                                             |
-| ![Edge hiện Publisher Unknown vì bộ cài chưa ký số](https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/docs/assets/windows-install/edge-publisher-unknown-v25.jpg) | ![Edge hiện lựa chọn Keep anyway](https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/docs/assets/windows-install/edge-keep-anyway-v25.jpg)                  |
+### 2. Context, chi phí và Advisor nằm ngay nơi làm việc
 
-Các phiên bản Edge có thể bỏ qua một màn hình. Nếu tệp bị tải lặp và tên có thêm `(1)` hoặc `(2)`, hãy xác nhận bằng SHA-256. Không cần chọn **Report this app as safe**. Nếu Microsoft Defender nêu tên một mối đe dọa cụ thể, hãy dừng cài đặt và gửi báo cáo; không tắt Defender, SmartScreen hoặc chính sách bảo mật của toàn máy.
+- Mức dùng cửa sổ ngữ cảnh được theo dõi riêng cho từng phiên.
+- Chi phí API được ước tính từ token vào, token ra và cache theo bảng giá model
+  đã biết.
+- Model làm việc và model Advisor được tách rõ.
+- Advisor có checkpoint cho kế hoạch, phục hồi và kết quả cuối.
+- Tác vụ đơn giản có thể tắt Advisor để tránh lượt model phụ không cần thiết.
 
-Xem từng bước tại [Cài Windows bằng hình ảnh](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/docs/cai-dat-windows-bang-anh.md). Trên macOS, mở DMG đúng kiến trúc và kéo ứng dụng vào Applications. Trên Linux, ưu tiên `.deb` cho Ubuntu/Debian, `.rpm` cho Fedora/RHEL hoặc AppImage cho bản phân phối khác.
+### 3. Một cửa sổ cho hội thoại, tệp, Terminal và trình duyệt
 
-### 3. Hoàn tất thiết lập và kết nối model
+- Tạo và đổi tên nhiều phiên, mở thành tab hoặc chia panel.
+- Panel phải co giãn độc lập và giữ Tệp, Terminal cùng nhiều tab Browser.
+- Trang Dự án giúp nhóm các phiên theo thư mục thật trên máy.
+- Trang Thống kê sử dụng tổng hợp token theo thời gian, dự án và model.
+- Trạng thái quan trọng được giữ sau khi đóng rồi mở lại ứng dụng.
 
-1. Mở Hermes, chọn **Tiếng Việt** hoặc **English**.
-2. Chọn cài Hermes trên máy và giữ kết nối Internet trong lúc ứng dụng chuẩn bị runtime.
-3. Tại **Kết nối model**, chọn đường phù hợp:
-   - **OpenAI OAuth (ChatGPT):** đăng nhập tài khoản ChatGPT có quyền dùng Codex.
-   - **Claude Pro / Max:** đăng nhập qua Claude Code.
-   - **Google Gemini:** nhập khóa API tạo tại Google AI Studio.
-   - **Nhà cung cấp khác:** nhập tài khoản, API key hoặc endpoint tương ứng.
-4. Chọn model, tạo phiên đầu tiên và giao một việc thử không quan trọng.
+### 4. Gateway, Connector và quyền truy cập được làm rõ hơn
 
-Gói ChatGPT, Claude hoặc Gemini trên web không tự động trở thành hạn mức API của mọi nhà cung cấp. Mỗi dịch vụ có tài khoản, giới hạn và cách tính phí riêng. Nếu chưa có kết nối, chọn **Tôi sẽ chọn nhà cung cấp sau**, rồi mở **Cài đặt → Model/Nhà cung cấp** để cấu hình.
+- Gateway tự làm mới trạng thái sau start hoặc restart, không cần bấm kiểm tra
+  sức khỏe thủ công trong tình huống chuyển tiếp bình thường.
+- Chrome/Edge Connector xin quyền theo đúng hostname ở cả HTTP và HTTPS.
+- Preview chỉ hiển thị metadata, không hiển thị giá trị cookie hoặc bí mật.
+- Người dùng có thể thu hồi quyền đã cấp; phiên website được nhập vào vùng
+  Electron tách biệt.
+- Mật khẩu, autofill, bookmark và toàn bộ hồ sơ trình duyệt không được sao chép
+  vào Hermes.
 
-### Dữ liệu và quyền của agent
+### 5. Cài đè, sửa chữa và gỡ cài đặt có phạm vi rõ
 
-Thông tin đăng nhập và dữ liệu của mỗi người được lưu trong hồ sơ trên máy của mình. Bộ cài không chứa tài khoản, OAuth token, API key, lịch sử hoặc dữ liệu của người đóng gói. Khi bạn dùng model, trình duyệt hoặc dịch vụ mạng, dữ liệu cần thiết có thể được gửi tới dịch vụ đã chọn theo điều khoản của họ.
+- Giữ nguyên app ID và vùng dữ liệu để bản mới nhận cấu hình, dự án, phiên và
+  trạng thái onboarding hiện có.
+- Repair cùng byte không làm mất profile hoặc dữ liệu Desktop.
+- Gỡ giữ dữ liệu xóa ứng dụng và mục đăng ký của đúng bản đang chạy nhưng giữ
+  profile cùng userData.
+- Gỡ xóa dữ liệu chỉ xóa vùng đã chọn. Bản cài all-users hoặc bản ở đường dẫn
+  khác không thuộc phạm vi sẽ không bị đụng tới.
+- Đường nâng cấp từ `vi-v0.20.4-39` và rollback về bản đó đã được diễn tập trên
+  tài khoản smoke cô lập.
 
-Hermes có thể chạy lệnh và sửa tệp trong phạm vi được cấp. Hãy bắt đầu bằng tác vụ nhỏ, đọc yêu cầu quyền và kiểm tra kết quả trước khi cho agent thao tác với dữ liệu quan trọng. Không đăng API key, mã OAuth, bản sao lưu hoặc log chưa làm sạch vào issue công khai.
+## Tải đúng bản cho máy
 
-### Tình trạng kiểm thử
+Luôn tải từ release này và đối chiếu với
+[`SHA256SUMS.txt`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/SHA256SUMS.txt).
 
-- **Windows x64:** exact-artifact smoke đạt trên máy Windows 11 vật lý với cài mới bằng hồ sơ sạch, runtime đóng gói, gateway/onboarding, tạo và đổi tên phiên, tab phiên/trình duyệt, panel phải, khởi động lại giữ dữ liệu, repair và gỡ cài đặt giữ/xóa dữ liệu.
-- **Còn thiếu trên Windows x64:** chưa chạy một tool bằng provider thật và chưa kiểm chứng cập nhật Desktop từ v14 bằng chính artifact v25.
-- **Windows ARM64, macOS Apple Silicon/Intel và Linux x64/ARM64:** đã build trên runner native và khớp SHA-256 nhưng chưa có smoke trên máy người dùng; được công bố theo phạm vi build-only pilot để xin phản hồi.
+| Máy đang dùng           | Tệp cài v31.0                                                                                                                                            |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows 10/11 x64       | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Windows-x64-Setup.exe)        |
+| Windows 10/11 ARM64     | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Windows-arm64-Setup.exe)    |
+| Mac chip Apple M-series | [macOS Apple Silicon DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
+| Mac chip Intel          | [macOS Intel DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-macOS-Intel.dmg)                 |
+| Ubuntu/Debian x64       | [Linux x64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-x64.deb)                     |
+| Ubuntu/Debian ARM64     | [Linux ARM64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-arm64.deb)                 |
+| Fedora/RHEL x64         | [Linux x64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-x64.rpm)                     |
+| Fedora/RHEL ARM64       | [Linux ARM64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-arm64.rpm)                 |
+| Linux khác x64          | [Linux x64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-x64.AppImage)           |
+| Linux khác ARM64        | [Linux ARM64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-arm64.AppImage)       |
 
-### Bảo mật và chữ ký
+SHA-256 của bộ cài Windows x64 đã nghiệm thu:
 
-- Dự án đã nộp hồ sơ tham gia chương trình ký mã nguồn mở của **SignPath Foundation** và đang chờ SignPath xét duyệt để ký bản Windows.
-- Windows chưa có Authenticode nên SmartScreen hoặc Application Control có thể cảnh báo hoặc chặn.
-- Dự án chưa tham gia Apple Developer Program; bản macOS chưa có Developer ID hoặc notarization và có thể bị Gatekeeper cảnh báo hoặc chặn. Apple không ở trạng thái xét duyệt bản này.
-- Chữ ký số giúp xác minh nguồn phát hành; nó không phải giấy phép sử dụng phần mềm do Microsoft hoặc Apple cấp.
-- Vấn đề bảo mật cần được gửi theo [SECURITY.md](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/SECURITY.md), không đăng công khai.
+```text
+cca0f3c0255e5e8736676a4d7ccb52c6e1b75eb73b94b8d1c3ca5dc91e57e840
+```
 
-### Mong cộng đồng dùng thử và phản hồi
+## Lưu ý cài đặt dành cho người dùng
 
-Bản pilot được công khai để nhận phản hồi thực tế. Báo lỗi, góp ý bản dịch, đề xuất trải nghiệm cài đặt hoặc xác nhận “chạy tốt trên máy tôi” đều giúp dự án cải thiện.
+### Chọn đúng kiến trúc
 
-Vui lòng gửi tại [GitHub Issues](https://github.com/LucDinhLe/hermes-agent-vietnamese/issues) và cho biết:
+- Windows có `x64-based processor` chọn x64; máy dùng chip ARM chọn ARM64.
+- Mac dùng chip M1, M2, M3, M4 hoặc mới hơn chọn Apple Silicon; Mac chip Intel
+  chọn bản Intel.
+- Ubuntu/Debian ưu tiên `.deb`; Fedora/RHEL ưu tiên `.rpm`; Linux khác có thể
+  thử AppImage phù hợp kiến trúc.
+- Windows 32-bit và Linux ARM 32-bit chưa được đóng gói.
+
+### Cảnh báo trên Windows
+
+Bộ cài Windows chưa có Authenticode trong thời gian hồ sơ **SignPath
+Foundation** đang chờ xét duyệt. Microsoft Edge hoặc SmartScreen có thể báo tệp
+chưa phổ biến và hiển thị `Publisher: Unknown`.
+
+Chỉ tiếp tục khi đường tải thuộc kho `LucDinhLe/hermes-agent-vietnamese`, tên
+tệp đúng với máy và SHA-256 khớp manifest. Không tắt Microsoft Defender,
+SmartScreen hoặc chính sách bảo mật của toàn máy. Nếu Defender nêu tên một mối
+đe dọa cụ thể, hãy dừng cài và gửi báo cáo.
+
+| 1. Chọn **See more**                                                                                                                                                                                                             | 2. Chọn **Keep** trong menu tải xuống                                                                                                                                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ![Edge báo tệp Hermes chưa được tải xuống phổ biến](https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/70b2418fdb2b35a714d4a813c6894cdbbec0a370/docs/assets/windows-install/edge-warning-see-more-v25.jpg)      | ![Menu tải xuống của Edge có lựa chọn Keep](https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/70b2418fdb2b35a714d4a813c6894cdbbec0a370/docs/assets/windows-install/edge-download-menu-keep-v25.jpg) |
+| **3. Kiểm tra nguồn tải và Publisher Unknown**                                                                                                                                                                                   | **4. Mở mũi tên rồi chọn Keep anyway**                                                                                                                                                                                |
+| ![Edge hiển thị Publisher Unknown vì bộ cài chưa ký số](https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/70b2418fdb2b35a714d4a813c6894cdbbec0a370/docs/assets/windows-install/edge-publisher-unknown-v25.jpg) | ![Edge hiện lựa chọn Keep anyway](https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/70b2418fdb2b35a714d4a813c6894cdbbec0a370/docs/assets/windows-install/edge-keep-anyway-v25.jpg)                  |
+
+Giao diện Edge có thể thay đổi hoặc bỏ qua một bước. Hướng dẫn chi tiết nằm tại
+[Cài Windows bằng hình ảnh](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/70b2418fdb2b35a714d4a813c6894cdbbec0a370/docs/cai-dat-windows-bang-anh.md).
+
+### Cảnh báo trên macOS và Linux
+
+- Dự án **chưa tham gia Apple Developer Program**. Bản macOS chưa có Developer
+  ID, notarization hoặc stapling nên Gatekeeper có thể cảnh báo hoặc chặn.
+- Không tắt Gatekeeper hay cơ chế bảo vệ toàn máy. Nếu chính sách máy không cho
+  phép ứng dụng chưa ký, hãy chờ bản đã ký hoặc chỉ thử trong môi trường riêng.
+- AppImage có thể cần được đánh dấu cho phép thực thi trong Properties trước khi
+  mở. Gói `.deb` hoặc `.rpm` nên được cài bằng trình quản lý phần mềm của hệ điều
+  hành.
+
+### Cài mới và cài đè
+
+1. Sao lưu dữ liệu quan trọng trước khi thử bản pilot.
+2. Đóng Hermes và Gateway đang chạy.
+3. Tải đúng tệp, kiểm SHA-256 rồi mở bộ cài.
+4. Nếu đang dùng bản cũ tương thích, cài đè vào đúng phạm vi người dùng hiện
+   tại để giữ cấu hình và lịch sử.
+5. Mở Hermes, chọn ngôn ngữ, chờ runtime cùng Gateway sẵn sàng rồi kết nối model.
+6. Thử một tác vụ nhỏ trước khi cấp quyền với thư mục hoặc website quan trọng.
+
+## Hướng dẫn sử dụng hiệu quả bước đầu
+
+### Bước 1. Kết nối model theo đúng nhu cầu
+
+Mở **Cài đặt → Model/Nhà cung cấp** và chọn tài khoản phù hợp. Có thể dùng
+OpenAI OAuth nếu tài khoản có quyền Codex, Claude Pro/Max qua Claude Code,
+Gemini API hoặc provider khác được Hermes hỗ trợ. Mỗi dịch vụ có hạn mức và cách
+tính phí riêng.
+
+Gợi ý thực tế:
+
+- Model nhanh, rẻ dùng cho phân loại, tóm tắt và chỉnh câu chữ.
+- Model mạnh dùng cho lập kế hoạch, lập trình, nghiên cứu hoặc tác vụ nhiều bước.
+- Chỉ bật Advisor khi công việc đáng để trả thêm một lượt kiểm tra.
+
+### Bước 2. Tạo một dự án thay vì dồn mọi việc vào một phiên
+
+Tạo dự án theo thư mục thật, ví dụ `Khóa học AI`, `Nội dung tháng 9` hoặc
+`Website công ty`. Mỗi chủ đề lớn nên có phiên riêng. Cách này giúp ngữ cảnh gọn,
+file đúng chỗ và chi phí dễ theo dõi.
+
+### Bước 3. Dùng Agents theo vai trò rõ ràng
+
+Tạo Agent với nhiệm vụ cụ thể, ví dụ:
+
+- **Agent nghiên cứu** tìm nguồn và kiểm chứng dữ kiện.
+- **Agent biên tập** giữ giọng văn và cấu trúc nội dung.
+- **Agent kỹ thuật** đọc repository, chạy test và sửa lỗi.
+- **Agent phản biện** tìm điểm yếu trước khi bàn giao.
+
+Trong phiên, mở **Agents**, tìm roster và mời Agent cần thiết. Giữ một Agent chủ
+trì chịu trách nhiệm tổng hợp để tránh nhiều người cùng lái một việc.
+
+### Bước 4. Quan sát Context, chi phí và tiến trình
+
+Khi mức dùng ngữ cảnh tăng cao, hãy kết thúc lát cắt hiện tại, ghi lại quyết định
+và mở phiên mới nếu cần. Đừng giữ một phiên vô hạn cho mọi công việc. Dùng phần
+ước tính chi phí để chọn model hợp lý; số này chỉ là ước tính kỹ thuật.
+
+### Bước 5. Dùng panel phải để kiểm chứng công việc
+
+- **Tệp** để xem tài liệu Agent đang đọc hoặc sửa.
+- **Terminal** để theo dõi lệnh và kết quả kỹ thuật.
+- **Trình duyệt** để mở nguồn, form và website cần thao tác.
+- Tạo nhiều tab Browser khi cần đối chiếu, nhưng chỉ ghép Connector với đúng
+  website thực sự cần dùng.
+
+### Bước 6. Dùng Advisor cho checkpoint quan trọng
+
+Bật Advisor trước những việc có rủi ro cao như xuất bản nội dung, sửa code,
+phân tích dữ liệu hoặc ra quyết định. Yêu cầu Advisor kiểm ba điểm: mục tiêu có
+đúng không, bằng chứng đã đủ chưa, kết quả cuối còn rủi ro gì. Tắt Advisor cho
+tác vụ ngắn để tiết kiệm lượt model.
+
+### Bước 7. Tự động hóa sau khi luồng thủ công đã ổn
+
+Chỉ tạo tác vụ định kỳ sau khi đã chạy thử thủ công và kiểm tra đầu ra. Bắt đầu
+với mẫu tiếng Việt, chọn lịch dễ quan sát và giữ quyền ở mức tối thiểu. Kiểm tra
+Gateway nếu muốn nhận kết quả qua kênh nhắn tin.
+
+## Dữ liệu, quyền và chi phí
+
+- Bộ cài không chứa tài khoản, OAuth token, API key, lịch sử hoặc dữ liệu của
+  người đóng gói.
+- Thông tin đăng nhập và dữ liệu được lưu trong hồ sơ trên máy người dùng.
+- Dữ liệu cần thiết có thể được gửi tới model hoặc dịch vụ mà người dùng chọn,
+  theo điều khoản của dịch vụ đó.
+- Hermes có thể chạy lệnh, sửa hoặc xóa tệp trong phạm vi được cấp. Hãy đọc yêu
+  cầu quyền và kiểm tra kết quả trước thao tác quan trọng.
+- Không đăng API key, mã OAuth, cookie, bản sao lưu hoặc log chưa làm sạch vào
+  issue công khai.
+- Cài đặt ứng dụng không tự phát sinh phí model. Chi phí chỉ phát sinh khi dùng
+  provider hoặc dịch vụ có tính phí theo tài khoản của người dùng.
+
+## Tình trạng nghiệm thu
+
+- **Windows x64: exact-artifact smoke đạt** trên Windows 11 vật lý bằng đúng bộ
+  cài công khai. Các lane gồm cài mới, runtime tích hợp, Gateway, phiên, dự án,
+  Context, Agents, repair, nâng từ vi39, gỡ giữ dữ liệu, gỡ xóa dữ liệu và
+  rollback.
+- Windows ARM64, macOS Apple Silicon/Intel và Linux x64/ARM64 đã build trên
+  runner native và khớp manifest nhưng **chưa có smoke trên máy người dùng**.
+  Các target này mang phạm vi `BUILD-ONLY-PILOT`.
+- Windows chưa Authenticode. SignPath Foundation là đường ký đang được theo
+  đuổi.
+- macOS chưa ký và chưa công chứng.
+- Smoke runtime dùng provider loopback cô lập, không gọi model trả phí.
+
+## Hỗ trợ, phản hồi và quay lui
+
+Bản pilot được công khai để lấy bằng chứng sử dụng thực tế. Khi báo lỗi,
+hãy gửi:
 
 - Hệ điều hành, phiên bản và kiến trúc máy.
-- Tên tệp đã cài.
+- Tên tệp cài và SHA-256 nếu có thể.
 - Các bước tái hiện, kết quả mong đợi và kết quả thực tế.
-- Ảnh chụp hoặc log đã xóa tên riêng, đường dẫn nhạy cảm, API key, OAuth token và nội dung riêng tư.
+- Ảnh hoặc log đã xóa tên riêng, đường dẫn nhạy cảm và thông tin đăng nhập.
 
-Đặc biệt mong nhận phản hồi từ người dùng Windows ARM64, Mac Apple Silicon/Intel và Linux x64/ARM64 vì các target này đang thiếu smoke trên máy người dùng.
+Liên kết hỗ trợ:
 
-### Miễn trừ trách nhiệm
+- [GitHub Issues](https://github.com/LucDinhLe/hermes-agent-vietnamese/issues)
+- [README tiếng Việt](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md)
+- [Hướng dẫn cài Windows bằng ảnh](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/70b2418fdb2b35a714d4a813c6894cdbbec0a370/docs/cai-dat-windows-bang-anh.md)
+- [SECURITY.md](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/SECURITY.md)
+- [Mốc quay lui vi-v0.20.4-39](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.4-39)
+- [Workflow dựng và staging](https://github.com/LucDinhLe/hermes-agent-vietnamese/actions/runs/32644972843)
+- [Workflow promotion và hậu kiểm](https://github.com/LucDinhLe/hermes-agent-vietnamese/actions/runs/32653363289)
 
-Phần mềm được cung cấp **theo nguyên trạng**, không kèm bảo hành rõ ràng hoặc ngụ ý, theo giấy phép MIT. Dự án không bảo đảm phần mềm luôn không có lỗi, phù hợp với mọi mục đích, kết quả AI luôn chính xác hoặc dịch vụ, model và giá của bên thứ ba luôn được duy trì.
+Phần mềm được cung cấp theo nguyên trạng theo giấy phép MIT, không kèm bảo hành.
+Người dùng chịu trách nhiệm kiểm tra kết quả, quyền đã cấp, dữ liệu đã gửi và
+chi phí dịch vụ trước khi cho Agent thực hiện thao tác quan trọng.
 
-Bạn chịu trách nhiệm kiểm tra kết quả, quyền đã cấp, chi phí dịch vụ và hậu quả trước khi cho agent thực hiện thao tác quan trọng, gửi dữ liệu, chạy lệnh, sửa hoặc xóa tệp. Trong phạm vi pháp luật cho phép và theo giấy phép MIT, tác giả cùng chủ sở hữu bản quyền không chịu trách nhiệm đối với khiếu nại, thiệt hại hoặc nghĩa vụ phát sinh từ phần mềm hay việc sử dụng phần mềm.
+---
 
-Đọc đầy đủ [LICENSE](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/LICENSE), [miễn trừ trách nhiệm](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/DISCLAIMER.md), [chính sách ký mã](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/CODE_SIGNING_POLICY.md) và [hướng dẫn cài đặt tiếng Việt](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md).
-
-### Bằng chứng phát hành và quay lui
-
-- [Native staging và đóng gói](https://github.com/LucDinhLe/hermes-agent-vietnamese/actions/runs/31928640061)
-- [Install/update E2E](https://github.com/LucDinhLe/hermes-agent-vietnamese/actions/runs/31928640288)
-- [Promotion và hậu kiểm byte công khai](https://github.com/LucDinhLe/hermes-agent-vietnamese/actions/runs/31931684926)
-- Rollback: quay lại [vi-v0.20.0-14](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-14).
-
-Các candidate v15–v24 không được công khai.
+**Cập nhật metadata ngày 24/08/2026:** bổ sung phần giới thiệu, so sánh, ảnh
+hướng dẫn Windows và hướng dẫn sử dụng; rút gọn tiêu đề hiển thị, làm rõ cách
+Agents cộng tác trong từng phiên và chọn v31.0 làm bản tải mặc định/Latest theo
+quyết định của chủ dự án. Tag, commit, 31 asset, kích thước và checksum của bản
+phát hành không thay đổi.

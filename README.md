@@ -13,10 +13,14 @@ Hermes Vietnamese đóng gói phần lõi đó thành trải nghiệm Desktop Vi
 Dự án được phát triển từ [Hermes Agent](https://github.com/NousResearch/hermes-agent) của Nous Research theo [giấy phép MIT](LICENSE), do [Lê Đình Lực](https://github.com/LucDinhLe) phát triển và duy trì như một dự án cá nhân vì cộng đồng. Đây là bản phân phối độc lập, không phải bản phát hành chính thức của Nous Research, OpenAI, Anthropic, Google, Microsoft hoặc Apple.
 
 <p align="center">
-  <a href="https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-25"><img src="https://img.shields.io/badge/Tải_bản_vi--v0.20.0--25-Windows_%7C_macOS_%7C_Linux-F97316?style=for-the-badge" alt="Tải Hermes Vietnamese"></a>
+  <a href="https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.31.0-7"><img src="https://img.shields.io/badge/Tải_bản_vi--v0.31.0--7-Windows_%7C_macOS_%7C_Linux-F97316?style=for-the-badge" alt="Tải Hermes Vietnamese"></a>
   <a href="README.vi.md"><img src="https://img.shields.io/badge/Hướng_dẫn-Cài_đặt_%26_kết_nối-DC2626?style=for-the-badge" alt="Hướng dẫn cài đặt và kết nối"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/Giấy_phép-MIT-16A34A?style=for-the-badge" alt="Giấy phép MIT"></a>
 </p>
+
+> **Bản tải mặc định/Latest: [Hermes Vietnamese v31.0](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.31.0-7)** (`vi-v0.31.0-7`) là **community pilot công khai, chưa phải stable**. Windows x64 đã vượt exact-artifact smoke bằng đúng bộ cài đang phát hành; Windows ARM64, macOS và Linux là các bản native `BUILD-ONLY-PILOT` đang chờ thêm kiểm thử máy thật. Các bộ cài hiện chưa ký số.
+>
+> Tải bản hiện tại: [Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Windows-x64-Setup.exe) · [Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Windows-arm64-Setup.exe) · [macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) · [macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-macOS-Intel.dmg) · [Linux x64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-x64.deb) · [Linux ARM64 DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-arm64.deb) · [Linux x64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-x64.rpm) · [Linux ARM64 RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-arm64.rpm) · [Linux x64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-x64.AppImage) · [Linux ARM64 AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-arm64.AppImage).
 
 ## Điểm mạnh so với cách tự cài Hermes Agent từ mã nguồn
 
@@ -36,9 +40,9 @@ Hermes Vietnamese không tặng kèm model AI, tài khoản trả phí hoặc h�
 
 ### Bước 1. Tải về và cài đặt
 
-> **Bản tải mặc định hiện tại:** [vi-v0.20.0-25](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-25), bản pilot cộng đồng. Windows x64 đã được cài thử bằng chính artifact công khai; năm target còn lại đã build native nhưng đang chờ thêm phản hồi máy thật. Các bộ cài hiện chưa ký số.
+> **Bản tải mặc định hiện tại:** [vi-v0.31.0-7](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.31.0-7), bản pilot cộng đồng. Windows x64 đã được cài thử bằng chính artifact công khai; năm target còn lại đã build native nhưng đang chờ thêm phản hồi máy thật. Các bộ cài hiện chưa ký số.
 
-Mở [trang phát hành vi-v0.20.0-25](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.20.0-25), chọn đúng tệp cho máy và chạy bộ cài. Trong lần mở đầu tiên:
+Mở [trang phát hành vi-v0.31.0-7](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.31.0-7), chọn đúng tệp cho máy và chạy bộ cài. Trong lần mở đầu tiên:
 
 1. Chọn **Tiếng Việt** hoặc **English**.
 2. Chọn cài Hermes trên máy.
@@ -50,16 +54,16 @@ Người dùng kỹ thuật có thể xem mã trình cài Windows tại [`script
 
 | Máy đang dùng                | Tải trực tiếp                                                                                                                                                |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Windows 10/11, chip x64      | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Windows-x64-Setup.exe)           |
-| Windows 10/11, chip ARM64    | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Windows-arm64-Setup.exe)       |
-| Mac dùng chip Apple M-series | [Bộ cài macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
-| Mac dùng chip Intel          | [Bộ cài macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-macOS-Intel.dmg)                 |
-| Ubuntu/Debian x64            | [Gói Linux x64 `.deb`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-x64.deb)                 |
-| Ubuntu/Debian ARM64          | [Gói Linux ARM64 `.deb`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-arm64.deb)             |
-| Fedora/RHEL x64              | [Gói Linux x64 `.rpm`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-x64.rpm)                 |
-| Fedora/RHEL ARM64            | [Gói Linux ARM64 `.rpm`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-arm64.rpm)             |
-| Linux khác x64               | [Gói Linux x64 `.AppImage`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-x64.AppImage)       |
-| Linux khác ARM64             | [Gói Linux ARM64 `.AppImage`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.20.0-25/Hermes-Vietnamese-Linux-arm64.AppImage)   |
+| Windows 10/11, chip x64      | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Windows-x64-Setup.exe)           |
+| Windows 10/11, chip ARM64    | [Bộ cài Windows ARM64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Windows-arm64-Setup.exe)       |
+| Mac dùng chip Apple M-series | [Bộ cài macOS Apple Silicon](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
+| Mac dùng chip Intel          | [Bộ cài macOS Intel](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-macOS-Intel.dmg)                 |
+| Ubuntu/Debian x64            | [Gói Linux x64 `.deb`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-x64.deb)                 |
+| Ubuntu/Debian ARM64          | [Gói Linux ARM64 `.deb`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-arm64.deb)             |
+| Fedora/RHEL x64              | [Gói Linux x64 `.rpm`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-x64.rpm)                 |
+| Fedora/RHEL ARM64            | [Gói Linux ARM64 `.rpm`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-arm64.rpm)             |
+| Linux khác x64               | [Gói Linux x64 `.AppImage`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-x64.AppImage)       |
+| Linux khác ARM64             | [Gói Linux ARM64 `.AppImage`](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.31.0-7/Hermes-Vietnamese-Linux-arm64.AppImage)   |
 
 > **Windows báo `isn't commonly downloaded` hoặc chỉ hiện nút Delete?** Xem [hướng dẫn cài Windows từng bước bằng hình ảnh](docs/cai-dat-windows-bang-anh.md). Tệp sẽ không tự tiếp tục nếu chỉ chờ; người dùng cần mở **See more**, bấm mũi tên cạnh **Delete** và chọn **Keep anyway**.
 

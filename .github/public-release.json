@@ -1,11 +1,11 @@
 {
-  "tag": "vi-v0.20.0-25",
-  "rollbackTag": "vi-v0.20.0-14",
+  "tag": "vi-v0.31.0-7",
+  "rollbackTag": "vi-v0.20.4-39",
   "releaseClass": "community-pilot",
   "windowsX64": {
     "filename": "Hermes-Vietnamese-Windows-x64-Setup.exe",
-    "size": 332776297,
-    "sha256": "0f31c4a23bbb7913300b3f3571ad346aae517d367705a965d451a1febf620e59"
+    "size": 340302846,
+    "sha256": "cca0f3c0255e5e8736676a4d7ccb52c6e1b75eb73b94b8d1c3ca5dc91e57e840"
   },
   "windowsInstallImages": [
     "edge-warning-see-more-v25.jpg",
