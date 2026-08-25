@@ -8,22 +8,40 @@ fallback and no required phase can be reported as skipped.
 
 ## Safety boundary
 
-The host runner hashes and stages the three installer inputs and then launches
-only `WindowsSandbox.exe`. It never launches Hermes, Playwright, an installer,
-or an uninstaller on the host.
+The runner hashes and stages the three installer inputs and accepts exactly two
+disposable boundaries:
+
+- local `WindowsSandbox.exe`, where the host never launches Hermes,
+  Playwright, an installer, or an uninstaller; or
+- the repository's `windows-2025` GitHub-hosted runner, where the complete
+  machine is a GitHub-provisioned ephemeral VM and the lifecycle script is the
+  only workload after checkout, dependency staging, and artifact download.
+
+There is no workstation-host mode and no self-hosted-runner fallback.
 
 The generated Windows Sandbox configuration has networking, clipboard, GPU,
 audio/video input, and printer redirection disabled. Installer inputs, a frozen
 tracked-source snapshot, and the supplied Node runtime are mapped read-only.
 Only a new evidence directory is writable. The live repository is never
-mapped: the host extracts `git archive <candidate-commit>`, physically copies
+mapped: the runner extracts `git archive <harness-commit>`, physically copies
 only the link-free `@playwright/test`, `playwright`, and `playwright-core`
 package trees beneath its `node_modules`, rejects every link/junction, and
 fingerprints the complete snapshot before and after the run. Ignored `.env`,
 MCP/Codex config, keys, logs, and private workspace files therefore cannot
-enter the guest through the source mapping. The guest runner additionally
-requires all of the
-following before it touches an installer:
+enter the guest through the source mapping.
+
+The GitHub-hosted lane enforces `GITHUB_ACTIONS=true`,
+`RUNNER_ENVIRONMENT=github-hosted`, `RUNNER_OS=Windows`, x64, Node 26+, and a
+reported hypervisor/virtual-machine model. Before it starts the lifecycle, the
+host process removes credential-shaped variables plus Git/SSH/npm credential
+channels. The guest creates outbound block rules for both `Internet` and
+`LocalSubnet` scopes for all three installers, `Hermes.exe`, and every resident
+Node/Python/Codex executable under the installed app. Loopback remains
+available only for the mock-provider test. Those rules remain active until the
+ephemeral VM is discarded.
+
+Both lanes additionally require all of the following before an installer is
+allowed to run:
 
 - the portable Node runtime matches `v26.5.1`, `win32/x64`, and the
   `win-x64/node.exe` SHA-256 from the official
@@ -35,26 +53,27 @@ following before it touches an installer:
 - any changed dependency byte stops the harness before the guest mapping; the
   verified fingerprints are sealed into `host-launch.json`;
 
-- the `WDAGUtilityAccount` identity, profile, SID class, and a virtualized
-  machine boundary;
-- an HKCU isolation probe showing the current hive belongs to the guest SID,
-  the volatile profile is the disposable guest, and no foreign interactive
-  user hive is loaded;
+- the expected isolated account/profile, matching HKCU SID, a virtualized
+  machine boundary, and no foreign interactive user hive (`WDAGUtilityAccount`
+  specifically for Windows Sandbox; the current GitHub runner account for the
+  hosted VM);
 - no pre-existing Hermes process or Hermes product/uninstall registration;
-- no active network adapter;
+- either no active network adapter (Sandbox) or verified product-scoped
+  Internet/LAN firewall rules (GitHub-hosted VM);
 - no credential-shaped environment variable after scrubbing;
 - the exact expected size and SHA-256 for all three staged NSIS files.
 
-If Windows Sandbox is unavailable, the command exits non-zero. Use a separate,
-disposable Windows x64 VM and adapt the guest runner only if that VM provides an
-equivalent externally verified snapshot boundary. Never run `guest.ps1`
-directly on a workstation: its final action powers off its disposable guest.
+If neither approved boundary is present, the command exits non-zero. Never run
+`guest.ps1` directly on a workstation. Its mode is sealed into the manifest;
+Sandbox powers itself off, while the hosted lane relies on GitHub's mandatory
+post-job VM destruction.
 
 ## Pinned inputs
 
 The harness fixes these product lanes in code:
 
-- candidate: `vi-v0.32.0-1`, with its full 40-character source commit;
+- candidate: `vi-v0.32.0-1`, source commit
+  `81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f`;
 - update source: `vi-v0.31.0-7`, commit
   `70b2418fdb2b35a714d4a813c6894cdbbec0a370`, 340,302,846 bytes, SHA-256
   `cca0f3c0255e5e8736676a4d7ccb52c6e1b75eb73b94b8d1c3ca5dc91e57e840`;
@@ -71,18 +90,20 @@ record the same commit/hash plus the byte size and product display version.
 These values are constants in the harness, not labels derived from CLI input.
 
 Supply the published or independently recorded SHA-256 for every installer.
-The three files must be distinct byte streams. The repository `HEAD` must equal
-the candidate commit and the checkout must be completely clean, including
-untracked files. Before mapping the checkout, the host also uses the release
-builder's ignored-input probe to reject local `.env` files and ignored source
-shadows that ordinary `git status` cannot see. This binds the mapped Playwright
-tests and guest runner to the same committed inputs used for the one candidate
-build without mapping local credentials. The same HEAD/status/ignored-input
-guard runs again after receipt verification and before the host can write PASS;
-the frozen mapped snapshot also must retain its exact file count and tree hash.
+The three files must be distinct byte streams. Candidate provenance stays
+locked to the immutable build commit above. The descriptor separately records
+`harnessCommit`, because post-build validation fixes may change tests without
+changing or relabeling candidate bytes. Repository `HEAD` must equal that
+harness commit and the checkout must be completely clean, including untracked
+files. Before mapping the checkout, the runner also uses the release builder's
+ignored-input probe to reject local `.env` files and ignored source shadows
+that ordinary `git status` cannot see. The same
+HEAD/status/ignored-input guard runs again after receipt verification and
+before the runner can write PASS; the frozen mapped snapshot also must retain
+its exact file count and tree hash.
 
 The evidence root itself may not be a symlink or junction. Before creating the
-Sandbox configuration, canonical real paths are compared against the checkout,
+isolated manifest, canonical real paths are compared against the checkout,
 Node runtime, installer directories, home/temp roots, and staged input; aliases
 or overlaps fail before any writable mapping is opened.
 
@@ -93,13 +114,14 @@ checkout. The run is offline and must not install dependencies.
 ## Run after the one candidate build
 
 Choose a new evidence directory outside the checkout and the Node runtime. From
-the clean candidate checkout, run:
+the clean harness checkout, run the local Sandbox lane:
 
 ```powershell
 & 'C:\pinned\node-26-x64\node.exe' scripts/windows-lifecycle-acceptance/run.mjs `
   --candidate 'D:\release-inputs\Hermes-0.32.0-vi.1-win-x64.exe' `
   --candidate-sha256 '<64-lowercase-hex>' `
-  --candidate-commit '<40-lowercase-hex>' `
+  --candidate-commit '81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f' `
+  --harness-commit '<current-clean-HEAD-40-lowercase-hex>' `
   --previous 'D:\release-inputs\Hermes-vi-v0.31.0-7-win-x64.exe' `
   --previous-sha256 'cca0f3c0255e5e8736676a4d7ccb52c6e1b75eb73b94b8d1c3ca5dc91e57e840' `
   --rollback 'D:\release-inputs\Hermes-vi-v0.20.4-39-win-x64.exe' `
@@ -108,9 +130,17 @@ the clean candidate checkout, run:
   --evidence-dir 'D:\hermes-evidence\v32-lifecycle-001'
 ```
 
+The hosted lane is dispatched only through
+`.github/workflows/runtime-smoke-vietnamese.yml` with tag `vi-v0.32.0-1`,
+release class `community-prerelease`, and the exact candidate SHA-256. It uses
+the dispatched branch SHA as `harnessCommit`, downloads the candidate from the
+private draft plus the two pinned public rollback inputs, and uploads the full
+evidence tree even on a fail-closed result.
+
 The default timeout is 90 minutes. `--timeout-minutes` accepts 15 through 240.
 Keep the Sandbox window open until it powers itself off and the host reports a
-passed receipt.
+passed receipt. The GitHub-hosted lane is non-interactive and ends only after
+the validated receipt or a hard failure/timeout.
 
 ## Required lifecycle
 
@@ -188,6 +218,7 @@ $tokens = $null
 if ($errors.Count -ne 0) { throw ($errors | Out-String) }
 ```
 
-The unit tests cover exact artifact binding, fail-closed host support, the
-read-only/writable Sandbox mapping boundary, and rejection of missing/skipped
-gates or malformed evidence manifests.
+The unit tests cover exact artifact binding, candidate/harness commit
+separation, fail-closed support for both approved VM modes, the read-only/
+writable Sandbox mapping boundary, and rejection of missing/skipped gates or
+malformed evidence manifests.

@@ -12,9 +12,11 @@ import {
   ROLLBACK_TAG,
   V31_SOURCE_COMMIT,
   V31_SOURCE_TAG,
+  V32_CANDIDATE_COMMIT,
   V32_CANDIDATE_TAG,
   WINDOWS_LIFECYCLE_NODE_SHA256,
   WINDOWS_LIFECYCLE_NODE_VERSION,
+  assertSupportedGithubHostedWindowsRunner,
   assertSupportedWindowsSandboxHost,
   buildWindowsSandboxConfig,
   validateLifecycleDescriptor,
@@ -35,15 +37,16 @@ function usage() {
   return `Usage:
   node scripts/windows-lifecycle-acceptance/run.mjs \\
     --candidate <v32 NSIS.exe> --candidate-sha256 <sha256> \\
-    --candidate-commit <40-char-sha> \\
+    --candidate-commit <40-char-sha> --harness-commit <40-char-sha> \\
     --previous <vi-v0.31.0-7 NSIS.exe> --previous-sha256 <sha256> \\
     --rollback <vi-v0.20.4-39 NSIS.exe> --rollback-sha256 <sha256> \\
     --node-runtime-dir <pinned Node 26 x64 directory> \\
-    --evidence-dir <new or empty directory>
+    --evidence-dir <new or empty directory> \\
+    [--isolation-mode windows-sandbox|github-hosted-ephemeral-vm]
 
-This command launches Windows Sandbox with networking and clipboard disabled.
-It never falls back to installing on the host. Tags are fixed to
-${V32_CANDIDATE_TAG}, ${V31_SOURCE_TAG}, and ${ROLLBACK_TAG}.`
+This command runs only in Windows Sandbox or a GitHub-hosted ephemeral Windows
+VM. It never falls back to a workstation install. Candidate commit and tags are fixed to
+${V32_CANDIDATE_COMMIT}, ${V32_CANDIDATE_TAG}, ${V31_SOURCE_TAG}, and ${ROLLBACK_TAG}.`
 }
 
 function parseArgs(argv) {
@@ -64,6 +67,7 @@ function parseArgs(argv) {
     'candidate',
     'candidate-sha256',
     'candidate-commit',
+    'harness-commit',
     'previous',
     'previous-sha256',
     'rollback',
@@ -71,7 +75,7 @@ function parseArgs(argv) {
     'node-runtime-dir',
     'evidence-dir'
   ]
-  const allowed = new Set([...required, 'timeout-minutes'])
+  const allowed = new Set([...required, 'isolation-mode', 'timeout-minutes'])
   for (const key of values.keys()) {
     if (!allowed.has(key)) throw new Error(`unknown option: --${key}`)
   }
@@ -83,12 +87,18 @@ function parseArgs(argv) {
   if (!Number.isFinite(timeoutMinutes) || timeoutMinutes < 15 || timeoutMinutes > 240) {
     throw new Error('--timeout-minutes must be between 15 and 240')
   }
+  const isolationMode = values.get('isolation-mode') || 'windows-sandbox'
+  if (!['windows-sandbox', 'github-hosted-ephemeral-vm'].includes(isolationMode)) {
+    throw new Error('--isolation-mode must be windows-sandbox or github-hosted-ephemeral-vm')
+  }
 
   return {
     candidate: path.resolve(values.get('candidate')),
     candidateCommit: values.get('candidate-commit'),
     candidateSha256: values.get('candidate-sha256').toLowerCase(),
     evidenceDir: path.resolve(values.get('evidence-dir')),
+    harnessCommit: values.get('harness-commit'),
+    isolationMode,
     nodeRuntimeDir: path.resolve(values.get('node-runtime-dir')),
     previous: path.resolve(values.get('previous')),
     previousSha256: values.get('previous-sha256').toLowerCase(),
@@ -190,6 +200,36 @@ function runChecked(command, args, options = {}) {
   return result.stdout.trim()
 }
 
+function inspectWindowsVirtualMachine() {
+  const output = runChecked('powershell.exe', [
+    '-NoLogo',
+    '-NoProfile',
+    '-NonInteractive',
+    '-Command',
+    '$system = Get-CimInstance Win32_ComputerSystem; [pscustomobject]@{ hypervisorPresent = [bool]$system.HypervisorPresent; model = [string]$system.Model } | ConvertTo-Json -Compress'
+  ])
+  const result = JSON.parse(output)
+  return { hypervisorPresent: result.hypervisorPresent === true, model: String(result.model || '') }
+}
+
+function scrubCredentialEnvironment(environment) {
+  const denied = /(?:api[_-]?key|token|secret|password|credential|cookie|authorization)/i
+  const deniedExact = new Set([
+    'GITHUB_ENV',
+    'GITHUB_OUTPUT',
+    'GITHUB_PATH',
+    'GITHUB_STEP_SUMMARY',
+    'GIT_ASKPASS',
+    'NPM_CONFIG_USERCONFIG',
+    'SSH_AUTH_SOCK'
+  ])
+  return Object.fromEntries(
+    Object.entries(environment).filter(
+      ([name, value]) => value !== undefined && !denied.test(name) && !deniedExact.has(name)
+    )
+  )
+}
+
 function assertCandidateCheckout(guard) {
   const head = runChecked('git', ['-C', REPO_ROOT, 'rev-parse', 'HEAD'])
   const dirty = runChecked('git', ['-C', REPO_ROOT, 'status', '--porcelain=v1', '--untracked-files=all'])
@@ -225,19 +265,21 @@ async function waitForReceipt({ child, descriptor, evidenceDir, timeoutMs }) {
       try {
         receipt = JSON.parse(fs.readFileSync(resultPath, 'utf8'))
       } catch (error) {
-        throw new Error(`Sandbox result is invalid JSON: ${error instanceof Error ? error.message : String(error)}`)
+        throw new Error(
+          `isolated lifecycle result is invalid JSON: ${error instanceof Error ? error.message : String(error)}`
+        )
       }
       const validated = validateLifecycleReceipt(receipt, descriptor)
       return { ...validated, evidence: verifyEvidenceFiles(evidenceDir, receipt) }
     }
     if (exit && Date.now() - exit.time > 10_000) {
       throw new Error(
-        `Windows Sandbox exited before producing a valid receipt (code=${exit.code}, signal=${exit.signal})`
+        `isolated lifecycle runner exited before producing a valid receipt (code=${exit.code}, signal=${exit.signal})`
       )
     }
     await new Promise(resolve => setTimeout(resolve, 1000))
   }
-  throw new Error(`Windows Sandbox lifecycle acceptance timed out after ${Math.round(timeoutMs / 60_000)} minutes`)
+  throw new Error(`isolated Windows lifecycle acceptance timed out after ${Math.round(timeoutMs / 60_000)} minutes`)
 }
 
 async function main() {
@@ -249,12 +291,25 @@ async function main() {
 
   const windowsDir = process.env.WINDIR || 'C:\\Windows'
   const sandboxExe = path.join(windowsDir, 'System32', 'WindowsSandbox.exe')
-  assertSupportedWindowsSandboxHost({
-    arch: process.arch,
-    nodeVersion: process.version,
-    platform: process.platform,
-    sandboxExecutableExists: fs.statSync(sandboxExe, { throwIfNoEntry: false })?.isFile() === true
-  })
+  const hostVirtualMachine = inspectWindowsVirtualMachine()
+  if (args.isolationMode === 'windows-sandbox') {
+    assertSupportedWindowsSandboxHost({
+      arch: process.arch,
+      nodeVersion: process.version,
+      platform: process.platform,
+      sandboxExecutableExists: fs.statSync(sandboxExe, { throwIfNoEntry: false })?.isFile() === true
+    })
+  } else {
+    assertSupportedGithubHostedWindowsRunner({
+      arch: process.arch,
+      githubActions: process.env.GITHUB_ACTIONS,
+      ...hostVirtualMachine,
+      nodeVersion: process.version,
+      platform: process.platform,
+      runnerEnvironment: process.env.RUNNER_ENVIRONMENT,
+      runnerOs: process.env.RUNNER_OS
+    })
+  }
 
   const portableNode = path.join(args.nodeRuntimeDir, 'node.exe')
   if (!fs.statSync(portableNode, { throwIfNoEntry: false })?.isFile()) {
@@ -274,14 +329,26 @@ async function main() {
   if (portablePlatform !== 'win32/x64') {
     throw new Error(`pinned Node runtime must be Windows x64, got ${portablePlatform}`)
   }
-  assertSupportedWindowsSandboxHost({
-    arch: 'x64',
-    nodeVersion: portableVersion,
-    platform: 'win32',
-    sandboxExecutableExists: true
-  })
+  if (args.isolationMode === 'windows-sandbox') {
+    assertSupportedWindowsSandboxHost({
+      arch: 'x64',
+      nodeVersion: portableVersion,
+      platform: 'win32',
+      sandboxExecutableExists: true
+    })
+  } else {
+    assertSupportedGithubHostedWindowsRunner({
+      arch: 'x64',
+      githubActions: process.env.GITHUB_ACTIONS,
+      ...hostVirtualMachine,
+      nodeVersion: portableVersion,
+      platform: 'win32',
+      runnerEnvironment: process.env.RUNNER_ENVIRONMENT,
+      runnerOs: process.env.RUNNER_OS
+    })
+  }
 
-  const checkoutGuard = createLocalCandidateProvenanceGuard({ expectedCommit: args.candidateCommit })
+  const checkoutGuard = createLocalCandidateProvenanceGuard({ expectedCommit: args.harnessCommit })
   assertCandidateCheckout(checkoutGuard)
   assertEmptyEvidenceDirectory(args.evidenceDir)
   assertEvidenceBoundary(args.evidenceDir, [
@@ -297,6 +364,7 @@ async function main() {
   const runId = crypto.randomUUID()
   const descriptor = validateLifecycleDescriptor({
     candidate: inspectInstaller(args.candidate, args.candidateSha256, V32_CANDIDATE_TAG, args.candidateCommit),
+    harnessCommit: args.harnessCommit,
     previous: inspectInstaller(args.previous, args.previousSha256, V31_SOURCE_TAG, V31_SOURCE_COMMIT),
     releaseClass: 'community-prerelease',
     rollback: inspectInstaller(args.rollback, args.rollbackSha256, ROLLBACK_TAG, ROLLBACK_COMMIT),
@@ -310,7 +378,7 @@ async function main() {
     const repoSnapshotDir = path.join(inputDir, 'repo-snapshot')
     stageTrackedSnapshot({
       destination: repoSnapshotDir,
-      expectedCommit: args.candidateCommit,
+      expectedCommit: args.harnessCommit,
       repoRoot: REPO_ROOT
     })
     const dependencyPackages = stagePlaywrightDependencies({
@@ -347,28 +415,40 @@ async function main() {
       }
     }
 
+    const hostedPaths = {
+      candidate: guestInputs.candidate,
+      evidence: args.evidenceDir,
+      nodeRuntime: args.nodeRuntimeDir,
+      previous: guestInputs.previous,
+      repo: repoSnapshotDir,
+      rollback: guestInputs.rollback
+    }
+    const sandboxPaths = {
+      candidate: 'C:\\HermesHarness\\Input\\candidate.exe',
+      evidence: 'C:\\HermesHarness\\Evidence',
+      nodeRuntime: 'C:\\HermesHarness\\Node',
+      previous: 'C:\\HermesHarness\\Input\\previous.exe',
+      repo: 'C:\\HermesHarness\\Repo',
+      rollback: 'C:\\HermesHarness\\Input\\rollback.exe'
+    }
     const guestManifest = {
       ...descriptor,
-      paths: {
-        candidate: 'C:\\HermesHarness\\Input\\candidate.exe',
-        evidence: 'C:\\HermesHarness\\Evidence',
-        nodeRuntime: 'C:\\HermesHarness\\Node',
-        previous: 'C:\\HermesHarness\\Input\\previous.exe',
-        repo: 'C:\\HermesHarness\\Repo',
-        rollback: 'C:\\HermesHarness\\Input\\rollback.exe'
-      }
+      isolation: { mechanism: args.isolationMode },
+      paths: args.isolationMode === 'windows-sandbox' ? sandboxPaths : hostedPaths
     }
     writeJsonAtomic(path.join(inputDir, 'manifest.json'), guestManifest)
-    fs.writeFileSync(
-      path.join(inputDir, 'lifecycle.wsb'),
-      buildWindowsSandboxConfig({
-        evidenceDir: args.evidenceDir,
-        inputDir,
-        nodeRuntimeDir: args.nodeRuntimeDir,
-        repoSnapshotDir
-      }),
-      'utf8'
-    )
+    if (args.isolationMode === 'windows-sandbox') {
+      fs.writeFileSync(
+        path.join(inputDir, 'lifecycle.wsb'),
+        buildWindowsSandboxConfig({
+          evidenceDir: args.evidenceDir,
+          inputDir,
+          nodeRuntimeDir: args.nodeRuntimeDir,
+          repoSnapshotDir
+        }),
+        'utf8'
+      )
+    }
     const expectedPath = path.join(args.evidenceDir, 'expected-lifecycle.json')
     const hostLaunchPath = path.join(args.evidenceDir, 'host-launch.json')
     writeJsonAtomic(expectedPath, descriptor)
@@ -384,8 +464,12 @@ async function main() {
       rollback: descriptor.rollback,
       runId,
       schemaVersion: 1,
+      isolation: {
+        mechanism: args.isolationMode,
+        ...(args.isolationMode === 'github-hosted-ephemeral-vm' ? hostVirtualMachine : {})
+      },
       sourceSnapshot: {
-        commit: args.candidateCommit,
+        commit: args.harnessCommit,
         dependencyPackages,
         fileCount: snapshotFingerprint.fileCount,
         sha256: snapshotFingerprint.sha256
@@ -393,11 +477,35 @@ async function main() {
       startedAt: new Date().toISOString()
     })
 
-    sandbox = spawn(sandboxExe, [path.join(inputDir, 'lifecycle.wsb')], {
-      detached: false,
-      stdio: 'ignore',
-      windowsHide: false
-    })
+    if (args.isolationMode === 'windows-sandbox') {
+      sandbox = spawn(sandboxExe, [path.join(inputDir, 'lifecycle.wsb')], {
+        detached: false,
+        stdio: 'ignore',
+        windowsHide: false
+      })
+    } else {
+      const powerShell = path.join(windowsDir, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+      sandbox = spawn(
+        powerShell,
+        [
+          '-NoLogo',
+          '-NoProfile',
+          '-NonInteractive',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          path.join(inputDir, 'guest.ps1'),
+          '-ManifestPath',
+          path.join(inputDir, 'manifest.json')
+        ],
+        {
+          detached: false,
+          env: scrubCredentialEnvironment(process.env),
+          stdio: 'inherit',
+          windowsHide: true
+        }
+      )
+    }
     const validated = await waitForReceipt({
       child: sandbox,
       descriptor,

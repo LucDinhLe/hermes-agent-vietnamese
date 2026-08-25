@@ -2,6 +2,7 @@ const SHA256_RE = /^[0-9a-f]{64}$/
 const COMMIT_RE = /^[0-9a-f]{40}$/
 
 export const V32_CANDIDATE_TAG = 'vi-v0.32.0-1'
+export const V32_CANDIDATE_COMMIT = '81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f'
 export const V31_SOURCE_TAG = 'vi-v0.31.0-7'
 export const ROLLBACK_TAG = 'vi-v0.20.4-39'
 export const V31_SOURCE_COMMIT = '70b2418fdb2b35a714d4a813c6894cdbbec0a370'
@@ -18,7 +19,7 @@ export const WINDOWS_LIFECYCLE_NODE_SHA256 = 'b48b0224081224cda1f49374e2fc63d143
 
 export const REQUIRED_LIFECYCLE_GATES = Object.freeze([
   'isolatedGuest',
-  'networkDisabled',
+  'networkIsolation',
   'exactInputs',
   'noCredentialInheritance',
   'freshInstall',
@@ -117,8 +118,13 @@ export function validateLifecycleDescriptor(descriptor) {
     throw new Error('runId must be a generated lowercase identifier')
   }
 
+  const harnessCommit = requireString(descriptor.harnessCommit, 'harnessCommit')
+  if (!COMMIT_RE.test(harnessCommit)) {
+    throw new Error('harnessCommit must be a full lowercase 40-character commit SHA')
+  }
+
   const candidate = validateArtifact(descriptor.candidate, 'candidate', V32_CANDIDATE_TAG, {
-    requireCommit: true
+    expectedCommit: V32_CANDIDATE_COMMIT
   })
   const previous = validateArtifact(descriptor.previous, 'previous', V31_SOURCE_TAG, {
     expectedCommit: V31_SOURCE_COMMIT,
@@ -138,6 +144,7 @@ export function validateLifecycleDescriptor(descriptor) {
 
   return Object.freeze({
     candidate,
+    harnessCommit,
     previous,
     releaseClass: descriptor.releaseClass,
     rollback,
@@ -160,6 +167,36 @@ export function assertSupportedWindowsSandboxHost({ arch, nodeVersion, platform,
   }
   if (!sandboxExecutableExists) {
     throw new Error('Windows Sandbox is unavailable; lifecycle acceptance cannot run safely on this host')
+  }
+  return true
+}
+
+export function assertSupportedGithubHostedWindowsRunner({
+  arch,
+  githubActions,
+  hypervisorPresent,
+  model,
+  nodeVersion,
+  platform,
+  runnerEnvironment,
+  runnerOs
+}) {
+  if (platform !== 'win32' || arch !== 'x64') {
+    throw new Error(`GitHub hosted lifecycle acceptance requires win32/x64, got ${platform}/${arch}`)
+  }
+  const major = Number(
+    String(nodeVersion || '')
+      .replace(/^v/, '')
+      .split('.')[0]
+  )
+  if (!Number.isInteger(major) || major < 26) {
+    throw new Error(`GitHub hosted lifecycle acceptance requires Node 26+, got ${nodeVersion || '(missing)'}`)
+  }
+  if (githubActions !== 'true' || runnerEnvironment !== 'github-hosted' || runnerOs !== 'Windows') {
+    throw new Error('lifecycle runner did not prove the GitHub-hosted Windows environment contract')
+  }
+  if (hypervisorPresent !== true && !/virtual/i.test(String(model || ''))) {
+    throw new Error('GitHub-hosted lifecycle runner did not prove a virtual-machine boundary')
   }
   return true
 }
@@ -280,22 +317,56 @@ export function validateLifecycleReceipt(receipt, descriptor) {
   if (receipt.status !== 'passed') {
     throw new Error(`lifecycle result is not passed: ${receipt.status || '(missing)'}`)
   }
-  if (receipt.isolation?.mechanism !== 'windows-sandbox') {
-    throw new Error('lifecycle result did not prove Windows Sandbox isolation')
+  if (receipt.harnessCommit !== expected.harnessCommit) {
+    throw new Error('lifecycle result does not match the expected validation harness commit')
   }
-  if (receipt.isolation?.guestUser !== 'WDAGUtilityAccount') {
-    throw new Error('lifecycle result did not run as the Windows Sandbox guest account')
-  }
-  if (receipt.isolation?.networkDisabled !== true || receipt.isolation?.hostRegistryReachable !== false) {
-    throw new Error('lifecycle result did not prove the required network/registry boundary')
-  }
-  if (
-    receipt.isolation?.registryProbe?.kind !== 'loaded-user-hives-and-volatile-profile' ||
-    receipt.isolation?.registryProbe?.currentHiveMatchesGuestSid !== true ||
-    receipt.isolation?.registryProbe?.foreignInteractiveUserHiveCount !== 0 ||
-    receipt.isolation?.registryProbe?.volatileProfileIsDisposableGuest !== true
-  ) {
-    throw new Error('lifecycle result did not include the active guest-registry isolation probe')
+
+  const isolation = receipt.isolation
+  if (isolation?.mechanism === 'windows-sandbox') {
+    if (isolation.guestUser !== 'WDAGUtilityAccount') {
+      throw new Error('lifecycle result did not run as the Windows Sandbox guest account')
+    }
+    if (
+      isolation.networkMode !== 'disabled' ||
+      isolation.productOutboundBlocked !== true ||
+      isolation.hostRegistryReachable !== false ||
+      receipt.gates?.networkIsolation?.detail?.mode !== 'disabled'
+    ) {
+      throw new Error('lifecycle result did not prove the Windows Sandbox network/registry boundary')
+    }
+    if (
+      isolation.registryProbe?.kind !== 'loaded-user-hives-and-volatile-profile' ||
+      isolation.registryProbe?.currentHiveMatchesGuestSid !== true ||
+      isolation.registryProbe?.foreignInteractiveUserHiveCount !== 0 ||
+      isolation.registryProbe?.volatileProfileIsDisposableGuest !== true
+    ) {
+      throw new Error('lifecycle result did not include the active Sandbox registry-isolation probe')
+    }
+  } else if (isolation?.mechanism === 'github-hosted-ephemeral-vm') {
+    if (
+      isolation.ephemeralVm !== true ||
+      isolation.hypervisorBoundary !== true ||
+      isolation.networkMode !== 'product-firewall' ||
+      isolation.productOutboundBlocked !== true ||
+      isolation.hostRegistryReachable !== false ||
+      !Number.isSafeInteger(isolation.firewallRuleCount) ||
+      isolation.firewallRuleCount < 8 ||
+      receipt.gates?.networkIsolation?.detail?.mode !== 'product-firewall' ||
+      receipt.gates?.networkIsolation?.detail?.firewallRuleCount !== 6 ||
+      JSON.stringify(receipt.gates?.networkIsolation?.detail?.scopes) !== JSON.stringify(['Internet', 'LocalSubnet'])
+    ) {
+      throw new Error('lifecycle result did not prove the GitHub-hosted VM and product-firewall boundary')
+    }
+    if (
+      isolation.registryProbe?.kind !== 'github-hosted-ephemeral-vm' ||
+      isolation.registryProbe?.currentHiveMatchesGuestSid !== true ||
+      isolation.registryProbe?.foreignInteractiveUserHiveCount !== 0 ||
+      isolation.registryProbe?.volatileProfileIsCurrentRunner !== true
+    ) {
+      throw new Error('lifecycle result did not include the hosted-VM registry-isolation probe')
+    }
+  } else {
+    throw new Error('lifecycle result did not prove a supported disposable Windows isolation mechanism')
   }
 
   assertSameArtifact(receipt.artifacts?.candidate, expected.candidate, 'candidate')

@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       sha256sums_sha256:
-        description: 'SHA-256 của SHA256SUMS.txt trong draft'
+        description: 'SHA-256 của SHA256SUMS.txt; riêng v32 là SHA-256 exact Windows candidate'
         required: true
         type: string
       release_class:
@@ -25,6 +25,7 @@ permissions:
 jobs:
   exact-bytes:
     name: Byte và chữ ký — ${{ matrix.id }}
+    if: inputs.tag != 'vi-v0.32.0-1'
     runs-on: ${{ matrix.runner }}
     environment: release-smoke
     strategy:
@@ -122,6 +123,7 @@ jobs:
 
   evidence:
     name: Đối chiếu smoke thật trên đúng máy và artifact
+    if: inputs.tag != 'vi-v0.32.0-1'
     needs: exact-bytes
     runs-on: ubuntu-24.04
     environment: release-production
@@ -162,5 +164,68 @@ jobs:
         with:
           name: release-evidence-${{ inputs.tag }}
           path: release-evidence.json
+          if-no-files-found: error
+          retention-days: 90
+
+  v32-windows-lifecycle:
+    name: V32 Windows x64 — fresh, update, repair, uninstall, rollback
+    if: inputs.tag == 'vi-v0.32.0-1' && inputs.release_class == 'community-prerelease'
+    runs-on: windows-2025
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.5.1
+          cache: npm
+
+      - name: Cài dependency kiểm thử từ lockfile
+        shell: powershell
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Tải ba installer đã khóa byte
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          New-Item -ItemType Directory -Path candidate, previous, rollback | Out-Null
+          gh release download $env:TAG --repo $env:GITHUB_REPOSITORY --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir candidate
+          gh release download vi-v0.31.0-7 --repo $env:GITHUB_REPOSITORY --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir previous
+          gh release download vi-v0.20.4-39 --repo $env:GITHUB_REPOSITORY --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir rollback
+
+      - name: Chạy vòng đời thật trong máy ảo GitHub dùng một lần
+        shell: powershell
+        env:
+          CANDIDATE_SHA256: ${{ inputs.sha256sums_sha256 }}
+        run: |
+          $candidate = (Resolve-Path 'candidate\Hermes-Vietnamese-Windows-x64-Setup.exe').Path
+          $previous = (Resolve-Path 'previous\Hermes-Vietnamese-Windows-x64-Setup.exe').Path
+          $rollback = (Resolve-Path 'rollback\Hermes-Vietnamese-Windows-x64-Setup.exe').Path
+          $nodeRuntime = Split-Path -Parent (Get-Command node.exe).Source
+          $evidence = "C:\HermesEvidence\v32-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          node scripts/windows-lifecycle-acceptance/run.mjs `
+            --isolation-mode github-hosted-ephemeral-vm `
+            --candidate $candidate `
+            --candidate-sha256 $env:CANDIDATE_SHA256 `
+            --candidate-commit 81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f `
+            --harness-commit $env:GITHUB_SHA `
+            --previous $previous `
+            --previous-sha256 cca0f3c0255e5e8736676a4d7ccb52c6e1b75eb73b94b8d1c3ca5dc91e57e840 `
+            --rollback $rollback `
+            --rollback-sha256 e4e0b60d7821b0e72af7b79e745b723c035f588c49bb11782778214a3e0c6d31 `
+            --node-runtime-dir $nodeRuntime `
+            --evidence-dir $evidence `
+            --timeout-minutes 105
+
+      - name: Lưu bằng chứng vòng đời kể cả khi fail-closed
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: v32-windows-lifecycle-${{ github.run_id }}-${{ github.run_attempt }}
+          path: C:\HermesEvidence
           if-no-files-found: error
           retention-days: 90

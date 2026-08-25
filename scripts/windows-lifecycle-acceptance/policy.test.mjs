@@ -9,8 +9,10 @@ import {
   V31_SOURCE_COMMIT,
   V31_SOURCE_SHA256,
   V31_SOURCE_SIZE,
+  V32_CANDIDATE_COMMIT,
   WINDOWS_LIFECYCLE_NODE_SHA256,
   WINDOWS_LIFECYCLE_NODE_VERSION,
+  assertSupportedGithubHostedWindowsRunner,
   assertSupportedWindowsSandboxHost,
   buildWindowsSandboxConfig,
   validateLifecycleDescriptor,
@@ -18,7 +20,7 @@ import {
 } from './policy.mjs'
 
 const candidate = {
-  commit: 'a'.repeat(40),
+  commit: V32_CANDIDATE_COMMIT,
   fileName: 'Hermes-0.32.0-vi.1-win-x64.exe',
   sha256: '1'.repeat(64),
   size: 320_000_000,
@@ -42,6 +44,7 @@ const rollback = {
 }
 const descriptor = {
   candidate,
+  harnessCommit: 'b'.repeat(40),
   previous,
   releaseClass: 'community-prerelease',
   rollback,
@@ -52,6 +55,7 @@ const descriptor = {
 test('descriptor binds the three exact lifecycle installers and rejects byte reuse', () => {
   const validated = validateLifecycleDescriptor(descriptor)
   assert.equal(validated.candidate.commit, candidate.commit)
+  assert.equal(validated.harnessCommit, descriptor.harnessCommit)
   assert.equal(validated.previous.tag, 'vi-v0.31.0-7')
   assert.equal(validated.rollback.tag, 'vi-v0.20.4-39')
 
@@ -66,6 +70,10 @@ test('descriptor binds the three exact lifecycle installers and rejects byte reu
   assert.throws(
     () => validateLifecycleDescriptor({ ...descriptor, rollback: { ...rollback, tag: 'vi-v0.20.4-40' } }),
     /must be vi-v0\.20\.4-39/
+  )
+  assert.throws(
+    () => validateLifecycleDescriptor({ ...descriptor, candidate: { ...candidate, commit: 'a'.repeat(40) } }),
+    /pinned vi-v0\.32\.0-1 source commit/
   )
 })
 
@@ -103,6 +111,33 @@ test('host gate never degrades an unsupported machine into a skipped acceptance'
   )
 })
 
+test('GitHub-hosted gate requires the exact ephemeral Windows VM contract', () => {
+  const supported = {
+    arch: 'x64',
+    githubActions: 'true',
+    hypervisorPresent: true,
+    model: 'Virtual Machine',
+    nodeVersion: 'v26.5.1',
+    platform: 'win32',
+    runnerEnvironment: 'github-hosted',
+    runnerOs: 'Windows'
+  }
+  assert.equal(assertSupportedGithubHostedWindowsRunner(supported), true)
+  assert.throws(
+    () => assertSupportedGithubHostedWindowsRunner({ ...supported, runnerEnvironment: 'self-hosted' }),
+    /GitHub-hosted Windows environment contract/
+  )
+  assert.throws(
+    () =>
+      assertSupportedGithubHostedWindowsRunner({
+        ...supported,
+        hypervisorPresent: false,
+        model: 'Physical workstation'
+      }),
+    /virtual-machine boundary/
+  )
+})
+
 test('sandbox configuration disables host-facing channels and maps only evidence writable', () => {
   const xml = buildWindowsSandboxConfig({
     evidenceDir: 'C:\\Evidence & Results',
@@ -125,7 +160,12 @@ test('receipt validation requires every gate and exact artifact identity', () =>
     REQUIRED_LIFECYCLE_GATES.map(name => [
       name,
       {
-        detail: name === 'v31ToV32Update' || name === 'rollbackVi39' ? { sameRegisteredInstallDir: true } : {},
+        detail:
+          name === 'v31ToV32Update' || name === 'rollbackVi39'
+            ? { sameRegisteredInstallDir: true }
+            : name === 'networkIsolation'
+              ? { mode: 'disabled' }
+              : {},
         evidence: [`${name}.log`],
         status: 'passed'
       }
@@ -139,11 +179,13 @@ test('receipt validation requires every gate and exact artifact identity', () =>
       size: 1234
     })),
     gates,
+    harnessCommit: descriptor.harnessCommit,
     isolation: {
       guestUser: 'WDAGUtilityAccount',
       hostRegistryReachable: false,
       mechanism: 'windows-sandbox',
-      networkDisabled: true,
+      networkMode: 'disabled',
+      productOutboundBlocked: true,
       registryProbe: {
         currentHiveMatchesGuestSid: true,
         foreignInteractiveUserHiveCount: 0,
@@ -157,6 +199,48 @@ test('receipt validation requires every gate and exact artifact identity', () =>
   }
 
   assert.equal(validateLifecycleReceipt(receipt, descriptor).receipt, receipt)
+  const hostedReceipt = {
+    ...receipt,
+    gates: {
+      ...gates,
+      networkIsolation: {
+        ...gates.networkIsolation,
+        detail: {
+          firewallRuleCount: 6,
+          mode: 'product-firewall',
+          scopes: ['Internet', 'LocalSubnet']
+        }
+      }
+    },
+    isolation: {
+      ephemeralVm: true,
+      firewallRuleCount: 8,
+      guestUser: 'runneradmin',
+      hostRegistryReachable: false,
+      hypervisorBoundary: true,
+      mechanism: 'github-hosted-ephemeral-vm',
+      networkMode: 'product-firewall',
+      productOutboundBlocked: true,
+      registryProbe: {
+        currentHiveMatchesGuestSid: true,
+        foreignInteractiveUserHiveCount: 0,
+        kind: 'github-hosted-ephemeral-vm',
+        volatileProfileIsCurrentRunner: true
+      }
+    }
+  }
+  assert.equal(validateLifecycleReceipt(hostedReceipt, descriptor).receipt, hostedReceipt)
+  assert.throws(
+    () =>
+      validateLifecycleReceipt(
+        {
+          ...hostedReceipt,
+          isolation: { ...hostedReceipt.isolation, productOutboundBlocked: false }
+        },
+        descriptor
+      ),
+    /product-firewall boundary/
+  )
   assert.throws(
     () => validateLifecycleReceipt({ ...receipt, gates: { ...gates, repair: { status: 'skipped' } } }, descriptor),
     /repair is not passed/

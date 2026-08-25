@@ -11,18 +11,23 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $ProductId = '48ae4bdc-0f8d-5252-af1e-bf7c0a8c3649'
 $ProductKey = "HKCU:\Software\$ProductId"
 $UninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$ProductId"
-$StateRoot = 'C:\HermesLifecycle'
-$ExpectedGuest = 'WDAGUtilityAccount'
-$ExpectedProfile = 'C:\Users\WDAGUtilityAccount'
+$StateRoot = $null
+$ExpectedGuest = $null
+$ExpectedProfile = $null
 $Gates = [ordered]@{}
 $Events = New-Object System.Collections.ArrayList
 $Manifest = $null
 $EvidenceRoot = $null
 $CurrentInstallDir = $null
 $RecordedInstallDirs = New-Object System.Collections.ArrayList
+$ProtectedPrograms = New-Object System.Collections.ArrayList
 $HostRegistryReachable = $null
-$NetworkDisabled = $null
+$HypervisorBoundary = $false
+$ProductOutboundBlocked = $false
+$FirewallGroup = $null
+$FirewallRuleCount = 0
 $RegistryProbe = $null
+$IsolationMechanism = $null
 
 function Write-JsonAtomic {
   param([string]$Path, [object]$Value)
@@ -88,6 +93,63 @@ function Assert-ExactInput {
   Assert-True ($item.Length -eq [Int64]$Artifact.size) "$Label installer size mismatch inside the guest"
   $digest = Get-Sha256 $Path
   Assert-True ($digest -eq [string]$Artifact.sha256) "$Label installer SHA-256 mismatch inside the guest"
+}
+
+function Protect-OutboundPrograms {
+  param([string[]]$Programs, [string]$Stage)
+  if ($IsolationMechanism -ne 'github-hosted-ephemeral-vm') { return }
+  foreach ($rawProgram in @($Programs)) {
+    if ([string]::IsNullOrWhiteSpace($rawProgram)) { continue }
+    $program = [System.IO.Path]::GetFullPath($rawProgram)
+    Assert-True (Test-Path -LiteralPath $program -PathType Leaf) "$Stage outbound-isolation target is missing: $program"
+    $alreadyProtected = @($script:ProtectedPrograms | Where-Object {
+      [string]::Equals([string]$_, $program, [StringComparison]::OrdinalIgnoreCase)
+    }).Count -gt 0
+    if ($alreadyProtected) { continue }
+    foreach ($scope in @('Internet', 'LocalSubnet')) {
+      $ruleName = "HermesLifecycle-$($Manifest.runId)-$($script:FirewallRuleCount + 1)"
+      New-NetFirewallRule `
+        -Name $ruleName `
+        -DisplayName $ruleName `
+        -Group $FirewallGroup `
+        -Direction Outbound `
+        -Action Block `
+        -Enabled True `
+        -Profile Any `
+        -Program $program `
+        -RemoteAddress $scope | Out-Null
+      $script:FirewallRuleCount += 1
+    }
+    [void]$script:ProtectedPrograms.Add($program)
+  }
+
+  $rules = @(Get-NetFirewallRule -Group $FirewallGroup -ErrorAction Stop | Where-Object {
+    $_.Enabled -eq 'True' -and $_.Direction -eq 'Outbound' -and $_.Action -eq 'Block'
+  })
+  Assert-True ($rules.Count -eq $script:FirewallRuleCount) "$Stage did not preserve every product firewall rule"
+  foreach ($program in @($script:ProtectedPrograms)) {
+    $applicationRules = @($rules | Get-NetFirewallApplicationFilter | Where-Object {
+      [string]::Equals([string]$_.Program, [string]$program, [StringComparison]::OrdinalIgnoreCase)
+    })
+    Assert-True ($applicationRules.Count -eq 2) "$Stage did not block both Internet and local-subnet egress for $program"
+  }
+  $script:ProductOutboundBlocked = $true
+  Add-Event 'product-outbound-firewall-verified' @{
+    programCount = $script:ProtectedPrograms.Count
+    ruleCount = $script:FirewallRuleCount
+    stage = $Stage
+  }
+}
+
+function Protect-InstalledProduct {
+  param([string]$Binary, [string]$Stage)
+  if ($IsolationMechanism -ne 'github-hosted-ephemeral-vm') { return }
+  $installDir = Split-Path -Parent $Binary
+  $programs = @($Binary)
+  $programs += @(Get-ChildItem -LiteralPath $installDir -File -Recurse | Where-Object {
+    $_.Name -match '^(?:node|python|pythonw|codex)\.exe$'
+  } | ForEach-Object { $_.FullName })
+  Protect-OutboundPrograms $programs $Stage
 }
 
 function Get-InstallState {
@@ -169,6 +231,7 @@ function Install-Exact {
   $log = Invoke-NativeLogged $Installer @('/S') $LogName
   $state = Get-InstallState
   $script:CurrentInstallDir = [string]$state.InstallDir
+  Protect-InstalledProduct ([string]$state.Binary) $LogName
   $alreadyRecorded = @($RecordedInstallDirs | Where-Object {
     [string]::Equals([string]$_, [string]$state.InstallDir, [StringComparison]::OrdinalIgnoreCase)
   }).Count -gt 0
@@ -229,6 +292,7 @@ function Invoke-PlaywrightPhase {
   Assert-True (Test-Path -LiteralPath $node -PathType Leaf) 'pinned guest node.exe is missing'
   Assert-True (Test-Path -LiteralPath $cli -PathType Leaf) 'mapped Playwright CLI is missing'
   Assert-True (Test-Path -LiteralPath $Binary -PathType Leaf) 'installed packaged binary is missing before Playwright'
+  Protect-InstalledProduct $Binary "Playwright $Action"
   $env:HERMES_LIFECYCLE_ACTION = $Action
   $env:HERMES_LIFECYCLE_HERMES_HOME = $Home
   $env:HERMES_LIFECYCLE_USER_DATA = $UserData
@@ -265,6 +329,7 @@ function Invoke-PlaywrightPhase {
 
 function Invoke-PackagedAcceptance {
   param([string]$Binary)
+  Protect-InstalledProduct $Binary 'packaged v32 acceptance'
   $node = Join-Path ([string]$Manifest.paths.nodeRuntime) 'node.exe'
   $repo = [string]$Manifest.paths.repo
   $cli = Join-Path $repo 'node_modules\@playwright\test\cli.js'
@@ -393,6 +458,19 @@ function Get-EvidenceManifest {
 function Write-Receipt {
   param([string]$Status, [string]$Failure = '')
   if ($null -eq $Manifest -or [string]::IsNullOrWhiteSpace($EvidenceRoot)) { return }
+  $isolation = [ordered]@{
+    guestUser = $ExpectedGuest
+    hostRegistryReachable = $HostRegistryReachable
+    mechanism = $IsolationMechanism
+    networkMode = $(if ($IsolationMechanism -eq 'windows-sandbox') { 'disabled' } else { 'product-firewall' })
+    productOutboundBlocked = $ProductOutboundBlocked
+    registryProbe = $RegistryProbe
+  }
+  if ($IsolationMechanism -eq 'github-hosted-ephemeral-vm') {
+    $isolation.ephemeralVm = $true
+    $isolation.firewallRuleCount = $FirewallRuleCount
+    $isolation.hypervisorBoundary = $HypervisorBoundary
+  }
   $receipt = [ordered]@{
     artifacts = [ordered]@{
       candidate = Get-ArtifactRecord $Manifest.candidate
@@ -402,13 +480,8 @@ function Write-Receipt {
     evidenceManifest = Get-EvidenceManifest
     events = @($Events)
     gates = $Gates
-    isolation = [ordered]@{
-      guestUser = $ExpectedGuest
-      hostRegistryReachable = $HostRegistryReachable
-      mechanism = 'windows-sandbox'
-      networkDisabled = $NetworkDisabled
-      registryProbe = $RegistryProbe
-    }
+    harnessCommit = [string]$Manifest.harnessCommit
+    isolation = $isolation
     runId = [string]$Manifest.runId
     schemaVersion = 1
     status = $Status
@@ -421,29 +494,61 @@ try {
   Assert-True (Test-Path -LiteralPath $ManifestPath -PathType Leaf) 'guest manifest is missing'
   $Manifest = Get-Content -LiteralPath $ManifestPath -Raw | ConvertFrom-Json
   Assert-True ($Manifest.schemaVersion -eq 1) 'unsupported guest manifest schema'
-  $expectedMappedPaths = [ordered]@{
-    candidate = 'C:\HermesHarness\Input\candidate.exe'
-    previous = 'C:\HermesHarness\Input\previous.exe'
-    rollback = 'C:\HermesHarness\Input\rollback.exe'
-    repo = 'C:\HermesHarness\Repo'
-    nodeRuntime = 'C:\HermesHarness\Node'
-    evidence = 'C:\HermesHarness\Evidence'
+  Assert-True ($null -ne $Manifest.PSObject.Properties['harnessCommit']) 'manifest did not bind the validation harness commit'
+  Assert-True ([string]$Manifest.harnessCommit -match '^[0-9a-f]{40}$') 'validation harness commit is malformed'
+  $IsolationMechanism = [string]$Manifest.isolation.mechanism
+  Assert-True ($IsolationMechanism -in @('windows-sandbox', 'github-hosted-ephemeral-vm')) 'unsupported lifecycle isolation mechanism'
+
+  if ($IsolationMechanism -eq 'windows-sandbox') {
+    $expectedMappedPaths = [ordered]@{
+      candidate = 'C:\HermesHarness\Input\candidate.exe'
+      previous = 'C:\HermesHarness\Input\previous.exe'
+      rollback = 'C:\HermesHarness\Input\rollback.exe'
+      repo = 'C:\HermesHarness\Repo'
+      nodeRuntime = 'C:\HermesHarness\Node'
+      evidence = 'C:\HermesHarness\Evidence'
+    }
+    foreach ($entry in $expectedMappedPaths.GetEnumerator()) {
+      Assert-True ([string]$Manifest.paths.($entry.Key) -eq [string]$entry.Value) "manifest path $($entry.Key) is not the fixed Sandbox mapping"
+    }
+    $ExpectedGuest = 'WDAGUtilityAccount'
+    $ExpectedProfile = 'C:\Users\WDAGUtilityAccount'
+    $StateRoot = 'C:\HermesLifecycle'
+  } else {
+    Assert-True ($env:GITHUB_ACTIONS -eq 'true') 'hosted lifecycle is not running in GitHub Actions'
+    Assert-True ($env:RUNNER_ENVIRONMENT -eq 'github-hosted') 'hosted lifecycle is not on a GitHub-hosted runner'
+    Assert-True ($env:RUNNER_OS -eq 'Windows') 'hosted lifecycle is not on a Windows runner'
+    Assert-True (-not [string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) 'hosted lifecycle is missing RUNNER_TEMP'
+    Assert-True (-not [string]::IsNullOrWhiteSpace($env:RUNNER_TOOL_CACHE)) 'hosted lifecycle is missing RUNNER_TOOL_CACHE'
+    foreach ($key in @('candidate', 'previous', 'rollback', 'repo')) {
+      Assert-GuestPath ([string]$Manifest.paths.$key) $env:RUNNER_TEMP "hosted $key path"
+    }
+    Assert-GuestPath ([string]$Manifest.paths.nodeRuntime) $env:RUNNER_TOOL_CACHE 'hosted Node runtime path'
+    Assert-GuestPath ([string]$Manifest.paths.evidence) 'C:\HermesEvidence' 'hosted evidence path'
+    $ExpectedGuest = [string]$env:USERNAME
+    $ExpectedProfile = [System.IO.Path]::GetFullPath($env:USERPROFILE).TrimEnd('\')
+    $StateRoot = "C:\HermesLifecycle\$($Manifest.runId)"
+    $FirewallGroup = "HermesLifecycle-$($Manifest.runId)"
   }
-  foreach ($entry in $expectedMappedPaths.GetEnumerator()) {
-    Assert-True ([string]$Manifest.paths.($entry.Key) -eq [string]$entry.Value) "manifest path $($entry.Key) is not the fixed Sandbox mapping"
-  }
+
   $EvidenceRoot = [string]$Manifest.paths.evidence
-  Assert-True ($EvidenceRoot -eq 'C:\HermesHarness\Evidence') 'evidence mapping is not the fixed guest path'
   New-Item -ItemType Directory -Path $EvidenceRoot -Force | Out-Null
   Assert-True (-not (Test-Path -LiteralPath (Join-Path $EvidenceRoot 'lifecycle-result.json'))) 'evidence directory contains a stale lifecycle receipt'
 
   $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
   $system = Get-CimInstance Win32_ComputerSystem
-  Assert-True ($env:USERNAME -eq $ExpectedGuest) 'lifecycle runner is not the Windows Sandbox guest account'
-  Assert-True ($identity.Name -match "\\$ExpectedGuest$") 'Windows identity is not the Sandbox guest account'
-  Assert-True ($identity.User.Value -match '-504$') 'Sandbox guest SID does not have the WDAG utility-account RID'
-  Assert-True ([System.IO.Path]::GetFullPath($env:USERPROFILE).TrimEnd('\') -eq $ExpectedProfile) 'guest profile is not disposable WDAGUtilityAccount'
-  Assert-True ($system.Model -match 'Virtual|Sandbox' -or $system.HypervisorPresent) 'guest did not prove a virtualized boundary'
+  $HypervisorBoundary = [bool]($system.Model -match 'Virtual|Sandbox' -or $system.HypervisorPresent)
+  Assert-True ($env:USERNAME -eq $ExpectedGuest) 'lifecycle runner account changed during preflight'
+  Assert-True ($identity.Name -match ("\\" + [regex]::Escape($ExpectedGuest) + '$')) 'Windows identity does not match the isolated runner account'
+  Assert-True ([System.IO.Path]::GetFullPath($env:USERPROFILE).TrimEnd('\') -eq $ExpectedProfile) 'runner profile does not match the current isolated account'
+  Assert-True $HypervisorBoundary 'isolated runner did not prove a virtualized boundary'
+  if ($IsolationMechanism -eq 'windows-sandbox') {
+    Assert-True ($identity.User.Value -match '-504$') 'Sandbox guest SID does not have the WDAG utility-account RID'
+  } else {
+    $principal = New-Object System.Security.Principal.WindowsPrincipal($identity)
+    Assert-True ($principal.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)) 'GitHub-hosted lifecycle runner is not elevated for product firewall isolation'
+    Assert-True ($null -ne (Get-Command New-NetFirewallRule -ErrorAction SilentlyContinue)) 'GitHub-hosted lifecycle runner lacks Windows Firewall controls'
+  }
   Assert-True (-not (Test-Path -LiteralPath $ProductKey) -and -not (Test-Path -LiteralPath $UninstallKey)) 'disposable guest was not clean before installation'
   Assert-NoHermesProcesses 'initial guest preflight'
   $loadedInteractiveHives = @(Get-ChildItem -LiteralPath Registry::HKEY_USERS | Where-Object {
@@ -452,27 +557,40 @@ try {
   $foreignInteractiveHives = @($loadedInteractiveHives | Where-Object { $_ -ne $identity.User.Value })
   $volatileProfile = [string](Get-ItemProperty -LiteralPath 'HKCU:\Volatile Environment').USERPROFILE
   Assert-True (Test-Path -LiteralPath ("Registry::HKEY_USERS\" + $identity.User.Value)) 'current guest HKCU hive is not the loaded guest SID hive'
-  Assert-True ($foreignInteractiveHives.Count -eq 0) 'a foreign interactive user registry hive is mounted in the Sandbox guest'
-  Assert-True ([System.IO.Path]::GetFullPath($volatileProfile).TrimEnd('\') -eq $ExpectedProfile) 'HKCU volatile profile does not belong to the disposable guest'
+  Assert-True ($foreignInteractiveHives.Count -eq 0) 'a foreign interactive user registry hive is mounted in the isolated runner'
+  Assert-True ([System.IO.Path]::GetFullPath($volatileProfile).TrimEnd('\') -eq $ExpectedProfile) 'HKCU volatile profile does not belong to the isolated runner'
   $HostRegistryReachable = $false
-  $RegistryProbe = [ordered]@{
-    currentHiveMatchesGuestSid = $true
-    foreignInteractiveUserHiveCount = 0
-    kind = 'loaded-user-hives-and-volatile-profile'
-    volatileProfileIsDisposableGuest = $true
+  if ($IsolationMechanism -eq 'windows-sandbox') {
+    $RegistryProbe = [ordered]@{
+      currentHiveMatchesGuestSid = $true
+      foreignInteractiveUserHiveCount = 0
+      kind = 'loaded-user-hives-and-volatile-profile'
+      volatileProfileIsDisposableGuest = $true
+    }
+  } else {
+    $RegistryProbe = [ordered]@{
+      currentHiveMatchesGuestSid = $true
+      foreignInteractiveUserHiveCount = 0
+      kind = 'github-hosted-ephemeral-vm'
+      volatileProfileIsCurrentRunner = $true
+    }
   }
+  Assert-True (-not (Test-Path -LiteralPath $StateRoot)) 'isolated lifecycle state root already exists'
   [void](New-Item -ItemType Directory -Path $StateRoot -Force)
   Add-Gate 'isolatedGuest' @('lifecycle-result.json') @{
     account = $ExpectedGuest
     foreignInteractiveUserHiveCount = 0
-    profile = 'disposable-wdag-profile'
-    registryProbe = 'loaded-user-hives-and-volatile-profile'
+    mechanism = $IsolationMechanism
+    profile = $(if ($IsolationMechanism -eq 'windows-sandbox') { 'disposable-wdag-profile' } else { 'github-hosted-ephemeral-runner-profile' })
+    registryProbe = [string]$RegistryProbe.kind
   }
 
-  $upAdapters = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' })
-  Assert-True ($upAdapters.Count -eq 0) 'Windows Sandbox networking is not disabled'
-  $NetworkDisabled = $true
-  Add-Gate 'networkDisabled' @('lifecycle-result.json') @{ upAdapterCount = 0 }
+  if ($IsolationMechanism -eq 'windows-sandbox') {
+    $upAdapters = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' })
+    Assert-True ($upAdapters.Count -eq 0) 'Windows Sandbox networking is not disabled'
+    $ProductOutboundBlocked = $true
+    Add-Gate 'networkIsolation' @('lifecycle-result.json') @{ mode = 'disabled'; upAdapterCount = 0 }
+  }
 
   $credentialPattern = '(?i)(api[_-]?key|token|secret|password|credential|cookie|authorization)'
   $credentialVariables = @(Get-ChildItem Env: | Where-Object { $_.Name -match $credentialPattern })
@@ -488,6 +606,18 @@ try {
     candidateSha256 = [string]$Manifest.candidate.sha256
     previousSha256 = [string]$Manifest.previous.sha256
     rollbackSha256 = [string]$Manifest.rollback.sha256
+  }
+  if ($IsolationMechanism -eq 'github-hosted-ephemeral-vm') {
+    Protect-OutboundPrograms @(
+      [string]$Manifest.paths.candidate,
+      [string]$Manifest.paths.previous,
+      [string]$Manifest.paths.rollback
+    ) 'exact installer inputs'
+    Add-Gate 'networkIsolation' @('lifecycle-result.json') @{
+      firewallRuleCount = $FirewallRuleCount
+      mode = 'product-firewall'
+      scopes = @('Internet', 'LocalSubnet')
+    }
   }
 
   $candidatePath = [string]$Manifest.paths.candidate
@@ -605,5 +735,7 @@ try {
   }
   exit 1
 } finally {
-  Start-Process -FilePath "$env:WINDIR\System32\shutdown.exe" -ArgumentList @('/s', '/t', '0', '/f') -WindowStyle Hidden -ErrorAction SilentlyContinue
+  if ($IsolationMechanism -eq 'windows-sandbox') {
+    Start-Process -FilePath "$env:WINDIR\System32\shutdown.exe" -ArgumentList @('/s', '/t', '0', '/f') -WindowStyle Hidden -ErrorAction SilentlyContinue
+  }
 }

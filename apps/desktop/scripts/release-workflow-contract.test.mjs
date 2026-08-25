@@ -393,6 +393,20 @@ test('runtime smoke refuses missing platform, update, persistence, signing, or r
   assert.match(runtimeSmoke, /gh release download "\$TAG" --repo "\$GITHUB_REPOSITORY" --pattern "\$ARTIFACT"/)
 })
 
+test('v32 runtime smoke binds the exact candidate to an ephemeral Windows lifecycle VM', () => {
+  assert.match(runtimeSmoke, /v32-windows-lifecycle:/)
+  assert.match(runtimeSmoke, /if: inputs\.tag == 'vi-v0\.32\.0-1' && inputs\.release_class == 'community-prerelease'/)
+  assert.match(runtimeSmoke, /runs-on: windows-2025/)
+  assert.match(runtimeSmoke, /node-version: 26\.5\.1/)
+  assert.match(runtimeSmoke, /--isolation-mode github-hosted-ephemeral-vm/)
+  assert.match(runtimeSmoke, /--candidate-commit 81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f/)
+  assert.match(runtimeSmoke, /--harness-commit \$env:GITHUB_SHA/)
+  assert.match(runtimeSmoke, /--previous-sha256 cca0f3c0255e5e8736676a4d7ccb52c6e1b75eb73b94b8d1c3ca5dc91e57e840/)
+  assert.match(runtimeSmoke, /--rollback-sha256 e4e0b60d7821b0e72af7b79e745b723c035f588c49bb11782778214a3e0c6d31/)
+  assert.match(runtimeSmoke, /path: C:\\HermesEvidence/)
+  assert.match(runtimeSmoke, /if: always\(\)/)
+})
+
 test('pilot promotion stays prerelease, validates every byte, and discloses missing native smoke', () => {
   assert.match(pilotPromotion, /environment: release-production/)
   assert.match(pilotPromotion, /^\s*group: hermes-vietnamese-promotion$/m)
