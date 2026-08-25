@@ -394,6 +394,11 @@ async function activateTopmostVisibleButton(page: Page, name: RegExp, timeout = 
           }
 
           try {
+            // About places the uninstall choices below the initial viewport.
+            // Reveal the exact semantic button first, then require it to pass
+            // a fresh topmost hit-test before any keyboard activation.
+            await element.scrollIntoViewIfNeeded()
+
             const receivesPointer = await element.evaluate(node => {
               const rect = node.getBoundingClientRect()
               const x = rect.left + rect.width / 2

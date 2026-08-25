@@ -238,6 +238,7 @@ test('GUI uninstall opens Settings through its global shortcut and activates exa
   assert.doesNotMatch(uninstallHelper, /Open settings|Mở cài đặt/)
   assert.match(activationHelper, /document\.elementFromPoint/)
   assert.match(activationHelper, /const element = await button\.elementHandle\(\)/)
+  assert.match(activationHelper, /await element\.scrollIntoViewIfNeeded\(\)/)
   assert.match(activationHelper, /node\.contains\(hitTarget\)/)
   assert.match(activationHelper, /await element\.press\('Enter'\)/)
   assert.doesNotMatch(activationHelper, /mouse\.click|element\.click|button\.click|locator\.click/)
