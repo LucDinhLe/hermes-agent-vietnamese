@@ -1787,6 +1787,7 @@ export interface Translations {
       searchPlaceholder: string
       emptyTitle: string
       emptyDescription: string
+      autoDiscovered: string
       open: string
       sessionsCount: (count: number) => string
       tokensCount: (tokens: string) => string

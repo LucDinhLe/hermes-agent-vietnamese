@@ -184,7 +184,28 @@
 - Bước nhỏ tiếp theo: nối backend API profile-scoped bằng
   `_CONFIG_MUTATION_LOCK`, `load_config`/`save_config`; manual toggle phải cập
   nhật `skills.allowed` khi work profile tồn tại và giữ legacy behavior.
+## Cập nhật 2026-08-26 — sự cố tưởng mất phiên khi mở Dự án trên v32
 
+- Audit read-only hồ sơ Hermes thật xác nhận `state.db` còn đủ 11 phiên và 752
+  bản ghi tin nhắn; mọi phiên đều `hidden=0`, `archived=0`, ba cơ sở dữ liệu đều
+  `integrity_check=ok` và không có khóa ngoại mồ côi. Đã chụp bản sao thô trước
+  khi kiểm tra; không sửa dữ liệu người dùng.
+- Nguyên nhân là phạm vi dự án được lưu bền trong giao diện: sau khi mở dự án,
+  sidebar chỉ hiện phiên thuộc dự án đó, trong khi lối **Tất cả dự án** bị làm
+  mờ `opacity-40`. Đây là lỗi hiển thị nghiêm trọng gây cảm giác mất dữ liệu,
+  không phải thao tác xóa phiên.
+- Ba thẻ 0 phiên/0 token xuất hiện thêm là kho git do cơ chế tự dò mặc định quét
+  giới hạn trong thư mục người dùng; chúng không phải dự án vừa được tạo. Trang
+  Dự án trước đây không ghi rõ nguồn tự động và không có thao tác ẩn trực tiếp.
+- Bản sửa làm lối quay về nổi rõ và nói thẳng các phiên khác vẫn còn; kho tự dò
+  có nhãn **Tự động tìm thấy** và nút **Ẩn khỏi danh sách dự án**.
+- Regression giao diện dự án đạt 134/134; hai ca mới đã được chạy đỏ trước khi
+  sửa rồi xanh sau sửa. Desktop typecheck, ESLint các tệp thay đổi và
+  `git diff --check` đạt. Backend dự án đạt 30/32 trên Windows; hai ca còn lại
+  chỉ lệch kỳ vọng đường dẫn POSIX (`/tmp` so với `C:\\tmp`) có sẵn trong test,
+  không liên quan thay đổi hoặc hồ sơ thật.
+- Đây mới là source fix trên nhánh cô lập từ đúng `vi-v0.32.0-1`; chưa push,
+  chưa đóng gói, chưa cài đè hồ sơ thật và chưa thực hiện hành động công khai.
 ## Cập nhật 2026-08-24 — continuity >350k và Governor opaque fail-closed
 
 - Implementation tip trước checkpoint test:

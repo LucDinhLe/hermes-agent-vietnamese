@@ -2209,6 +2209,7 @@ export const vi = defineLocale({
       searchPlaceholder: 'Tìm dự án…',
       emptyTitle: 'Chưa có dự án',
       emptyDescription: 'Tạo dự án để gom các thư mục và phiên làm việc liên quan.',
+      autoDiscovered: 'Tự động tìm thấy',
       open: 'Mở dự án',
       sessionsCount: count => `${count} phiên`,
       tokensCount: tokens => `${tokens} token`,
@@ -2249,7 +2250,7 @@ export const vi = defineLocale({
       moveNoProjects: 'Không có dự án nào khác',
       reveal: 'Hiện trong thư mục',
       copyPath: 'Sao chép đường dẫn',
-      removeFromSidebar: 'Ẩn khỏi thanh bên',
+      removeFromSidebar: 'Ẩn khỏi danh sách dự án',
       createFailed: 'Không thể tạo dự án',
       staleBackend:
         'Cập nhật dịch vụ nền Hermes để tạo dự án - dịch vụ nền của bạn cũ hơn ứng dụng dành cho Desktop này (Cài đặt → Cập nhật → dịch vụ nền).',
@@ -2287,7 +2288,7 @@ export const vi = defineLocale({
       enter: label => `Mở ${label}`,
       reorder: label => `Sắp xếp lại ${label}`,
       toggle: (label, open) => `${open ? 'Hiển thị' : 'Ẩn'} ${label} phiên`,
-      back: 'Tất cả dự án'
+      back: 'Tất cả dự án · các phiên khác vẫn còn'
     },
     newSessionIn: label => `Phiên mới trong ${label}`,
     showMoreIn: (count, label) => `Hiển thị thêm ${count} phiên trong ${label}`,

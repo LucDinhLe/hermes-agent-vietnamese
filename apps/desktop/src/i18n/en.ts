@@ -2132,6 +2132,7 @@ export const en: Translations = {
       searchPlaceholder: 'Search projects…',
       emptyTitle: 'No projects yet',
       emptyDescription: 'Create a project to group related folders and sessions.',
+      autoDiscovered: 'Found automatically',
       open: 'Open project',
       sessionsCount: count => `${count} ${count === 1 ? 'session' : 'sessions'}`,
       tokensCount: tokens => `${tokens} tokens`,
@@ -2172,7 +2173,7 @@ export const en: Translations = {
       moveNoProjects: 'No other projects',
       reveal: 'Reveal in folder',
       copyPath: 'Copy path',
-      removeFromSidebar: 'Hide from sidebar',
+      removeFromSidebar: 'Hide from projects',
       createFailed: 'Could not create project',
       staleBackend:
         'Update the Hermes backend to create projects — your backend is older than this desktop app (Settings → Updates → Backend).',
@@ -2211,7 +2212,7 @@ export const en: Translations = {
       enter: label => `Open ${label}`,
       reorder: label => `Reorder ${label}`,
       toggle: (label, open) => `${open ? 'Show' : 'Hide'} ${label} sessions`,
-      back: 'All projects'
+      back: 'All projects · other sessions remain available'
     },
     newSessionIn: label => `New session in ${label}`,
     showMoreIn: (count, label) => `Show ${count} more in ${label}`,

@@ -1667,6 +1667,7 @@ export const ar = defineLocale({
       searchPlaceholder: 'البحث في المشاريع…',
       emptyTitle: 'لا توجد مشاريع بعد',
       emptyDescription: 'أنشئ مشروعاً لجمع المجلدات والجلسات المرتبطة.',
+      autoDiscovered: 'تم العثور عليه تلقائياً',
       open: 'فتح المشروع',
       sessionsCount: count => `${count} جلسة`,
       tokensCount: tokens => `${tokens} رمزاً`,
@@ -1701,7 +1702,7 @@ export const ar = defineLocale({
       menuDelete: 'حذف',
       reveal: 'إظهار في المجلد',
       copyPath: 'نسخ المسار',
-      removeFromSidebar: 'إخفاء من الشريط الجانبي',
+      removeFromSidebar: 'إخفاء من قائمة المشاريع',
       createFailed: 'تعذّر إنشاء المشروع',
       deleteConfirm: 'هذا يزيل المشروع المحفوظ من Hermes. تبقى الملفات ومستودعات git وأشجار العمل دون تغيير.',
       startWork: 'شجرة عمل جديدة',
@@ -1735,7 +1736,7 @@ export const ar = defineLocale({
       enter: label => `فتح ${label}`,
       reorder: label => `إعادة ترتيب ${label}`,
       toggle: (label, open) => `${open ? 'إظهار' : 'إخفاء'} جلسات ${label}`,
-      back: 'كل المشاريع'
+      back: 'كل المشاريع · الجلسات الأخرى ما زالت محفوظة'
     },
     newSessionIn: label => `جلسة جديدة في ${label}`,
     showMoreIn: (count, label) => `إظهار ${count} أخرى في ${label}`,

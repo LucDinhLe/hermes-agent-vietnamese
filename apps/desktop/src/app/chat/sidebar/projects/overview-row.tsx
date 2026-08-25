@@ -45,10 +45,7 @@ export function projectIcon({ color, icon, isNoProject }: SidebarProjectTree) {
 export function ProjectBackRow({ label, onClick }: { label: string; onClick: () => void }) {
   return (
     <SidebarRowShell>
-      <SidebarRowBody
-        className="group/back w-full text-(--ui-text-tertiary) opacity-40 hover:text-foreground"
-        onClick={onClick}
-      >
+      <SidebarRowBody className="group/back w-full text-(--ui-text-secondary) hover:text-foreground" onClick={onClick}>
         <SidebarRowLead>
           <SidebarRowLeadGlyph>
             <Codicon name="arrow-left" size={SIDEBAR_LEAD_ICON_SIZE} />

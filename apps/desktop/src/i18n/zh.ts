@@ -2271,6 +2271,7 @@ export const zh: Translations = {
       searchPlaceholder: '搜索项目…',
       emptyTitle: '还没有项目',
       emptyDescription: '创建项目以归集相关文件夹和会话。',
+      autoDiscovered: '自动发现',
       open: '打开项目',
       sessionsCount: count => `${count} 个会话`,
       tokensCount: tokens => `${tokens} 个词元`,
@@ -2310,7 +2311,7 @@ export const zh: Translations = {
       moveNoProjects: '没有其他项目',
       reveal: '在文件夹中显示',
       copyPath: '复制路径',
-      removeFromSidebar: '从侧边栏移除',
+      removeFromSidebar: '从项目列表中隐藏',
       createFailed: '无法创建项目',
       staleBackend: '请更新 Hermes 后端以创建项目——当前后端比桌面应用旧（设置 → 更新 → 后端）。',
       deleteConfirm: '这会从 Hermes 中移除已保存的项目。文件、git 仓库和工作树保持不变。',
@@ -2346,7 +2347,7 @@ export const zh: Translations = {
       enter: label => `打开 ${label}`,
       reorder: label => `重新排序 ${label}`,
       toggle: (label, open) => `${open ? '展开' : '收起'} ${label} 会话`,
-      back: '全部项目'
+      back: '全部项目 · 其他会话仍然保留'
     },
     newSessionIn: label => `在 ${label} 中新建会话`,
     showMoreIn: (count, label) => `在 ${label} 中再显示 ${count} 个`,
