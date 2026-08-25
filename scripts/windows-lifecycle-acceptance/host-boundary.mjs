@@ -10,6 +10,24 @@ export function isSameOrWithin(candidate, parent) {
   return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))
 }
 
+export function resolveLifecycleStagingRoot({ isolationMode, runnerTemp, systemTemp }) {
+  let selected
+  if (isolationMode === 'github-hosted-ephemeral-vm') {
+    if (typeof runnerTemp !== 'string' || runnerTemp.trim() === '') {
+      throw new Error('GitHub-hosted lifecycle staging requires RUNNER_TEMP')
+    }
+    selected = runnerTemp
+  } else if (isolationMode === 'windows-sandbox') {
+    selected = systemTemp
+  } else {
+    throw new Error(`unsupported lifecycle isolation mode: ${isolationMode}`)
+  }
+
+  const stat = fs.statSync(selected, { throwIfNoEntry: false })
+  if (!stat?.isDirectory()) throw new Error(`lifecycle staging root is not a directory: ${selected}`)
+  return canonicalHostPath(selected)
+}
+
 export function assertEmptyEvidenceDirectory(directory) {
   const linkStat = fs.lstatSync(directory, { throwIfNoEntry: false })
   if (linkStat?.isSymbolicLink()) throw new Error(`evidence path may not be a link or junction: ${directory}`)

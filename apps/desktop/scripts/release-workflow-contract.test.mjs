@@ -13,6 +13,10 @@ const runtimeSmoke = readFileSync(
   new URL('../../../.github/workflows/runtime-smoke-vietnamese.yml', import.meta.url),
   'utf8'
 )
+const lifecycleRunner = readFileSync(
+  new URL('../../../scripts/windows-lifecycle-acceptance/run.mjs', import.meta.url),
+  'utf8'
+)
 const jsTests = readFileSync(new URL('../../../.github/workflows/js-tests.yml', import.meta.url), 'utf8')
 const vitestConfig = readFileSync(new URL('../vitest.config.ts', import.meta.url), 'utf8')
 const builderWrapper = readFileSync(new URL('../scripts/run-electron-builder.mjs', import.meta.url), 'utf8')
@@ -409,6 +413,10 @@ test('v32 runtime smoke binds the exact candidate to an ephemeral Windows lifecy
   assert.match(runtimeSmoke, /\$asset\.digest -ne "sha256:\$\(\$env:CANDIDATE_SHA256\.ToLowerInvariant\(\)\)"/)
   assert.match(runtimeSmoke, /Invoke-WebRequest -Uri \$asset\.url -Headers \$headers -OutFile \$candidatePath/)
   assert.match(runtimeSmoke, /Join-Path \$env:RUNNER_TEMP 'hermes-v32-release-inputs'/)
+  assert.match(lifecycleRunner, /resolveLifecycleStagingRoot/)
+  assert.match(lifecycleRunner, /runnerTemp: process\.env\.RUNNER_TEMP/)
+  assert.match(lifecycleRunner, /fs\.mkdtempSync\(path\.join\(stagingRoot/)
+  assert.doesNotMatch(lifecycleRunner, /fs\.mkdtempSync\(path\.join\(os\.tmpdir\(\)/)
   assert.doesNotMatch(runtimeSmoke, /New-Item -ItemType Directory -Path candidate, previous, rollback/)
   assert.match(runtimeSmoke, /actions\/cache\/restore@0400d5f644dc74513175e3cd8d07132dd4860809/)
   assert.match(runtimeSmoke, /actions\/cache\/save@0400d5f644dc74513175e3cd8d07132dd4860809/)

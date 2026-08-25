@@ -26,7 +26,12 @@ import {
   LOCAL_CANDIDATE_IGNORED_INPUT_GIT_ARGS,
   createLocalCandidateProvenanceGuard
 } from '../bundled-release-policy.mjs'
-import { assertEmptyEvidenceDirectory, assertEvidenceBoundary, isSameOrWithin } from './host-boundary.mjs'
+import {
+  assertEmptyEvidenceDirectory,
+  assertEvidenceBoundary,
+  isSameOrWithin,
+  resolveLifecycleStagingRoot
+} from './host-boundary.mjs'
 import { fingerprintSnapshot, stagePlaywrightDependencies, stageTrackedSnapshot } from './tracked-snapshot.mjs'
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
@@ -372,7 +377,12 @@ async function main() {
     schemaVersion: 1
   })
 
-  const inputDir = fs.mkdtempSync(path.join(os.tmpdir(), `hermes-v32-lifecycle-${runId}-`))
+  const stagingRoot = resolveLifecycleStagingRoot({
+    isolationMode: args.isolationMode,
+    runnerTemp: process.env.RUNNER_TEMP,
+    systemTemp: os.tmpdir()
+  })
+  const inputDir = fs.mkdtempSync(path.join(stagingRoot, `hermes-v32-lifecycle-${runId}-`))
   let sandbox = null
   try {
     const repoSnapshotDir = path.join(inputDir, 'repo-snapshot')
@@ -535,7 +545,7 @@ async function main() {
     console.log(`Windows x64 lifecycle acceptance passed: ${path.join(args.evidenceDir, RESULT_NAME)}`)
   } finally {
     if (sandbox && sandbox.exitCode === null && !sandbox.killed) sandbox.kill()
-    if (!isSameOrWithin(inputDir, os.tmpdir()) || path.resolve(inputDir) === path.resolve(os.tmpdir())) {
+    if (!isSameOrWithin(inputDir, stagingRoot) || path.resolve(inputDir) === path.resolve(stagingRoot)) {
       throw new Error(`refusing to remove an unexpected staging directory: ${inputDir}`)
     }
     fs.rmSync(inputDir, { force: true, recursive: true })
