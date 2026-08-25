@@ -1,24 +1,12 @@
 {
-  "tag": "vi-v0.31.0-7",
+  "tag": "vi-v0.32.0-1",
   "rollbackTag": "vi-v0.20.4-39",
   "releaseClass": "community-pilot",
-  "featuredCandidate": {
-    "tag": "vi-v0.32.0-1",
-    "commit": "81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f",
-    "productVersion": "v32.0",
-    "releaseClass": "community-prerelease",
-    "published": true,
-    "windowsX64": {
-      "filename": "Hermes-Vietnamese-Windows-x64-Setup.exe",
-      "size": 341176379,
-      "sha256": "efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac"
-    },
-    "downloadFiles": ["Hermes-Vietnamese-Windows-x64-Setup.exe"]
-  },
+  "artifactProvenanceClass": "community-prerelease",
   "windowsX64": {
     "filename": "Hermes-Vietnamese-Windows-x64-Setup.exe",
-    "size": 340302846,
-    "sha256": "cca0f3c0255e5e8736676a4d7ccb52c6e1b75eb73b94b8d1c3ca5dc91e57e840"
+    "size": 341176379,
+    "sha256": "efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac"
   },
   "windowsInstallImages": [
     "edge-warning-see-more-v25.jpg",
@@ -26,16 +14,5 @@
     "edge-publisher-unknown-v25.jpg",
     "edge-keep-anyway-v25.jpg"
   ],
-  "downloadFiles": [
-    "Hermes-Vietnamese-Windows-x64-Setup.exe",
-    "Hermes-Vietnamese-Windows-arm64-Setup.exe",
-    "Hermes-Vietnamese-macOS-Apple-Silicon.dmg",
-    "Hermes-Vietnamese-macOS-Intel.dmg",
-    "Hermes-Vietnamese-Linux-x64.deb",
-    "Hermes-Vietnamese-Linux-arm64.deb",
-    "Hermes-Vietnamese-Linux-x64.rpm",
-    "Hermes-Vietnamese-Linux-arm64.rpm",
-    "Hermes-Vietnamese-Linux-x64.AppImage",
-    "Hermes-Vietnamese-Linux-arm64.AppImage"
-  ]
+  "downloadFiles": ["Hermes-Vietnamese-Windows-x64-Setup.exe"]
 }

@@ -29,7 +29,7 @@ test("Vietnamese release tags map to deterministic Electron SemVer", () => {
   assert.throws(() => parseVietnameseReleaseTag("v0.20.0"), /vi-vX.Y.Z-N/)
 })
 
-test("unpublished v32 candidate stays separate from the current public v31 descriptor", () => {
+test("v32 Latest descriptor stays bound to the exact community-pilot candidate", () => {
   const desktopPackage = JSON.parse(
     fs.readFileSync(new URL("../apps/desktop/package.json", import.meta.url), "utf8"),
   )
@@ -45,12 +45,10 @@ test("unpublished v32 candidate stays separate from the current public v31 descr
   const candidate = resolveVietnameseReleaseCandidate(expectedTag)
 
   assert.equal(runtime.status, 0, runtime.stderr)
-  assert.equal(publicRelease.tag, "vi-v0.31.0-7")
-  assert.notEqual(publicRelease.tag, expectedTag)
-  assert.equal(publicRelease.featuredCandidate.tag, expectedTag)
-  assert.equal(publicRelease.featuredCandidate.productVersion, VI_PRODUCT_RELEASE.productVersion)
-  assert.equal(publicRelease.featuredCandidate.releaseClass, "community-prerelease")
-  assert.equal(publicRelease.featuredCandidate.published, false)
+  assert.equal(publicRelease.tag, expectedTag)
+  assert.equal(publicRelease.releaseClass, "community-pilot")
+  assert.equal(publicRelease.artifactProvenanceClass, "community-prerelease")
+  assert.deepEqual(publicRelease.downloadFiles, ["Hermes-Vietnamese-Windows-x64-Setup.exe"])
   assert.equal(candidate.tag, expectedTag)
   assert.equal(candidate.productVersion, VI_PRODUCT_RELEASE.productVersion)
   assert.equal(candidate.baseVersion, VI_PRODUCT_RELEASE.technicalVersion)

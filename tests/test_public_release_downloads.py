@@ -25,6 +25,7 @@ def test_primary_download_guides_only_point_to_current_release() -> None:
         assert rollback_release not in text, (
             f"{path} still sends users to {rollback_release}"
         )
+        assert "vi-v0.31.0-7" not in text, f"{path} still promotes superseded v31"
 
 
 def test_download_tables_use_current_release_and_exact_asset_names() -> None:
@@ -41,54 +42,50 @@ def test_download_tables_use_current_release_and_exact_asset_names() -> None:
             )
 
 
-def test_featured_candidate_notes_use_the_candidate_assets() -> None:
-    candidate = PUBLIC_RELEASE["featuredCandidate"]
-    assert candidate["releaseClass"] == "community-prerelease"
+def test_latest_notes_use_the_exact_v32_asset() -> None:
+    assert PUBLIC_RELEASE["releaseClass"] == "community-pilot"
+    assert PUBLIC_RELEASE["artifactProvenanceClass"] == "community-prerelease"
     prefix = (
         "https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/"
-        f"{candidate['tag']}/"
+        f"{PUBLIC_RELEASE['tag']}/"
     )
     text = _read(".github/release-notes-vietnamese.md")
-    assert candidate["tag"] in text
-    assert "community prerelease, chưa phải stable" in text
-    for filename in candidate["downloadFiles"]:
+    assert PUBLIC_RELEASE["tag"] in text
+    assert "community pilot GitHub Latest, chưa phải stable" in text
+    assert "provenance `community-prerelease`" in text
+    for filename in PUBLIC_RELEASE["downloadFiles"]:
         assert prefix + filename in text, (
-            ".github/release-notes-vietnamese.md is missing the featured "
-            f"candidate URL for {filename}"
+            ".github/release-notes-vietnamese.md is missing the Latest "
+            f"v32 URL for {filename}"
         )
 
 
-def test_featured_candidate_does_not_relabel_the_default_release() -> None:
+def test_v32_relabels_the_default_release_without_claiming_stable() -> None:
     text = _read(".github/release-notes-vietnamese.md")
-    assert PUBLIC_RELEASE["featuredCandidate"]["tag"] != PUBLIC_RELEASE["tag"]
-    assert "bản tải mặc định/Latest" not in text
-    assert "Bản ổn định/Latest vẫn là" not in text
+    assert "GitHub Latest" in text
+    assert "chưa phải stable" in text
+    assert "Latest đầy đủ vẫn là v31" not in text
 
 
-def test_published_candidate_requires_a_public_readme_callout() -> None:
-    candidate = PUBLIC_RELEASE["featuredCandidate"]
-    if candidate.get("published") is not True:
-        return
-
+def test_latest_v32_requires_a_public_readme_callout() -> None:
     release_url = (
         "https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/"
-        f"{candidate['tag']}"
+        f"{PUBLIC_RELEASE['tag']}"
     )
     download_prefix = (
         "https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/"
-        f"{candidate['tag']}/"
+        f"{PUBLIC_RELEASE['tag']}/"
     )
 
     for path in ("README.md", "README.vi.md"):
         text = _read(path)
-        assert candidate["tag"] in text, f"{path} must feature the published candidate"
-        assert "prerelease" in text.lower(), (
-            f"{path} must identify {candidate['tag']} as prerelease"
-        )
-        assert release_url in text, f"{path} must link to the candidate release page"
-        for filename in candidate["downloadFiles"]:
+        assert PUBLIC_RELEASE["tag"] in text, f"{path} must feature v32 Latest"
+        assert "community pilot" in text.lower()
+        assert "chưa phải stable" in text.lower()
+        assert release_url in text, f"{path} must link to the v32 release page"
+        for filename in PUBLIC_RELEASE["downloadFiles"]:
             assert download_prefix + filename in text, (
-                f"{path} is missing the candidate URL for {filename}"
+                f"{path} is missing the v32 URL for {filename}"
             )
 
 

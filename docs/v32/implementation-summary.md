@@ -9,8 +9,8 @@ Baseline v32: `3cce675cea2bfdfd2fd29352f35a529e827cf46f`
 Mốc mã trước checkpoint test hiện tại:
 `ffa71a84065f9272bb65df28787fe80470f72558`
 
-Trạng thái cuối: **technical GO; private staging hoàn tất; chờ owner approval
-cho merge và public community prerelease**.
+Trạng thái cuối trước promotion: **technical GO; private staging hoàn tất;
+owner đã duyệt merge và đưa community pilot v32 lên GitHub Latest**.
 
 Candidate bất biến dùng commit
 `81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f`, version `0.32.0-vi.1`, Windows
@@ -194,6 +194,6 @@ staging đều đạt. Lifecycle receipt khóa 19/19 gate tại run `32865922889
 chi tiết nằm trong `docs/v32/evidence/` và `docs/v32/go-no-go.md`.
 
 Không có live provider proof vì chưa được duyệt quota; không có Authenticode.
-Hai giới hạn này được công bố rõ cho community prerelease. Công việc kỹ thuật
-còn lại bằng không; merge `main` và public release chỉ chạy sau một xác nhận
-cuối của chủ dự án.
+Hai giới hạn này được công bố rõ cho community pilot chưa stable. Công việc kỹ
+thuật đã hoàn tất; promotion khóa exact byte, tự hậu kiểm và tự khôi phục v31
+nếu bất kỳ cổng công khai nào thất bại.

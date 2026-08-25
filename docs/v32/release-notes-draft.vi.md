@@ -1,6 +1,6 @@
 # Hermes Vietnamese v32 — release notes staging
 
-Trạng thái: **nội dung public đã khóa, release vẫn là private draft**.
+Trạng thái: **nội dung public đã khóa; owner đã duyệt promotion GitHub Latest**.
 
 Nguồn body chuẩn để promotion đối chiếu byte-for-byte:
 `.github/release-notes-vietnamese.md`.
@@ -36,5 +36,6 @@ Nguồn body chuẩn để promotion đối chiếu byte-for-byte:
 - Chưa có smoke máy người dùng hoặc live provider proof.
 - SignPath chưa cung cấp credential ký; dự án chưa tham gia Apple Developer
   Program.
-- Public community prerelease và merge `main` chờ owner approval.
-- GitHub Latest vẫn là v31 vì GitHub không cho prerelease mang nhãn Latest.
+- V32 sẽ được công khai dưới dạng community pilot GitHub Latest, chưa phải stable.
+- Artifact giữ provenance `community-prerelease`; cờ GitHub `prerelease=false`
+  chỉ dùng để thay v31 lỗi nghiêm trọng ở vị trí Latest.

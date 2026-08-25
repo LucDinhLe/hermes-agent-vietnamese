@@ -26,7 +26,7 @@ permissions:
 
 jobs:
   promote:
-    name: Xác minh exact byte và công khai v32 community prerelease
+    name: Xác minh exact byte và đưa v32 community pilot lên Latest
     runs-on: ubuntu-24.04
     environment: release-production
     steps:
@@ -89,7 +89,7 @@ jobs:
             candidate lifecycle release-api.json lifecycle-run.json lifecycle-artifacts.json \
             "$EXPECTED_MANIFEST_SHA" "$LIFECYCLE_RUN_ID" draft
 
-      - name: Công khai, hậu kiểm và tự quay về draft nếu lỗi
+      - name: Công khai Latest, hậu kiểm và tự khôi phục v31 nếu lỗi
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -99,23 +99,52 @@ jobs:
         run: |
           set -euo pipefail
           release_id="$(jq -r .id release-api.json)"
-          previous_latest="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)"
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > previous-latest.json
+          previous_latest="$(jq -r .tag_name previous-latest.json)"
+          previous_latest_id="$(jq -r .id previous-latest.json)"
           test "$previous_latest" = vi-v0.31.0-7
+          [[ "$previous_latest_id" =~ ^[1-9][0-9]*$ ]]
+          test "$release_id" != "$previous_latest_id"
 
           rollback_publication() {
             local original_status=$?
+            local rollback_failed=false
             trap - ERR
-            gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
-              -F draft=true -F prerelease=true -f make_latest=false > /dev/null || true
-            exit "$original_status"
+            echo "::error::V32 postcheck failed; returning $TAG to draft and restoring Latest=$previous_latest"
+            if ! gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+              -F draft=true -F prerelease=true -f make_latest=false > rollback-v32.json; then
+              rollback_failed=true
+            fi
+            if ! gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > rollback-v32-verify.json; then
+              rollback_failed=true
+            elif [[ "$(jq -r .draft rollback-v32-verify.json)" != "true" || \
+              "$(jq -r .prerelease rollback-v32-verify.json)" != "true" ]]; then
+              rollback_failed=true
+            fi
+            if ! gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$previous_latest_id" \
+              -f make_latest=true > rollback-latest.json; then
+              rollback_failed=true
+            fi
+            if ! gh api "repos/$GITHUB_REPOSITORY/releases/latest" > rollback-latest-verify.json; then
+              rollback_failed=true
+            elif [[ "$(jq -r .id rollback-latest-verify.json)" != "$previous_latest_id" || \
+              "$(jq -r .tag_name rollback-latest-verify.json)" != "$previous_latest" ]]; then
+              rollback_failed=true
+            fi
+            if [[ "$rollback_failed" == "true" ]]; then
+              echo "::error::Automatic rollback verification failed; manual release repair is required"
+            else
+              echo "::notice::Rollback verified: v32=draft, Latest=$previous_latest"
+            fi
+            return "$original_status"
           }
           trap rollback_publication ERR
 
           gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
-            -F draft=false -F prerelease=true -f make_latest=false > publication-response.json
+            -F draft=false -F prerelease=false -f make_latest=true > publication-response.json
           test "$(jq -r .id publication-response.json)" = "$release_id"
           test "$(jq -r .draft publication-response.json)" = false
-          test "$(jq -r .prerelease publication-response.json)" = true
+          test "$(jq -r .prerelease publication-response.json)" = false
 
           gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > published-release.json
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" \
@@ -125,9 +154,11 @@ jobs:
           mv published-release-complete.json published-release.json
           node scripts/validate-v32-promotion.mjs \
             candidate lifecycle published-release.json lifecycle-run.json lifecycle-artifacts.json \
-            "$EXPECTED_MANIFEST_SHA" "$LIFECYCLE_RUN_ID" published
+            "$EXPECTED_MANIFEST_SHA" "$LIFECYCLE_RUN_ID" latest
 
-          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)" = "$previous_latest"
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > latest-release.json
+          test "$(jq -r .id latest-release.json)" = "$release_id"
+          test "$(jq -r .tag_name latest-release.json)" = "$TAG"
           mkdir public
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir public
           test "$(sha256sum public/SHA256SUMS.txt | cut -d' ' -f1)" = "$EXPECTED_MANIFEST_SHA"

@@ -4,11 +4,16 @@
 
 ## Hermes Vietnamese v32.0
 
-Lớp phát hành: **community prerelease, chưa phải stable**.
+Lớp phát hành: **community pilot GitHub Latest, chưa phải stable**.
 
-`vi-v0.32.0-1` là **community prerelease cho Windows 10/11 x64**, chưa phải stable.
+`vi-v0.32.0-1` là **community pilot cho Windows 10/11 x64** và thay v31 làm
+GitHub Latest, nhưng chưa phải stable.
 Bản này tập trung sửa các lỗi chí mạng của v31 về token, phiên dài và ba luồng
 UI/UX chính.
+
+Candidate bất biến vẫn mang provenance `community-prerelease`. GitHub được đặt
+`prerelease=false` chỉ để v32 có thể thay bản v31 lỗi nghiêm trọng ở vị trí
+Latest; việc này không biến artifact chưa ký thành stable/final.
 
 ## Những thay đổi chính
 
@@ -51,8 +56,8 @@ UI/UX chính.
   lượt này; Windows có thể hiện `Publisher: Unknown` hoặc SmartScreen.
 - Dự án chưa tham gia Apple Developer Program; v32 không quảng cáo artifact
   macOS, Linux hoặc Windows ARM64 khi chưa có exact-byte evidence riêng.
-- Đây là community prerelease, vì vậy GitHub Latest đầy đủ vẫn là v31; v32 được
-  công khai bằng trang release và link Windows x64 riêng.
+- Đây là community pilot GitHub Latest cho Windows x64, không phải stable/final.
+  v31 bị thay khỏi Latest vì các lỗi nghiêm trọng về token, context và UI/UX.
 - Chỉ cài tệp có kích thước và SHA-256 khớp bảng trên. Không tắt Microsoft
   Defender hoặc SmartScreen trên toàn máy.
 - Rollback đã diễn tập: `vi-v0.20.4-39`.

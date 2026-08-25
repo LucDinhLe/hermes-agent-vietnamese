@@ -4,12 +4,12 @@ Ngày khóa hồ sơ: 2026-08-25
 
 ## Quyết định
 
-**Technical GO** cho Windows 10/11 x64 ở lớp `community-prerelease`.
+**Technical GO** cho Windows 10/11 x64 dưới dạng community pilot GitHub Latest;
+artifact bất biến giữ provenance `community-prerelease` và chưa phải stable.
 
 Candidate đã vượt source gates, exact packaged smoke và toàn bộ vòng đời trên
 máy ảo Windows dùng một lần. Private staging giữ đúng installer đã nghiệm thu.
-Merge `main` và công khai release vẫn là hai hành động bên ngoài đang chờ một
-xác nhận cuối của chủ dự án.
+Chủ dự án đã duyệt merge `main` và thay v31 bằng v32 ở vị trí GitHub Latest.
 
 ## Candidate bất biến
 
@@ -64,8 +64,8 @@ rebuild hoặc thay sau khi freeze.
 - Local private staging và GitHub draft cùng giữ SHA-256
   `efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac`.
 - Workflow `promote-v32-vietnamese.yml` tải lại draft và lifecycle artifact,
-  hash lại mọi receipt, công khai dưới dạng prerelease, hậu kiểm rồi tự trả về
-  draft nếu lỗi.
+  hash lại mọi receipt, đưa v32 lên Latest, hậu kiểm rồi tự trả v32 về draft và
+  khôi phục v31 làm Latest nếu lỗi.
 
 ## Residual risks và giới hạn công bố
 
@@ -76,9 +76,9 @@ rebuild hoặc thay sau khi freeze.
    không tiêu hao quota thật.
 4. Windows ARM64, macOS và Linux không được quảng cáo như artifact v32 đã nghiệm
    thu.
-5. GitHub không cho prerelease làm `Latest`; vì vậy v32 có thể được công khai
-   đúng provenance nhưng v31 vẫn là GitHub Latest cho tới khi có full release
-   hợp lệ.
+5. GitHub không cho release mang cờ prerelease làm `Latest`; vì vậy cờ GitHub
+   của v32 được đặt `prerelease=false` để thay v31 lỗi nghiêm trọng. Provenance
+   artifact vẫn là `community-prerelease`; không gọi stable/final.
 
 ## Rollback
 
@@ -102,7 +102,7 @@ Source tests: VERIFIED
 Packaged Windows smoke: VERIFIED
 Update/relaunch/repair/uninstall/rollback: VERIFIED
 Private staging: VERIFIED (4/4 assets; manifest 1fb94a77e6b2a7da0622fbdc17e6fbb92dbebd37096ed3e24c7965fd177790f4)
-Public promotion: awaiting owner approval
-Residual risks: unsigned Windows community prerelease; no user-machine/live-provider proof; v31 remains GitHub Latest while v32 is prerelease
+Public promotion: owner approved; workflow ready to publish v32 as GitHub Latest
+Residual risks: unsigned Windows community pilot; no user-machine/live-provider proof; only Windows x64 is a verified v32 artifact
 Rollback target: vi-v0.20.4-39
 ```

@@ -202,7 +202,17 @@ export function validateV32PromotionBundle({
   if (release.id !== 376211316 || release.tag_name !== V32_IDENTITY.tag || release.name !== 'Hermes Vietnamese v32.0') {
     throw new Error('GitHub release identity mismatch')
   }
-  if (release.prerelease !== true || release.draft !== (expectedState === 'draft')) {
+  const expectedReleaseState =
+    expectedState === 'draft'
+      ? { draft: true, prerelease: true }
+      : expectedState === 'latest'
+        ? { draft: false, prerelease: false }
+        : null
+  if (
+    !expectedReleaseState ||
+    release.draft !== expectedReleaseState.draft ||
+    release.prerelease !== expectedReleaseState.prerelease
+  ) {
     throw new Error(`GitHub release state mismatch: ${expectedState}`)
   }
   const expectedBody = fs.readFileSync(notesPath, 'utf8').replace(/\r\n?/gu, '\n').replace(/\n+$/gu, '')
@@ -232,17 +242,21 @@ export function validateV32PromotionBundle({
   }
 
   const publicRelease = readJson(publicReleasePath)
-  const featured = publicRelease.featuredCandidate
-  requireIdentity(featured, 'featured candidate')
-  if (featured.published !== true) throw new Error('featured v32 candidate is not marked published')
   if (
-    featured.windowsX64?.filename !== V32_IDENTITY.artifact ||
-    featured.windowsX64?.size !== V32_IDENTITY.size ||
-    featured.windowsX64?.sha256 !== V32_IDENTITY.sha256
+    publicRelease.tag !== V32_IDENTITY.tag ||
+    publicRelease.releaseClass !== 'community-pilot' ||
+    publicRelease.artifactProvenanceClass !== V32_IDENTITY.releaseClass
   ) {
-    throw new Error('featured v32 Windows identity mismatch')
+    throw new Error('public v32 release identity mismatch')
   }
-  sameMembers(featured.downloadFiles ?? [], [V32_IDENTITY.artifact], 'featured v32 downloads')
+  if (
+    publicRelease.windowsX64?.filename !== V32_IDENTITY.artifact ||
+    publicRelease.windowsX64?.size !== V32_IDENTITY.size ||
+    publicRelease.windowsX64?.sha256 !== V32_IDENTITY.sha256
+  ) {
+    throw new Error('public v32 Windows identity mismatch')
+  }
+  sameMembers(publicRelease.downloadFiles ?? [], [V32_IDENTITY.artifact], 'public v32 downloads')
 
   validateReceipt(lifecycleDir, evidence, run, artifacts)
   return { status: 'passed', releaseId: release.id, manifestSha, lifecycleRunId: String(expectedRunId) }
@@ -262,7 +276,7 @@ function main() {
     !state
   ) {
     throw new Error(
-      'usage: validate-v32-promotion.mjs <candidate-dir> <lifecycle-dir> <release.json> <run.json> <artifacts.json> <manifest-sha> <run-id> <draft|published>'
+      'usage: validate-v32-promotion.mjs <candidate-dir> <lifecycle-dir> <release.json> <run.json> <artifacts.json> <manifest-sha> <run-id> <draft|latest>'
     )
   }
   const result = validateV32PromotionBundle({
