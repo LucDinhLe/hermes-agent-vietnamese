@@ -62,9 +62,30 @@ def get_disabled_skills(config: dict, platform: Optional[str] = None) -> Set[str
 
 
 def save_disabled_skills(config: dict, disabled: Set[str], platform: Optional[str] = None):
-    """Persist disabled skill names to config."""
+    """Persist disabled names and keep a completed work-profile allowlist aligned.
+
+    The global toggle surface predates capability profiles.  For a completed
+    work profile, a manual global disable also revokes the skill from
+    ``skills.allowed`` and a manual re-enable adds it back.  Platform-specific
+    overrides do not change the profile-wide permission warehouse.  Legacy
+    profiles without a completed work profile retain the old disabled-only
+    behavior.
+    """
     config.setdefault("skills", {})
     if platform is None:
+        skills_cfg = config["skills"]
+        previous_disabled = _normalize_skill_names(skills_cfg.get("disabled"))
+        work_profile = skills_cfg.get("work_profile")
+        allowed_value = skills_cfg.get("allowed")
+        if (
+            isinstance(work_profile, dict)
+            and work_profile.get("completed") is True
+            and isinstance(allowed_value, (list, tuple, set, frozenset))
+        ):
+            allowed = _normalize_skill_names(allowed_value)
+            newly_disabled = set(disabled) - previous_disabled
+            newly_enabled = previous_disabled - set(disabled)
+            skills_cfg["allowed"] = sorted((allowed - newly_disabled) | newly_enabled)
         config["skills"]["disabled"] = sorted(disabled)
     else:
         config["skills"].setdefault("platform_disabled", {})
