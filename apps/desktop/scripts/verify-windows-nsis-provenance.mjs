@@ -39,28 +39,66 @@ function run7za(binary, args, label) {
   }
 }
 
+function isFile(file) {
+  return fs.statSync(file, { throwIfNoEntry: false })?.isFile() === true
+}
+
+export function resolveExtractedWindowsNsisLayout(outer, arch) {
+  const expectedArchiveName = arch === 'arm64' ? 'app-arm64.7z' : 'app-64.7z'
+  const applicationArchives = allFiles(
+    outer,
+    (_file, name) => name.toLowerCase() === expectedArchiveName
+  )
+  if (applicationArchives.length > 1) {
+    throw new Error(
+      `NSIS must contain at most one ${expectedArchiveName}; found ${applicationArchives.length}`
+    )
+  }
+  if (applicationArchives.length === 1) {
+    return Object.freeze({
+      applicationArchive: applicationArchives[0],
+      applicationRoot: null,
+      kind: 'archive'
+    })
+  }
+
+  // Newer 7-Zip NSIS handlers may expand electron-builder's embedded
+  // app-<arch>.7z in one pass. Accept that representation only when the
+  // application is rooted exactly at the extraction directory; the later
+  // provenance and PE gates still validate the immutable payload and target
+  // architecture. Nested matching decoys therefore remain fail-closed.
+  const directLayoutFiles = [
+    path.join(outer, 'Hermes.exe'),
+    path.join(outer, 'resources', 'install-stamp.json'),
+    path.join(outer, 'resources', 'agent-payload', 'manifest.json')
+  ]
+  if (directLayoutFiles.every(isFile)) {
+    return Object.freeze({
+      applicationArchive: null,
+      applicationRoot: outer,
+      kind: 'direct'
+    })
+  }
+
+  throw new Error(
+    `NSIS contains neither one ${expectedArchiveName} nor a directly extracted application root`
+  )
+}
+
 export async function extractWindowsNsisWithoutInstalling(artifactPath, outputRoot, arch) {
   const sevenZip = await getPath7za()
   const outer = path.join(outputRoot, 'outer')
   fs.mkdirSync(outer, { recursive: true })
   run7za(sevenZip, ['x', '-bd', '-y', `-o${outer}`, artifactPath], 'NSIS outer extraction')
 
-  const expectedArchiveName = arch === 'arm64' ? 'app-arm64.7z' : 'app-64.7z'
-  const applicationArchives = allFiles(
-    outer,
-    (_file, name) => name.toLowerCase() === expectedArchiveName
-  )
-  if (applicationArchives.length !== 1) {
-    throw new Error(
-      `NSIS must contain exactly one ${expectedArchiveName}; found ${applicationArchives.length}`
-    )
-  }
+  const layout = resolveExtractedWindowsNsisLayout(outer, arch)
+  if (layout.kind === 'direct') return layout.applicationRoot
 
   const application = path.join(outputRoot, 'application')
   fs.mkdirSync(application, { recursive: true })
   run7za(
     sevenZip,
-    ['x', '-bd', '-y', `-o${application}`, applicationArchives[0]],
+    ['x', '-bd', '-y', `-o${application}`, layout.applicationArchive],
     'NSIS resident application extraction'
   )
   return application

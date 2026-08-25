@@ -5,7 +5,10 @@ import path from 'node:path'
 
 import { afterEach, test } from 'vitest'
 
-import { verifyWindowsNsisProvenance } from './verify-windows-nsis-provenance.mjs'
+import {
+  resolveExtractedWindowsNsisLayout,
+  verifyWindowsNsisProvenance
+} from './verify-windows-nsis-provenance.mjs'
 
 const COMMIT = '1'.repeat(40)
 const STALE_COMMIT = '2'.repeat(40)
@@ -66,6 +69,63 @@ function env() {
 
 afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { force: true, recursive: true })
+})
+
+function extractionRoot() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-nsis-layout-test-'))
+  roots.push(root)
+  return root
+}
+
+test('accepts the direct application tree emitted by newer 7-Zip NSIS handlers', () => {
+  const outer = extractionRoot()
+  writePe(path.join(outer, 'Hermes.exe'))
+  fs.mkdirSync(path.join(outer, 'resources', 'agent-payload'), { recursive: true })
+  fs.writeFileSync(path.join(outer, 'resources', 'install-stamp.json'), '{}')
+  fs.writeFileSync(path.join(outer, 'resources', 'agent-payload', 'manifest.json'), '{}')
+
+  const layout = resolveExtractedWindowsNsisLayout(outer, 'x64')
+  assert.equal(layout.kind, 'direct')
+  assert.equal(layout.applicationRoot, outer)
+})
+
+test('keeps the legacy embedded application archive layout supported', () => {
+  const outer = extractionRoot()
+  const archive = path.join(outer, 'nested', 'app-64.7z')
+  fs.mkdirSync(path.dirname(archive), { recursive: true })
+  fs.writeFileSync(archive, 'archive fixture')
+
+  const layout = resolveExtractedWindowsNsisLayout(outer, 'x64')
+  assert.equal(layout.kind, 'archive')
+  assert.equal(layout.applicationArchive, archive)
+})
+
+test('rejects nested direct-layout decoys when the embedded archive is absent', () => {
+  const outer = extractionRoot()
+  const decoy = path.join(outer, 'decoy')
+  writePe(path.join(decoy, 'Hermes.exe'))
+  fs.mkdirSync(path.join(decoy, 'resources', 'agent-payload'), { recursive: true })
+  fs.writeFileSync(path.join(decoy, 'resources', 'install-stamp.json'), '{}')
+  fs.writeFileSync(path.join(decoy, 'resources', 'agent-payload', 'manifest.json'), '{}')
+
+  assert.throws(
+    () => resolveExtractedWindowsNsisLayout(outer, 'x64'),
+    /neither one app-64\.7z nor a directly extracted application root/
+  )
+})
+
+test('rejects multiple embedded application archives', () => {
+  const outer = extractionRoot()
+  for (const directory of ['first', 'second']) {
+    const archive = path.join(outer, directory, 'app-64.7z')
+    fs.mkdirSync(path.dirname(archive), { recursive: true })
+    fs.writeFileSync(archive, directory)
+  }
+
+  assert.throws(
+    () => resolveExtractedWindowsNsisLayout(outer, 'x64'),
+    /at most one app-64\.7z; found 2/
+  )
 })
 
 test('accepts provenance and PE architecture extracted from the installer bytes themselves', async () => {
