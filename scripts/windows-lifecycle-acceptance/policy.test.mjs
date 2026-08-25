@@ -165,8 +165,13 @@ test('native stderr warnings are logged while the native exit code remains autho
 test('NSIS install completion waits for both exact registry keys instead of racing the installer', () => {
   assert.match(guestScript, /function Wait-InstallState/)
   assert.match(guestScript, /Test-Path -LiteralPath \$ProductKey[\s\S]*?Test-Path -LiteralPath \$UninstallKey/)
+  assert.match(guestScript, /function Invoke-NsisInstall/)
+  assert.match(guestScript, /Start-Process[\s\S]*?-ArgumentList @\('\/S', '\/currentuser'\)[\s\S]*?-PassThru[\s\S]*?-Wait/)
+  assert.match(guestScript, /\$log = Invoke-NsisInstall \$Installer \$LogName/)
   assert.match(guestScript, /\$state = Wait-InstallState \$LogName/)
   assert.doesNotMatch(guestScript, /\$state = Get-InstallState\r?\n/)
+  assert.match(guestScript, /install-diagnostics-\$Stage\.json/)
+  assert.match(guestScript, /hklm32Uninstall/)
 })
 
 test('sandbox configuration disables host-facing channels and maps only evidence writable', () => {

@@ -192,7 +192,62 @@ function Wait-InstallState {
     }
     Start-Sleep -Milliseconds 500
   } while ([DateTime]::UtcNow -lt $deadline)
+  try { Write-InstallDiagnostics $Stage } catch {}
   throw "$Stage did not reach a complete registered install within 3 minutes: $lastFailure"
+}
+
+function Write-InstallDiagnostics {
+  param([string]$Stage)
+  $registryPaths = [ordered]@{
+    hkcuProduct = $ProductKey
+    hkcuUninstall = $UninstallKey
+    hklmProduct = "Registry::HKEY_LOCAL_MACHINE\Software\$ProductId"
+    hklmUninstall = "Registry::HKEY_LOCAL_MACHINE\Software\Microsoft\Windows\CurrentVersion\Uninstall\$ProductId"
+    hklm32Product = "Registry::HKEY_LOCAL_MACHINE\Software\WOW6432Node\$ProductId"
+    hklm32Uninstall = "Registry::HKEY_LOCAL_MACHINE\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\$ProductId"
+  }
+  $registry = [ordered]@{}
+  foreach ($entry in $registryPaths.GetEnumerator()) {
+    $registry[$entry.Key] = [bool](Test-Path -LiteralPath $entry.Value)
+  }
+  $installPaths = @(
+    (Join-Path $env:LOCALAPPDATA 'Programs\Hermes'),
+    (Join-Path $env:ProgramFiles 'Hermes')
+  )
+  if (-not [string]::IsNullOrWhiteSpace(${env:ProgramFiles(x86)})) {
+    $installPaths += Join-Path ${env:ProgramFiles(x86)} 'Hermes'
+  }
+  $paths = @($installPaths | ForEach-Object {
+    [ordered]@{ path = $_; exists = [bool](Test-Path -LiteralPath $_) }
+  })
+  $installerPaths = @(
+    [string]$Manifest.paths.candidate,
+    [string]$Manifest.paths.previous,
+    [string]$Manifest.paths.rollback
+  )
+  $processes = @(Get-CimInstance Win32_Process | Where-Object {
+    $executable = [string]$_.ExecutablePath
+    $commandLine = [string]$_.CommandLine
+    ($_.Name -match '(?i)(?:Hermes|nsis|setup)') -or
+      @($installerPaths | Where-Object {
+        ($executable -and [string]::Equals($executable, $_, [StringComparison]::OrdinalIgnoreCase)) -or
+        ($commandLine -and $commandLine.IndexOf($_, [StringComparison]::OrdinalIgnoreCase) -ge 0)
+      }).Count -gt 0
+  } | ForEach-Object {
+    [ordered]@{
+      name = [string]$_.Name
+      processId = [int]$_.ProcessId
+      parentProcessId = [int]$_.ParentProcessId
+      executablePath = [string]$_.ExecutablePath
+      commandLine = [string]$_.CommandLine
+    }
+  })
+  Write-JsonAtomic (Join-Path $EvidenceRoot ("install-diagnostics-$Stage.json")) ([ordered]@{
+    installPaths = $paths
+    processes = $processes
+    registry = $registry
+    stage = $Stage
+  })
 }
 
 function Get-HermesProcesses {
@@ -260,10 +315,28 @@ function Invoke-NativeLogged {
   return $LogName
 }
 
+function Invoke-NsisInstall {
+  param([string]$Installer, [string]$LogName)
+  $process = Start-Process `
+    -FilePath $Installer `
+    -ArgumentList @('/S', '/currentuser') `
+    -PassThru `
+    -Wait `
+    -WindowStyle Hidden
+  $exitCode = [int]$process.ExitCode
+  [System.IO.File]::WriteAllText(
+    (Join-Path $EvidenceRoot $LogName),
+    "exitCode=$exitCode`narguments=/S /currentuser`n",
+    $Utf8NoBom
+  )
+  Assert-True ($exitCode -eq 0) "NSIS installer failed with exit code $exitCode; see $LogName"
+  return $LogName
+}
+
 function Install-Exact {
   param([string]$Installer, [string]$LogName)
   Assert-NoHermesProcesses "before $LogName"
-  $log = Invoke-NativeLogged $Installer @('/S') $LogName
+  $log = Invoke-NsisInstall $Installer $LogName
   $state = Wait-InstallState $LogName
   $script:CurrentInstallDir = [string]$state.InstallDir
   Protect-InstalledProduct ([string]$state.Binary) $LogName
