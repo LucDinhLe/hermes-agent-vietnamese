@@ -18,8 +18,9 @@
   locale; toàn bộ ba cấu hình TypeScript đạt. ESLint phần thay đổi không có lỗi;
   `git diff --check` đạt. Không build, live probe, đọc/sửa profile Hermes thật,
   push hay hành động public.
-- Bước nhỏ tiếp theo: bổ sung UX gọi task discovery khi tạo session/agent mới,
-  chỉ gợi ý Skill đã được allow và giữ recommendation không mutate config.
+- Bước nhỏ tiếp theo: khóa bằng regression một dấu hiệu fresh-profile-only bền
+  vững cho default install và named profile create; update/repair cùng profile
+  legacy không được bị hỏi lại. Sau đó mới nối task discovery vào session/agent.
 
 ## Cập nhật 2026-08-26 — API work profile profile-scoped
 

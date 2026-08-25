@@ -264,15 +264,15 @@ Các checkpoint đã hoàn thành trên `feat/v32-token-context-ux`:
 - `853af78fe`: manual Skill toggle giữ `skills.allowed` đồng bộ.
 - `5d87c54e4`: API capability profile-scoped dùng config writer/lock hiện hữu.
 - Lát cắt Desktop tiếp theo đã nối client API, trang **Work Profile** trong
-  Settings và first-run work setup với preview/edit/Back/Skip/retry. Mọi mutation
+  Settings và first-run work setup với preview/edit/Save/Skip. Mọi mutation
   chỉ xảy ra sau Save hoặc Skip; mở Settings và preview không ghi config. Chuỗi
   mới có đủ `en`, `vi`, `ja`, `zh`, `zh-hant` và fallback `ar`.
 
 Gate gần nhất:
 
-- Canonical Python gate: 58/58 qua `scripts/run_tests.sh` cho capability profile,
+- Canonical Python gate: 63/63 qua `scripts/run_tests.sh` cho capability profile,
   bundled sync, Skill toggles và backend API.
-- Desktop capability/client/onboarding/Settings: 18/18.
+- Desktop capability/client/onboarding/Settings/i18n: 34/34.
 - Desktop typecheck xanh; lint toàn bộ file thay đổi xanh.
 - Không live probe, không provider/model/network call, không build candidate,
   không dùng profile thật; `.tmp/` vẫn được giữ nguyên.
@@ -302,7 +302,7 @@ hoặc public promotion của candidate kế tiếp phải tuân theo release ga
 Decision: candidate only / implementation in progress
 Candidate: none for v32.1; immutable public base is 81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f, 0.32.0-vi.1, 341176379 bytes, efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac
 Audience allowed: source implementation and isolated tests only
-Gates passed: v32 technical GO; isolated fresh baseline; fail-closed allowlist/local discovery; profile-scoped backend API; Desktop client/Settings/first-run UI source gates; Python 58/58; Desktop targeted 18/18; typecheck and changed-file lint
+Gates passed: v32 technical GO; isolated fresh baseline; fail-closed allowlist/local discovery; profile-scoped backend API; Desktop client/Settings/first-run UI source gates; Python 63/63; Desktop targeted 34/34; typecheck and changed-file lint
 Gates failed or missing: durable fresh-profile-only marker and named-profile first-open coverage; session/subagent router; root Governor fan-out telemetry; MCP router; integration/UI E2E; token benchmark; packaged lifecycle
 Evidence: fresh bundled sync 82 packages; 72 active relevant skills; 8,797-char skill index (~2,199 token estimate); 0 configured MCP; local discovery reports 0 model/provider/network; no config mutation before confirmation
 Residual risks: first-run UI still needs a durable fresh-profile-only trigger separate from legacy detection; parent/child capability isolation and prompt byte stability are not yet wired; MCP permissions and multi-agent fan-out still need fail-closed contracts
