@@ -10,6 +10,7 @@ import {
   createComposerAttachmentScope,
   migrateSessionDraft,
   removeComposerAttachment,
+  replaceSessionDraft,
   requestVoiceConversationStart,
   SESSION_DRAFTS_STORAGE_KEY,
   stashSessionDraft,
@@ -290,5 +291,19 @@ describe('session drafts', () => {
 
     clearSessionDraft('from')
     clearSessionDraft('to')
+  })
+
+  it('replaces an older destination when the visible composer hands off its draft', () => {
+    stashSessionDraft('visible-tile', 'the draft on screen', [attachment({ id: 'file:visible' })])
+    stashSessionDraft('primary', 'older hidden snapshot', [])
+
+    expect(replaceSessionDraft('visible-tile', 'primary')).toBe(true)
+    expect(takeSessionDraft('primary')).toMatchObject({
+      text: 'the draft on screen',
+      attachments: [{ id: 'file:visible' }]
+    })
+    expect(takeSessionDraft('visible-tile')).toEqual({ attachments: [], text: '' })
+
+    clearSessionDraft('primary')
   })
 })

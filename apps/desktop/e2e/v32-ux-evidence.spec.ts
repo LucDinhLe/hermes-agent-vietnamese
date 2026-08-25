@@ -37,6 +37,16 @@ test('Messaging back preserves the draft and the context meter exposes transpare
       { timeout: 60_000 }
     )
 
+    // Exercise the real multi-tab path: the old primary-only coverage could
+    // not expose a draft that lived under a session tile's owner-scoped key.
+    const tabs = page.locator('[data-tree-tab^="session-tile:"]')
+    const before = await tabs.count()
+    const previousTab = tabs.nth(before - 1)
+
+    await page.locator('[data-session-tab-plus] button').first().click()
+    await expect(tabs).toHaveCount(before + 1)
+    await previousTab.click()
+
     await composer.click()
     await composer.type(draft, { delay: 10 })
     await expect(composer).toContainText(draft)

@@ -14,17 +14,24 @@ import {
   setupPackagedMockBackend,
   waitForAppReady,
 } from './fixtures'
-import { MOCK_REPLY, receivedUserTexts } from './mock-server'
+import { MOCK_REPLY, type MockServer } from './mock-server'
 
-async function send(page: Page, prompt: string): Promise<void> {
+async function send(page: Page, mock: MockServer, prompt: string): Promise<void> {
   const composer = page.locator('[data-slot="composer-rich-input"]:visible')
+  const agentCallsBefore = mock.receivedCompletions.filter(
+    request => request.kind === 'agent' && request.userText === prompt,
+  ).length
 
   await composer.click()
   await page.keyboard.insertText(prompt)
   await page.keyboard.press('Enter')
   await expect
-    .poll(() => receivedUserTexts().filter((text) => text === prompt).length, { timeout: 60_000 })
-    .toBe(1)
+    .poll(
+      () =>
+        mock.receivedCompletions.filter(request => request.kind === 'agent' && request.userText === prompt).length,
+      { timeout: 60_000 },
+    )
+    .toBe(agentCallsBefore + 1)
   await page.waitForFunction(
     reply => document.querySelector('[data-slot="aui_thread-viewport"]')?.textContent?.includes(String(reply)) ?? false,
     MOCK_REPLY,
@@ -54,7 +61,7 @@ test.describe('v32 exact packaged candidate', () => {
     const setupPrompt = 'Persist this exact packaged v32 acceptance session'
     const draft = 'Bản nháp packaged v32 vẫn còn sau khi mở lại'
 
-    await send(fixture.page, setupPrompt)
+    await send(fixture.page, fixture.mock, setupPrompt)
 
     // A physical pointer click creates one selected tab and focuses its
     // composer. Return to the persisted tab before checking its draft.
@@ -105,8 +112,8 @@ test.describe('v32 exact packaged candidate', () => {
     await fixture.page.keyboard.press('Backspace')
     await expect(composer).toHaveText('')
 
-    await send(fixture.page, 'PACKAGED_V32_COMPACTION_SECOND')
-    await send(fixture.page, 'PACKAGED_V32_COMPACTION_THIRD')
+    await send(fixture.page, fixture.mock, 'PACKAGED_V32_COMPACTION_SECOND')
+    await send(fixture.page, fixture.mock, 'PACKAGED_V32_COMPACTION_THIRD')
 
     await composer.click()
     await fixture.page.keyboard.insertText('/compress preserve packaged v32 acceptance anchors')
@@ -115,7 +122,7 @@ test.describe('v32 exact packaged candidate', () => {
       .poll(() => fixture.page.locator('[data-slot="aui_thread-viewport"]').textContent(), { timeout: 120_000 })
       .toMatch(/Compressed|No changes from compression/)
 
-    await send(fixture.page, 'PACKAGED_V32_AFTER_COMPACTION')
+    await send(fixture.page, fixture.mock, 'PACKAGED_V32_AFTER_COMPACTION')
     await meter.click()
     await expect(fixture.page.locator('[data-slot="context-usage-panel"]')).toContainText(
       /(?:Số lần compact|Compactions).*1/i,

@@ -3,6 +3,7 @@ import type * as React from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 
+import { getActiveComposer } from '@/app/chat/composer/focus'
 import { PageLoader } from '@/components/page-loader'
 import { StatusDot, type StatusTone } from '@/components/status-dot'
 import { Button } from '@/components/ui/button'
@@ -28,9 +29,11 @@ import { openExternalLink } from '@/lib/external-link'
 import { ExternalLink, Save, Trash2 } from '@/lib/icons'
 import { normalize } from '@/lib/text'
 import { cn } from '@/lib/utils'
+import { replaceSessionDraft, requestComposerDraftSync } from '@/store/composer'
 import { $changeEventsAvailable, $pairingChangeTick, $platformsChangeTick } from '@/store/live-sync'
 import { notify, notifyError } from '@/store/notifications'
-import { $selectedStoredSessionId } from '@/store/session'
+import { $selectedStoredSessionId, $sessions } from '@/store/session'
+import { $sessionTiles } from '@/store/session-states'
 import { $settingsScopeOverride } from '@/store/settings-scope'
 import { runGatewayRestart } from '@/store/system-actions'
 
@@ -38,13 +41,13 @@ import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
 import { DetailColumn, ListColumn, MasterDetail } from '../master-detail'
 import { PageSearchShell } from '../page-search-shell'
-import { workspaceChatReturnRoute } from '../routes'
 import { CREDENTIAL_CONTROL_CLASS } from '../settings/credential-key-ui'
 import { ListRow } from '../settings/primitives'
 import { SettingsProfileScope } from '../settings/profile-scope'
 import type { SetStatusbarItemGroup } from '../shell/statusbar-controls'
 
 import { PlatformAvatar } from './platform-icon'
+import { messagingReturnPlan } from './return-to-session'
 
 interface MessagingViewProps extends React.ComponentProps<'section'> {
   setStatusbarItemGroup?: SetStatusbarItemGroup
@@ -134,6 +137,28 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   const m = t.messaging
   const navigate = useNavigate()
   const selectedStoredSessionId = useStore($selectedStoredSessionId)
+
+  const returnToSession = useCallback(() => {
+    const composerTarget = getActiveComposer()
+
+    // The page covers (but does not unmount) a session tile. Flush its live DOM
+    // text synchronously before moving the snapshot onto the primary scope.
+    requestComposerDraftSync('flush', composerTarget)
+
+    const plan = messagingReturnPlan({
+      composerTarget,
+      selectedStoredSessionId,
+      sessions: $sessions.get(),
+      tiles: $sessionTiles.get()
+    })
+
+    if (plan.sourceDraftScope && plan.destinationDraftScope) {
+      replaceSessionDraft(plan.sourceDraftScope, plan.destinationDraftScope)
+    }
+
+    navigate(plan.route)
+  }, [navigate, selectedStoredSessionId])
+
   // Shared settings "Applies to" scope: configure another profile's gateway
   // platforms/pairing without switching the whole app (null → active profile).
   const scopeProfile = useStore($settingsScopeOverride)
@@ -433,7 +458,7 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
       leadingAction={
         <Button
           className="shrink-0 gap-1.5"
-          onClick={() => navigate(workspaceChatReturnRoute(selectedStoredSessionId))}
+          onClick={returnToSession}
           size="sm"
           type="button"
           variant="ghost"

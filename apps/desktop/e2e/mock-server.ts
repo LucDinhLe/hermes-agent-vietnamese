@@ -20,6 +20,11 @@ import type { ServerResponse } from 'node:http'
 import os from 'node:os'
 import nodePath from 'node:path'
 
+import {
+  classifyMockCompletionRequest,
+  type MockCompletionRequest
+} from '../scripts/mock-completion-classification.mjs'
+
 /** A canned assistant reply used for every chat completion request. */
 export const MOCK_REPLY = 'Hello from the mock inference server! The full boot chain is working.'
 
@@ -44,6 +49,7 @@ export interface MockServer {
   port: number
   url: string
   receivedPrompts: string[]
+  receivedCompletions: MockCompletionRequest[]
   waitForHeldStream: () => Promise<void>
   waitForHeldCompletion: () => Promise<void>
   releaseHeldStream: () => void
@@ -363,6 +369,7 @@ function includesBlockingClarifyTrigger(value: unknown): boolean {
 export function startMockServer(options: MockServerOptions = {}): Promise<MockServer> {
   return new Promise((resolve, reject) => {
     const receivedPrompts: string[] = []
+    const receivedCompletions: MockCompletionRequest[] = []
     let resolveHeldStreamStarted: (() => void) | null = null
     let releaseHeldStream: (() => void) | null = null
     let heldCompletionCount = 0
@@ -420,6 +427,8 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
           } catch {
             // malformed JSON — treat as non-streaming with defaults
           }
+
+          receivedCompletions.push(classifyMockCompletionRequest(parsed))
 
           const lastUserMessage = [...(parsed.messages ?? [])]
             .reverse()
@@ -614,6 +623,7 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
         port,
         url,
         receivedPrompts,
+        receivedCompletions,
         waitForHeldStream: () => heldStreamStarted,
         waitForHeldCompletion: () => heldStreamStarted,
         releaseHeldStream: () => releaseHeldStream?.(),

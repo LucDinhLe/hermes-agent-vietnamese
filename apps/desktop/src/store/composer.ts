@@ -436,6 +436,35 @@ export function migrateSessionDraft(fromKey: string | null | undefined, toKey: s
   return true
 }
 
+/**
+ * Move the draft from the composer the user can currently see onto another
+ * scope, replacing any older destination snapshot.
+ *
+ * Workspace-page navigation uses this when a session tile hands its live draft
+ * back to the primary chat. In that case the visible tile is authoritative;
+ * keeping an older primary snapshot would make Back appear to erase the text
+ * the user just typed.
+ */
+export function replaceSessionDraft(fromKey: string | null | undefined, toKey: string | null | undefined): boolean {
+  const from = draftKey(fromKey)
+  const to = draftKey(toKey)
+
+  if (!fromKey || !toKey || from === to) {
+    return false
+  }
+
+  const source = draftsBySession.get(from)
+
+  if (!source) {
+    return false
+  }
+
+  stashSessionDraft(toKey, source.text, source.attachments)
+  clearSessionDraft(fromKey)
+
+  return true
+}
+
 export function setComposerDraft(value: string) {
   $composerDraft.set(value)
 }
