@@ -170,6 +170,8 @@ jobs:
   v32-windows-lifecycle:
     name: V32 Windows x64 — fresh, update, repair, uninstall, rollback
     if: inputs.tag == 'vi-v0.32.0-1' && inputs.release_class == 'community-prerelease'
+    permissions:
+      contents: write
     runs-on: windows-2025
     timeout-minutes: 120
     steps:
@@ -194,6 +196,11 @@ jobs:
           CANDIDATE_SHA256: ${{ inputs.sha256sums_sha256 }}
         run: |
           $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Path C:\HermesEvidence -Force | Out-Null
+          [System.IO.File]::WriteAllText(
+            'C:\HermesEvidence\draft-download-attempt.json',
+            "{`"runId`":`"$env:GITHUB_RUN_ID`",`"attempt`":`"$env:GITHUB_RUN_ATTEMPT`",`"harnessCommit`":`"$env:GITHUB_SHA`"}`n"
+          )
           New-Item -ItemType Directory -Path candidate, previous, rollback | Out-Null
 
           $releaseJson = gh api --paginate "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" --slurp

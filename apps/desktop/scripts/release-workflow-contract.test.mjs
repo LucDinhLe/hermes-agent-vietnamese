@@ -396,6 +396,7 @@ test('runtime smoke refuses missing platform, update, persistence, signing, or r
 test('v32 runtime smoke binds the exact candidate to an ephemeral Windows lifecycle VM', () => {
   assert.match(runtimeSmoke, /v32-windows-lifecycle:/)
   assert.match(runtimeSmoke, /if: inputs\.tag == 'vi-v0\.32\.0-1' && inputs\.release_class == 'community-prerelease'/)
+  assert.match(runtimeSmoke, /v32-windows-lifecycle:[\s\S]*?permissions:\r?\n\s+contents: write/)
   assert.match(runtimeSmoke, /runs-on: windows-2025/)
   assert.match(runtimeSmoke, /node-version: 26\.5\.1/)
   assert.match(runtimeSmoke, /--isolation-mode github-hosted-ephemeral-vm/)
@@ -409,6 +410,7 @@ test('v32 runtime smoke binds the exact candidate to an ephemeral Windows lifecy
   assert.match(runtimeSmoke, /Invoke-WebRequest -Uri \$asset\.url -Headers \$headers -OutFile candidate/)
   assert.match(runtimeSmoke, /if \(\$LASTEXITCODE -ne 0\) \{ throw 'Cannot download pinned v31 installer' \}/)
   assert.match(runtimeSmoke, /workflow-preflight\.json/)
+  assert.match(runtimeSmoke, /draft-download-attempt\.json/)
   assert.match(runtimeSmoke, /path: C:\\HermesEvidence/)
   assert.match(runtimeSmoke, /if: always\(\)/)
 })
