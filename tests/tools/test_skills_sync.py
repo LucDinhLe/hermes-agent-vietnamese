@@ -97,6 +97,127 @@ class TestDiscoverBundledSkills:
         assert [name for name, _ in _discover_bundled_skills(tmp_path)] == ["umbrella"]
 
 
+class TestAllowedCatalogSync:
+    def test_new_bundled_skill_is_disabled_for_an_existing_allowlist(
+        self, tmp_path, monkeypatch
+    ):
+        from hermes_cli.capability_profile import apply_work_profile
+        from hermes_cli.config import load_config, save_config
+
+        hermes_home = tmp_path / "profile"
+        skills_dir = hermes_home / "skills"
+        bundled = tmp_path / "bundled"
+        old_skill = bundled / "general" / "old-skill"
+        old_skill.mkdir(parents=True)
+        (old_skill / "SKILL.md").write_text(
+            "---\nname: old-skill\ndescription: Existing\n---\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+
+        patches = (
+            patch("tools.skills_sync.HERMES_HOME", hermes_home),
+            patch("tools.skills_sync.SKILLS_DIR", skills_dir),
+            patch("tools.skills_sync.MANIFEST_FILE", skills_dir / ".bundled_manifest"),
+            patch("tools.skills_sync._get_bundled_dir", return_value=bundled),
+            patch(
+                "tools.skills_sync._get_optional_dir",
+                return_value=tmp_path / "no-optional-skills",
+            ),
+        )
+        from contextlib import ExitStack
+
+        with ExitStack() as stack:
+            for item in patches:
+                stack.enter_context(item)
+            sync_skills(quiet=True)
+            config = {}
+            apply_work_profile(
+                config,
+                installed_skills={"old-skill"},
+                allowed_skills={"old-skill"},
+                work_areas=[],
+                common_tasks=[],
+                skipped=False,
+            )
+            save_config(config)
+
+            new_skill = bundled / "general" / "future-skill"
+            new_skill.mkdir(parents=True)
+            (new_skill / "SKILL.md").write_text(
+                "---\nname: future-skill\ndescription: New\n---\n",
+                encoding="utf-8",
+            )
+            result = sync_skills(quiet=True)
+            saved = load_config()
+
+        assert "future-skill" in result["copied"]
+        assert saved["skills"]["allowed"] == ["old-skill"]
+        assert "future-skill" in saved["skills"]["disabled"]
+
+    def test_config_write_failure_blocks_new_bundled_skill_copy(
+        self, tmp_path, monkeypatch
+    ):
+        from hermes_cli.capability_profile import apply_work_profile
+        from hermes_cli.config import save_config
+
+        hermes_home = tmp_path / "profile"
+        skills_dir = hermes_home / "skills"
+        bundled = tmp_path / "bundled"
+        old_skill = bundled / "general" / "old-skill"
+        old_skill.mkdir(parents=True)
+        (old_skill / "SKILL.md").write_text(
+            "---\nname: old-skill\ndescription: Existing\n---\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
+
+        patches = (
+            patch("tools.skills_sync.HERMES_HOME", hermes_home),
+            patch("tools.skills_sync.SKILLS_DIR", skills_dir),
+            patch("tools.skills_sync.MANIFEST_FILE", skills_dir / ".bundled_manifest"),
+            patch("tools.skills_sync._get_bundled_dir", return_value=bundled),
+            patch(
+                "tools.skills_sync._get_optional_dir",
+                return_value=tmp_path / "no-optional-skills",
+            ),
+        )
+        from contextlib import ExitStack
+
+        with ExitStack() as stack:
+            for item in patches:
+                stack.enter_context(item)
+            sync_skills(quiet=True)
+            config = {}
+            apply_work_profile(
+                config,
+                installed_skills={"old-skill"},
+                allowed_skills={"old-skill"},
+                work_areas=[],
+                common_tasks=[],
+                skipped=False,
+            )
+            save_config(config)
+
+            future_skill = bundled / "general" / "future-skill"
+            future_skill.mkdir(parents=True)
+            (future_skill / "SKILL.md").write_text(
+                "---\nname: future-skill\ndescription: New\n---\n",
+                encoding="utf-8",
+            )
+            monkeypatch.setattr(
+                "hermes_cli.config.save_config",
+                lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                    RuntimeError("config write failed")
+                ),
+            )
+
+            with pytest.raises(RuntimeError, match="config write failed"):
+                sync_skills(quiet=True)
+
+        assert not (skills_dir / "general" / "future-skill").exists()
+
+
 class TestReadSkillName:
     def test_name_from_frontmatter_with_dir_name_fallbacks(self, tmp_path):
         skill_md = tmp_path / "SKILL.md"
@@ -127,7 +248,7 @@ class TestComputeRelativeDest:
     def test_preserves_category_structure(self):
         bundled = Path("/repo/skills")
         dest = _compute_relative_dest(Path("/repo/skills/mlops/axolotl"), bundled)
-        assert str(dest).endswith("mlops/axolotl")
+        assert dest.parts[-2:] == ("mlops", "axolotl")
         # Flat (uncategorized) skills keep their own name.
         assert _compute_relative_dest(Path("/repo/skills/simple"), bundled).name == "simple"
 

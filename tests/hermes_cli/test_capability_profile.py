@@ -1,5 +1,7 @@
 from hermes_cli.capability_profile import (
     apply_work_profile,
+    discover_task_skills,
+    reconcile_allowed_skill_catalog,
     recommend_skills,
     work_profile_state,
 )
@@ -104,3 +106,91 @@ def test_skip_completes_birth_with_every_skill_disabled():
     assert state.skipped is True
     assert state.allowed == ()
     assert set(config["skills"]["disabled"]) == INSTALLED
+
+
+def test_existing_allowlist_fails_closed_when_catalog_grows():
+    config = {
+        "skills": {
+            "allowed": ["grounded-citations", "obsidian"],
+            "disabled": ["pdf"],
+            "work_profile": {"completed": True},
+        }
+    }
+
+    changed = reconcile_allowed_skill_catalog(
+        config,
+        installed_skills={
+            "grounded-citations",
+            "obsidian",
+            "pdf",
+            "new-bundled-skill",
+        },
+    )
+
+    assert changed is True
+    assert config["skills"]["allowed"] == ["grounded-citations", "obsidian"]
+    assert set(config["skills"]["disabled"]) == {"pdf", "new-bundled-skill"}
+
+
+def test_legacy_catalog_growth_is_not_silently_migrated():
+    config = {"skills": {"disabled": ["pdf"]}}
+    original = {"skills": {"disabled": ["pdf"]}}
+
+    changed = reconcile_allowed_skill_catalog(
+        config,
+        installed_skills=INSTALLED | {"new-bundled-skill"},
+    )
+
+    assert changed is False
+    assert config == original
+
+
+def test_local_discovery_auto_selects_only_allowed_and_recommends_the_rest(monkeypatch):
+    import socket
+    import urllib.request
+
+    monkeypatch.setattr(
+        socket,
+        "socket",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("network access")),
+    )
+    monkeypatch.setattr(
+        urllib.request,
+        "urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("network access")),
+    )
+    config = {
+        "skills": {
+            "allowed": ["grounded-citations", "obsidian", "docx"],
+            "disabled": ["humanizer", "youtube-content"],
+            "work_profile": {"completed": True},
+        }
+    }
+    original = {
+        "skills": {
+            "allowed": ["grounded-citations", "obsidian", "docx"],
+            "disabled": ["humanizer", "youtube-content"],
+            "work_profile": {"completed": True},
+        }
+    }
+
+    result = discover_task_skills(
+        task="Viết bài có trích dẫn và biên tập nội dung tự nhiên",
+        installed_skills={
+            "grounded-citations",
+            "obsidian",
+            "docx",
+            "humanizer",
+            "youtube-content",
+        },
+        allowed_skills=config["skills"]["allowed"],
+    )
+
+    assert set(result.selected) <= set(config["skills"]["allowed"])
+    assert "grounded-citations" in result.selected
+    assert "humanizer" in result.recommended
+    assert not (set(result.recommended) & set(result.selected))
+    assert result.model_attempts == 0
+    assert result.used_provider is False
+    assert result.used_network is False
+    assert config == original

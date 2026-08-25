@@ -702,10 +702,21 @@ def sync_skills(quiet: bool = False) -> dict:
             "optional_provenance_backfilled": [],
         }
 
-    SKILLS_DIR.mkdir(parents=True, exist_ok=True)
-    manifest = _read_manifest()
     bundled_skills = _discover_bundled_skills(bundled_dir)
     bundled_names = {name for name, _ in bundled_skills}
+
+    # The allowlist is authoritative once it exists. Persist the deny snapshot
+    # before copying any newly bundled package, so a config-write failure
+    # blocks the sync instead of briefly exposing an unauthorized skill.
+    from hermes_cli.capability_profile import reconcile_allowed_skill_catalog
+    from hermes_cli.config import read_raw_config, save_config
+
+    config = read_raw_config()
+    if reconcile_allowed_skill_catalog(config, installed_skills=bundled_names):
+        save_config(config)
+
+    SKILLS_DIR.mkdir(parents=True, exist_ok=True)
+    manifest = _read_manifest()
     suppressed = _read_suppressed_names()
     # Index of skills already provided by external_dirs (skip writing them)
     external_index = _build_external_skill_index()

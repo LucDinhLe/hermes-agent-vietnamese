@@ -39,6 +39,18 @@ class WorkProfileState:
     common_tasks: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class TaskSkillDiscovery:
+    """A local-only routing result for a future session or child agent."""
+
+    selected: tuple[str, ...]
+    recommended: tuple[str, ...]
+    reasons: Mapping[str, str]
+    used_provider: bool = False
+    used_network: bool = False
+    model_attempts: int = 0
+
+
 AREA_SKILLS: Mapping[str, tuple[str, ...]] = {
     "research_learning": (
         "grounded-citations",
@@ -274,6 +286,59 @@ def recommend_skills(
     return SkillRecommendation(skills=tuple(ranked), reasons=reasons)
 
 
+def _areas_for_task(task: str) -> tuple[str, ...]:
+    task_text = _normalize_text(task)
+    return tuple(
+        area
+        for area, keywords in KEYWORD_AREAS.items()
+        if any(keyword in task_text for keyword in keywords)
+    )
+
+
+def discover_task_skills(
+    *,
+    task: str,
+    installed_skills: Iterable[str],
+    allowed_skills: Iterable[str],
+    limit: int = 8,
+) -> TaskSkillDiscovery:
+    """Discover task skills locally without changing the running session.
+
+    Only skills already present in ``allowed_skills`` are returned in
+    ``selected``. Installed-but-not-allowed matches are recommendations for an
+    explicit future permission change; this function never mutates config and
+    has no provider, model, or network dependency.
+    """
+    installed = {str(name).strip() for name in installed_skills if str(name).strip()}
+    allowed = {
+        str(name).strip()
+        for name in allowed_skills
+        if str(name).strip() and str(name).strip() in installed
+    }
+    capped_limit = min(8, max(3, int(limit)))
+    areas = _areas_for_task(task)
+    if not areas:
+        return TaskSkillDiscovery(selected=(), recommended=(), reasons={})
+
+    ranked: list[str] = []
+    reasons: dict[str, str] = {}
+    for area in areas:
+        label = AREA_LABELS.get(area, area.replace("_", " "))
+        for skill in AREA_SKILLS.get(area, ()):
+            if skill in installed and skill not in reasons:
+                ranked.append(skill)
+                reasons[skill] = f"Useful for {label}."
+
+    selected = tuple(skill for skill in ranked if skill in allowed)[:capped_limit]
+    recommended = tuple(skill for skill in ranked if skill not in allowed)[:capped_limit]
+    visible = set(selected) | set(recommended)
+    return TaskSkillDiscovery(
+        selected=selected,
+        recommended=recommended,
+        reasons={skill: reason for skill, reason in reasons.items() if skill in visible},
+    )
+
+
 def _selection_hash(allowed: Sequence[str]) -> str:
     payload = json.dumps(list(allowed), ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -315,6 +380,46 @@ def apply_work_profile(
         "selection_hash": _selection_hash(allowed_sorted),
     }
     return config
+
+
+def reconcile_allowed_skill_catalog(
+    config: MutableMapping[str, object], *, installed_skills: Iterable[str]
+) -> bool:
+    """Fail closed when an installed catalog grows under an allowlist.
+
+    Legacy profiles have no ``skills.allowed`` key and remain untouched. Once
+    the key exists it is authoritative: every installed skill outside it is
+    disabled, including skills added by a later bundled sync. Existing stale
+    disabled entries are retained so an uninstalled skill cannot silently
+    reactivate if it returns later.
+    """
+    skills_value = config.get("skills")
+    if not isinstance(skills_value, MutableMapping):
+        return False
+    allowed_value = skills_value.get("allowed")
+    if not isinstance(allowed_value, (list, tuple, set, frozenset)):
+        return False
+
+    allowed = {str(name).strip() for name in allowed_value if str(name).strip()}
+    installed = {str(name).strip() for name in installed_skills if str(name).strip()}
+    disabled_value = skills_value.get("disabled")
+    disabled = (
+        {str(name).strip() for name in disabled_value if str(name).strip()}
+        if isinstance(disabled_value, (list, tuple, set, frozenset))
+        else set()
+    )
+    next_disabled = (disabled | (installed - allowed)) - allowed
+    normalized_allowed = sorted(allowed)
+    normalized_disabled = sorted(next_disabled)
+    changed = (
+        list(allowed_value) != normalized_allowed
+        or not isinstance(disabled_value, list)
+        or disabled_value != normalized_disabled
+    )
+    if changed:
+        skills_value["allowed"] = normalized_allowed
+        skills_value["disabled"] = normalized_disabled
+    return changed
 
 
 def work_profile_state(
