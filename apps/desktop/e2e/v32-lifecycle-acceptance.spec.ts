@@ -321,9 +321,14 @@ async function sendAndWaitForReply(
   const beforeReply = await transcriptOccurrences(page, expectedReply)
 
   await expect(input).toBeVisible({ timeout: 30_000 })
-  await input.click()
-  await page.keyboard.insertText(prompt)
-  await page.keyboard.press('Enter')
+  // The rich input is contenteditable inside an interactive composer surface.
+  // Targeting the inner node with a pointer can be intercepted by that surface
+  // even though the editor is visible; Playwright's contenteditable fill plus
+  // Enter exercises the same keyboard send path without hit-testing a child
+  // beneath its pointer-owning wrapper.
+  await input.fill(prompt)
+  await expect(input).toHaveText(prompt)
+  await input.press('Enter')
   await expect(transcript(page)).toContainText(prompt, { timeout: 30_000 })
   await expect
     .poll(() => mock.receivedPrompts.filter(received => received === prompt).length, { timeout: 60_000 })

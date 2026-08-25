@@ -204,6 +204,14 @@ test('localized onboarding readiness uses the overlay contract and never retries
   assert.match(lifecycleSpec, /test\.describe\.configure\(\{ mode: 'serial', retries: 0, timeout: 360_000 \}\)/)
 })
 
+test('lifecycle messages use the contenteditable keyboard path instead of clicking beneath its composer surface', () => {
+  const sendHelper = lifecycleSpec.match(/async function sendAndWaitForReply[\s\S]*?\r?\n\}/)?.[0] ?? ''
+  assert.match(sendHelper, /await input\.fill\(prompt\)/)
+  assert.match(sendHelper, /await expect\(input\)\.toHaveText\(prompt\)/)
+  assert.match(sendHelper, /await input\.press\('Enter'\)/)
+  assert.doesNotMatch(sendHelper, /input\.click\(\)/)
+})
+
 test('sandbox configuration disables host-facing channels and maps only evidence writable', () => {
   const xml = buildWindowsSandboxConfig({
     evidenceDir: 'C:\\Evidence & Results',
