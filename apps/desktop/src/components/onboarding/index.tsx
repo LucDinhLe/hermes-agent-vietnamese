@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
-import { getGlobalModelOptions } from '@/hermes'
+import { getGlobalModelOptions, getWorkProfile } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { Check, ChevronDown, ChevronLeft, KeyRound, Loader2 } from '@/lib/icons'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
@@ -54,6 +54,42 @@ interface DesktopOnboardingOverlayProps {
   onCompleted?: () => void
   profile: string
   requestGateway: OnboardingContext['requestGateway']
+}
+
+export function shouldShowWorkProfileSetup({
+  done,
+  enabled,
+  manual,
+  required
+}: {
+  done: boolean
+  enabled: boolean
+  manual: boolean
+  required: boolean
+}) {
+  return enabled && required && !manual && !done
+}
+
+export function shouldRenderDesktopOnboarding({
+  configured,
+  firstRunSkipped,
+  manual,
+  showWorkProfile
+}: {
+  configured: boolean | null
+  firstRunSkipped: boolean
+  manual: boolean
+  showWorkProfile: boolean
+}) {
+  if (showWorkProfile || manual) {
+    return true
+  }
+
+  if (configured === true || firstRunSkipped) {
+    return false
+  }
+
+  return true
 }
 
 export interface ApiKeyOption {
@@ -210,8 +246,39 @@ export function DesktopOnboardingOverlay({
   // connecting overlay's exit choreography instead of cutting instantly.
   const [leaving, setLeaving] = useState(false)
   const [workProfileDone, setWorkProfileDone] = useState(false)
+  const [workProfileRequired, setWorkProfileRequired] = useState<boolean | null>(null)
 
-  useEffect(() => setWorkProfileDone(false), [profile])
+  useEffect(() => {
+    setWorkProfileDone(false)
+    setWorkProfileRequired(null)
+  }, [connectionId, profile])
+
+  useEffect(() => {
+    if (!enabled || onboarding.manual) {
+      setWorkProfileRequired(false)
+
+      return
+    }
+
+    let cancelled = false
+    void getWorkProfile(profile, connectionId)
+      .then(state => {
+        if (!cancelled) {
+          setWorkProfileRequired(state.onboarding_required === true)
+        }
+      })
+      .catch(() => {
+        // Older backends do not expose this endpoint. Fail closed on prompting:
+        // provider onboarding still works, but no legacy profile is re-nagged.
+        if (!cancelled) {
+          setWorkProfileRequired(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [connectionId, enabled, onboarding.manual, profile])
 
   const finalizeOnboarding = () => {
     if (leaving) {
@@ -266,19 +333,24 @@ export function DesktopOnboardingOverlay({
     }
   }, [ctx, onboarding.flow.status, onboarding.manual, onboarding.providers])
 
+  const showWorkProfile = shouldShowWorkProfileSetup({
+    done: workProfileDone,
+    enabled,
+    manual: onboarding.manual,
+    required: workProfileRequired === true
+  })
+
   // Mount from frame 1 so we replace the boot overlay seamlessly. The
   // configured field stays null until the runtime check resolves; only then
   // do we know whether to dismiss (true) or surface the picker (false).
   // EXCEPTION: manual mode (user opened the selector from a working app to
   // add/switch a provider) shows the overlay regardless of configured state.
-  if (onboarding.configured === true && !onboarding.manual) {
-    return null
-  }
-
-  // The user chose "I'll choose a provider later" on first run. Stay out of the
-  // way on every subsequent launch — they re-enter via Settings → Providers
-  // (manual mode), which sets manual=true and bypasses this gate.
-  if (onboarding.firstRunSkipped && !onboarding.manual) {
+  if (!shouldRenderDesktopOnboarding({
+    configured: onboarding.configured,
+    firstRunSkipped: onboarding.firstRunSkipped,
+    manual: onboarding.manual,
+    showWorkProfile
+  })) {
     return null
   }
 
@@ -299,12 +371,15 @@ export function DesktopOnboardingOverlay({
   // In manual mode the app is already configured, so the flow is "ready"
   // immediately — no runtime gate needed. Otherwise wait for the readiness
   // check (configured === false) before showing the picker.
-  const ready = onboarding.manual || (enabled && onboarding.configured === false)
+  const ready =
+    showWorkProfile ||
+    onboarding.manual ||
+    (workProfileRequired !== null && enabled && onboarding.configured === false)
+
   const showPicker = flow.status === 'idle' || flow.status === 'success'
   // The final "you're in" screen drops the card chrome and floats centered on
   // the surface — same bare, cinematic treatment as the connecting overlay.
   const bare = ready && !showPicker && flow.status === 'confirming_model'
-  const showWorkProfile = ready && !onboarding.manual && !workProfileDone
 
   return (
     <div
@@ -347,7 +422,10 @@ export function DesktopOnboardingOverlay({
             <WorkProfileSetup
               connectionId={connectionId}
               firstRun
-              onDone={() => setWorkProfileDone(true)}
+              onDone={() => {
+                setWorkProfileDone(true)
+                setWorkProfileRequired(false)
+              }}
               profile={profile}
             />
           ) : ready ? (

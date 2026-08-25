@@ -197,6 +197,32 @@ class TestProfileScopedSkills:
         assert routed["used_network"] is False
         assert _load_cfg(worker_home) == saved
 
+    def test_work_profile_state_exposes_explicit_fresh_marker_without_mutation(
+        self, client, isolated_profiles
+    ):
+        worker_home = isolated_profiles["worker_alpha"]
+        marker = {
+            "skills": {
+                "work_profile": {
+                    "completed": False,
+                    "onboarding_required": True,
+                    "version": 1,
+                }
+            }
+        }
+        (worker_home / "config.yaml").write_text(
+            yaml.safe_dump(marker, sort_keys=False), encoding="utf-8"
+        )
+
+        response = client.get(
+            "/api/skills/work-profile", params={"profile": "worker_alpha"}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["onboarding_required"] is True
+        assert response.json()["legacy"] is False
+        assert _load_cfg(worker_home) == marker
+
 
 class TestProfileScopedHubActions:
     def test_hub_install_spawns_with_profile_flag(

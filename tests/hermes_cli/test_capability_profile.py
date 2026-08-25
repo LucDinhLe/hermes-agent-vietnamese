@@ -1,6 +1,7 @@
 from hermes_cli.capability_profile import (
     apply_work_profile,
     discover_task_skills,
+    mark_work_profile_onboarding_required,
     reconcile_allowed_skill_catalog,
     recommend_skills,
     work_profile_state,
@@ -87,6 +88,44 @@ def test_legacy_profile_is_preserved_until_the_user_explicitly_applies():
     assert state.legacy is True
     assert state.allowed is None
     assert config == {"skills": {"disabled": ["pdf"]}}
+
+
+def test_fresh_profile_marker_is_explicit_idempotent_and_cleared_on_apply():
+    config = {}
+
+    assert mark_work_profile_onboarding_required(config) is True
+    assert mark_work_profile_onboarding_required(config) is False
+
+    state = work_profile_state(config, installed_skills=INSTALLED)
+    assert state.onboarding_required is True
+    assert state.legacy is False
+    assert state.allowed is None
+
+    apply_work_profile(
+        config,
+        installed_skills=INSTALLED,
+        allowed_skills={"docx"},
+        work_areas=["writing_content"],
+        common_tasks=["Draft a brief"],
+        skipped=False,
+    )
+
+    completed = work_profile_state(config, installed_skills=INSTALLED)
+    assert completed.completed is True
+    assert completed.onboarding_required is False
+
+
+def test_shipped_template_marks_only_a_new_default_profile_for_onboarding():
+    from pathlib import Path
+
+    import yaml
+
+    template = Path(__file__).resolve().parents[2] / "cli-config.yaml.example"
+    config = yaml.safe_load(template.read_text(encoding="utf-8"))
+
+    state = work_profile_state(config, installed_skills=INSTALLED)
+    assert state.onboarding_required is True
+    assert state.legacy is False
 
 
 def test_skip_completes_birth_with_every_skill_disabled():

@@ -34,6 +34,7 @@ class WorkProfileState:
     completed: bool
     skipped: bool
     legacy: bool
+    onboarding_required: bool
     allowed: tuple[str, ...] | None
     work_areas: tuple[str, ...] = ()
     common_tasks: tuple[str, ...] = ()
@@ -344,6 +345,39 @@ def _selection_hash(allowed: Sequence[str]) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def mark_work_profile_onboarding_required(
+    config: MutableMapping[str, object],
+) -> bool:
+    """Mark a profile at its explicit birth point for one-time onboarding.
+
+    Callers must invoke this only while creating a genuinely new profile. The
+    marker is deliberately not inferred from a missing allowlist, config age,
+    or schema version, so update/repair never turns a legacy profile into a
+    first-run profile. Returns whether the supplied config changed.
+    """
+    skills_value = config.get("skills")
+    skills_config: MutableMapping[str, object]
+    if isinstance(skills_value, MutableMapping):
+        skills_config = skills_value
+    else:
+        skills_config = {}
+        config["skills"] = skills_config
+
+    profile_value = skills_config.get("work_profile")
+    if isinstance(profile_value, Mapping):
+        if profile_value.get("completed") is True:
+            return False
+        if profile_value.get("onboarding_required") is True:
+            return False
+
+    skills_config["work_profile"] = {
+        "version": WORK_PROFILE_VERSION,
+        "completed": False,
+        "onboarding_required": True,
+    }
+    return True
+
+
 def apply_work_profile(
     config: MutableMapping[str, object],
     *,
@@ -431,6 +465,9 @@ def work_profile_state(
     profile_value = skills_config.get("work_profile")
     profile = profile_value if isinstance(profile_value, Mapping) else {}
     completed = profile.get("completed") is True
+    onboarding_required = (
+        not completed and profile.get("onboarding_required") is True
+    )
     allowed_value = skills_config.get("allowed")
     allowed = (
         tuple(sorted({str(name).strip() for name in allowed_value if str(name).strip()}))
@@ -444,7 +481,8 @@ def work_profile_state(
     return WorkProfileState(
         completed=completed,
         skipped=profile.get("skipped") is True,
-        legacy=not completed and allowed is None,
+        legacy=not completed and allowed is None and not onboarding_required,
+        onboarding_required=onboarding_required,
         allowed=allowed,
         work_areas=_unique_clean(profile.get("work_areas", ()))
         if isinstance(profile.get("work_areas"), (list, tuple))

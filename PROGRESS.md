@@ -1,5 +1,27 @@
 # Tiến độ
 
+## Cập nhật 2026-08-26 — marker khai sinh chỉ dành cho profile mới
+
+- Thêm marker `skills.work_profile.onboarding_required` tại đúng hai điểm khai
+  sinh: config mặc định chỉ được installer chép khi chưa có config, và lệnh tạo
+  named profile hoàn toàn mới. Clone giữ nguyên config nguồn; update, repair và
+  legacy profile không được backfill marker.
+- Backend trả marker trong API state. Desktop chỉ mở **Thiết lập công việc** khi
+  marker là `true`, kể cả provider đã cấu hình; backend cũ, profile legacy và
+  người từng bỏ qua không bị hỏi lại. Save/Skip thay marker bằng receipt hoàn
+  tất, nên không lặp giữa các lần mở.
+- Regression đỏ đã được khóa trước khi sửa. Canonical Python gate đạt 61/61 cho
+  capability, bundled sync, manual Skill config và API; named create/clone đạt
+  2/2; config template đạt 56/56. Desktop mục tiêu đạt 26/26, typecheck đạt và
+  ESLint phần thay đổi sạch. Toàn bộ kiểm tra dùng profile cô lập, không gọi
+  provider/model/network và không đọc hoặc sửa profile Hermes thật.
+- Không chạy toàn bộ `test_profiles.py` như một gate đạt trên Windows: file này
+  còn sáu ca POSIX/symlink/wrapper nền không thuộc lát cắt; hai contract liên
+  quan trực tiếp đã được chạy riêng và đều xanh.
+- Bước nhỏ tiếp theo: nối task discovery vào session/subagent mới, chỉ cấp Skill
+  đã allow; giữ parent prompt byte-stable, Skill chưa allow chỉ recommendation
+  và mọi child call vẫn đi qua root Token Governor.
+
 ## Cập nhật 2026-08-26 — UI thiết lập công việc profile-scoped
 
 - Nối typed Desktop client vào bốn API work profile/discovery và khóa mọi

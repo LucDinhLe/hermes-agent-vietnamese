@@ -132,6 +132,16 @@ class TestCreateProfile:
         mode = stat.S_IMODE(env_path.stat().st_mode)
         assert mode == 0o600
 
+    def test_fresh_profile_gets_one_time_work_profile_onboarding_marker(self, profile_env):
+        profile_dir = create_profile("writer", no_alias=True)
+
+        config = yaml.safe_load((profile_dir / "config.yaml").read_text(encoding="utf-8"))
+        assert config["skills"]["work_profile"] == {
+            "completed": False,
+            "onboarding_required": True,
+            "version": 1,
+        }
+
 
 
 
@@ -150,6 +160,7 @@ class TestCreateProfile:
         assert cloned_config["model"] == "test"
         assert (profile_dir / ".env").read_text().strip() == "KEY=val"
         assert (profile_dir / "SOUL.md").read_text() == "Be helpful."
+        assert "work_profile" not in cloned_config.get("skills", {})
 
 
 
@@ -1123,5 +1134,4 @@ class TestResolveProfileEnvSpelling:
         # No HERMES_HOME: the platform default root applies (existing contract).
         monkeypatch.delenv("HERMES_HOME", raising=False)
         assert Path(resolve_profile_env("default")) == _get_default_hermes_home()
-
 

@@ -1059,6 +1059,7 @@ export interface WorkProfileStateResponse {
   completed: boolean
   skipped: boolean
   legacy: boolean
+  onboarding_required: boolean
   allowed: null | string[]
   work_areas: string[]
   common_tasks: string[]

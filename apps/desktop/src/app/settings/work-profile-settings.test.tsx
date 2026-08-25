@@ -27,6 +27,7 @@ beforeEach(() => {
     completed: true,
     installed_count: 2,
     legacy: false,
+    onboarding_required: false,
     skipped: false,
     work_areas: ['research_learning']
   })
@@ -93,6 +94,7 @@ describe('WorkProfileSettings', () => {
       completed: false,
       installed_count: 2,
       legacy: true,
+      onboarding_required: false,
       skipped: false,
       work_areas: []
     })

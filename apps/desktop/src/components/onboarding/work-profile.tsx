@@ -42,6 +42,7 @@ export function WorkProfileSetup({ connectionId, firstRun = false, onDone, profi
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -50,7 +51,8 @@ export function WorkProfileSetup({ connectionId, firstRun = false, onDone, profi
       .then(([state, skills]) => {
         if (cancelled) {return}
 
-        if (firstRun && state.completed) {
+        if (firstRun && (state.completed || state.onboarding_required !== true)) {
+          setDismissed(true)
           onDone?.(state.skipped)
 
           return
@@ -127,6 +129,10 @@ export function WorkProfileSetup({ connectionId, firstRun = false, onDone, profi
     } finally {
       setBusy(false)
     }
+  }
+
+  if (dismissed) {
+    return null
   }
 
   if (loading) {

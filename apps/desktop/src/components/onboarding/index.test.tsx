@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { $desktopOnboarding, type DesktopOnboardingState, type OnboardingContext } from '@/store/onboarding'
 import type { OAuthProvider } from '@/types/hermes'
 
-import { Picker } from '.'
+import { Picker, shouldRenderDesktopOnboarding, shouldShowWorkProfileSetup } from '.'
 
 function provider(id: string, name = id): OAuthProvider {
   return {
@@ -124,5 +124,45 @@ describe('onboarding Picker', () => {
     render(<Picker ctx={ctx} />)
 
     expect(screen.queryByRole('button', { name: "I'll choose a provider later" })).toBeNull()
+  })
+})
+
+describe('work-profile onboarding gate', () => {
+  it('surfaces a marked fresh profile even when provider onboarding was already completed', () => {
+    const showWorkProfile = shouldShowWorkProfileSetup({
+      done: false,
+      enabled: true,
+      manual: false,
+      required: true
+    })
+
+    expect(showWorkProfile).toBe(true)
+    expect(
+      shouldRenderDesktopOnboarding({
+        configured: true,
+        firstRunSkipped: false,
+        manual: false,
+        showWorkProfile
+      })
+    ).toBe(true)
+  })
+
+  it('does not re-prompt configured or skipped legacy profiles without the marker', () => {
+    expect(
+      shouldRenderDesktopOnboarding({
+        configured: true,
+        firstRunSkipped: false,
+        manual: false,
+        showWorkProfile: false
+      })
+    ).toBe(false)
+    expect(
+      shouldRenderDesktopOnboarding({
+        configured: false,
+        firstRunSkipped: true,
+        manual: false,
+        showWorkProfile: false
+      })
+    ).toBe(false)
   })
 })

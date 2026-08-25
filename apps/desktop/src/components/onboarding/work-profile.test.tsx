@@ -31,6 +31,7 @@ function arrange() {
     completed: false,
     installed_count: 3,
     legacy: true,
+    onboarding_required: true,
     skipped: false,
     work_areas: []
   })
@@ -96,5 +97,26 @@ describe('WorkProfileSetup', () => {
       )
     )
     expect(onDone).toHaveBeenCalledWith(true)
+  })
+
+  it('does not re-prompt or mutate a legacy profile without the fresh marker', async () => {
+    arrange()
+    mockedGetWorkProfile.mockResolvedValueOnce({
+      allowed: null,
+      common_tasks: [],
+      completed: false,
+      installed_count: 3,
+      legacy: true,
+      onboarding_required: false,
+      skipped: false,
+      work_areas: []
+    })
+    const onDone = vi.fn()
+
+    render(<WorkProfileSetup firstRun onDone={onDone} profile="legacy" />)
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith(false))
+    expect(mockedApply).not.toHaveBeenCalled()
+    expect(screen.queryByRole('heading', { name: 'Set up your work' })).toBeNull()
   })
 })

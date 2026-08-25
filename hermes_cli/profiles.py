@@ -1197,6 +1197,28 @@ def create_profile(
     if not clone_all:
         _migrate_profile_config_if_outdated(profile_dir)
 
+    # A one-time work-profile prompt is a birth property, not a migration.
+    # Mark only truly fresh profiles. Config/full clones preserve the source's
+    # completed/legacy state exactly, so updates, repairs, and cloning an
+    # existing workspace cannot silently turn into first-run onboarding.
+    if source_dir is None:
+        from hermes_constants import (
+            reset_hermes_home_override,
+            set_hermes_home_override,
+        )
+        from hermes_cli.capability_profile import (
+            mark_work_profile_onboarding_required,
+        )
+        from hermes_cli.config import read_raw_config, save_config
+
+        token = set_hermes_home_override(str(profile_dir))
+        try:
+            profile_config = read_raw_config()
+            if mark_work_profile_onboarding_required(profile_config):
+                save_config(profile_config)
+        finally:
+            reset_hermes_home_override(token)
+
     # Persist description if the caller provided one. Done last so a
     # partial-create failure doesn't strand a description file in an
     # incomplete profile.

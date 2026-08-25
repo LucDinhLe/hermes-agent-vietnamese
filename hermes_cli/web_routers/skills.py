@@ -507,6 +507,7 @@ async def get_work_profile(profile: Optional[str] = None):
             "completed": state.completed,
             "skipped": state.skipped,
             "legacy": state.legacy,
+            "onboarding_required": state.onboarding_required,
             "allowed": list(state.allowed) if state.allowed is not None else None,
             "work_areas": list(state.work_areas),
             "common_tasks": list(state.common_tasks),
