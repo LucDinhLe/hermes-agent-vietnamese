@@ -428,6 +428,11 @@ test('v32 runtime smoke binds the exact candidate to an ephemeral Windows lifecy
   assert.match(runtimeSmoke, /workflow-preflight\.json/)
   assert.match(runtimeSmoke, /draft-download-attempt\.json/)
   assert.match(runtimeSmoke, /path: C:\\HermesEvidence/)
+  assert.match(
+    runtimeSmoke,
+    /path: C:\\HermesEvidence\r?\n\s+include-hidden-files: true/,
+    'lifecycle archive must retain Playwright hidden receipts covered by its manifest'
+  )
   assert.match(runtimeSmoke, /if: always\(\)/)
 })
 
