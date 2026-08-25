@@ -369,6 +369,7 @@ function Clear-LifecycleEnvironment {
   foreach ($name in @(
     'HERMES_LIFECYCLE_ACTION', 'HERMES_LIFECYCLE_HERMES_HOME', 'HERMES_LIFECYCLE_USER_DATA',
     'HERMES_LIFECYCLE_EXPECT_TEXT', 'HERMES_LIFECYCLE_SEND_TEXT', 'HERMES_LIFECYCLE_SCREENSHOT',
+    'HERMES_LIFECYCLE_ISOLATION_MODE',
     'HERMES_LIFECYCLE_REQUIRE_PROVENANCE', 'HERMES_PACKAGED_BINARY_PATH',
     'HERMES_PAYLOAD_TAG', 'HERMES_PAYLOAD_GIT_REF', 'HERMES_RELEASE_CLASS',
     'HERMES_REQUIRE_PACKAGED_CANDIDATE'
@@ -402,6 +403,7 @@ function Invoke-PlaywrightPhase {
   Assert-True (Test-Path -LiteralPath $Binary -PathType Leaf) 'installed packaged binary is missing before Playwright'
   Protect-InstalledProduct $Binary "Playwright $Action"
   $env:HERMES_LIFECYCLE_ACTION = $Action
+  $env:HERMES_LIFECYCLE_ISOLATION_MODE = $IsolationMechanism
   $env:HERMES_LIFECYCLE_HERMES_HOME = $HermesHome
   $env:HERMES_LIFECYCLE_USER_DATA = $UserData
   $env:HERMES_LIFECYCLE_SCREENSHOT = Join-Path $EvidenceRoot ("$Action.png")

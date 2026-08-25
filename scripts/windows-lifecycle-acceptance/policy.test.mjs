@@ -21,6 +21,10 @@ import {
 } from './policy.mjs'
 
 const guestScript = fs.readFileSync(new URL('./guest.ps1', import.meta.url), 'utf8')
+const lifecycleSpec = fs.readFileSync(
+  new URL('../../apps/desktop/e2e/v32-lifecycle-acceptance.spec.ts', import.meta.url),
+  'utf8'
+)
 
 const candidate = {
   commit: V32_CANDIDATE_COMMIT,
@@ -172,6 +176,18 @@ test('NSIS install completion waits for both exact registry keys instead of raci
   assert.doesNotMatch(guestScript, /\$state = Get-InstallState\r?\n/)
   assert.match(guestScript, /install-diagnostics-\$Stage\.json/)
   assert.match(guestScript, /hklm32Uninstall/)
+})
+
+test('lifecycle E2E accepts only the isolation mode already validated by the guest', () => {
+  assert.match(guestScript, /\$env:HERMES_LIFECYCLE_ISOLATION_MODE = \$IsolationMechanism/)
+  assert.match(guestScript, /'HERMES_LIFECYCLE_ISOLATION_MODE'/)
+  assert.match(lifecycleSpec, /requiredEnv\('HERMES_LIFECYCLE_ISOLATION_MODE'\)/)
+  assert.match(lifecycleSpec, /isolationMode === 'windows-sandbox'[\s\S]*?username !== 'wdagutilityaccount'/)
+  assert.match(lifecycleSpec, /isolationMode === 'github-hosted-ephemeral-vm'/)
+  assert.match(lifecycleSpec, /process\.env\.GITHUB_ACTIONS !== 'true'/)
+  assert.match(lifecycleSpec, /process\.env\.RUNNER_ENVIRONMENT !== 'github-hosted'/)
+  assert.match(lifecycleSpec, /process\.env\.RUNNER_OS !== 'Windows'/)
+  assert.match(lifecycleSpec, /unsupported HERMES_LIFECYCLE_ISOLATION_MODE/)
 })
 
 test('sandbox configuration disables host-facing channels and maps only evidence writable', () => {

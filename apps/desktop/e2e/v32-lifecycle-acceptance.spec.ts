@@ -4,7 +4,8 @@
  * This spec is intentionally inert in the ordinary E2E suite. The lifecycle
  * guest invokes it once per phase with HERMES_LIFECYCLE_ACTION and supplies
  * guest-only HERMES_HOME, Electron userData, and screenshot paths. No phase
- * may run outside WDAGUtilityAccount or fall back to a dev Electron binary.
+ * may run outside the disposable isolation mode validated by the lifecycle
+ * guest or fall back to a dev Electron binary.
  */
 
 import * as fs from 'node:fs'
@@ -122,9 +123,26 @@ function loadLifecycleContext(): LifecycleContext {
 
   const username = (process.env.USERNAME || os.userInfo().username).toLowerCase()
   const userProfile = path.win32.resolve(requiredEnv('USERPROFILE'))
+  const isolationMode = requiredEnv('HERMES_LIFECYCLE_ISOLATION_MODE')
+  const profileUsername = path.win32.basename(userProfile).toLowerCase()
 
-  if (username !== 'wdagutilityaccount' || path.win32.basename(userProfile).toLowerCase() !== username) {
-    throw new Error('lifecycle phase refused to launch outside Windows Sandbox WDAGUtilityAccount')
+  if (profileUsername !== username) {
+    throw new Error('lifecycle phase refused a user profile that does not match the active guest account')
+  }
+  if (isolationMode === 'windows-sandbox') {
+    if (username !== 'wdagutilityaccount') {
+      throw new Error('lifecycle phase refused to launch outside Windows Sandbox WDAGUtilityAccount')
+    }
+  } else if (isolationMode === 'github-hosted-ephemeral-vm') {
+    if (
+      process.env.GITHUB_ACTIONS !== 'true' ||
+      process.env.RUNNER_ENVIRONMENT !== 'github-hosted' ||
+      process.env.RUNNER_OS !== 'Windows'
+    ) {
+      throw new Error('lifecycle phase refused to launch outside a GitHub-hosted ephemeral Windows VM')
+    }
+  } else {
+    throw new Error(`unsupported HERMES_LIFECYCLE_ISOLATION_MODE: ${isolationMode}`)
   }
 
   const action = parseAction(requiredEnv('HERMES_LIFECYCLE_ACTION'))
