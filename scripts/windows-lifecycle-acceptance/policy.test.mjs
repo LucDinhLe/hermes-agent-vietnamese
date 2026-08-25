@@ -162,6 +162,13 @@ test('native stderr warnings are logged while the native exit code remains autho
   assert.doesNotMatch(nativeLogger, /2>&1 \| Tee-Object/)
 })
 
+test('NSIS install completion waits for both exact registry keys instead of racing the installer', () => {
+  assert.match(guestScript, /function Wait-InstallState/)
+  assert.match(guestScript, /Test-Path -LiteralPath \$ProductKey[\s\S]*?Test-Path -LiteralPath \$UninstallKey/)
+  assert.match(guestScript, /\$state = Wait-InstallState \$LogName/)
+  assert.doesNotMatch(guestScript, /\$state = Get-InstallState\r?\n/)
+})
+
 test('sandbox configuration disables host-facing channels and maps only evidence writable', () => {
   const xml = buildWindowsSandboxConfig({
     evidenceDir: 'C:\\Evidence & Results',

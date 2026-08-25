@@ -265,7 +265,8 @@ async function waitForReceipt({ child, descriptor, evidenceDir, timeoutMs }) {
   })
 
   while (Date.now() < deadline) {
-    if (fs.statSync(resultPath, { throwIfNoEntry: false })?.isFile()) {
+    const receiptExists = fs.statSync(resultPath, { throwIfNoEntry: false })?.isFile() === true
+    if (receiptExists && exit) {
       let receipt
       try {
         receipt = JSON.parse(fs.readFileSync(resultPath, 'utf8'))

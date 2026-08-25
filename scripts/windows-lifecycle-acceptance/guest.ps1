@@ -178,6 +178,23 @@ function Get-InstallState {
   return [ordered]@{ Binary = $binary; InstallDir = $installLocation; Uninstaller = $uninstaller }
 }
 
+function Wait-InstallState {
+  param([string]$Stage)
+  $deadline = [DateTime]::UtcNow.AddMinutes(3)
+  $lastFailure = 'the NSIS product and uninstall keys are not both present'
+  do {
+    if ((Test-Path -LiteralPath $ProductKey) -and (Test-Path -LiteralPath $UninstallKey)) {
+      try {
+        return Get-InstallState
+      } catch {
+        $lastFailure = $_.Exception.Message
+      }
+    }
+    Start-Sleep -Milliseconds 500
+  } while ([DateTime]::UtcNow -lt $deadline)
+  throw "$Stage did not reach a complete registered install within 3 minutes: $lastFailure"
+}
+
 function Get-HermesProcesses {
   $matches = @()
   foreach ($process in @(Get-CimInstance Win32_Process)) {
@@ -247,7 +264,7 @@ function Install-Exact {
   param([string]$Installer, [string]$LogName)
   Assert-NoHermesProcesses "before $LogName"
   $log = Invoke-NativeLogged $Installer @('/S') $LogName
-  $state = Get-InstallState
+  $state = Wait-InstallState $LogName
   $script:CurrentInstallDir = [string]$state.InstallDir
   Protect-InstalledProduct ([string]$state.Binary) $LogName
   $alreadyRecorded = @($RecordedInstallDirs | Where-Object {
