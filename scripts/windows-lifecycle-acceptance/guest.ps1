@@ -227,8 +227,9 @@ function Invoke-NativeLogged {
     # evidence without allowing ErrorActionPreference=Stop to turn a zero exit
     # code into a PowerShell terminating error.
     $ErrorActionPreference = 'Continue'
+    $global:LASTEXITCODE = 0
     $nativeOutput = @(& $Executable @Arguments 2>&1)
-    $exitCode = $LASTEXITCODE
+    $exitCode = $global:LASTEXITCODE
   } finally {
     $ErrorActionPreference = $previousErrorActionPreference
   }

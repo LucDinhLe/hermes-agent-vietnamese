@@ -417,6 +417,8 @@ test('v32 runtime smoke binds the exact candidate to an ephemeral Windows lifecy
   assert.match(lifecycleRunner, /runnerTemp: process\.env\.RUNNER_TEMP/)
   assert.match(lifecycleRunner, /fs\.mkdtempSync\(path\.join\(stagingRoot/)
   assert.doesNotMatch(lifecycleRunner, /fs\.mkdtempSync\(path\.join\(os\.tmpdir\(\)/)
+  assert.match(lifecycleRunner, /maxRetries: 12/)
+  assert.match(lifecycleRunner, /retryDelay: 250/)
   assert.doesNotMatch(runtimeSmoke, /New-Item -ItemType Directory -Path candidate, previous, rollback/)
   assert.match(runtimeSmoke, /actions\/cache\/restore@0400d5f644dc74513175e3cd8d07132dd4860809/)
   assert.match(runtimeSmoke, /actions\/cache\/save@0400d5f644dc74513175e3cd8d07132dd4860809/)

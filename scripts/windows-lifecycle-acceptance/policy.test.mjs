@@ -156,7 +156,8 @@ test('native stderr warnings are logged while the native exit code remains autho
   const nativeLogger = guestScript.match(/function Invoke-NativeLogged \{[\s\S]*?\r?\n\}/)?.[0] ?? ''
   assert.match(nativeLogger, /\$ErrorActionPreference = 'Continue'/)
   assert.match(nativeLogger, /\$nativeOutput = @\(& \$Executable @Arguments 2>&1\)/)
-  assert.match(nativeLogger, /\$exitCode = \$LASTEXITCODE/)
+  assert.match(nativeLogger, /\$global:LASTEXITCODE = 0/)
+  assert.match(nativeLogger, /\$exitCode = \$global:LASTEXITCODE/)
   assert.match(nativeLogger, /Assert-True \(\$exitCode -eq 0\)/)
   assert.doesNotMatch(nativeLogger, /2>&1 \| Tee-Object/)
 })

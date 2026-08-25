@@ -548,7 +548,7 @@ async function main() {
     if (!isSameOrWithin(inputDir, stagingRoot) || path.resolve(inputDir) === path.resolve(stagingRoot)) {
       throw new Error(`refusing to remove an unexpected staging directory: ${inputDir}`)
     }
-    fs.rmSync(inputDir, { force: true, recursive: true })
+    fs.rmSync(inputDir, { force: true, maxRetries: 12, recursive: true, retryDelay: 250 })
   }
 }
 
