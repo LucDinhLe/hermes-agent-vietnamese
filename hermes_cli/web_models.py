@@ -642,6 +642,25 @@ class SkillToggle(BaseModel):
     profile: Optional[str] = None
 
 
+class WorkProfileRecommendRequest(BaseModel):
+    work_areas: List[str] = []
+    common_tasks: List[str] = []
+    profile: Optional[str] = None
+
+
+class WorkProfileApplyRequest(BaseModel):
+    allowed_skills: List[str] = []
+    work_areas: List[str] = []
+    common_tasks: List[str] = []
+    skipped: bool = False
+    profile: Optional[str] = None
+
+
+class TaskSkillDiscoveryRequest(BaseModel):
+    task: str
+    profile: Optional[str] = None
+
+
 # --- from web_server.py (originally lines 15883-15893) ---
 
 class SkillCreate(BaseModel):
