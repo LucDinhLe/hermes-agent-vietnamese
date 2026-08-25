@@ -224,7 +224,15 @@ function buildExactAppEnv(context: LifecycleContext): Record<string, string> {
   const env = buildAppEnv(sandbox, {
     HERMES_DESKTOP_APP_NAME: `HermesLifecycle-${context.action}-${Date.now()}`,
     NO_PROXY: '127.0.0.1,localhost',
-    no_proxy: '127.0.0.1,localhost'
+    no_proxy: '127.0.0.1,localhost',
+    // These two phases deliberately exercise a real multi-turn tool loop.
+    // Pin only the built-in, side-effect-free todo schema so the isolated
+    // profile cannot inherit a workspace coding posture or expose any host-
+    // facing toolsets. The installed runtime still owns tool validation and
+    // execution; the harness only makes the exact tested schema available.
+    ...(context.action === 'safe-tool' || context.action === 'verify-update'
+      ? { HERMES_TUI_TOOLSETS: 'todo' }
+      : {})
   })
 
   // The exact installed candidate owns its renderer and resident runtime.

@@ -212,6 +212,14 @@ test('lifecycle messages use the contenteditable keyboard path instead of clicki
   assert.doesNotMatch(sendHelper, /input\.click\(\)/)
 })
 
+test('safe tool-loop phases expose only the built-in todo toolset', () => {
+  assert.match(
+    lifecycleSpec,
+    /context\.action === 'safe-tool' \|\| context\.action === 'verify-update'[\s\S]*?HERMES_TUI_TOOLSETS: 'todo'/
+  )
+  assert.doesNotMatch(lifecycleSpec, /HERMES_TUI_TOOLSETS: '(?:all|\*)'/)
+})
+
 test('sandbox configuration disables host-facing channels and maps only evidence writable', () => {
   const xml = buildWindowsSandboxConfig({
     evidenceDir: 'C:\\Evidence & Results',
