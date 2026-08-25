@@ -394,18 +394,25 @@ async function clickTopmostVisibleButton(page: Page, name: RegExp, timeout = 30_
           }
 
           try {
-            const receivesPointer = await element.evaluate(node => {
+            const clickPoint = await element.evaluate(node => {
               const rect = node.getBoundingClientRect()
-              const hitTarget = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+              const x = rect.left + rect.width / 2
+              const y = rect.top + rect.height / 2
+              const hitTarget = document.elementFromPoint(x, y)
 
-              return hitTarget !== null && (hitTarget === node || node.contains(hitTarget))
+              return hitTarget !== null && (hitTarget === node || node.contains(hitTarget)) ? { x, y } : null
             })
 
-            if (!receivesPointer) {
+            if (clickPoint === null) {
               continue
             }
 
-            await element.click({ timeout: 1_000 })
+            // The element is already visible and its center is proven to hit
+            // this exact control. Use the physical mouse at that CSS point so
+            // Playwright does not perform a second scroll-into-view; that
+            // redundant scroll can move the responsive copy beneath the
+            // desktop sidebar between actionability and pointer dispatch.
+            await page.mouse.click(clickPoint.x, clickPoint.y)
 
             return true
           } catch {
