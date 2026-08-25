@@ -179,14 +179,19 @@ test('NSIS install completion waits for both exact registry keys instead of raci
 })
 
 test('lifecycle E2E accepts only the isolation mode already validated by the guest', () => {
+  assert.match(guestScript, /\$env:HERMES_LIFECYCLE_EVIDENCE_ROOT = \$EvidenceRoot/)
   assert.match(guestScript, /\$env:HERMES_LIFECYCLE_ISOLATION_MODE = \$IsolationMechanism/)
+  assert.match(guestScript, /'HERMES_LIFECYCLE_EVIDENCE_ROOT'/)
   assert.match(guestScript, /'HERMES_LIFECYCLE_ISOLATION_MODE'/)
+  assert.match(lifecycleSpec, /requireAbsolutePath\('HERMES_LIFECYCLE_EVIDENCE_ROOT'\)/)
   assert.match(lifecycleSpec, /requiredEnv\('HERMES_LIFECYCLE_ISOLATION_MODE'\)/)
   assert.match(lifecycleSpec, /isolationMode === 'windows-sandbox'[\s\S]*?username !== 'wdagutilityaccount'/)
   assert.match(lifecycleSpec, /isolationMode === 'github-hosted-ephemeral-vm'/)
   assert.match(lifecycleSpec, /process\.env\.GITHUB_ACTIONS !== 'true'/)
   assert.match(lifecycleSpec, /process\.env\.RUNNER_ENVIRONMENT !== 'github-hosted'/)
   assert.match(lifecycleSpec, /process\.env\.RUNNER_OS !== 'Windows'/)
+  assert.match(lifecycleSpec, /isStrictlyWithin\(HOSTED_EVIDENCE_ROOT, evidenceRoot\)/)
+  assert.match(lifecycleSpec, /isStrictlyWithin\(evidenceRoot, screenshotPath\)/)
   assert.match(lifecycleSpec, /unsupported HERMES_LIFECYCLE_ISOLATION_MODE/)
 })
 

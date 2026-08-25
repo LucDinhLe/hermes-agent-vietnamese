@@ -27,6 +27,7 @@ import { INTERIM_TEXTS, MOCK_REPLY, restartMockServer, startMockServer, type Moc
 
 const GUEST_STATE_ROOT = 'C:\\HermesLifecycle'
 const GUEST_EVIDENCE_ROOT = 'C:\\HermesHarness\\Evidence'
+const HOSTED_EVIDENCE_ROOT = 'C:\\HermesEvidence'
 const TOOL_TRIGGER = 'E2E_INTERIM_TRIGGER'
 
 const ACTIONS = [
@@ -148,14 +149,22 @@ function loadLifecycleContext(): LifecycleContext {
   const action = parseAction(requiredEnv('HERMES_LIFECYCLE_ACTION'))
   const hermesHome = requireAbsolutePath('HERMES_LIFECYCLE_HERMES_HOME')
   const userDataDir = requireAbsolutePath('HERMES_LIFECYCLE_USER_DATA')
+  const evidenceRoot = requireAbsolutePath('HERMES_LIFECYCLE_EVIDENCE_ROOT')
   const screenshotPath = requireAbsolutePath('HERMES_LIFECYCLE_SCREENSHOT')
   const binaryPath = requireAbsolutePath('HERMES_PACKAGED_BINARY_PATH')
 
   if (!isStrictlyWithin(GUEST_STATE_ROOT, hermesHome) || !isStrictlyWithin(GUEST_STATE_ROOT, userDataDir)) {
     throw new Error(`lifecycle state must stay beneath ${GUEST_STATE_ROOT}`)
   }
-  if (!isStrictlyWithin(GUEST_EVIDENCE_ROOT, screenshotPath)) {
-    throw new Error(`lifecycle screenshot must stay beneath ${GUEST_EVIDENCE_ROOT}`)
+  if (isolationMode === 'windows-sandbox') {
+    if (evidenceRoot.toLowerCase() !== path.win32.resolve(GUEST_EVIDENCE_ROOT).toLowerCase()) {
+      throw new Error(`Windows Sandbox evidence root must be ${GUEST_EVIDENCE_ROOT}`)
+    }
+  } else if (!isStrictlyWithin(HOSTED_EVIDENCE_ROOT, evidenceRoot)) {
+    throw new Error(`hosted lifecycle evidence root must stay beneath ${HOSTED_EVIDENCE_ROOT}`)
+  }
+  if (!isStrictlyWithin(evidenceRoot, screenshotPath)) {
+    throw new Error('lifecycle screenshot must stay beneath HERMES_LIFECYCLE_EVIDENCE_ROOT')
   }
   if (path.win32.extname(screenshotPath).toLowerCase() !== '.png') {
     throw new Error('HERMES_LIFECYCLE_SCREENSHOT must name a PNG file')
