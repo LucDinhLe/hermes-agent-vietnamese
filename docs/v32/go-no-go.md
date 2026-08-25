@@ -9,7 +9,7 @@ artifact bất biến giữ provenance `community-prerelease` và chưa phải s
 
 Candidate đã vượt source gates, exact packaged smoke và toàn bộ vòng đời trên
 máy ảo Windows dùng một lần. Private staging giữ đúng installer đã nghiệm thu.
-Chủ dự án đã duyệt merge `main` và thay v31 bằng v32 ở vị trí GitHub Latest.
+V32 đã thay v31 ở vị trí GitHub Latest sau promotion run `32873014588`.
 
 ## Candidate bất biến
 
@@ -52,10 +52,10 @@ rebuild hoặc thay sau khi freeze.
   safe tool, relaunch/persistence, update v31→v32, repair, uninstall giữ dữ liệu,
   reinstall, uninstall xóa dữ liệu, rollback vi39 và cleanup không còn process.
 
-## Private staging và promotion
+## Private staging và promotion hoàn tất
 
-- Draft release ID: `376211316`; tag `vi-v0.32.0-1`; `draft=true`,
-  `prerelease=true`.
+- Release ID: `376211316`; tag `vi-v0.32.0-1`; sau promotion có `draft=false`,
+  `prerelease=false` và là GitHub Latest.
 - Installer asset ID: `528808235`; size/digest khớp exact candidate.
 - Manifest SHA-256:
   `1fb94a77e6b2a7da0622fbdc17e6fbb92dbebd37096ed3e24c7965fd177790f4`.
@@ -66,6 +66,10 @@ rebuild hoặc thay sau khi freeze.
 - Workflow `promote-v32-vietnamese.yml` tải lại draft và lifecycle artifact,
   hash lại mọi receipt, đưa v32 lên Latest, hậu kiểm rồi tự trả v32 về draft và
   khôi phục v31 làm Latest nếu lỗi.
+- Promotion run `32873014588`, job `97884293185`, controller commit
+  `684ce63912f9177bff1f737dc0a99b88d79fcaf2`: **success**.
+- Public URL:
+  `https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.0-1`.
 
 ## Residual risks và giới hạn công bố
 
@@ -102,7 +106,7 @@ Source tests: VERIFIED
 Packaged Windows smoke: VERIFIED
 Update/relaunch/repair/uninstall/rollback: VERIFIED
 Private staging: VERIFIED (4/4 assets; manifest 1fb94a77e6b2a7da0622fbdc17e6fbb92dbebd37096ed3e24c7965fd177790f4)
-Public promotion: owner approved; workflow ready to publish v32 as GitHub Latest
+Public promotion: completed — https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.0-1
 Residual risks: unsigned Windows community pilot; no user-machine/live-provider proof; only Windows x64 is a verified v32 artifact
 Rollback target: vi-v0.20.4-39
 ```

@@ -1,6 +1,6 @@
 # Hermes Vietnamese v32 — release notes staging
 
-Trạng thái: **nội dung public đã khóa; owner đã duyệt promotion GitHub Latest**.
+Trạng thái: **đã công khai và hậu kiểm thành công ở GitHub Latest**.
 
 Nguồn body chuẩn để promotion đối chiếu byte-for-byte:
 `.github/release-notes-vietnamese.md`.
@@ -27,8 +27,9 @@ Nguồn body chuẩn để promotion đối chiếu byte-for-byte:
 - Logical continuity: trên 350k, canonical 246/246.
 - Exact packaged Windows smoke: 1/1.
 - Hosted Windows lifecycle: run `32865922889`, 19/19 gate.
-- Private draft: release ID `376211316`; exact installer asset ID `528808235`.
+- Release public: ID `376211316`; exact installer asset ID `528808235`.
 - Promotion preflight: PASS trên 4/4 asset và 60/60 lifecycle receipt.
+- Promotion run `32873014588`: PASS; `draft=false`, `prerelease=false`, Latest.
 
 ## Boundary công bố
 
@@ -36,6 +37,6 @@ Nguồn body chuẩn để promotion đối chiếu byte-for-byte:
 - Chưa có smoke máy người dùng hoặc live provider proof.
 - SignPath chưa cung cấp credential ký; dự án chưa tham gia Apple Developer
   Program.
-- V32 sẽ được công khai dưới dạng community pilot GitHub Latest, chưa phải stable.
+- V32 được công khai dưới dạng community pilot GitHub Latest, chưa phải stable.
 - Artifact giữ provenance `community-prerelease`; cờ GitHub `prerelease=false`
   chỉ dùng để thay v31 lỗi nghiêm trọng ở vị trí Latest.

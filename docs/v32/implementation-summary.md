@@ -9,8 +9,8 @@ Baseline v32: `3cce675cea2bfdfd2fd29352f35a529e827cf46f`
 Mốc mã trước checkpoint test hiện tại:
 `ffa71a84065f9272bb65df28787fe80470f72558`
 
-Trạng thái cuối trước promotion: **technical GO; private staging hoàn tất;
-owner đã duyệt merge và đưa community pilot v32 lên GitHub Latest**.
+Trạng thái cuối: **technical GO; community pilot v32 đã được công khai và thay
+v31 ở vị trí GitHub Latest**.
 
 Candidate bất biến dùng commit
 `81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f`, version `0.32.0-vi.1`, Windows
@@ -193,7 +193,12 @@ Source matrix, exact packaged smoke, hosted isolated lifecycle và private
 staging đều đạt. Lifecycle receipt khóa 19/19 gate tại run `32865922889`;
 chi tiết nằm trong `docs/v32/evidence/` và `docs/v32/go-no-go.md`.
 
+Promotion run `32873014588` tại controller commit
+`684ce63912f9177bff1f737dc0a99b88d79fcaf2` đã tải lại toàn bộ byte/evidence,
+công khai release ID `376211316`, kiểm tra lại public download và xác nhận
+`vi-v0.32.0-1` là GitHub Latest.
+
 Không có live provider proof vì chưa được duyệt quota; không có Authenticode.
 Hai giới hạn này được công bố rõ cho community pilot chưa stable. Công việc kỹ
-thuật đã hoàn tất; promotion khóa exact byte, tự hậu kiểm và tự khôi phục v31
-nếu bất kỳ cổng công khai nào thất bại.
+thuật và promotion đã hoàn tất. Đường tự khôi phục v31 vẫn được giữ trong
+workflow nếu một promotion tương lai thất bại giữa chừng.

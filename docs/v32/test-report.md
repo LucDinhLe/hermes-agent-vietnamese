@@ -117,4 +117,4 @@ tests, mock provider integration and exact installed-artifact evidence.
 - Exact packaged Windows x64: **PASS**.
 - Fresh/update/relaunch/persistence/repair/uninstall/rollback: **PASS**.
 - Release surface/private staging: **PASS**.
-- Public mutation: **WAITING FOR OWNER APPROVAL**.
+- Public promotion/Latest hậu kiểm: **PASS**, run `32873014588`.
