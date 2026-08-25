@@ -30,6 +30,16 @@ const GUEST_EVIDENCE_ROOT = 'C:\\HermesHarness\\Evidence'
 const HOSTED_EVIDENCE_ROOT = 'C:\\HermesEvidence'
 const TOOL_TRIGGER = 'E2E_INTERIM_TRIGGER'
 
+const selfUninstallAction =
+  process.env.HERMES_LIFECYCLE_ACTION === 'uninstall-lite' || process.env.HERMES_LIFECYCLE_ACTION === 'uninstall-full'
+
+// A GUI uninstall intentionally terminates the Electron transport itself.
+// The generic Playwright recorder otherwise retains that dead transport until
+// the worker timeout even after the test and after-hooks finish. Uninstall
+// phases preserve their mandatory explicit screenshot before confirmation;
+// only their generic per-page recorder is disabled.
+test.use(selfUninstallAction ? { screenshot: 'off', trace: 'off' } : {})
+
 const ACTIONS = [
   'onboarding',
   'safe-tool',

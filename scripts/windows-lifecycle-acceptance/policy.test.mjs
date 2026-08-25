@@ -213,6 +213,20 @@ test('lifecycle E2E accepts only the isolation mode already validated by the gue
   assert.match(lifecycleSpec, /unsupported HERMES_LIFECYCLE_ISOLATION_MODE/)
 })
 
+test('self-uninstall disables only the dead-transport recorder and keeps explicit evidence', () => {
+  const uninstallCases = lifecycleSpec.match(/case 'uninstall-lite':[\s\S]*?\r?\n\s*break/)?.[0] ?? ''
+  const captureHelper = lifecycleSpec.match(/async function captureEvidence[\s\S]*?\r?\n\}/)?.[0] ?? ''
+  assert.match(lifecycleSpec, /const selfUninstallAction =/)
+  assert.match(lifecycleSpec, /test\.use\(selfUninstallAction \? \{ screenshot: 'off', trace: 'off' \} : \{\}\)/)
+  assert.match(uninstallCases, /await captureEvidence\(running\.page, context\)/)
+  assert.match(uninstallCases, /await confirmGuiUninstall\(running\)/)
+  assert.ok(
+    uninstallCases.indexOf('await captureEvidence(running.page, context)') <
+      uninstallCases.indexOf('await confirmGuiUninstall(running)')
+  )
+  assert.match(captureHelper, /await page\.screenshot\(\{ fullPage: true, path: context\.screenshotPath \}\)/)
+})
+
 test('localized onboarding readiness uses the overlay contract and never retries a dirty lifecycle profile', () => {
   const onboardingWait = fixtureScript.match(/export async function waitForOnboarding[\s\S]*?\r?\n\}/)?.[0] ?? ''
   assert.match(onboardingWait, /locator\('\[class\*=\"z-\(--z-onboarding\)\"\]'\)/)
