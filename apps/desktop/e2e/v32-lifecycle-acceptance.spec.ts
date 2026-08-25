@@ -230,9 +230,7 @@ function buildExactAppEnv(context: LifecycleContext): Record<string, string> {
     // profile cannot inherit a workspace coding posture or expose any host-
     // facing toolsets. The installed runtime still owns tool validation and
     // execution; the harness only makes the exact tested schema available.
-    ...(context.action === 'safe-tool' || context.action === 'verify-update'
-      ? { HERMES_TUI_TOOLSETS: 'todo' }
-      : {})
+    ...(context.action === 'safe-tool' || context.action === 'verify-update' ? { HERMES_TUI_TOOLSETS: 'todo' } : {})
   })
 
   // The exact installed candidate owns its renderer and resident runtime.
@@ -373,8 +371,16 @@ async function captureEvidence(page: Page, context: LifecycleContext): Promise<v
 }
 
 async function openGuiUninstall(page: Page, mode: 'full' | 'lite'): Promise<void> {
-  await page.getByRole('button', { name: /^(Open settings|Mở cài đặt)$/i }).click()
-  await page.getByRole('button', { name: /^(About|Giới thiệu)$/i }).click()
+  // The public Windows settings shortcut is intentionally global, including
+  // while the composer owns focus. Use that real user path here because the
+  // fixed settings glyph can share pixels with Electron's draggable titlebar
+  // strip in a narrow lifecycle window; a locator click would then fail at hit
+  // testing before it could exercise the uninstall UI at all.
+  await page.keyboard.press('Control+,')
+
+  const about = page.getByRole('button', { name: /^(About|Giới thiệu)$/i })
+  await expect(about).toBeVisible({ timeout: 30_000 })
+  await about.click()
 
   const option =
     mode === 'lite'

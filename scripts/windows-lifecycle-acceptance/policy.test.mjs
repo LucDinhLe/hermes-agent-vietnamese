@@ -173,7 +173,10 @@ test('NSIS install completion waits for both exact registry keys instead of raci
   assert.match(guestScript, /function Wait-InstallState/)
   assert.match(guestScript, /Test-Path -LiteralPath \$ProductKey[\s\S]*?Test-Path -LiteralPath \$UninstallKey/)
   assert.match(guestScript, /function Invoke-NsisInstall/)
-  assert.match(guestScript, /Start-Process[\s\S]*?-ArgumentList @\('\/S', '\/currentuser'\)[\s\S]*?-PassThru[\s\S]*?-Wait/)
+  assert.match(
+    guestScript,
+    /Start-Process[\s\S]*?-ArgumentList @\('\/S', '\/currentuser'\)[\s\S]*?-PassThru[\s\S]*?-Wait/
+  )
   assert.match(guestScript, /\$log = Invoke-NsisInstall \$Installer \$LogName/)
   assert.match(guestScript, /\$state = Wait-InstallState \$LogName/)
   assert.doesNotMatch(guestScript, /\$state = Get-InstallState\r?\n/)
@@ -224,6 +227,15 @@ test('lifecycle messages use the contenteditable keyboard path instead of clicki
   assert.match(sendHelper, /await expect\(input\)\.toHaveText\(prompt\)/)
   assert.match(sendHelper, /await input\.press\('Enter'\)/)
   assert.doesNotMatch(sendHelper, /input\.click\(\)/)
+})
+
+test('GUI uninstall opens Settings through its global Windows shortcut before using real controls', () => {
+  const uninstallHelper = lifecycleSpec.match(/async function openGuiUninstall[\s\S]*?\r?\n\}/)?.[0] ?? ''
+  assert.match(uninstallHelper, /await page\.keyboard\.press\('Control\+,'\)/)
+  assert.match(uninstallHelper, /const about = page\.getByRole\('button'/)
+  assert.match(uninstallHelper, /await about\.click\(\)/)
+  assert.match(uninstallHelper, /await option\.click\(\)/)
+  assert.doesNotMatch(uninstallHelper, /Open settings|Mở cài đặt/)
 })
 
 test('safe tool-loop phases expose only the built-in todo toolset', () => {
