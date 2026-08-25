@@ -147,6 +147,11 @@ test('guest preflight failures always leave a receipt-capable diagnostic', () =>
   assert.match(guestScript, /Write-Error "Windows lifecycle guest failed closed: \$failure"/)
 })
 
+test('guest parameters never shadow the read-only PowerShell HOME variable', () => {
+  assert.doesNotMatch(guestScript, /\$Home\b/i)
+  assert.match(guestScript, /\[string\]\$HermesHome/)
+})
+
 test('sandbox configuration disables host-facing channels and maps only evidence writable', () => {
   const xml = buildWindowsSandboxConfig({
     evidenceDir: 'C:\\Evidence & Results',

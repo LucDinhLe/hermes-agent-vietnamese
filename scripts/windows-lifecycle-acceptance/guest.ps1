@@ -273,16 +273,16 @@ function Invoke-PlaywrightPhase {
   param(
     [string]$Action,
     [string]$Binary,
-    [string]$Home,
+    [string]$HermesHome,
     [string]$UserData,
     [string]$LogName,
     [bool]$RequireProvenance,
     [string]$ExpectedText = '',
     [string]$SendText = ''
   )
-  Assert-GuestPath $Home $StateRoot 'phase HERMES_HOME'
+  Assert-GuestPath $HermesHome $StateRoot 'phase HERMES_HOME'
   Assert-GuestPath $UserData $StateRoot 'phase userData'
-  New-Item -ItemType Directory -Path $Home -Force | Out-Null
+  New-Item -ItemType Directory -Path $HermesHome -Force | Out-Null
   New-Item -ItemType Directory -Path $UserData -Force | Out-Null
   $node = Join-Path ([string]$Manifest.paths.nodeRuntime) 'node.exe'
   $repo = [string]$Manifest.paths.repo
@@ -294,7 +294,7 @@ function Invoke-PlaywrightPhase {
   Assert-True (Test-Path -LiteralPath $Binary -PathType Leaf) 'installed packaged binary is missing before Playwright'
   Protect-InstalledProduct $Binary "Playwright $Action"
   $env:HERMES_LIFECYCLE_ACTION = $Action
-  $env:HERMES_LIFECYCLE_HERMES_HOME = $Home
+  $env:HERMES_LIFECYCLE_HERMES_HOME = $HermesHome
   $env:HERMES_LIFECYCLE_USER_DATA = $UserData
   $env:HERMES_LIFECYCLE_SCREENSHOT = Join-Path $EvidenceRoot ("$Action.png")
   $env:HERMES_LIFECYCLE_REQUIRE_PROVENANCE = $(if ($RequireProvenance) { '1' } else { '0' })
@@ -355,10 +355,10 @@ function Invoke-PackagedAcceptance {
 }
 
 function Write-Sentinels {
-  param([string]$Home, [string]$UserData, [string]$Prefix)
-  New-Item -ItemType Directory -Path $Home -Force | Out-Null
+  param([string]$HermesHome, [string]$UserData, [string]$Prefix)
+  New-Item -ItemType Directory -Path $HermesHome -Force | Out-Null
   New-Item -ItemType Directory -Path $UserData -Force | Out-Null
-  $homeFile = Join-Path $Home 'lifecycle-home-sentinel.txt'
+  $homeFile = Join-Path $HermesHome 'lifecycle-home-sentinel.txt'
   $uiFile = Join-Path $UserData 'lifecycle-ui-sentinel.txt'
   [System.IO.File]::WriteAllText($homeFile, "$Prefix-home`n", $Utf8NoBom)
   [System.IO.File]::WriteAllText($uiFile, "$Prefix-ui`n", $Utf8NoBom)
@@ -434,8 +434,8 @@ function Get-TreeFingerprint {
 }
 
 function Invoke-GuiUninstall {
-  param([string]$Mode, [object]$State, [string]$Home, [string]$UserData)
-  [void](Invoke-PlaywrightPhase "uninstall-$Mode" ([string]$State.Binary) $Home $UserData "uninstall-$Mode.log" $true)
+  param([string]$Mode, [object]$State, [string]$HermesHome, [string]$UserData)
+  [void](Invoke-PlaywrightPhase "uninstall-$Mode" ([string]$State.Binary) $HermesHome $UserData "uninstall-$Mode.log" $true)
   Wait-Uninstalled ([string]$State.InstallDir) "GUI uninstall $Mode"
 }
 
