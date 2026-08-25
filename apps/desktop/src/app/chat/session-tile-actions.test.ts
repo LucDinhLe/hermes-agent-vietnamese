@@ -16,7 +16,7 @@ vi.mock('@/store/gateway', () => ({
     requestGatewayMock(method, params)
 }))
 
-const { setSessionTileDelegate } = await import('@/store/session-states')
+const { sessionTileIdentity, setSessionTileDelegate } = await import('@/store/session-states')
 const { useSessionTileActions } = await import('./session-tile-actions')
 
 const RUNTIME_SESSION_ID = 'rt-tile-current'
@@ -138,5 +138,22 @@ describe('useSessionTileActions sleep/wake session recovery', () => {
     expect(ok).toBe(true)
     expect(calls.map(c => c.method)).toEqual(['session.redirect', 'session.resume', 'session.redirect'])
     expect(calls[2]?.params).toEqual({ session_id: RECOVERED_SESSION_ID, text: 'actually use Postgres' })
+  })
+
+  it('accepts the source-qualified composer scope and submits a fresh tile turn', async () => {
+    requestGatewayMock.mockResolvedValue({})
+    const { result } = renderTileActions()
+
+    const accepted = await act(async () =>
+      result.current.submitText('send from the new tile', {
+        composerScope: sessionTileIdentity(OWNER, STORED_SESSION_ID)
+      })
+    )
+
+    expect(accepted).toBe(true)
+    expect(requestGatewayMock).toHaveBeenCalledWith('prompt.submit', {
+      session_id: RUNTIME_SESSION_ID,
+      text: 'send from the new tile'
+    })
   })
 })

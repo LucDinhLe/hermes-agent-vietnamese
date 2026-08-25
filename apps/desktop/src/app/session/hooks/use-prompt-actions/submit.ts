@@ -57,6 +57,10 @@ interface SubmitPromptDeps {
   copy: Translations['desktop']
   createBackendSessionForSend: (preview?: string | null) => Promise<string | null>
   getRoutedStoredSessionId: () => null | string
+  /** Map a stored session to the exact draft/queue namespace owned by this
+   * composer surface. Primary chat uses the lineage key; source-qualified
+   * session tiles add their backend owner identity. */
+  getComposerScopeForStoredSession?: (storedSessionId: string | null) => null | string
   getRuntimeIdForStoredSession: (storedSessionId: string) => null | string
   getRouteToken: () => string
   requestGateway: GatewayRequest
@@ -95,6 +99,9 @@ const MAIN_SUBMIT_SCOPE: NonNullable<SubmitPromptDeps['scope']> = {
   setMessages
 }
 
+const mainComposerScopeForStoredSession = (storedSessionId: string | null) =>
+  resolveComposerSessionKey(storedSessionId, $sessions.get())
+
 /** The prompt submit pipeline, extracted from usePromptActions. */
 export function useSubmitPrompt(deps: SubmitPromptDeps) {
   const {
@@ -102,6 +109,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
     busyRef,
     copy,
     createBackendSessionForSend,
+    getComposerScopeForStoredSession = mainComposerScopeForStoredSession,
     getRoutedStoredSessionId,
     getRuntimeIdForStoredSession,
     getRouteToken,
@@ -304,7 +312,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
               // into the same lineage-root domain before comparing, or every
               // submit into a session that has ever compressed would
               // false-positive-abort.
-              submitTargetComposerScope: resolveComposerSessionKey(startingStoredSessionId, $sessions.get())
+              submitTargetComposerScope: getComposerScopeForStoredSession(startingStoredSessionId)
             })
           : null
 
@@ -826,6 +834,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
       busyRef,
       copy,
       createBackendSessionForSend,
+      getComposerScopeForStoredSession,
       getRoutedStoredSessionId,
       getRuntimeIdForStoredSession,
       getRouteToken,

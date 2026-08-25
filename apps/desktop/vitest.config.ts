@@ -28,7 +28,11 @@ const electronNative: TestProjectConfiguration = {
     environment: 'node',
     include: ['electron/**/*.test.ts', 'scripts/**.test.{ts,mjs}'],
     testTimeout: electronTestTimeout,
-    exclude: ['scripts/run-short-session-hang-repro.test.mjs', 'scripts/patch-electron-builder-mac-binary.test.mjs']
+    exclude: [
+      'scripts/run-short-session-hang-repro.test.mjs',
+      'scripts/patch-electron-builder-mac-binary.test.mjs',
+      'scripts/patch-electron-builder-windows-nsis.test.mjs'
+    ]
   }
 }
 

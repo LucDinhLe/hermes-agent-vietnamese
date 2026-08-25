@@ -14,11 +14,21 @@ const runtimeSmoke = readFileSync(
   'utf8'
 )
 const jsTests = readFileSync(new URL('../../../.github/workflows/js-tests.yml', import.meta.url), 'utf8')
+const vitestConfig = readFileSync(new URL('../vitest.config.ts', import.meta.url), 'utf8')
 const builderWrapper = readFileSync(new URL('../scripts/run-electron-builder.mjs', import.meta.url), 'utf8')
 const bundledBuild = readFileSync(
   new URL('../../../scripts/build-bundled-desktop.mjs', import.meta.url),
   'utf8'
 )
+
+test('node:test builder patch regressions stay out of the Vitest project', () => {
+  for (const nodeTestSuite of [
+    'scripts/patch-electron-builder-mac-binary.test.mjs',
+    'scripts/patch-electron-builder-windows-nsis.test.mjs'
+  ]) {
+    assert.match(vitestConfig, new RegExp(nodeTestSuite.replaceAll('.', '\\.')))
+  }
+})
 
 test('candidate workflow builds the complete resident runtime on every advertised native target', () => {
   assert.match(candidate, /scripts\/validate-release-evidence\.test\.mjs/)

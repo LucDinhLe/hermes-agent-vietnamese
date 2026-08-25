@@ -24,8 +24,13 @@ import { requestGatewayForAgent } from '@/store/gateway'
 import { notifyError } from '@/store/notifications'
 import { clearPreviewArtifacts } from '@/store/preview-status'
 import { clearAllPrompts } from '@/store/prompts'
-import { $sessions, sessionMatchesStoredId } from '@/store/session'
-import { $sessionStates, sessionTileDelegate, type SessionTileOwner } from '@/store/session-states'
+import { $sessions, resolveComposerSessionKey, sessionMatchesStoredId } from '@/store/session'
+import {
+  $sessionStates,
+  sessionTileDelegate,
+  sessionTileIdentity,
+  type SessionTileOwner
+} from '@/store/session-states'
 import { broadcastSessionsChanged } from '@/store/session-sync'
 import { clearSessionSubagents } from '@/store/subagents'
 import { clearSessionTodos } from '@/store/todos'
@@ -151,6 +156,19 @@ export function useSessionTileActions({ owner, runtimeId, scope, storedSessionId
   const readState = useCallback(() => $sessionStates.get()[runtimeIdRef.current], [])
   const readMessages = useCallback(() => readState()?.messages ?? [], [readState])
 
+  const getComposerScopeForStoredSession = useCallback(
+    (sessionId: string | null) => {
+      if (!sessionId) {
+        return null
+      }
+
+      const resolved = resolveComposerSessionKey(sessionId, $sessions.get())
+
+      return sessionTileIdentity(owner, resolved || sessionId)
+    },
+    [owner]
+  )
+
   // A ⌘T tab's session is unlisted until its first turn persists — seed the
   // row from the user's first message so the tab and sidebar name it right
   // away (see listTileSessionRow).
@@ -247,6 +265,7 @@ export function useSessionTileActions({ owner, runtimeId, scope, storedSessionId
     busyRef,
     copy,
     createBackendSessionForSend: async () => runtimeIdRef.current,
+    getComposerScopeForStoredSession,
     getRoutedStoredSessionId: () => storedIdRef.current,
     getRuntimeIdForStoredSession: storedId => (storedId === storedIdRef.current ? runtimeIdRef.current : null),
     // A tile IS its session — no route to abandon, so the create-abort guard's

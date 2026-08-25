@@ -16,6 +16,16 @@ import {
 } from './fixtures'
 import { MOCK_REPLY, type MockServer } from './mock-server'
 
+function activeChatSurface(page: Page) {
+  return page
+    .locator('[data-slot="composer-rich-input"]:visible')
+    .locator('xpath=ancestor::*[@data-chat-surface][1]')
+}
+
+function activeThread(page: Page) {
+  return activeChatSurface(page).locator('[data-slot="aui_thread-viewport"]')
+}
+
 async function send(page: Page, mock: MockServer, prompt: string): Promise<void> {
   const composer = page.locator('[data-slot="composer-rich-input"]:visible')
   const agentCallsBefore = mock.receivedCompletions.filter(
@@ -24,7 +34,14 @@ async function send(page: Page, mock: MockServer, prompt: string): Promise<void>
 
   await composer.click()
   await page.keyboard.insertText(prompt)
-  await page.keyboard.press('Enter')
+  const composerRoot = composer.locator('xpath=ancestor::*[@data-slot="composer-root"][1]')
+  const sendButton = composerRoot.getByRole('button', { name: /^(Send|Gửi)$/ })
+
+  // A freshly created tile can still be starting its profile backend. Enter
+  // during that interval intentionally remains a draft, which is not evidence
+  // of a provider turn. Wait for the actual action and click it physically.
+  await expect(sendButton).toBeEnabled({ timeout: 120_000 })
+  await sendButton.click()
   await expect
     .poll(
       () =>
@@ -32,11 +49,8 @@ async function send(page: Page, mock: MockServer, prompt: string): Promise<void>
       { timeout: 60_000 },
     )
     .toBe(agentCallsBefore + 1)
-  await page.waitForFunction(
-    reply => document.querySelector('[data-slot="aui_thread-viewport"]')?.textContent?.includes(String(reply)) ?? false,
-    MOCK_REPLY,
-    { timeout: 90_000 },
-  )
+  await expect(activeThread(page)).toContainText(prompt, { timeout: 90_000 })
+  await expect(activeThread(page)).toContainText(MOCK_REPLY, { timeout: 90_000 })
 }
 
 test.describe('v32 exact packaged candidate', () => {
@@ -58,24 +72,38 @@ test.describe('v32 exact packaged candidate', () => {
   })
 
   test('runs resident gateway, preserves state, proves the three UX fixes, and compacts', async ({}, testInfo) => {
-    const setupPrompt = 'Persist this exact packaged v32 acceptance session'
+    test.setTimeout(360_000)
+    const primaryPrompt = 'Persist this exact packaged v32 primary session'
+    const focusedTilePrompt = 'Persist this exact packaged v32 focused-tile session'
     const draft = 'Bản nháp packaged v32 vẫn còn sau khi mở lại'
 
-    await send(fixture.page, fixture.mock, setupPrompt)
+    await send(fixture.page, fixture.mock, primaryPrompt)
 
-    // A physical pointer click creates one selected tab and focuses its
-    // composer. Return to the persisted tab before checking its draft.
+    // Keep the first stored session selected as primary, then create and send
+    // a turn in a different focused tile. Messaging Back must resolve the tile,
+    // not fall back to the primary session.
     const tabs = fixture.page.locator('[data-tree-tab^="session-tile:"]')
     const before = await tabs.count()
-    const previousTab = tabs.nth(before - 1)
 
     await fixture.page.locator('[data-session-tab-plus] button').first().click()
     await expect(tabs).toHaveCount(before + 1)
-    await expect(fixture.page.locator('[data-tree-tab^="session-tile:"][data-active="true"]')).toHaveCount(1)
+    const activeTab = fixture.page.locator('[data-tree-tab^="session-tile:"][data-active="true"]')
+
+    await expect(activeTab).toHaveCount(1)
     await fixture.page.waitForFunction(
       () => document.activeElement?.getAttribute('data-slot') === 'composer-rich-input',
     )
-    await previousTab.click()
+    await send(fixture.page, fixture.mock, focusedTilePrompt)
+
+    const focusedTileKey = await activeTab.getAttribute('data-tree-tab')
+
+    if (!focusedTileKey) {
+      throw new Error('focused packaged session tile has no stable data-tree-tab identity')
+    }
+    await expect(fixture.page.locator(`[data-tree-tab=${JSON.stringify(focusedTileKey)}]`)).toHaveAttribute(
+      'data-active',
+      'true'
+    )
 
     let composer = fixture.page.locator('[data-slot="composer-rich-input"]:visible')
 
@@ -89,8 +117,9 @@ test.describe('v32 exact packaged candidate', () => {
     await expect(back).toBeVisible()
     await back.click()
     await expect(composer).toContainText(draft)
+    await expect(activeThread(fixture.page)).toContainText(focusedTilePrompt, { timeout: 30_000 })
 
-    const meter = fixture.page.locator('[data-session-context-meter]').first()
+    let meter = activeChatSurface(fixture.page).locator('[data-session-context-meter]')
 
     await expect(meter).toBeEnabled()
     await meter.click()
@@ -102,8 +131,8 @@ test.describe('v32 exact packaged candidate', () => {
     await fixture.relaunch()
     await waitForAppReady(fixture, 180_000)
     composer = fixture.page.locator('[data-slot="composer-rich-input"]:visible')
-    await expect(fixture.page.locator('[data-slot="aui_thread-viewport"]')).toContainText(setupPrompt)
-    await expect(composer).toContainText(draft)
+    await expect(activeThread(fixture.page)).toContainText(focusedTilePrompt, { timeout: 90_000 })
+    await expect(composer).toContainText(draft, { timeout: 30_000 })
 
     // Clear the restored draft, add enough completed history for manual
     // compaction, then prove that the continued session still accepts a turn.
@@ -117,12 +146,16 @@ test.describe('v32 exact packaged candidate', () => {
 
     await composer.click()
     await fixture.page.keyboard.insertText('/compress preserve packaged v32 acceptance anchors')
-    await fixture.page.getByRole('button', { name: /^(Send|Gửi)$/ }).click()
+    await composer
+      .locator('xpath=ancestor::*[@data-slot="composer-root"][1]')
+      .getByRole('button', { name: /^(Send|Gửi)$/ })
+      .click()
     await expect
-      .poll(() => fixture.page.locator('[data-slot="aui_thread-viewport"]').textContent(), { timeout: 120_000 })
+      .poll(() => activeThread(fixture.page).textContent(), { timeout: 120_000 })
       .toMatch(/Compressed|No changes from compression/)
 
     await send(fixture.page, fixture.mock, 'PACKAGED_V32_AFTER_COMPACTION')
+    meter = activeChatSurface(fixture.page).locator('[data-session-context-meter]')
     await meter.click()
     await expect(fixture.page.locator('[data-slot="context-usage-panel"]')).toContainText(
       /(?:Số lần compact|Compactions).*1/i,
