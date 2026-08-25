@@ -51,7 +51,7 @@ def test_featured_candidate_notes_use_the_candidate_assets() -> None:
     text = _read(".github/release-notes-vietnamese.md")
     assert candidate["tag"] in text
     assert "community prerelease, chưa phải stable" in text
-    for filename in PUBLIC_RELEASE["downloadFiles"]:
+    for filename in candidate["downloadFiles"]:
         assert prefix + filename in text, (
             ".github/release-notes-vietnamese.md is missing the featured "
             f"candidate URL for {filename}"
@@ -86,7 +86,7 @@ def test_published_candidate_requires_a_public_readme_callout() -> None:
             f"{path} must identify {candidate['tag']} as prerelease"
         )
         assert release_url in text, f"{path} must link to the candidate release page"
-        for filename in PUBLIC_RELEASE["downloadFiles"]:
+        for filename in candidate["downloadFiles"]:
             assert download_prefix + filename in text, (
                 f"{path} is missing the candidate URL for {filename}"
             )

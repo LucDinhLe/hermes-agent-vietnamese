@@ -1,0 +1,135 @@
+name: Công khai Hermes Vietnamese v32
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha256sums_sha256:
+        description: 'SHA-256 exact của SHA256SUMS.txt trong private draft'
+        required: true
+        type: string
+      lifecycle_run_id:
+        description: 'Run ID lifecycle v32 có receipt đầy đủ'
+        required: true
+        type: string
+      controller_sha:
+        description: 'Full SHA của commit điều khiển promotion'
+        required: true
+        type: string
+
+concurrency:
+  group: hermes-vietnamese-promotion
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  promote:
+    name: Xác minh exact byte và công khai v32 community prerelease
+    runs-on: ubuntu-24.04
+    environment: release-production
+    steps:
+      - name: Khóa commit điều khiển promotion
+        shell: bash
+        env:
+          CONTROLLER_SHA: ${{ inputs.controller_sha }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$CONTROLLER_SHA" = "$DISPATCH_SHA"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+          ref: ${{ inputs.controller_sha }}
+
+      - name: Tải và xác minh private staging cùng lifecycle receipt
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: vi-v0.32.0-1
+          EXPECTED_MANIFEST_SHA: ${{ inputs.sha256sums_sha256 }}
+          LIFECYCLE_RUN_ID: ${{ inputs.lifecycle_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_MANIFEST_SHA" =~ ^[0-9a-f]{64}$ ]]
+          [[ "$LIFECYCLE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+
+          tag_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          test "$tag_commit" = 81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f
+          tag_ref="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG")"
+          test "$(jq -r .object.type <<<"$tag_ref")" = commit
+          test "$(jq -r .object.sha <<<"$tag_ref")" = "$tag_commit"
+
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --slurp > release-pages.json
+          jq --arg tag "$TAG" '[.[][] | select(.tag_name == $tag)]' release-pages.json > release-matches.json
+          test "$(jq 'length' release-matches.json)" = 1
+          jq '.[0]' release-matches.json > release-api.json
+          release_id="$(jq -r .id release-api.json)"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" \
+            --slurp > release-asset-pages.json
+          jq --slurpfile pages release-asset-pages.json '.assets = [$pages[0][][]]' \
+            release-api.json > release-api-complete.json
+          mv release-api-complete.json release-api.json
+
+          mkdir candidate lifecycle
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir candidate
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$LIFECYCLE_RUN_ID" > lifecycle-run.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$LIFECYCLE_RUN_ID/artifacts" > lifecycle-artifacts.json
+          lifecycle_name="$(jq -r --arg run "$LIFECYCLE_RUN_ID" \
+            '.artifacts[] | select(.name == "v32-windows-lifecycle-" + $run + "-1") | .name' \
+            lifecycle-artifacts.json)"
+          test -n "$lifecycle_name"
+          gh run download "$LIFECYCLE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "$lifecycle_name" --dir lifecycle
+
+          node scripts/validate-v32-promotion.mjs \
+            candidate lifecycle release-api.json lifecycle-run.json lifecycle-artifacts.json \
+            "$EXPECTED_MANIFEST_SHA" "$LIFECYCLE_RUN_ID" draft
+
+      - name: Công khai, hậu kiểm và tự quay về draft nếu lỗi
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: vi-v0.32.0-1
+          EXPECTED_MANIFEST_SHA: ${{ inputs.sha256sums_sha256 }}
+          LIFECYCLE_RUN_ID: ${{ inputs.lifecycle_run_id }}
+        run: |
+          set -euo pipefail
+          release_id="$(jq -r .id release-api.json)"
+          previous_latest="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)"
+          test "$previous_latest" = vi-v0.31.0-7
+
+          rollback_publication() {
+            local original_status=$?
+            trap - ERR
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+              -F draft=true -F prerelease=true -f make_latest=false > /dev/null || true
+            exit "$original_status"
+          }
+          trap rollback_publication ERR
+
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -F draft=false -F prerelease=true -f make_latest=false > publication-response.json
+          test "$(jq -r .id publication-response.json)" = "$release_id"
+          test "$(jq -r .draft publication-response.json)" = false
+          test "$(jq -r .prerelease publication-response.json)" = true
+
+          gh api "repos/$GITHUB_REPOSITORY/releases/$release_id" > published-release.json
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases/$release_id/assets?per_page=100" \
+            --slurp > published-asset-pages.json
+          jq --slurpfile pages published-asset-pages.json '.assets = [$pages[0][][]]' \
+            published-release.json > published-release-complete.json
+          mv published-release-complete.json published-release.json
+          node scripts/validate-v32-promotion.mjs \
+            candidate lifecycle published-release.json lifecycle-run.json lifecycle-artifacts.json \
+            "$EXPECTED_MANIFEST_SHA" "$LIFECYCLE_RUN_ID" published
+
+          test "$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" --jq .tag_name)" = "$previous_latest"
+          mkdir public
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir public
+          test "$(sha256sum public/SHA256SUMS.txt | cut -d' ' -f1)" = "$EXPECTED_MANIFEST_SHA"
+          (cd public && sha256sum --check SHA256SUMS.txt)
+          trap - ERR

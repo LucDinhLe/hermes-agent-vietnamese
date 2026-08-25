@@ -4,9 +4,16 @@
   "releaseClass": "community-pilot",
   "featuredCandidate": {
     "tag": "vi-v0.32.0-1",
+    "commit": "81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f",
     "productVersion": "v32.0",
     "releaseClass": "community-prerelease",
-    "published": false
+    "published": true,
+    "windowsX64": {
+      "filename": "Hermes-Vietnamese-Windows-x64-Setup.exe",
+      "size": 341176379,
+      "sha256": "efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac"
+    },
+    "downloadFiles": ["Hermes-Vietnamese-Windows-x64-Setup.exe"]
   },
   "windowsX64": {
     "filename": "Hermes-Vietnamese-Windows-x64-Setup.exe",

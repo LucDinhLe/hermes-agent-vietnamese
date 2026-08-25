@@ -1,5 +1,13 @@
 # Kế hoạch Hermes Vietnamese v32
 
+> Final checkpoint 2026-08-25: Windows x64 candidate
+> `81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f` đạt technical GO; exact installer
+> 341.176.379 byte, SHA-256
+> `efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac`.
+> Source, packaged smoke, 19/19 lifecycle gate và private staging đều đạt.
+> Các dòng NO-GO bên dưới được giữ làm baseline lịch sử của kế hoạch trước
+> candidate; quyết định hiện hành nằm tại `docs/v32/go-no-go.md`.
+
 ## Quyết định hiện tại
 
 - Trạng thái: **candidate only / NO-GO cho staging và phát hành công khai**.

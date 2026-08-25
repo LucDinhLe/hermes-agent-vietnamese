@@ -9,12 +9,14 @@ Baseline v32: `3cce675cea2bfdfd2fd29352f35a529e827cf46f`
 Mốc mã trước checkpoint test hiện tại:
 `ffa71a84065f9272bb65df28787fe80470f72558`
 
-Trạng thái: **candidate only / NO-GO cho staging và phát hành công khai**
+Trạng thái cuối: **technical GO; private staging hoàn tất; chờ owner approval
+cho merge và public community prerelease**.
 
-Mốc mã trên là implementation tip trước commit tài liệu này. Commit, phiên bản
-và digest của candidate chỉ được điền sau khi freeze một worktree sạch. Chủ dự
-án đã cho phép đúng một build retry ngoại lệ trên commit cuối đã sửa; lượt này
-chưa được sử dụng và chỉ được dùng sau khi toàn bộ pre-build gate xanh.
+Candidate bất biến dùng commit
+`81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f`, version `0.32.0-vi.1`, Windows
+x64 installer 341.176.379 byte và SHA-256
+`efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac`.
+Lượt build ngoại lệ đã được dùng và candidate không bị rebuild.
 
 ## Kết quả người dùng nhận được
 
@@ -180,13 +182,18 @@ estimate, chưa phải tokenizer usage hoặc hóa đơn provider. Bản evidenc
 | Gateway/API | per-turn event, usage response, persistence và resume |
 | Desktop | Messaging route, session actions, context meter, context usage panel, i18n |
 
-## Bằng chứng và cổng còn mở
+## Bằng chứng và cổng cuối
 
 - Báo cáo test hợp nhất: `docs/v32/test-report.md`.
 - Benchmark offline: `docs/v32/benchmarks/offline-benchmark-2026-08-24.md`.
 - Bản nháp release notes: `docs/v32/release-notes-draft.vi.md`.
 - Quyết định phát hành và rollback: `docs/v32/go-no-go.md`.
 
-Chưa có build candidate, artifact manifest, digest, packaged Windows smoke,
-ảnh nghiệm thu, live provider proof hoặc phê duyệt public. Các kết quả source
-test chỉ cho phép tiếp tục chuẩn bị candidate cục bộ.
+Source matrix, exact packaged smoke, hosted isolated lifecycle và private
+staging đều đạt. Lifecycle receipt khóa 19/19 gate tại run `32865922889`;
+chi tiết nằm trong `docs/v32/evidence/` và `docs/v32/go-no-go.md`.
+
+Không có live provider proof vì chưa được duyệt quota; không có Authenticode.
+Hai giới hạn này được công bố rõ cho community prerelease. Công việc kỹ thuật
+còn lại bằng không; merge `main` và public release chỉ chạy sau một xác nhận
+cuối của chủ dự án.

@@ -1,137 +1,40 @@
-# Bản nháp ghi chú phát hành Hermes Vietnamese v32
+# Hermes Vietnamese v32 — release notes staging
 
-> **BẢN NHÁP NỘI BỘ — CHƯA DÙNG ĐỂ CÔNG BỐ**
->
-> Phiên bản, commit, ma trận hỗ trợ, chữ ký và mã băm bên dưới còn placeholder.
+Trạng thái: **nội dung public đã khóa, release vẫn là private draft**.
 
-## Thông tin candidate
+Nguồn body chuẩn để promotion đối chiếu byte-for-byte:
+`.github/release-notes-vietnamese.md`.
 
-- Phiên bản: `[CANDIDATE_VERSION]`
-- Tag: `[CANDIDATE_TAG]`
-- Commit: `[CANDIDATE_COMMIT]`
-- Lớp phát hành: `[LOCAL CANDIDATE / COMMUNITY PRERELEASE]`
-- Ngày build: `[BUILD_DATE_UTC]`
-- Trạng thái ký số: `[WINDOWS_SIGNING]`; `[MACOS_SIGNING_NOTARIZATION]`
-- Rollback target: `vi-v0.20.4-39`
+## Candidate
 
-## Điểm mới trong v32
+| Thuộc tính       | Giá trị                                                            |
+| ---------------- | ------------------------------------------------------------------ |
+| Tag              | `vi-v0.32.0-1`                                                     |
+| Version          | `0.32.0-vi.1`                                                      |
+| Commit           | `81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f`                         |
+| Release class    | `community-prerelease`                                             |
+| Windows x64 file | `Hermes-Vietnamese-Windows-x64-Setup.exe`                          |
+| Size             | `341176379` byte                                                   |
+| SHA-256          | `efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac` |
+| Authenticode     | `NotSigned`                                                        |
+| Rollback         | `vi-v0.20.4-39`                                                    |
+| Staging manifest | `1fb94a77e6b2a7da0622fbdc17e6fbb92dbebd37096ed3e24c7965fd177790f4` |
 
-### Chủ động dừng một yêu cầu quá dài
+## Evidence khóa
 
-Hermes nay theo dõi tổng số lần gọi mô hình và công cụ trong từng yêu cầu của
-người dùng, gồm cả các việc phụ và agent chuyên trách mà Hermes quan sát được.
-Ứng dụng cảnh báo khi yêu cầu bắt đầu dài bất thường, sau đó tạm dừng an toàn ở
-12 lần gọi mô hình hoặc 20 lần gọi công cụ. Người dùng có thể xem số đã dùng và
-gửi **tiếp tục** trong một lượt mới.
+- Source: Desktop 6.503 pass; Python 34.863 pass; typecheck/lint đạt.
+- Fresh lean: 5.169 estimated token, 0,4923% của 1,05M.
+- Logical continuity: trên 350k, canonical 246/246.
+- Exact packaged Windows smoke: 1/1.
+- Hosted Windows lifecycle: run `32865922889`, 19/19 gate.
+- Private draft: release ID `376211316`; exact installer asset ID `528808235`.
+- Promotion preflight: PASS trên 4/4 asset và 60/60 lifecycle receipt.
 
-### Phiên mới nhẹ hơn
+## Boundary công bố
 
-Lean Session chỉ đưa một bộ bridge nhỏ, ổn định vào prompt ban đầu. Công cụ đã
-được cấp quyền vẫn có thể tìm và gọi khi cần. Cách này giảm đáng kể phần ngữ
-cảnh nền mà vẫn giữ prompt cache ổn định qua nhiều lượt và sau khi mở lại phiên.
-
-Người dùng cần hành vi tương thích cũ có thể chọn profile `full` khi bắt đầu
-session mới.
-
-### Compaction sớm và phục hồi rõ hơn
-
-V32 tách giới hạn model công bố khỏi giới hạn thực tế của tuyến đang dùng. Với
-tuyến GPT-5.6 phù hợp, Hermes chuẩn bị compaction trước vùng lỗi từng quan sát.
-Khi provider trả lỗi context, Hermes compact và thử lại đúng một lần. Lỗi quota,
-billing hoặc rate limit được giữ thành trạng thái riêng và không làm mất session.
-
-### Output công cụ không còn phình context âm thầm
-
-Tool result lớn được lưu thành artifact có kích thước, SHA-256 và đường đọc lại.
-Model chỉ nhận preview có giới hạn. Trần mặc định là 9.500 byte UTF-8 cho một
-kết quả văn bản và 38.000 byte cho tổng kết quả trong một turn.
-
-### Context meter dễ hiểu hơn
-
-Panel mới tách:
-
-- active context và effective limit;
-- system/background với conversation;
-- logical history và số lần compaction;
-- quota provider khi có dữ liệu;
-- chi phí actual, estimated hoặc API tương đương.
-
-Với gói thuê bao, số tiền tham chiếu được ghi rõ là **API tương đương**, không
-phải khoản đang bị tính vào tài khoản.
-
-### Sửa trải nghiệm Desktop
-
-- Trang **Nhắn tin** có đường quay lại phiên rõ ràng.
-- Nút `+` trên thanh tab tạo phiên mới bằng thao tác pointer thật.
-- Draft, focus, Browser/Terminal pane và thông báo lỗi được giữ qua thao tác.
-- Meter theo turn hiển thị model calls, tool calls, input mới, cache-read,
-  output và trạng thái gần giới hạn hoặc đã tạm dừng.
-
-## Kết quả benchmark
-
-`[PARENT: chèn bảng before/after đã khóa theo exact candidate commit; ghi rõ đây
-là static estimate hay provider-measured usage. Liên kết evidence JSON/Markdown.]`
-
-Mục tiêu nghiệm thu của v32:
-
-- fresh lean dưới 1% của cửa sổ tham chiếu 1,05M;
-- prompt giải thích đơn giản chỉ có một main response;
-- không tool loop hoặc background review khi không cần;
-- logical transcript trên 350k đi vào đúng kế hoạch compaction và giữ recovery
-  anchors.
-
-## Giới hạn đã biết
-
-### Meter chưa nhìn xuyên ba runtime agentic bên ngoài
-
-Codex app-server, Claude Code và Copilot ACP chạy qua subprocess hoặc protocol
-riêng. Hermes đếm được request ở biên gọi runtime, nhưng chưa thể đếm trước từng
-provider request, retry hoặc tool call vật lý bên trong tiến trình đó. Meter có
-thể thấp hơn mức dùng thật trên ba tuyến này. Bản phát hành không được tuyên bố
-đã phủ toàn bộ physical attempts cho tới khi protocol cung cấp telemetry phù
-hợp hoặc các tuyến này fail closed theo chính sách được duyệt.
-
-### Bằng chứng provider và artifact
-
-- Chưa có live provider probe được duyệt.
-- `[PARENT: điền trạng thái packaged Windows x64 smoke.]`
-- `[PARENT: điền target nào có máy thật; target còn lại phải ghi BUILD-ONLY-PILOT.]`
-- `[PARENT: điền trạng thái update, repair, uninstall giữ/xóa dữ liệu và rollback.]`
-
-### Ký số và phạm vi hỗ trợ
-
-`[PARENT: công bố chính xác Authenticode, Developer ID, notarization, stapling
-và SmartScreen/Gatekeeper evidence. Nếu chưa có, chỉ được gọi community pilot
-chưa ký; không dùng stable/final.]`
-
-## Tải xuống và kiểm tra
-
-Chỉ điền mục này sau khi cùng một bộ byte đã staging và vượt exact-artifact
-smoke.
-
-| Nền tảng | Tệp | Byte | SHA-256 | Trạng thái runtime |
-| --- | --- | ---: | --- | --- |
-| Windows x64 | `[FILENAME]` | `[SIZE]` | `[SHA256]` | `[VERIFIED/PENDING]` |
-| Windows ARM64 | `[FILENAME]` | `[SIZE]` | `[SHA256]` | `[VERIFIED/BUILD-ONLY]` |
-| macOS Apple Silicon | `[FILENAME]` | `[SIZE]` | `[SHA256]` | `[VERIFIED/BUILD-ONLY]` |
-| macOS Intel | `[FILENAME]` | `[SIZE]` | `[SHA256]` | `[VERIFIED/BUILD-ONLY]` |
-| Linux x64 | `[FILENAME]` | `[SIZE]` | `[SHA256]` | `[VERIFIED/BUILD-ONLY]` |
-| Linux ARM64 | `[FILENAME]` | `[SIZE]` | `[SHA256]` | `[VERIFIED/BUILD-ONLY]` |
-
-## Cập nhật và quay lui
-
-- Bản v32 chưa được công bố sẽ không thay đổi GitHub Latest hiện tại.
-- Rollback target kỹ thuật của đợt nghiệm thu là `vi-v0.20.4-39`.
-- Không tự động đưa state/profile v32 về bản cũ trước khi compatibility và
-  rollback đã được diễn tập.
-- Không xóa profile hoặc Electron userData trong quá trình quay lui.
-- Artifact đã staging giữ bất biến. Mọi sửa mã tạo candidate, tag và digest mới.
-
-## Bằng chứng phát hành
-
-- Test report: `[LINK_OR_PATH_TO_FINAL_TEST_REPORT]`
-- Benchmark: `[LINK_OR_PATH_TO_FINAL_BENCHMARK]`
-- Candidate manifest: `[LINK_OR_PATH_TO_MANIFEST]`
-- Windows smoke: `[LINK_OR_PATH_TO_SMOKE_RECEIPT]`
-- Screenshots: `[LINK_OR_PATH_TO_SCREENSHOTS]`
-- GO/NO-GO: `[LINK_OR_PATH_TO_SIGNED_DECISION]`
+- Chỉ Windows x64 được quảng cáo cho v32.
+- Chưa có smoke máy người dùng hoặc live provider proof.
+- SignPath chưa cung cấp credential ký; dự án chưa tham gia Apple Developer
+  Program.
+- Public community prerelease và merge `main` chờ owner approval.
+- GitHub Latest vẫn là v31 vì GitHub không cho prerelease mang nhãn Latest.

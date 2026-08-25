@@ -111,18 +111,34 @@ contract test; it is not inside the already-built candidate. Promotion and
 lifecycle evidence must continue to identify the candidate by embedded commit
 `81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f`, not by the later harness HEAD.
 
-## Remaining gates
+## Final lifecycle and staging disposition
 
-This is an admitted unsigned Windows x64 candidate, not technical GO yet.
-Remaining required work:
+The exact installer above reached technical GO without a rebuild. Hosted
+lifecycle run `32865922889` used harness commit
+`08bee81cfa5f55bfc36069b5c9733d9a0d59c8e0` and a GitHub-hosted ephemeral
+Windows VM. Its host-validated receipt passed all 19 required gates: exact
+inputs, isolation, fresh install, empty onboarding, installed mock runtime,
+relaunch/persistence, three UX gates, compaction, safe tool, v31→v32 update,
+repair, both uninstall modes, rollback to `vi-v0.20.4-39` and zero residue.
 
-1. Run fresh install, update from v31, relaunch, persistence, repair,
-   uninstall, and rollback to `vi-v0.20.4-39` in a disposable Windows runner
-   or VM. Host-profile installation is not an acceptable substitute.
-2. Preserve the accepted installer byte in private immutable staging only
-   after the lifecycle matrix passes.
-3. Obtain real signing credentials or an explicit signing action before a
-   stable public Latest promotion; signing produces a new exact byte that must
-   be re-hashed and re-admitted.
-4. Merge, public release, and GitHub Latest remain separate owner-approval
-   actions.
+The first fully successful lifecycle run `32860690986` exposed a custody bug:
+`actions/upload-artifact` omitted Playwright `.last-run.json` files that were
+covered by the host manifest. Commit `08bee81cf` enabled hidden-file upload and
+added a release workflow regression. Run `32865922889` repeated the same exact
+candidate and archived every manifest member; the promotion validator hashes
+the complete downloaded tree again before publication.
+
+The local private staging copy and draft installer asset both remain exactly
+341,176,379 bytes with SHA-256
+`efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac`.
+The GitHub draft is release ID `376211316`, asset ID `528808235`,
+`draft=true`, `prerelease=true`.
+
+Residual boundary:
+
+- Authenticode is still `NotSigned`; this is a community prerelease, not
+  stable/final.
+- No user-machine or live-provider proof is claimed.
+- Merge and public release remain owner-approved mutations. GitHub does not
+  allow a prerelease to become repository `Latest`, so v31 keeps that label
+  while v32 is published with its own prerelease URL.

@@ -9,12 +9,20 @@ const pilotPromotion = readFileSync(
   new URL('../../../.github/workflows/promote-pilot-vietnamese.yml', import.meta.url),
   'utf8'
 )
+const v32Promotion = readFileSync(
+  new URL('../../../.github/workflows/promote-v32-vietnamese.yml', import.meta.url),
+  'utf8'
+)
 const runtimeSmoke = readFileSync(
   new URL('../../../.github/workflows/runtime-smoke-vietnamese.yml', import.meta.url),
   'utf8'
 )
 const lifecycleRunner = readFileSync(
   new URL('../../../scripts/windows-lifecycle-acceptance/run.mjs', import.meta.url),
+  'utf8'
+)
+const v32PromotionValidator = readFileSync(
+  new URL('../../../scripts/validate-v32-promotion.mjs', import.meta.url),
   'utf8'
 )
 const jsTests = readFileSync(new URL('../../../.github/workflows/js-tests.yml', import.meta.url), 'utf8')
@@ -434,6 +442,23 @@ test('v32 runtime smoke binds the exact candidate to an ephemeral Windows lifecy
     'lifecycle archive must retain Playwright hidden receipts covered by its manifest'
   )
   assert.match(runtimeSmoke, /if: always\(\)/)
+})
+
+test('v32 promotion revalidates private bytes and full lifecycle evidence before publication', () => {
+  assert.match(v32Promotion, /environment: release-production/)
+  assert.match(v32Promotion, /^\s*group: hermes-vietnamese-promotion$/m)
+  assert.match(v32Promotion, /CONTROLLER_SHA: \$\{\{ inputs\.controller_sha \}\}/)
+  assert.match(v32Promotion, /test "\$CONTROLLER_SHA" = "\$DISPATCH_SHA"/)
+  assert.match(v32Promotion, /test "\$tag_commit" = 81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f/)
+  assert.match(v32Promotion, /gh run download "\$LIFECYCLE_RUN_ID"/)
+  assert.equal((v32Promotion.match(/node scripts\/validate-v32-promotion\.mjs/g) ?? []).length, 2)
+  assert.match(v32Promotion, /"\$EXPECTED_MANIFEST_SHA" "\$LIFECYCLE_RUN_ID" draft/)
+  assert.match(v32Promotion, /"\$EXPECTED_MANIFEST_SHA" "\$LIFECYCLE_RUN_ID" published/)
+  assert.match(v32Promotion, /-F draft=false -F prerelease=true -f make_latest=false/)
+  assert.match(v32Promotion, /-F draft=true -F prerelease=true -f make_latest=false/)
+  assert.match(v32Promotion, /test "\$previous_latest" = vi-v0\.31\.0-7/)
+  assert.doesNotMatch(v32Promotion, /git tag|git push|refs\/tags\/.*--force/)
+  assert.match(v32PromotionValidator, /run\.name !== 'Kiểm thử runtime artifact Hermes Vietnamese'/)
 })
 
 test('pilot promotion stays prerelease, validates every byte, and discloses missing native smoke', () => {

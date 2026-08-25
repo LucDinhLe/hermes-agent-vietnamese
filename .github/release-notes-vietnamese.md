@@ -4,60 +4,55 @@
 
 ## Hermes Vietnamese v32.0
 
-Nhãn candidate: `vi-v0.32.0-1`
+Lớp phát hành: **community prerelease, chưa phải stable**.
 
-Phiên bản Desktop: `0.32.0-vi.1`
-
-Lớp phát hành: **community prerelease, chưa phải stable**
-
-v32 tập trung sửa các lỗi chí mạng của v31 trong ba vùng: kiểm soát token,
-khả năng tiếp tục phiên dài và thao tác giao diện. Candidate chỉ được chuyển
-sang phát hành công khai sau khi đúng byte Windows x64 vượt toàn bộ vòng đời
-cài mới, cập nhật, mở lại, giữ dữ liệu, repair, uninstall và rollback trong
-profile cô lập.
+`vi-v0.32.0-1` là **community prerelease cho Windows 10/11 x64**, chưa phải stable.
+Bản này tập trung sửa các lỗi chí mạng của v31 về token, phiên dài và ba luồng
+UI/UX chính.
 
 ## Những thay đổi chính
 
-- **Token Governor:** tính cả lượt gọi chính và phụ, áp ngân sách theo từng
-  lượt, chặn tool-loop không tiến triển và hiển thị API-equivalent riêng.
-- **Phiên dài trên 300k:** compaction giữ lịch sử logic và continuation state,
-  nhờ đó phiên tiếp tục thay vì khóa im lặng khi parent context đầy.
-- **Tool output lớn:** lọc, rút gọn và spill phần dư ra artifact có tham chiếu,
-  không tiếp tục bơm toàn bộ output vào parent context.
-- **Phân loại lỗi:** tách quota, context overflow và lỗi provider; trạng thái
-  phiên vẫn có hướng phục hồi rõ ràng.
-- **UX-001:** nút `+` nhận pointer/click thật và tạo phiên đúng một lần.
-- **UX-002:** trang Nhắn tin có đường quay lại rõ ràng và giữ nguyên draft.
+- **Token Governor:** đếm lượt gọi chính, phụ, retry và tool call mà Hermes
+  quản lý; cảnh báo sớm và tạm dừng an toàn trước tool-loop không tiến triển.
+- **Phiên dài trên 300k:** compaction giữ lịch sử logic, recovery anchors và
+  continuation state để phiên có thể tiếp tục sau khi mở lại.
+- **Tool output lớn:** chỉ giữ preview có trần trong parent context; phần dư
+  được lưu thành artifact có kích thước, SHA-256 và đường đọc lại.
+- **Phân loại lỗi:** quota, context overflow và lỗi provider có trạng thái khôi
+  phục riêng; composer không còn bị khóa im lặng.
+- **UX-001:** nút `+` nhận pointer/click thật và tạo đúng một phiên.
+- **UX-002:** trang Nhắn tin có nút quay lại rõ ràng và giữ nguyên draft.
 - **UX-003:** meter tách context nền, hội thoại, lịch sử logic, compaction,
-  quota provider, ngân sách lượt và API-equivalent.
+  quota, ngân sách lượt và chi phí API-equivalent.
 
-## Phạm vi candidate
+## Windows x64 đã nghiệm thu
 
-Windows x64 là artifact nghiệm thu bắt buộc. Các đường dẫn còn lại được giữ
-đúng tên chuẩn của release family để manifest và quy trình phát hành có thể
-kiểm tra nhất quán; chúng không được xem là đã nghiệm thu nếu chưa có evidence
-riêng cho đúng nền tảng.
+- Windows x64: exact-artifact smoke đạt.
+- Cài mới, onboarding rỗng, mock runtime, safe tool, relaunch và persistence:
+  đạt trong máy ảo Windows dùng một lần.
+- Update trực tiếp từ `vi-v0.31.0-7`, repair khôi phục đúng byte, uninstall giữ
+  dữ liệu, uninstall xóa dữ liệu và rollback về `vi-v0.20.4-39`: đạt.
+- Chưa có smoke trên máy người dùng; toàn bộ nghiệm thu ghi dữ liệu dùng profile
+  cô lập và mock provider, không dùng hồ sơ Hermes thật.
 
-| Nền tảng | Tệp candidate |
-| --- | --- |
-| Windows 10/11 x64 | [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.0-1/Hermes-Vietnamese-Windows-x64-Setup.exe) |
-| Windows ARM64 | [Hermes-Vietnamese-Windows-arm64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.0-1/Hermes-Vietnamese-Windows-arm64-Setup.exe) |
-| macOS Apple Silicon | [Hermes-Vietnamese-macOS-Apple-Silicon.dmg](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.0-1/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) |
-| macOS Intel | [Hermes-Vietnamese-macOS-Intel.dmg](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.0-1/Hermes-Vietnamese-macOS-Intel.dmg) |
-| Debian/Ubuntu x64 | [Hermes-Vietnamese-Linux-x64.deb](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.0-1/Hermes-Vietnamese-Linux-x64.deb) |
-| Debian/Ubuntu ARM64 | [Hermes-Vietnamese-Linux-arm64.deb](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.0-1/Hermes-Vietnamese-Linux-arm64.deb) |
-| Fedora/RHEL x64 | [Hermes-Vietnamese-Linux-x64.rpm](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.0-1/Hermes-Vietnamese-Linux-x64.rpm) |
-| Fedora/RHEL ARM64 | [Hermes-Vietnamese-Linux-arm64.rpm](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.0-1/Hermes-Vietnamese-Linux-arm64.rpm) |
-| Linux x64 AppImage | [Hermes-Vietnamese-Linux-x64.AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.0-1/Hermes-Vietnamese-Linux-x64.AppImage) |
-| Linux ARM64 AppImage | [Hermes-Vietnamese-Linux-arm64.AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.0-1/Hermes-Vietnamese-Linux-arm64.AppImage) |
+| Thuộc tính             | Giá trị                                                            |
+| ---------------------- | ------------------------------------------------------------------ |
+| Tệp                    | `Hermes-Vietnamese-Windows-x64-Setup.exe`                          |
+| Version                | `0.32.0-vi.1`                                                      |
+| Commit trong candidate | `81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f`                         |
+| Kích thước             | `341176379` byte                                                   |
+| SHA-256                | `efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac` |
 
-## An toàn cài đặt
+[Tải Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.0-1/Hermes-Vietnamese-Windows-x64-Setup.exe)
 
-- Candidate cộng đồng hiện chưa có Authenticode; Windows có thể hiển thị
-  `Publisher: Unknown` hoặc SmartScreen.
-- Chỉ dùng artifact có tên, kích thước và SHA-256 khớp evidence phát hành.
-- Không tắt Microsoft Defender, SmartScreen hoặc cơ chế bảo vệ toàn máy.
-- Mốc rollback đã diễn tập vẫn là `vi-v0.20.4-39`.
+## Giới hạn và an toàn cài đặt
 
-Commit, kích thước và SHA-256 chính xác của Windows x64 sẽ được khóa vào ghi
-nhận candidate sau khi build bất biến và kiểm thử vòng đời hoàn tất.
+- Candidate hiện `NotSigned`. Hồ sơ SignPath chưa cung cấp credential ký cho
+  lượt này; Windows có thể hiện `Publisher: Unknown` hoặc SmartScreen.
+- Dự án chưa tham gia Apple Developer Program; v32 không quảng cáo artifact
+  macOS, Linux hoặc Windows ARM64 khi chưa có exact-byte evidence riêng.
+- Đây là community prerelease, vì vậy GitHub Latest đầy đủ vẫn là v31; v32 được
+  công khai bằng trang release và link Windows x64 riêng.
+- Chỉ cài tệp có kích thước và SHA-256 khớp bảng trên. Không tắt Microsoft
+  Defender hoặc SmartScreen trên toàn máy.
+- Rollback đã diễn tập: `vi-v0.20.4-39`.
