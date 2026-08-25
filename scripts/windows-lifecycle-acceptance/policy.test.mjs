@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
 import test from 'node:test'
 
 import {
@@ -18,6 +19,8 @@ import {
   validateLifecycleDescriptor,
   validateLifecycleReceipt
 } from './policy.mjs'
+
+const guestScript = fs.readFileSync(new URL('./guest.ps1', import.meta.url), 'utf8')
 
 const candidate = {
   commit: V32_CANDIDATE_COMMIT,
@@ -136,6 +139,12 @@ test('GitHub-hosted gate requires the exact ephemeral Windows VM contract', () =
       }),
     /virtual-machine boundary/
   )
+})
+
+test('guest preflight failures always leave a receipt-capable diagnostic', () => {
+  assert.match(guestScript, /Join-Path \$EvidenceRoot 'lifecycle-failure\.txt'/)
+  assert.match(guestScript, /Write-Receipt 'failed' \$failure/)
+  assert.match(guestScript, /Write-Error "Windows lifecycle guest failed closed: \$failure"/)
 })
 
 test('sandbox configuration disables host-facing channels and maps only evidence writable', () => {

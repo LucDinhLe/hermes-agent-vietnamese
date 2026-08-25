@@ -729,10 +729,19 @@ try {
   $failure = $_.Exception.Message
   try {
     Add-Event 'failed-closed' @{ message = $failure }
-    if ($null -ne $Manifest -and -not [string]::IsNullOrWhiteSpace($EvidenceRoot)) { Write-Receipt 'failed' $failure }
+    if ($null -ne $Manifest -and -not [string]::IsNullOrWhiteSpace($EvidenceRoot)) {
+      New-Item -ItemType Directory -Path $EvidenceRoot -Force | Out-Null
+      [System.IO.File]::WriteAllText(
+        (Join-Path $EvidenceRoot 'lifecycle-failure.txt'),
+        "$failure`n$($_ | Out-String)`n",
+        $Utf8NoBom
+      )
+      Write-Receipt 'failed' $failure
+    }
   } catch {
     # The host will still fail closed if a receipt cannot be written.
   }
+  Write-Error "Windows lifecycle guest failed closed: $failure"
   exit 1
 } finally {
   if ($IsolationMechanism -eq 'windows-sandbox') {
