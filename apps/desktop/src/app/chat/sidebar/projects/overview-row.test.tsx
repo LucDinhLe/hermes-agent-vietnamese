@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { SessionInfo } from '@/hermes'
 
-import { ProjectOverviewRow } from './overview-row'
+import { ProjectBackRow, ProjectOverviewRow } from './overview-row'
 import type { SidebarProjectTree } from './workspace-groups'
 
 afterEach(cleanup)
@@ -44,6 +44,18 @@ const project = { id: 'p1', label: 'Test D' } as unknown as SidebarProjectTree
 const tipTrigger = (el: HTMLElement) => el.closest('[data-slot="tooltip-trigger"]')
 
 describe('ProjectOverviewRow', () => {
+  it('keeps the project-scope escape visible and clickable', () => {
+    const onClick = vi.fn()
+
+    render(<ProjectBackRow label="All projects · other sessions remain available" onClick={onClick} />)
+
+    const button = screen.getByRole('button', { name: 'All projects · other sessions remain available' })
+    expect(button.className).not.toContain('opacity-40')
+
+    fireEvent.click(button)
+    expect(onClick).toHaveBeenCalledOnce()
+  })
+
   it('wraps the "new session" add button in a Tip with the project-scoped label', () => {
     render(<ProjectOverviewRow onNewSession={vi.fn()} project={project} />)
 

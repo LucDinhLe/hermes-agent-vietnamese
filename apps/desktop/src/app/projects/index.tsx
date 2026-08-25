@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils'
 import {
   $dismissedAutoProjectIds,
   $pinnedProjectIds,
+  dismissAutoProject,
   filterVisibleProjects,
   pinProject,
   unpinProject
@@ -132,6 +133,11 @@ export function ProjectsView() {
                       <div className="flex min-w-0 items-center gap-2">
                         <h2 className="truncate text-sm font-semibold text-foreground">{project.label}</h2>
                         {active && <span className="size-1.5 shrink-0 rounded-full bg-[color:var(--dt-primary)]" />}
+                        {project.isAuto && (
+                          <span className="shrink-0 text-[0.625rem] font-medium text-(--ui-text-tertiary)">
+                            {p.autoDiscovered}
+                          </span>
+                        )}
                       </div>
                       {project.path && (
                         <p
@@ -142,17 +148,32 @@ export function ProjectsView() {
                         </p>
                       )}
                     </div>
-                    <Tip label={pinned ? row.unpin : row.pin}>
-                      <Button
-                        aria-label={pinned ? row.unpin : row.pin}
-                        className={cn('shrink-0 text-(--ui-text-tertiary)', pinned && 'text-[color:var(--dt-primary)]')}
-                        onClick={() => (pinned ? unpinProject(project.id) : pinProject(project.id))}
-                        size="icon-xs"
-                        variant="ghost"
-                      >
-                        <Codicon name={pinned ? 'pinned' : 'pin'} size="0.8rem" />
-                      </Button>
-                    </Tip>
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      <Tip label={pinned ? row.unpin : row.pin}>
+                        <Button
+                          aria-label={pinned ? row.unpin : row.pin}
+                          className={cn('text-(--ui-text-tertiary)', pinned && 'text-[color:var(--dt-primary)]')}
+                          onClick={() => (pinned ? unpinProject(project.id) : pinProject(project.id))}
+                          size="icon-xs"
+                          variant="ghost"
+                        >
+                          <Codicon name={pinned ? 'pinned' : 'pin'} size="0.8rem" />
+                        </Button>
+                      </Tip>
+                      {project.isAuto && (
+                        <Tip label={p.removeFromSidebar}>
+                          <Button
+                            aria-label={p.removeFromSidebar}
+                            className="text-(--ui-text-tertiary)"
+                            onClick={() => dismissAutoProject(project.id)}
+                            size="icon-xs"
+                            variant="ghost"
+                          >
+                            <Codicon name="close" size="0.8rem" />
+                          </Button>
+                        </Tip>
+                      )}
+                    </div>
                   </div>
 
                   <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.68rem] text-(--ui-text-tertiary)">

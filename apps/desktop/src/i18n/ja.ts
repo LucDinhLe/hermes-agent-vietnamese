@@ -1798,6 +1798,7 @@ export const ja = defineLocale({
       searchPlaceholder: 'プロジェクトを検索…',
       emptyTitle: 'プロジェクトはまだありません',
       emptyDescription: 'プロジェクトを作成して、関連するフォルダーとセッションをまとめます。',
+      autoDiscovered: '自動検出',
       open: 'プロジェクトを開く',
       sessionsCount: count => `${count} セッション`,
       tokensCount: tokens => `${tokens} トークン`,
@@ -1832,7 +1833,7 @@ export const ja = defineLocale({
       menuDelete: '削除',
       reveal: 'フォルダで表示',
       copyPath: 'パスをコピー',
-      removeFromSidebar: 'サイドバーから削除',
+      removeFromSidebar: 'プロジェクト一覧から非表示',
       createFailed: 'プロジェクトを作成できませんでした',
       staleBackend:
         'プロジェクトを作成するには Hermes バックエンドを更新してください。バックエンドがこのデスクトップアプリより古いです（設定 → 更新 → バックエンド）。',
@@ -1869,7 +1870,8 @@ export const ja = defineLocale({
       removeWorktreeDirty:
         'このワークツリーにはコミットされていない変更があります。強制削除（変更を破棄）するか、レーンを隠してディスク上に残します。',
       forceRemove: '強制削除',
-      enter: label => `${label} を開く`
+      enter: label => `${label} を開く`,
+      back: 'すべてのプロジェクト · 他のセッションも残っています'
     },
     newSessionIn: label => `${label} で新しいセッション`,
     showMoreIn: (count, label) => `${label} でさらに ${count} 件を表示`,

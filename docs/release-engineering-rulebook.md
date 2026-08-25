@@ -174,6 +174,12 @@ Chỉ dùng user/hồ sơ cô lập. Không đọc, nhập hoặc khôi phục d
 - [ ] Cài và mở bằng đường người dùng thực tế, không cần developer tools.
 - [ ] Runtime/bootstrap, gateway và onboarding đạt.
 - [ ] Tạo/đổi tên phiên, kiểm tab phiên/Browser và panel phải.
+- [ ] Với hồ sơ có phiên cũ chưa gắn thư mục, tạo và mở một dự án rồi xác nhận
+      lối **Tất cả dự án** luôn dễ thấy, các phiên cũ vẫn truy cập được và không
+      phiên nào tự đổi sang hidden/archived hoặc bị xóa.
+- [ ] Kho git do Hermes tự dò phải được ghi rõ là tự động tìm thấy và có thao
+      tác ẩn ngay trong trang Dự án; không được trình bày như dự án người dùng
+      vừa tạo.
 - [ ] Connector Chrome và Edge dùng profile cô lập phải vượt fixture HTTP và
       HTTPS có non-default port: preview chỉ có metadata, import, persistence
       sau restart, revoke cả grant cũ/mới và quét redaction.

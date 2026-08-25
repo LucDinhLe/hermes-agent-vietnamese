@@ -1740,6 +1740,7 @@ export const zhHant = defineLocale({
       searchPlaceholder: '搜尋專案…',
       emptyTitle: '尚無專案',
       emptyDescription: '建立專案以彙整相關資料夾與工作階段。',
+      autoDiscovered: '自動探索',
       open: '開啟專案',
       sessionsCount: count => `${count} 個工作階段`,
       tokensCount: tokens => `${tokens} 個詞元`,
@@ -1774,7 +1775,7 @@ export const zhHant = defineLocale({
       menuDelete: '刪除',
       reveal: '在資料夾中顯示',
       copyPath: '複製路徑',
-      removeFromSidebar: '從側邊欄移除',
+      removeFromSidebar: '從專案清單中隱藏',
       createFailed: '無法建立專案',
       staleBackend: '請更新 Hermes 後端以建立專案——目前後端比桌面應用舊（設定 → 更新 → 後端）。',
       deleteConfirm: '這會從 Hermes 中移除已儲存的專案。檔案、git 儲存庫和工作樹維持不變。',
@@ -1807,7 +1808,8 @@ export const zhHant = defineLocale({
         '從 git 中移除（刪除工作樹目錄，但保留分支），或僅從側邊欄隱藏該軌道並將工作樹保留在磁碟上。',
       removeWorktreeDirty: '此工作樹有未提交的變更。強制移除（捨棄這些變更），或僅隱藏軌道並保留在磁碟上。',
       forceRemove: '強制移除',
-      enter: label => `開啟 ${label}`
+      enter: label => `開啟 ${label}`,
+      back: '所有專案 · 其他工作階段仍保留'
     },
     newSessionIn: label => `在 ${label} 中新建工作階段`,
     showMoreIn: (count, label) => `在 ${label} 中再顯示 ${count} 個`,
@@ -2462,8 +2464,7 @@ export const zhHant = defineLocale({
         turnBudgetNormal: '預算內',
         turnBudgetPaused: '已暫停',
         turnBudgetTitle: '本輪預算',
-        turnBudgetTokens: (input, cacheRead, output) =>
-          `${input} 新輸入 · ${cacheRead} 快取讀取 · ${output} 輸出`
+        turnBudgetTokens: (input, cacheRead, output) => `${input} 新輸入 · ${cacheRead} 快取讀取 · ${output} 輸出`
       },
       session: '工作階段',
       yoloOn: 'YOLO 已開啟 — 自動核准危險指令。Shift+點擊可全域切換。',
