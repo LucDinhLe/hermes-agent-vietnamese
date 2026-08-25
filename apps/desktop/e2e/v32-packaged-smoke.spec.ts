@@ -26,6 +26,14 @@ function activeThread(page: Page) {
   return activeChatSurface(page).locator('[data-slot="aui_thread-viewport"]')
 }
 
+// This spec owns two packaged Electron applications across relaunch. The
+// Playwright worker-level trace/screenshot recorder retains both closed
+// Electron transports after every product assertion and fixture cleanup has
+// completed, then consumes the full hook timeout. Keep the two explicit
+// acceptance screenshots below, but do not attach the generic per-page
+// recorder to this multi-application spec.
+test.use({ screenshot: 'off', trace: 'off' })
+
 async function send(page: Page, mock: MockServer, prompt: string): Promise<void> {
   const composer = page.locator('[data-slot="composer-rich-input"]:visible')
   const agentCallsBefore = mock.receivedCompletions.filter(

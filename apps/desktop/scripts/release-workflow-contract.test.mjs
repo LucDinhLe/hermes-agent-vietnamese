@@ -20,6 +20,7 @@ const bundledBuild = readFileSync(
   new URL('../../../scripts/build-bundled-desktop.mjs', import.meta.url),
   'utf8'
 )
+const v32PackagedSmoke = readFileSync(new URL('../e2e/v32-packaged-smoke.spec.ts', import.meta.url), 'utf8')
 
 test('node:test builder patch regressions stay out of the Vitest project', () => {
   for (const nodeTestSuite of [
@@ -28,6 +29,13 @@ test('node:test builder patch regressions stay out of the Vitest project', () =>
   ]) {
     assert.match(vitestConfig, new RegExp(nodeTestSuite.replaceAll('.', '\\.')))
   }
+})
+
+test('v32 packaged relaunch owns bounded evidence instead of worker-level multi-app tracing', () => {
+  assert.match(v32PackagedSmoke, /test\.use\(\{ screenshot: 'off', trace: 'off' \}\)/)
+  assert.match(v32PackagedSmoke, /testInfo\.outputPath\('packaged-v32-ux\.png'\)/)
+  assert.match(v32PackagedSmoke, /testInfo\.outputPath\('packaged-v32-compaction\.png'\)/)
+  assert.equal((v32PackagedSmoke.match(/await fixture\.page\.screenshot/g) ?? []).length, 2)
 })
 
 test('candidate workflow builds the complete resident runtime on every advertised native target', () => {
