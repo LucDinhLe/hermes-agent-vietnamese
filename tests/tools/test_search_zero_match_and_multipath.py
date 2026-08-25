@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 
 import pytest
 
@@ -22,6 +23,11 @@ def proj(tmp_path, monkeypatch):
 
 
 class TestZeroMatchProbe:
+    @pytest.fixture(autouse=True)
+    def _require_rg(self):
+        if shutil.which("rg") is None:
+            pytest.skip("zero-match steering probes require ripgrep")
+
     def test_case_mismatch_gets_hint(self, proj):
         r = json.loads(search_tool("token_alpha", path=str(proj / "proj"), task_id="t-zm"))
         assert r["total_count"] == 0

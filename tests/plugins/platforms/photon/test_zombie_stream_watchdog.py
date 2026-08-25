@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any, Dict
@@ -47,6 +48,8 @@ def _make_adapter(monkeypatch: pytest.MonkeyPatch) -> PhotonAdapter:
 # -- Sidecar decision rules (execute the real node module) -------------------
 
 def _run_staleness_harness(script: str) -> Dict[str, Any]:
+    if shutil.which("node") is None:
+        pytest.skip("Photon sidecar decision tests require Node.js")
     harness = (
         "import { classifyProbeRejection, shouldProbe, isZombieSuspect } "
         f"from {json.dumps(_MODULE.as_uri())};\n"

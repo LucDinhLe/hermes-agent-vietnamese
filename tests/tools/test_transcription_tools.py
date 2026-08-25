@@ -1191,9 +1191,9 @@ class TestRunCommandSttIdleTimeout:
         script.write_text(
             "\n".join([
                 "import sys, time",
-                "for idx in range(4):",
+                "for idx in range(6):",
                 "    print(f'tick {idx}', file=sys.stderr, flush=True)",
-                "    time.sleep(0.04)",
+                "    time.sleep(0.12)",
                 "print('done', flush=True)",
             ]),
             encoding="utf-8",
@@ -1201,11 +1201,14 @@ class TestRunCommandSttIdleTimeout:
 
         result = _run_command_stt(
             self._shell_command(sys.executable, "-u", str(script)),
-            timeout=0.1,
+            # Total runtime (0.72s) still exceeds this idle budget, while the
+            # 0.38s scheduling margin keeps a 44-worker full suite from
+            # mistaking temporary CPU starvation for provider silence.
+            timeout=0.5,
         )
 
         assert result.returncode == 0
-        assert "tick 3" in result.stderr
+        assert "tick 5" in result.stderr
         assert "done" in result.stdout
 
     def test_silent_stall_still_times_out(self, tmp_path):
