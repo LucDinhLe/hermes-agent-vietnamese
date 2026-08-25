@@ -8,7 +8,8 @@ remain pending.
 ## Frozen implementation state
 
 - Branch: `feat/v32-token-context-ux`
-- Source-fix commit: `6626f46b7`
+- Source-fix commits: `6626f46b7`,
+  `e792c7450a7b82714f7d9405b033227fdef1cd7e`
 - Candidate version: `0.32.0-vi.1`
 - Candidate tag label: `vi-v0.32.0-1`
 - Release class: `community-prerelease`
@@ -36,6 +37,27 @@ Product fixes closed by `6626f46b7`:
 - command transcription uses a bounded first-byte startup grace, then restores
   the caller's exact idle timeout after every chunk;
 - voice environment detection uses the single patchable WSL predicate.
+
+The first exact Git-backed full-suite diagnostic ran at `53f66f6a5` with
+file retries disabled. It completed all 3,081 files in 3,859.3 seconds:
+34,860 passed, 16 failed and 342 skipped. The 16 failures were limited to nine
+files and were all classified before the next commit:
+
+- repository source scanning raced parallel cache removal;
+- shared SQLite counters exhausted one short busy timeout at `BEGIN IMMEDIATE`;
+- Node- and ripgrep-dependent tests did not declare their runtime requirement;
+- one TUI lock regression shared process-global delegation state with earlier
+  tests;
+- Windows search quoting rewrote regex backslashes as path separators and
+  multiline regexes did not match CRLF files;
+- a 100ms transcription timing fixture mistook full-suite CPU starvation for
+  provider silence.
+
+`e792c7450a7b82714f7d9405b033227fdef1cd7e` closes those causes with stable
+Git-index scanning plus a Git-less archive fallback, bounded transaction-
+boundary retry without replaying transaction bodies, explicit Node/ripgrep
+runtime skips, isolated TUI lock coverage, regex-safe shell quoting with
+LF/CRLF parity, and a scheduler-tolerant progress fixture.
 
 Harness fixes replace scheduler-sensitive wall-clock guesses with deterministic
 barriers, events, operation counts or outer hang watchdogs. Windows update tests
@@ -79,6 +101,16 @@ test.
 - Ruff passed on every changed Python file.
 - `git diff --check` passed.
 
+### Exact diagnostic follow-up
+
+- Recovery files on Windows with pinned Node 26.5.1: 199 passed, 0 failed,
+  3 platform skips.
+- TUI orphan-reap lock regression: 1 passed, 0 failed.
+- Search multiline/CRLF, literal-backslash, zero-match and multipath suite:
+  23 passed, 0 failed.
+- Ruff and `git diff --check`: passed.
+- Exceptional candidate build retry: **0 of 1 used**.
+
 ## Previously green source gates still requiring exact-final-SHA rerun
 
 - Renderer Vitest: 548 files, 4,943 tests passed.
@@ -93,8 +125,9 @@ test.
 
 ## Continuation state
 
-1. Commit the unpublished v32 candidate metadata and this checkpoint.
-2. Create a clean clone that retains `.git`, checked out at the final commit.
+1. Create a clean clone that retains `.git`, checked out at the final commit.
+2. Run the focused recovery files on Linux, including the missing-runtime skip
+   contract.
 3. Run the complete Python suite with a 900-second per-file watchdog and no
    accepted flaky retry.
 4. Rerun exact pinned-Node renderer, Electron, E2E, typecheck, lint, prebuild,
