@@ -247,7 +247,34 @@ export const ja = defineLocale({
       archivedChats: 'アーカイブ済みチャット',
       about: '情報',
       billing: '請求',
-      notifications: '通知'
+      notifications: '通知',
+      workProfile: '作業プロフィール'
+    },
+    workProfile: {
+      title: '作業プロフィール',
+      intro: '働き方を選択します。承認したスキルだけが新しいセッションで利用できます。',
+      commonTasks: 'よく行う作業',
+      commonTasksHint: '1行に1件。提案にはローカルのスキルカタログだけを使います。',
+      commonTasksPlaceholder: '出典付き概要を作成\nプロジェクト計画を準備',
+      preview: '提案を確認',
+      previewing: '確認中…',
+      previewFailed: 'スキルの提案を表示できませんでした。',
+      skillsTitle: '承認済みスキル',
+      skillsHint: '保存前に提案を確認してください。未選択のスキルはインストールされたまま利用不可になります。',
+      toggleSkill: name => `${name} を承認`,
+      save: '作業プロフィールを保存',
+      saving: '保存中…',
+      saved: '保存しました。変更は新しいセッションに適用されます。',
+      saveFailed: '作業プロフィールを保存できませんでした。',
+      loadFailed: '作業プロフィールを読み込めませんでした。',
+      areas: {
+        research_learning: '調査と学習',
+        leadership_business: 'リーダーシップとビジネス',
+        writing_content: '執筆とコンテンツ',
+        software_building: 'ソフトウェア開発',
+        office_productivity: 'オフィス生産性',
+        creative_media: 'クリエイティブメディア'
+      }
     },
     notifications: {
       title: '通知',
@@ -2281,6 +2308,32 @@ export const ja = defineLocale({
   },
 
   onboarding: {
+    workProfile: {
+      title: '作業内容を設定',
+      description: '作業分野を選ぶと、Hermes がローカルのカタログから少数のインストール済み Skill を提案します。',
+      areasLabel: '作業分野',
+      areas: {
+        research_learning: '調査と学習',
+        leadership_business: 'リーダーシップとビジネス',
+        writing_content: '執筆とコンテンツ',
+        software_building: 'ソフトウェア開発',
+        office_productivity: 'オフィス生産性',
+        creative_media: 'クリエイティブメディア'
+      },
+      tasksLabel: 'よく行うタスク',
+      tasksPlaceholder: '1 行に 1 件。例：週刊ニュースレターを作成',
+      preview: '提案をプレビュー',
+      previewTitle: 'おすすめの Skill',
+      availableTitle: 'その他のインストール済み Skill',
+      add: skill => `${skill} を追加`,
+      remove: skill => `${skill} を削除`,
+      save: '作業設定を保存',
+      skip: '今はスキップ',
+      loading: '作業設定を読み込み中…',
+      empty: '作業分野を選ぶか、よく行うタスクを入力してください。',
+      failed: '作業設定を更新できませんでした。',
+      saving: '保存中…'
+    },
     headerTitle: 'Hermes Agent のセットアップをしましょう',
     headerDesc: 'チャットを始めるにはモデルプロバイダーを接続してください。ほとんどのオプションはワンクリックです。',
     preparingInstall: 'Hermes はインストールを完了中です。初回実行では通常 1 分以内に完了します。',

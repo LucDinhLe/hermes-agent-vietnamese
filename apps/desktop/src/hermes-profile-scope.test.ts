@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  applyWorkProfile,
   authMcpServer,
   checkHermesUpdate,
   deleteProfile,
+  discoverTaskSkills,
   getActionStatus,
   getElevenLabsVoices,
   getEnvVars,
@@ -18,8 +20,10 @@ import {
   getStatus,
   getToolsets,
   getUsageAnalytics,
+  getWorkProfile,
   installSkillFromHub,
   pollOAuthSession,
+  recommendWorkProfile,
   restartGateway,
   runDoctor,
   saveHermesConfig,
@@ -44,7 +48,8 @@ import {
 // System-panel "restart does nothing" bug was these helpers dropping it.
 describe('backend action helpers are profile-scoped', () => {
   const api = vi.fn(
-    async (_req: { path: string; profile?: string; connectionId?: string; method?: string }) => ({}) as never
+    async (_req: { path: string; profile?: string; connectionId?: string; method?: string; body?: unknown }) =>
+      ({}) as never
   )
 
   beforeEach(() => {
@@ -154,6 +159,47 @@ describe('backend action helpers are profile-scoped', () => {
 
     expect(api.mock.calls[0][0]).toMatchObject({ path: '/api/skills', profile: 'researcher' })
     expect(api.mock.calls[0][0].connectionId).toBeUndefined()
+  })
+
+  it('keeps work-profile reads and writes pinned to the captured backend owner', () => {
+    setApiRequestProfile('ambient')
+    setApiRequestConnection('source-b')
+
+    void getWorkProfile('researcher', 'source-a')
+    void recommendWorkProfile(
+      { common_tasks: ['Write research briefs'], work_areas: ['research_learning'] },
+      'researcher',
+      'source-a'
+    )
+    void applyWorkProfile(
+      {
+        allowed_skills: ['grounded-citations'],
+        common_tasks: ['Write research briefs'],
+        skipped: false,
+        work_areas: ['research_learning']
+      },
+      'researcher',
+      'source-a'
+    )
+    void discoverTaskSkills('Write a cited brief', 'researcher', 'source-a')
+
+    expect(api.mock.calls.map(call => call[0].path)).toEqual([
+      '/api/skills/work-profile',
+      '/api/skills/work-profile/recommend',
+      '/api/skills/work-profile',
+      '/api/skills/discover'
+    ])
+    expect(api.mock.calls.map(call => call[0].method)).toEqual([undefined, 'POST', 'PUT', 'POST'])
+
+    for (const call of api.mock.calls) {
+      expect(call[0]).toEqual(expect.objectContaining({ connectionId: 'source-a', profile: 'researcher' }))
+    }
+
+    expect(api.mock.calls[1][0].body).toEqual({
+      common_tasks: ['Write research briefs'],
+      work_areas: ['research_learning']
+    })
+    expect(api.mock.calls[3][0].body).toEqual({ task: 'Write a cited brief' })
   })
 
   it('preserves an explicit local source while the ambient primary is remote', () => {

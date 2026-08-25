@@ -241,7 +241,34 @@ export const zhHant = defineLocale({
       archivedChats: '已封存聊天',
       about: '關於',
       billing: '帳單',
-      notifications: '通知'
+      notifications: '通知',
+      workProfile: '工作檔案'
+    },
+    workProfile: {
+      title: '工作檔案',
+      intro: '選擇你的工作方式。只有經你核准的技能可用於新工作階段。',
+      commonTasks: '常用任務',
+      commonTasksHint: '每行一項。推薦只使用本機技能目錄。',
+      commonTasksPlaceholder: '撰寫附引用的簡報\n準備專案計畫',
+      preview: '預覽推薦',
+      previewing: '正在檢查…',
+      previewFailed: '無法預覽技能推薦。',
+      skillsTitle: '已核准技能',
+      skillsHint: '儲存前請檢查推薦。未勾選的技能仍會保留安裝，但無法使用。',
+      toggleSkill: name => `核准 ${name}`,
+      save: '儲存工作檔案',
+      saving: '正在儲存…',
+      saved: '工作檔案已儲存。變更將套用至新工作階段。',
+      saveFailed: '無法儲存工作檔案。',
+      loadFailed: '無法載入工作檔案。',
+      areas: {
+        research_learning: '研究與學習',
+        leadership_business: '領導與商業',
+        writing_content: '寫作與內容',
+        software_building: '軟體開發',
+        office_productivity: '辦公效率',
+        creative_media: '創意媒體'
+      }
     },
     notifications: {
       title: '通知',
@@ -2207,6 +2234,32 @@ export const zhHant = defineLocale({
   },
 
   onboarding: {
+    workProfile: {
+      title: '設定您的工作',
+      description: '選擇工作領域，Hermes 會從本機目錄建議少量已安裝的 Skill。',
+      areasLabel: '工作領域',
+      areas: {
+        research_learning: '研究與學習',
+        leadership_business: '領導與商業',
+        writing_content: '寫作與內容',
+        software_building: '軟體開發',
+        office_productivity: '辦公效率',
+        creative_media: '創意媒體'
+      },
+      tasksLabel: '常用任務',
+      tasksPlaceholder: '每行一項，例如：撰寫每週簡報',
+      preview: '預覽建議',
+      previewTitle: '建議的 Skill',
+      availableTitle: '其他已安裝 Skill',
+      add: skill => `加入 ${skill}`,
+      remove: skill => `移除 ${skill}`,
+      save: '儲存工作設定',
+      skip: '暫時略過',
+      loading: '正在載入工作設定…',
+      empty: '請先選擇工作領域或描述常用任務。',
+      failed: '無法更新工作設定。',
+      saving: '正在儲存…'
+    },
     headerTitle: '開始設定 Hermes Agent',
     headerDesc: '連線模型提供方即可開始聊天。大多數選項只需一次點擊。',
     preparingInstall: 'Hermes 正在完成安裝。首次執行通常不到一分鐘。',
@@ -2462,8 +2515,7 @@ export const zhHant = defineLocale({
         turnBudgetNormal: '預算內',
         turnBudgetPaused: '已暫停',
         turnBudgetTitle: '本輪預算',
-        turnBudgetTokens: (input, cacheRead, output) =>
-          `${input} 新輸入 · ${cacheRead} 快取讀取 · ${output} 輸出`
+        turnBudgetTokens: (input, cacheRead, output) => `${input} 新輸入 · ${cacheRead} 快取讀取 · ${output} 輸出`
       },
       session: '工作階段',
       yoloOn: 'YOLO 已開啟 — 自動核准危險指令。Shift+點擊可全域切換。',

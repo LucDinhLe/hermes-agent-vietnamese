@@ -31,6 +31,7 @@ import { isMessagingSource } from '@/lib/session-source'
 import { latestSessionTodos } from '@/lib/todos'
 import { activateWakeIndicator } from '@/lib/wake-indicator'
 import { playWakeSound } from '@/lib/wake-sound'
+import { connectionOwnerId } from '@/store/backend-owner'
 import { $billingSettingsRequest } from '@/store/billing-block'
 import { $desktopBoot } from '@/store/boot'
 import { requestVoiceConversationStart } from '@/store/composer'
@@ -173,6 +174,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   const actionsRef = useRef<WiringActions | null>(null)
 
   const gatewayState = useStore($gatewayState)
+  const desktopConnection = useStore($connection)
   const activeSessionId = useStore($activeSessionId)
   const billingSettingsRequest = useStore($billingSettingsRequest)
   const cronReviewRequest = useStore($cronReviewRequest)
@@ -993,17 +995,22 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   // (preview's monitor/devtools cluster, …) arrive as registry contributions.
   const leftTitlebarTools = useTitlebarToolContributions('left')
   const rightTitlebarTools = useTitlebarToolContributions('right')
-  const connection = useStore($connection)
-  const controlsPos = titlebarControlsPosition(connection?.windowButtonPosition, Boolean(connection?.isFullscreen))
+
+  const controlsPos = titlebarControlsPosition(
+    desktopConnection?.windowButtonPosition,
+    Boolean(desktopConnection?.isFullscreen)
+  )
+
   // Windows/WSLg reserve native min/max/close on the right (AppShell parity:
   // prefer the live WCO measurement, fall back to the static reservation).
   const measuredOverlayWidth = useWindowControlsOverlayWidth()
-  const nativeOverlayWidth = measuredOverlayWidth ?? connection?.nativeOverlayWidth ?? 0
+
+  const nativeOverlayWidth = measuredOverlayWidth ?? desktopConnection?.nativeOverlayWidth ?? 0
 
   const titlebarChrome = {
-    darwinMajor: connection?.darwinMajor ?? 0,
-    isFullscreen: Boolean(connection?.isFullscreen),
-    windowButtonPosition: connection?.windowButtonPosition
+    darwinMajor: desktopConnection?.darwinMajor ?? 0,
+    isFullscreen: Boolean(desktopConnection?.isFullscreen),
+    windowButtonPosition: desktopConnection?.windowButtonPosition
   }
 
   const titlebarToolsRight = titlebarToolsRightCss(nativeOverlayWidth, titlebarChrome)
@@ -1055,6 +1062,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
       {!isAuxiliaryWindow() && <DesktopInstallOverlay />}
       {!isAuxiliaryWindow() && (
         <DesktopOnboardingOverlay
+          connectionId={connectionOwnerId(desktopConnection)}
           enabled={gatewayState === 'open'}
           onCompleted={() => {
             void refreshHermesConfig()

@@ -313,7 +313,34 @@ export const ar = defineLocale({
       about: 'حول',
       notifications: 'الإشعارات',
       keybinds: 'اختصارات لوحة المفاتيح',
-      plugins: 'الإضافات'
+      plugins: 'الإضافات',
+      workProfile: 'ملف العمل'
+    },
+    workProfile: {
+      title: 'ملف العمل',
+      intro: 'اختر طريقة عملك. لا تتاح للجلسات الجديدة إلا المهارات التي وافقت عليها.',
+      commonTasks: 'المهام المعتادة',
+      commonTasksHint: 'مهمة واحدة في كل سطر. تستخدم الاقتراحات فهرس المهارات المحلي فقط.',
+      commonTasksPlaceholder: 'كتابة موجز موثق\nإعداد خطة مشروع',
+      preview: 'معاينة الاقتراحات',
+      previewing: 'جارٍ الفحص…',
+      previewFailed: 'تعذرت معاينة اقتراحات المهارات.',
+      skillsTitle: 'المهارات المعتمدة',
+      skillsHint: 'راجع الاقتراح قبل الحفظ. تبقى المهارات غير المحددة مثبتة لكنها غير متاحة.',
+      toggleSkill: name => `اعتماد ${name}`,
+      save: 'حفظ ملف العمل',
+      saving: 'جارٍ الحفظ…',
+      saved: 'تم حفظ ملف العمل. تطبق التغييرات على الجلسات الجديدة.',
+      saveFailed: 'تعذر حفظ ملف العمل.',
+      loadFailed: 'تعذر تحميل ملف العمل.',
+      areas: {
+        research_learning: 'البحث والتعلم',
+        leadership_business: 'القيادة والأعمال',
+        writing_content: 'الكتابة والمحتوى',
+        software_building: 'بناء البرمجيات',
+        office_productivity: 'إنتاجية المكتب',
+        creative_media: 'الوسائط الإبداعية'
+      }
     },
     plugins: {
       title: 'إضافات سطح المكتب',
@@ -2038,6 +2065,32 @@ export const ar = defineLocale({
     reloadRetry: 'إعادة التحميل وإعادة المحاولة'
   },
   onboarding: {
+    workProfile: {
+      title: 'إعداد عملك',
+      description: 'اختر مجالات عملك ليقترح Hermes مجموعة صغيرة من المهارات المثبتة باستخدام الفهرس المحلي فقط.',
+      areasLabel: 'مجالات العمل',
+      areas: {
+        research_learning: 'البحث والتعلم',
+        leadership_business: 'القيادة والأعمال',
+        writing_content: 'الكتابة والمحتوى',
+        software_building: 'بناء البرمجيات',
+        office_productivity: 'إنتاجية المكتب',
+        creative_media: 'الوسائط الإبداعية'
+      },
+      tasksLabel: 'المهام المعتادة',
+      tasksPlaceholder: 'مهمة واحدة في كل سطر، مثال: كتابة نشرة أسبوعية',
+      preview: 'معاينة الاقتراحات',
+      previewTitle: 'المهارات المقترحة',
+      availableTitle: 'مهارات مثبتة أخرى',
+      add: skill => `إضافة ${skill}`,
+      remove: skill => `إزالة ${skill}`,
+      save: 'حفظ إعداد العمل',
+      skip: 'التخطي الآن',
+      loading: 'جارٍ تحميل إعداد العمل…',
+      empty: 'اختر مجال عمل أو صف مهمة معتادة أولاً.',
+      failed: 'تعذر تحديث إعداد العمل.',
+      saving: 'جارٍ الحفظ…'
+    },
     headerTitle: 'لنُعِدّ لك Hermes Agent',
     headerDesc: 'اربط مزوّد نماذج لبدء المحادثة. معظم الخيارات تتطلب نقرة واحدة.',
     preparingInstall: 'يُكمل Hermes التثبيت. عادة ما يستغرق ذلك أقل من دقيقة في أول تشغيل.',

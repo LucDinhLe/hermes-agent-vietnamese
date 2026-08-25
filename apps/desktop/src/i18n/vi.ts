@@ -571,7 +571,34 @@ export const vi = defineLocale({
       about: 'Giới thiệu',
       billing: 'Thanh toán',
       notifications: 'Thông báo',
-      plugins: 'Plugin'
+      plugins: 'Plugin',
+      workProfile: 'Hồ sơ công việc'
+    },
+    workProfile: {
+      title: 'Hồ sơ công việc',
+      intro: 'Chọn cách Đại ca làm việc. Hermes chỉ đưa các Skill đã được cho phép vào phiên mới.',
+      commonTasks: 'Công việc thường làm',
+      commonTasksHint: 'Mỗi dòng một việc. Gợi ý chỉ dùng catalog Skill cục bộ.',
+      commonTasksPlaceholder: 'Viết báo cáo có dẫn nguồn\nLập kế hoạch dự án',
+      preview: 'Xem gợi ý',
+      previewing: 'Đang rà…',
+      previewFailed: 'Không thể xem gợi ý Skill.',
+      skillsTitle: 'Skill được phép',
+      skillsHint: 'Rà lại gợi ý trước khi lưu. Skill bỏ chọn vẫn được cài nhưng không khả dụng.',
+      toggleSkill: name => `Cho phép ${name}`,
+      save: 'Lưu hồ sơ công việc',
+      saving: 'Đang lưu…',
+      saved: 'Đã lưu hồ sơ. Thay đổi áp dụng cho phiên mới.',
+      saveFailed: 'Không thể lưu hồ sơ công việc.',
+      loadFailed: 'Không thể tải hồ sơ công việc.',
+      areas: {
+        research_learning: 'Nghiên cứu và học tập',
+        leadership_business: 'Lãnh đạo và kinh doanh',
+        writing_content: 'Viết và nội dung',
+        software_building: 'Xây dựng phần mềm',
+        office_productivity: 'Năng suất văn phòng',
+        creative_media: 'Sáng tạo đa phương tiện'
+      }
     },
     plugins: {
       title: 'Plugin Desktop',
@@ -2736,7 +2763,33 @@ export const vi = defineLocale({
     price: (input, output) => `${input} đầu vào / ${output} đầu ra mỗi triệu token`,
     change: 'Thay đổi',
     startChatting: 'Bắt đầu',
-    docs: provider => `Tài liệu ${provider}`
+    docs: provider => `Tài liệu ${provider}`,
+    workProfile: {
+      title: 'Thiết lập công việc',
+      description: 'Chọn loại công việc bạn làm. Hermes sẽ đề xuất một bộ Skill nhỏ từ catalog cục bộ.',
+      areasLabel: 'Lĩnh vực công việc',
+      areas: {
+        research_learning: 'Nghiên cứu và học tập',
+        leadership_business: 'Lãnh đạo và kinh doanh',
+        writing_content: 'Viết và nội dung',
+        software_building: 'Phát triển phần mềm',
+        office_productivity: 'Năng suất văn phòng',
+        creative_media: 'Sáng tạo đa phương tiện'
+      },
+      tasksLabel: 'Công việc thường làm',
+      tasksPlaceholder: 'Mỗi dòng một việc, ví dụ: Soạn bản tin hằng tuần',
+      preview: 'Xem trước đề xuất',
+      previewTitle: 'Skill được đề xuất',
+      availableTitle: 'Skill cục bộ khác',
+      add: skill => `Thêm ${skill}`,
+      remove: skill => `Gỡ ${skill}`,
+      save: 'Lưu thiết lập công việc',
+      skip: 'Để sau',
+      loading: 'Đang tải thiết lập công việc…',
+      empty: 'Hãy chọn một lĩnh vực hoặc mô tả công việc thường làm trước.',
+      failed: 'Không thể cập nhật thiết lập công việc.',
+      saving: 'Đang lưu…'
+    }
   },
 
   modelPicker: {

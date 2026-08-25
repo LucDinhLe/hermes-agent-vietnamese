@@ -1055,6 +1055,45 @@ export interface SkillInfo {
   provenance?: 'agent' | 'bundled' | 'hub'
 }
 
+export interface WorkProfileStateResponse {
+  completed: boolean
+  skipped: boolean
+  legacy: boolean
+  allowed: null | string[]
+  work_areas: string[]
+  common_tasks: string[]
+  installed_count: number
+}
+
+export interface WorkProfileRecommendationResponse {
+  skills: string[]
+  reasons: Record<string, string>
+  used_provider: boolean
+}
+
+export interface WorkProfileApplyPayload {
+  allowed_skills: string[]
+  work_areas: string[]
+  common_tasks: string[]
+  skipped: boolean
+}
+
+export interface WorkProfileApplyResponse {
+  ok: boolean
+  completed: boolean
+  skipped: boolean
+  allowed: string[]
+}
+
+export interface TaskSkillDiscoveryResponse {
+  selected: string[]
+  recommended: string[]
+  reasons: Record<string, string>
+  model_attempts: number
+  used_provider: boolean
+  used_network: boolean
+}
+
 export interface ToolsetInfo {
   configured: boolean
   description: string

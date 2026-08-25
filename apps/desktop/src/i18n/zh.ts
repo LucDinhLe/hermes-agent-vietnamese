@@ -353,7 +353,34 @@ export const zh: Translations = {
       about: '关于',
       billing: '账单',
       notifications: '通知',
-      plugins: '插件'
+      plugins: '插件',
+      workProfile: '工作档案'
+    },
+    workProfile: {
+      title: '工作档案',
+      intro: '选择你的工作方式。只有经你批准的技能可用于新会话。',
+      commonTasks: '常用任务',
+      commonTasksHint: '每行一项。推荐仅使用本地技能目录。',
+      commonTasksPlaceholder: '撰写带引用的简报\n准备项目计划',
+      preview: '预览推荐',
+      previewing: '正在检查…',
+      previewFailed: '无法预览技能推荐。',
+      skillsTitle: '已批准技能',
+      skillsHint: '保存前请检查推荐。未勾选的技能仍会保留安装，但不可使用。',
+      toggleSkill: name => `批准 ${name}`,
+      save: '保存工作档案',
+      saving: '正在保存…',
+      saved: '工作档案已保存。更改将应用于新会话。',
+      saveFailed: '无法保存工作档案。',
+      loadFailed: '无法加载工作档案。',
+      areas: {
+        research_learning: '研究与学习',
+        leadership_business: '领导与商业',
+        writing_content: '写作与内容',
+        software_building: '软件开发',
+        office_productivity: '办公效率',
+        creative_media: '创意媒体'
+      }
     },
     plugins: {
       title: '桌面插件',
@@ -2765,6 +2792,32 @@ export const zh: Translations = {
   },
 
   onboarding: {
+    workProfile: {
+      title: '设置你的工作',
+      description: '选择工作领域，Hermes 会从本地目录建议少量已安装的 Skill。',
+      areasLabel: '工作领域',
+      areas: {
+        research_learning: '研究与学习',
+        leadership_business: '领导与商业',
+        writing_content: '写作与内容',
+        software_building: '软件开发',
+        office_productivity: '办公效率',
+        creative_media: '创意媒体'
+      },
+      tasksLabel: '常用任务',
+      tasksPlaceholder: '每行一项，例如：撰写每周简报',
+      preview: '预览建议',
+      previewTitle: '推荐的 Skill',
+      availableTitle: '其他已安装 Skill',
+      add: skill => `添加 ${skill}`,
+      remove: skill => `移除 ${skill}`,
+      save: '保存工作设置',
+      skip: '暂时跳过',
+      loading: '正在加载工作设置…',
+      empty: '请先选择工作领域或描述常用任务。',
+      failed: '无法更新工作设置。',
+      saving: '正在保存…'
+    },
     headerTitle: '开始设置 Hermes Agent',
     headerDesc: '连接模型提供方即可开始对话。大多数选项只需一次点击。',
     preparingInstall: 'Hermes 正在完成安装。首次运行通常不到一分钟。',
@@ -3043,8 +3096,7 @@ export const zh: Translations = {
         turnBudgetNormal: '预算内',
         turnBudgetPaused: '已暂停',
         turnBudgetTitle: '本轮预算',
-        turnBudgetTokens: (input, cacheRead, output) =>
-          `${input} 新输入 · ${cacheRead} 缓存读取 · ${output} 输出`,
+        turnBudgetTokens: (input, cacheRead, output) => `${input} 新输入 · ${cacheRead} 缓存读取 · ${output} 输出`,
         unavailable: '暂无数据'
       },
       session: '会话',

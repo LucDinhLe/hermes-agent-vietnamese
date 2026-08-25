@@ -64,6 +64,7 @@ import type {
   SkillInfo,
   StarmapGraph,
   StatusResponse,
+  TaskSkillDiscoveryResponse,
   TerminalBackendsResponse,
   ToolsetConfig,
   ToolsetInfo,
@@ -71,7 +72,11 @@ import type {
   WebhookCreatePayload,
   WebhookCreateResponse,
   WebhookEnableResponse,
-  WebhooksResponse
+  WebhooksResponse,
+  WorkProfileApplyPayload,
+  WorkProfileApplyResponse,
+  WorkProfileRecommendationResponse,
+  WorkProfileStateResponse
 } from '@/types/hermes'
 
 // Desktop startup fires a burst of read-only data calls (config, profiles,
@@ -229,6 +234,7 @@ export type {
   StaleAuxAssignment,
   StarmapGraph,
   StatusResponse,
+  TaskSkillDiscoveryResponse,
   ToolsetConfig,
   ToolsetInfo,
   ToolsetModel,
@@ -237,7 +243,11 @@ export type {
   WebhookCreateResponse,
   WebhookEnableResponse,
   WebhookRoute,
-  WebhooksResponse
+  WebhooksResponse,
+  WorkProfileApplyPayload,
+  WorkProfileApplyResponse,
+  WorkProfileRecommendationResponse,
+  WorkProfileStateResponse
 } from '@/types/hermes'
 
 export class HermesGateway extends JsonRpcGatewayClient {
@@ -1376,6 +1386,55 @@ export function setSkillEnabled(
     path: '/api/skills/toggle',
     method: 'PUT',
     body: { name, enabled }
+  })
+}
+
+export function getWorkProfile(
+  profile?: null | string,
+  connectionId?: null | string
+): Promise<WorkProfileStateResponse> {
+  return window.hermesDesktop.api<WorkProfileStateResponse>({
+    ...profileScoped(profile, connectionId),
+    path: '/api/skills/work-profile'
+  })
+}
+
+export function recommendWorkProfile(
+  input: Pick<WorkProfileApplyPayload, 'common_tasks' | 'work_areas'>,
+  profile?: null | string,
+  connectionId?: null | string
+): Promise<WorkProfileRecommendationResponse> {
+  return window.hermesDesktop.api<WorkProfileRecommendationResponse>({
+    ...profileScoped(profile, connectionId),
+    path: '/api/skills/work-profile/recommend',
+    method: 'POST',
+    body: input
+  })
+}
+
+export function applyWorkProfile(
+  input: WorkProfileApplyPayload,
+  profile?: null | string,
+  connectionId?: null | string
+): Promise<WorkProfileApplyResponse> {
+  return window.hermesDesktop.api<WorkProfileApplyResponse>({
+    ...profileScoped(profile, connectionId),
+    path: '/api/skills/work-profile',
+    method: 'PUT',
+    body: input
+  })
+}
+
+export function discoverTaskSkills(
+  task: string,
+  profile?: null | string,
+  connectionId?: null | string
+): Promise<TaskSkillDiscoveryResponse> {
+  return window.hermesDesktop.api<TaskSkillDiscoveryResponse>({
+    ...profileScoped(profile, connectionId),
+    path: '/api/skills/discover',
+    method: 'POST',
+    body: { task }
   })
 }
 

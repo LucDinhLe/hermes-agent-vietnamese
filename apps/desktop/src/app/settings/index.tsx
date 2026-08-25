@@ -15,6 +15,7 @@ import {
   Info,
   Keyboard,
   KeyRound,
+  Layers3,
   Package,
   RefreshCw,
   Settings2,
@@ -46,6 +47,7 @@ import { PluginsSettings } from './plugins-settings'
 import { PROVIDER_VIEWS, ProvidersSettings, type ProviderView } from './providers-settings'
 import { SessionsSettings } from './sessions-settings'
 import type { SettingsPageProps, SettingsView as SettingsViewId } from './types'
+import { WorkProfileSettings } from './work-profile-settings'
 
 const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   ...SECTIONS.map(s => `config:${s.id}` as SettingsViewId),
@@ -59,6 +61,7 @@ const SETTINGS_VIEWS: readonly SettingsViewId[] = [
   'notifications',
   'billing',
   'plugins',
+  'work-profile',
   'sessions',
   'about'
 ]
@@ -289,6 +292,13 @@ function SettingsViewInner({
         onSelect: () => setActiveView('keys')
       },
       {
+        active: activeView === 'work-profile',
+        icon: Layers3,
+        id: 'work-profile',
+        label: t.settings.nav.workProfile,
+        onSelect: () => setActiveView('work-profile')
+      },
+      {
         active: activeView === 'plugins',
         icon: Package,
         id: 'plugins',
@@ -386,6 +396,8 @@ function SettingsViewInner({
             <BillingSettings />
           ) : activeView === 'plugins' ? (
             <PluginsSettings />
+          ) : activeView === 'work-profile' ? (
+            <WorkProfileSettings backendOwner={backendOwner} />
           ) : (
             <SessionsSettings backendOwner={backendOwner} />
           )}

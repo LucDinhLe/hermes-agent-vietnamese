@@ -257,23 +257,40 @@ không cần chốt để chạy baseline A.
 
 ## 8. Continuation state
 
-Phiên tiếp theo bắt đầu tại lát cắt **B. Capability profile contract**:
+Các checkpoint đã hoàn thành trên `feat/v32-token-context-ux`:
 
-1. Đọc file này, `docs/v32/go-no-go.md`, ba decision log v32, rulebook và mọi
-   `AGENTS.md` áp dụng.
-2. Xác minh branch/HEAD/remote và giữ nguyên các file chưa commit. Không xóa
-   `.tmp/`; đây là baseline cô lập đang ignored/untracked.
-3. Chạy lại test hiện có bằng `scripts/run_tests.sh`; hiện trạng kỳ vọng 4/4.
-4. Viết test đỏ rồi hoàn thiện contract cho hai việc còn thiếu: Skill mới sync
-   vào profile có allowlist phải mặc định chưa được phép; local discovery phải
-   trả recommendation mà không silent-mutate config hoặc gọi provider/network.
-5. Nối backend API bằng config writer/lock/profile scope hiện hữu. Manual toggle
-   phải cập nhật `skills.allowed` khi work profile đã tồn tại và giữ hành vi cũ
-   cho legacy profile.
-6. Sau backend xanh mới nối onboarding và Settings. Mọi chuỗi UI mới phải cập
-   nhật đủ `en`, `ja`, `zh`, `zh-hant` cùng tiếng Việt nguồn của ứng dụng.
-7. Sau UI mới nối session/subagent routing, giữ parent prompt byte-stable và
-   thêm benchmark token cho full catalog, parent, session và child.
+- `244ffd407`: hợp đồng work profile deterministic.
+- `c3ea14789`: bundled sync fail-closed và local discovery 0 provider/network.
+- `853af78fe`: manual Skill toggle giữ `skills.allowed` đồng bộ.
+- `5d87c54e4`: API capability profile-scoped dùng config writer/lock hiện hữu.
+- Lát cắt Desktop tiếp theo đã nối client API, trang **Work Profile** trong
+  Settings và first-run work setup với preview/edit/Back/Skip/retry. Mọi mutation
+  chỉ xảy ra sau Save hoặc Skip; mở Settings và preview không ghi config. Chuỗi
+  mới có đủ `en`, `vi`, `ja`, `zh`, `zh-hant` và fallback `ar`.
+
+Gate gần nhất:
+
+- Canonical Python gate: 58/58 qua `scripts/run_tests.sh` cho capability profile,
+  bundled sync, Skill toggles và backend API.
+- Desktop capability/client/onboarding/Settings: 18/18.
+- Desktop typecheck xanh; lint toàn bộ file thay đổi xanh.
+- Không live probe, không provider/model/network call, không build candidate,
+  không dùng profile thật; `.tmp/` vẫn được giữ nguyên.
+
+Việc còn lại, theo thứ tự:
+
+1. Khóa bằng regression một dấu hiệu **fresh-profile-only** bền vững cho default
+   install và named profile create. UI hiện chỉ đi cùng first-run provider flow;
+   chưa được phép suy diễn mọi profile legacy là profile mới. Update/repair và
+   profile người dùng cũ phải không bị hỏi lại.
+2. Nối session/subagent capability router: discovery chỉ cấp Skill đã allow cho
+   session/agent mới; Skill chưa allow chỉ recommendation; parent system prompt
+   byte-stable và không toggle giữa phiên.
+3. Đưa mọi child attempt/tool call qua root Token Governor và thêm telemetry
+   breakdown parent/child.
+4. Thêm benchmark exact cho full catalog, parent 3–8 Skill, session và child;
+   sau đó mới làm MCP permission router fail-closed.
+5. Chỉ sau source/integration/UI E2E xanh mới chạy packaged lifecycle gate.
 
 Không cần live provider probe cho các lát cắt trên. Dùng mock provider và profile
 cô lập. Không sửa profile Hermes thật. Mọi build, push, staging, cài candidate
@@ -285,11 +302,11 @@ hoặc public promotion của candidate kế tiếp phải tuân theo release ga
 Decision: candidate only / implementation in progress
 Candidate: none for v32.1; immutable public base is 81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f, 0.32.0-vi.1, 341176379 bytes, efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac
 Audience allowed: source implementation and isolated tests only
-Gates passed: v32 technical GO; isolated fresh baseline; capability-profile unit slice 4/4
-Gates failed or missing: backend/API wiring, first-run UI, dynamic discovery, session/subagent router, MCP router, integration/E2E, benchmark, packaged lifecycle
-Evidence: fresh bundled sync 82 packages; 72 active relevant skills; 8,797-char skill index (~2,199 token estimate); 0 configured MCP; local capability profile tests 4/4
-Residual risks: future synced skills can bypass a static disabled snapshot until allowlist enforcement is wired; dynamic capability changes can break prompt cache; MCP permissions and multi-agent fan-out need fail-closed contracts
+Gates passed: v32 technical GO; isolated fresh baseline; fail-closed allowlist/local discovery; profile-scoped backend API; Desktop client/Settings/first-run UI source gates; Python 58/58; Desktop targeted 18/18; typecheck and changed-file lint
+Gates failed or missing: durable fresh-profile-only marker and named-profile first-open coverage; session/subagent router; root Governor fan-out telemetry; MCP router; integration/UI E2E; token benchmark; packaged lifecycle
+Evidence: fresh bundled sync 82 packages; 72 active relevant skills; 8,797-char skill index (~2,199 token estimate); 0 configured MCP; local discovery reports 0 model/provider/network; no config mutation before confirmation
+Residual risks: first-run UI still needs a durable fresh-profile-only trigger separate from legacy detection; parent/child capability isolation and prompt byte stability are not yet wired; MCP permissions and multi-agent fan-out still need fail-closed contracts
 Rollback target: vi-v0.20.4-39
 Public actions taken: none
-Next smallest step: regression for local catalog discovery and future-sync fail-closed allowlist, then backend API wiring
+Next smallest step: red test for a durable fresh-profile-only marker across default install, named create, update and repair; then session/subagent routing with parent prompt byte-stability
 ```

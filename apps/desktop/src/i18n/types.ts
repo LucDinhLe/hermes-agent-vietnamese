@@ -314,6 +314,34 @@ export interface Translations {
       billing: string
       notifications: string
       plugins: string
+      workProfile: string
+    }
+    workProfile: {
+      title: string
+      intro: string
+      commonTasks: string
+      commonTasksHint: string
+      commonTasksPlaceholder: string
+      preview: string
+      previewing: string
+      previewFailed: string
+      skillsTitle: string
+      skillsHint: string
+      toggleSkill: (name: string) => string
+      save: string
+      saving: string
+      saved: string
+      saveFailed: string
+      loadFailed: string
+      areas: Record<
+        | 'research_learning'
+        | 'leadership_business'
+        | 'writing_content'
+        | 'software_building'
+        | 'office_productivity'
+        | 'creative_media',
+        string
+      >
     }
     plugins: {
       title: string
@@ -2261,6 +2289,25 @@ export interface Translations {
     change: string
     startChatting: string
     docs: (provider: string) => string
+    workProfile: {
+      title: string
+      description: string
+      areasLabel: string
+      areas: Record<string, string>
+      tasksLabel: string
+      tasksPlaceholder: string
+      preview: string
+      previewTitle: string
+      availableTitle: string
+      add: (skill: string) => string
+      remove: (skill: string) => string
+      save: string
+      skip: string
+      loading: string
+      empty: string
+      failed: string
+      saving: string
+    }
   }
 
   modelPicker: {

@@ -1,5 +1,26 @@
 # Tiến độ
 
+## Cập nhật 2026-08-26 — UI thiết lập công việc profile-scoped
+
+- Nối typed Desktop client vào bốn API work profile/discovery và khóa mọi
+  request theo đúng `connectionId + profile`; test cũng chứng minh owner tường
+  minh không bị ambient backend ghi đè.
+- First-run nay đưa bước **Thiết lập công việc** sau khi backend sẵn sàng, cho
+  xem trước recommendation cục bộ, chỉnh danh sách Skill rồi mới lưu; bỏ qua
+  cũng được persist rõ ràng. Profile đã hoàn tất tự đi tiếp và luồng thêm
+  provider thủ công không bị chèn bước này.
+- Settings có mục **Hồ sơ công việc** để xem lại lĩnh vực, tối đa ba việc thường
+  làm và allowlist Skill. Mở Settings hoặc xem recommendation không migrate hay
+  mutate legacy profile; chỉ nút lưu mới ghi bằng API profile-scoped.
+- Hoàn tất copy/i18n cho `vi`, `en`, `ja`, `zh`, `zh-hant`, `ar`; component dùng
+  primitive và semantic label hiện hữu, không tự lấy focus.
+- Desktop gate đạt 34/34 trên 7 file cho API scope, onboarding, Settings và
+  locale; toàn bộ ba cấu hình TypeScript đạt. ESLint phần thay đổi không có lỗi;
+  `git diff --check` đạt. Không build, live probe, đọc/sửa profile Hermes thật,
+  push hay hành động public.
+- Bước nhỏ tiếp theo: bổ sung UX gọi task discovery khi tạo session/agent mới,
+  chỉ gợi ý Skill đã được allow và giữ recommendation không mutate config.
+
 ## Cập nhật 2026-08-26 — API work profile profile-scoped
 
 - Thêm API đọc state, local recommendation, apply/skip và local task discovery

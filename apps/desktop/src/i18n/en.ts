@@ -364,7 +364,34 @@ export const en: Translations = {
       about: 'About',
       billing: 'Billing',
       notifications: 'Notifications',
-      plugins: 'Plugins'
+      plugins: 'Plugins',
+      workProfile: 'Work Profile'
+    },
+    workProfile: {
+      title: 'Work profile',
+      intro: 'Choose how you work. Hermes keeps only the Skills you approve available to new sessions.',
+      commonTasks: 'Common tasks',
+      commonTasksHint: 'One task per line. Recommendations use the local Skill catalog only.',
+      commonTasksPlaceholder: 'Write a cited brief\nPrepare a project plan',
+      preview: 'Preview recommendations',
+      previewing: 'Reviewing…',
+      previewFailed: 'Could not preview Skill recommendations.',
+      skillsTitle: 'Approved Skills',
+      skillsHint: 'Review the recommendation before saving. Unchecked Skills remain installed but unavailable.',
+      toggleSkill: name => `Approve ${name}`,
+      save: 'Save work profile',
+      saving: 'Saving…',
+      saved: 'Work profile saved. Changes apply to new sessions.',
+      saveFailed: 'Could not save the work profile.',
+      loadFailed: 'Could not load the work profile.',
+      areas: {
+        research_learning: 'Research and learning',
+        leadership_business: 'Leadership and business',
+        writing_content: 'Writing and content',
+        software_building: 'Software building',
+        office_productivity: 'Office productivity',
+        creative_media: 'Creative media'
+      }
     },
     plugins: {
       title: 'Desktop plugins',
@@ -2710,7 +2737,33 @@ export const en: Translations = {
     price: (input, output) => `${input} in / ${output} out per Mtok`,
     change: 'Change',
     startChatting: 'Begin',
-    docs: provider => `${provider} docs`
+    docs: provider => `${provider} docs`,
+    workProfile: {
+      title: 'Set up your work',
+      description: 'Choose what you work on. Hermes will suggest a small set of installed Skills locally.',
+      areasLabel: 'Work areas',
+      areas: {
+        research_learning: 'Research and learning',
+        leadership_business: 'Leadership and business',
+        writing_content: 'Writing and content',
+        software_building: 'Software building',
+        office_productivity: 'Office productivity',
+        creative_media: 'Creative media'
+      },
+      tasksLabel: 'Common tasks',
+      tasksPlaceholder: 'One task per line, for example: Draft a weekly newsletter',
+      preview: 'Preview recommendations',
+      previewTitle: 'Recommended Skills',
+      availableTitle: 'Other installed Skills',
+      add: skill => `Add ${skill}`,
+      remove: skill => `Remove ${skill}`,
+      save: 'Save work setup',
+      skip: 'Skip for now',
+      loading: 'Loading work setup…',
+      empty: 'Choose a work area or describe a common task first.',
+      failed: 'Could not update the work setup.',
+      saving: 'Saving…'
+    }
   },
 
   modelPicker: {

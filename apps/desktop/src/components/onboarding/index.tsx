@@ -36,6 +36,7 @@ import {
   ProviderRow,
   sortProviders
 } from './providers'
+import { WorkProfileSetup } from './work-profile'
 
 export {
   FeaturedProviderRow,
@@ -48,6 +49,7 @@ export {
 } from './providers'
 
 interface DesktopOnboardingOverlayProps {
+  connectionId?: null | string
   enabled: boolean
   onCompleted?: () => void
   profile: string
@@ -180,6 +182,7 @@ function useApiKeyCatalog(): ApiKeyOption[] {
 const ONBOARDING_EXIT_MS = 1180
 
 export function DesktopOnboardingOverlay({
+  connectionId,
   enabled,
   onCompleted,
   profile,
@@ -206,6 +209,9 @@ export function DesktopOnboardingOverlay({
   // behind), THEN finalize so the unmount lands after the fade — mirrors the
   // connecting overlay's exit choreography instead of cutting instantly.
   const [leaving, setLeaving] = useState(false)
+  const [workProfileDone, setWorkProfileDone] = useState(false)
+
+  useEffect(() => setWorkProfileDone(false), [profile])
 
   const finalizeOnboarding = () => {
     if (leaving) {
@@ -298,6 +304,7 @@ export function DesktopOnboardingOverlay({
   // The final "you're in" screen drops the card chrome and floats centered on
   // the surface — same bare, cinematic treatment as the connecting overlay.
   const bare = ready && !showPicker && flow.status === 'confirming_model'
+  const showWorkProfile = ready && !onboarding.manual && !workProfileDone
 
   return (
     <div
@@ -322,7 +329,7 @@ export function DesktopOnboardingOverlay({
             : 'translate-y-0 scale-100 opacity-100 blur-0'
         )}
       >
-        {showPicker || !ready ? <Header /> : null}
+        {!showWorkProfile && (showPicker || !ready) ? <Header /> : null}
         {onboarding.manual ? (
           <Button
             aria-label={t.common.close}
@@ -335,8 +342,15 @@ export function DesktopOnboardingOverlay({
           </Button>
         ) : null}
         <div className="grid gap-3 p-5">
-          {reason ? <ReasonNotice reason={reason} /> : null}
-          {ready ? (
+          {reason && !showWorkProfile ? <ReasonNotice reason={reason} /> : null}
+          {showWorkProfile ? (
+            <WorkProfileSetup
+              connectionId={connectionId}
+              firstRun
+              onDone={() => setWorkProfileDone(true)}
+              profile={profile}
+            />
+          ) : ready ? (
             showPicker ? (
               <Picker ctx={ctx} />
             ) : (
