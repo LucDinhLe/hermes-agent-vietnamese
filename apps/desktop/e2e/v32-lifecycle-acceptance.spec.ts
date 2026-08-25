@@ -370,7 +370,7 @@ async function captureEvidence(page: Page, context: LifecycleContext): Promise<v
   }
 }
 
-async function clickTopmostVisibleButton(page: Page, name: RegExp, timeout = 30_000): Promise<void> {
+async function activateTopmostVisibleButton(page: Page, name: RegExp, timeout = 30_000): Promise<void> {
   const buttons = page.getByRole('button', { name })
 
   await expect
@@ -394,30 +394,30 @@ async function clickTopmostVisibleButton(page: Page, name: RegExp, timeout = 30_
           }
 
           try {
-            const clickPoint = await element.evaluate(node => {
+            const receivesPointer = await element.evaluate(node => {
               const rect = node.getBoundingClientRect()
               const x = rect.left + rect.width / 2
               const y = rect.top + rect.height / 2
               const hitTarget = document.elementFromPoint(x, y)
 
-              return hitTarget !== null && (hitTarget === node || node.contains(hitTarget)) ? { x, y } : null
+              return hitTarget !== null && (hitTarget === node || node.contains(hitTarget))
             })
 
-            if (clickPoint === null) {
+            if (!receivesPointer) {
               continue
             }
 
-            // The element is already visible and its center is proven to hit
-            // this exact control. Use the physical mouse at that CSS point so
-            // Playwright does not perform a second scroll-into-view; that
-            // redundant scroll can move the responsive copy beneath the
-            // desktop sidebar between actionability and pointer dispatch.
-            await page.mouse.click(clickPoint.x, clickPoint.y)
+            // The Electron shell can still consume pointer dispatch between
+            // DOM hit-testing and a click in this responsive Settings modal.
+            // Activate the exact, on-screen native button through its standard
+            // keyboard path; Enter is a real user input and does not require a
+            // forced click or a synthetic DOM event.
+            await element.press('Enter')
 
             return true
           } catch {
             // A responsive Settings render may detach a previously visible
-            // node. Rescan and click only a newly hit-testable exact handle.
+            // node. Rescan and activate only a newly hit-testable exact handle.
           } finally {
             await element.dispose()
           }
@@ -438,21 +438,21 @@ async function openGuiUninstall(page: Page, mode: 'full' | 'lite'): Promise<void
   // testing before it could exercise the uninstall UI at all.
   await page.keyboard.press('Control+,')
 
-  await clickTopmostVisibleButton(page, /^(About|Giới thiệu)$/i)
+  await activateTopmostVisibleButton(page, /^(About|Giới thiệu)$/i)
 
   const optionName =
     mode === 'lite'
       ? /^(Uninstall GUI \+ agent, keep my data|Gỡ giao diện và AI agent, giữ dữ liệu)/i
       : /^(Uninstall everything|Gỡ toàn bộ Hermes Vietnamese)/i
 
-  await clickTopmostVisibleButton(page, optionName, 60_000)
+  await activateTopmostVisibleButton(page, optionName, 60_000)
   await expect(page.getByText(/^(Confirm uninstall|Xác nhận gỡ cài đặt)$/i)).toBeVisible()
 }
 
 async function confirmGuiUninstall(running: RunningApp): Promise<void> {
   const child = running.app.process()
 
-  await clickTopmostVisibleButton(running.page, /^(Yes, uninstall|Đồng ý, gỡ cài đặt)$/i)
+  await activateTopmostVisibleButton(running.page, /^(Yes, uninstall|Đồng ý, gỡ cài đặt)$/i)
   await expect.poll(() => child.exitCode !== null || child.signalCode !== null, { timeout: 120_000 }).toBe(true)
   expect(child.signalCode).toBeNull()
   expect(child.exitCode).toBe(0)

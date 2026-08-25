@@ -229,20 +229,20 @@ test('lifecycle messages use the contenteditable keyboard path instead of clicki
   assert.doesNotMatch(sendHelper, /input\.click\(\)/)
 })
 
-test('GUI uninstall opens Settings through its global Windows shortcut before using real controls', () => {
+test('GUI uninstall opens Settings through its global shortcut and activates exact accessible controls', () => {
   const uninstallHelper = lifecycleSpec.match(/async function openGuiUninstall[\s\S]*?\r?\n\}/)?.[0] ?? ''
-  const pointerHelper = lifecycleSpec.match(/async function clickTopmostVisibleButton[\s\S]*?\r?\n\}/)?.[0] ?? ''
+  const activationHelper = lifecycleSpec.match(/async function activateTopmostVisibleButton[\s\S]*?\r?\n\}/)?.[0] ?? ''
   assert.match(uninstallHelper, /await page\.keyboard\.press\('Control\+,'\)/)
-  assert.match(uninstallHelper, /clickTopmostVisibleButton\(page, \/\^\(About\|Giới thiệu\)\$\/i\)/)
-  assert.match(uninstallHelper, /clickTopmostVisibleButton\(page, optionName, 60_000\)/)
+  assert.match(uninstallHelper, /activateTopmostVisibleButton\(page, \/\^\(About\|Giới thiệu\)\$\/i\)/)
+  assert.match(uninstallHelper, /activateTopmostVisibleButton\(page, optionName, 60_000\)/)
   assert.doesNotMatch(uninstallHelper, /Open settings|Mở cài đặt/)
-  assert.match(pointerHelper, /document\.elementFromPoint/)
-  assert.match(pointerHelper, /const element = await button\.elementHandle\(\)/)
-  assert.match(pointerHelper, /node\.contains\(hitTarget\)/)
-  assert.match(pointerHelper, /await page\.mouse\.click\(clickPoint\.x, clickPoint\.y\)/)
-  assert.doesNotMatch(pointerHelper, /element\.click|button\.click|locator\.click/)
-  assert.doesNotMatch(pointerHelper, /hitTargetIndex|buttons\.nth\(hitTargetIndex\)/)
-  assert.doesNotMatch(pointerHelper, /dispatchEvent|evaluate\([^)]*\.click/)
+  assert.match(activationHelper, /document\.elementFromPoint/)
+  assert.match(activationHelper, /const element = await button\.elementHandle\(\)/)
+  assert.match(activationHelper, /node\.contains\(hitTarget\)/)
+  assert.match(activationHelper, /await element\.press\('Enter'\)/)
+  assert.doesNotMatch(activationHelper, /mouse\.click|element\.click|button\.click|locator\.click/)
+  assert.doesNotMatch(activationHelper, /hitTargetIndex|buttons\.nth\(hitTargetIndex\)/)
+  assert.doesNotMatch(activationHelper, /dispatchEvent|evaluate\([^)]*\.click/)
 })
 
 test('safe tool-loop phases expose only the built-in todo toolset', () => {
