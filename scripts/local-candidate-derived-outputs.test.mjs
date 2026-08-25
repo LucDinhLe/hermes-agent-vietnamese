@@ -9,6 +9,13 @@ import {
   purgeLocalCandidateDerivedOutputs
 } from './local-candidate-derived-outputs.mjs'
 
+test('local candidate purge includes the complete electron-builder output root', () => {
+  assert.ok(
+    LOCAL_CANDIDATE_DERIVED_OUTPUTS.includes('apps/desktop/release'),
+    'an interrupted NSIS installer, blockmap or update feed must never survive into a retry'
+  )
+})
+
 test('local candidate purges every derived package-input root and preserves unrelated files', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-local-candidate-derived-'))
   try {

@@ -8,6 +8,10 @@ export const LOCAL_CANDIDATE_DERIVED_OUTPUTS = Object.freeze([
   'ui-tui/dist',
   'hermes_cli/web_dist',
   'apps/desktop/dist',
+  // electron-builder does not guarantee that output from an interrupted run
+  // is removed before the next one. A failed NSIS bootstrap can therefore
+  // leave a candidate-shaped .exe, blockmap or feed beside the next build.
+  'apps/desktop/release',
   'apps/desktop/build/install-stamp.json',
   'apps/desktop/build/hermes-connector',
   'apps/desktop/build/hermes-connector-trust.json',
