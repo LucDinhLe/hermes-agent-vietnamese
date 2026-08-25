@@ -181,6 +181,18 @@ test('NSIS install completion waits for both exact registry keys instead of raci
   assert.match(guestScript, /hklm32Uninstall/)
 })
 
+test('repair fixture snapshots component size before moving the live FileInfo path', () => {
+  const repairFixture = guestScript.match(/function Damage-RepairFixture \{[\s\S]*?\r?\n\}/)?.[0] ?? ''
+  const sizeCapture = '$originalSize = [Int64]$original.Length'
+  const captureIndex = repairFixture.indexOf(sizeCapture)
+  const moveIndex = repairFixture.indexOf('  Move-Item -LiteralPath $component')
+  assert.ok(captureIndex >= 0, 'repair fixture must capture an immutable original size')
+  assert.ok(moveIndex > captureIndex, 'repair fixture must capture size before moving the component')
+  assert.equal((repairFixture.match(/\$original\.Length/g) ?? []).length, 1)
+  assert.match(repairFixture, /originalSize = \$originalSize/)
+  assert.match(repairFixture, /OriginalSize = \$originalSize/)
+})
+
 test('lifecycle E2E accepts only the isolation mode already validated by the guest', () => {
   assert.match(guestScript, /\$env:HERMES_LIFECYCLE_EVIDENCE_ROOT = \$EvidenceRoot/)
   assert.match(guestScript, /\$env:HERMES_LIFECYCLE_ISOLATION_MODE = \$IsolationMechanism/)

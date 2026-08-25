@@ -495,6 +495,11 @@ function Damage-RepairFixture {
   $component = Join-Path ([string]$State.InstallDir) 'resources\app.asar'
   Assert-True (Test-Path -LiteralPath $component -PathType Leaf) 'repair fixture requires packaged resources/app.asar'
   $original = Get-Item -LiteralPath $component
+  # Capture immutable primitives before moving the file. FileInfo is a live
+  # filesystem wrapper; reading .Length after Move-Item can refresh the now-
+  # missing source path as zero and create a false repair mismatch even when
+  # NSIS restored the exact component bytes.
+  $originalSize = [Int64]$original.Length
   $originalHash = Get-Sha256 $component
   $quarantineDir = Join-Path $StateRoot 'repair-quarantine'
   $quarantine = Join-Path $quarantineDir 'app.asar'
@@ -506,7 +511,7 @@ function Damage-RepairFixture {
   $proof = [ordered]@{
     component = 'resources/app.asar'
     originalSha256 = $originalHash
-    originalSize = [Int64]$original.Length
+    originalSize = $originalSize
     preRepairHealthy = $false
     quarantineSha256 = Get-Sha256 $quarantine
     recoveryPath = 'rerun-exact-candidate-nsis'
@@ -516,7 +521,7 @@ function Damage-RepairFixture {
   return [ordered]@{
     Component = $component
     OriginalHash = $originalHash
-    OriginalSize = [Int64]$original.Length
+    OriginalSize = $originalSize
   }
 }
 
