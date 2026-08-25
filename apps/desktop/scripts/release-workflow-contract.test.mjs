@@ -211,6 +211,7 @@ test('candidate workflow fails closed on unsigned feeds and the Windows ARM64 na
   for (const regression of [
     'scripts/bundled-release-policy.test.mjs',
     'scripts/patch-electron-builder-mac-binary.test.mjs',
+    'scripts/patch-electron-builder-windows-nsis.test.mjs',
     'scripts/stage-native-deps.test.mjs',
     'tests/test_release_node_floor_contract.py',
     'tests/test_install_sh_venv_transaction.py'

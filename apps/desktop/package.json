@@ -32,7 +32,7 @@
     "prebuild": "npm run clean",
     "build": "node scripts/assert-root-install.mjs && uv run --no-project ../../scripts/write_install_stamp.py --output build/install-stamp.json && node scripts/build-connector-extension.mjs && vite build && node scripts/bundle-electron-main.mjs && node scripts/stage-native-deps.mjs && node scripts/stage-agent-payloads.mjs",
     "postbuild": "node scripts/assert-dist-built.mjs",
-    "prebuilder": "node scripts/patch-electron-builder-mac-binary.mjs",
+    "prebuilder": "node scripts/patch-electron-builder-mac-binary.mjs && node scripts/patch-electron-builder-windows-nsis.mjs",
     "builder": "cross-env NODE_OPTIONS=--max-old-space-size=16384 node scripts/run-electron-builder.mjs",
     "pack": "npm run build && npm run builder -- --dir --publish never",
     "dist": "npm run build && npm run builder",

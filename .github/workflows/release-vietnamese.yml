@@ -98,6 +98,7 @@ jobs:
           scripts/bundled-release-policy.test.mjs
           scripts/local-candidate-derived-outputs.test.mjs
           apps/desktop/scripts/patch-electron-builder-mac-binary.test.mjs
+          apps/desktop/scripts/patch-electron-builder-windows-nsis.test.mjs
           scripts/validate-release-evidence.test.mjs
           scripts/validate-pilot-release-evidence.test.mjs
           scripts/validate-public-release-contract.test.mjs
