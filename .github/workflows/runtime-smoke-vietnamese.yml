@@ -191,17 +191,60 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ inputs.tag }}
+          CANDIDATE_SHA256: ${{ inputs.sha256sums_sha256 }}
         run: |
+          $ErrorActionPreference = 'Stop'
           New-Item -ItemType Directory -Path candidate, previous, rollback | Out-Null
-          gh release download $env:TAG --repo $env:GITHUB_REPOSITORY --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir candidate
+
+          $releaseJson = gh api --paginate "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" --slurp
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate candidate drafts' }
+          $pages = $releaseJson | ConvertFrom-Json
+          $matches = @()
+          foreach ($page in @($pages)) {
+            $matches += @($page | Where-Object { $_.tag_name -eq $env:TAG })
+          }
+          if ($matches.Count -ne 1) { throw "Expected one draft for $env:TAG, got $($matches.Count)" }
+          $release = $matches[0]
+          if ($release.draft -ne $true -or $release.prerelease -ne $true) { throw 'Candidate is not a private prerelease draft' }
+          $assets = @($release.assets | Where-Object { $_.name -eq 'Hermes-Vietnamese-Windows-x64-Setup.exe' })
+          if ($assets.Count -ne 1) { throw "Expected one Windows x64 candidate asset, got $($assets.Count)" }
+          $asset = $assets[0]
+          if ($asset.state -ne 'uploaded' -or $asset.size -ne 341176379) { throw 'Draft candidate asset metadata is not exact' }
+          if ($asset.digest -ne "sha256:$($env:CANDIDATE_SHA256.ToLowerInvariant())") { throw 'Draft candidate digest is not exact' }
+          $headers = @{
+            Accept = 'application/octet-stream'
+            Authorization = "Bearer $env:GH_TOKEN"
+            'X-GitHub-Api-Version' = '2022-11-28'
+          }
+          Invoke-WebRequest -Uri $asset.url -Headers $headers -OutFile candidate\Hermes-Vietnamese-Windows-x64-Setup.exe
+
           gh release download vi-v0.31.0-7 --repo $env:GITHUB_REPOSITORY --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir previous
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot download pinned v31 installer' }
           gh release download vi-v0.20.4-39 --repo $env:GITHUB_REPOSITORY --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir rollback
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot download pinned vi39 installer' }
+
+          $records = @(
+            @{ Path = 'candidate\Hermes-Vietnamese-Windows-x64-Setup.exe'; Size = 341176379; Sha256 = $env:CANDIDATE_SHA256 },
+            @{ Path = 'previous\Hermes-Vietnamese-Windows-x64-Setup.exe'; Size = 340302846; Sha256 = 'cca0f3c0255e5e8736676a4d7ccb52c6e1b75eb73b94b8d1c3ca5dc91e57e840' },
+            @{ Path = 'rollback\Hermes-Vietnamese-Windows-x64-Setup.exe'; Size = 340105286; Sha256 = 'e4e0b60d7821b0e72af7b79e745b723c035f588c49bb11782778214a3e0c6d31' }
+          )
+          foreach ($record in $records) {
+            $item = Get-Item -LiteralPath $record.Path
+            if ($item.Length -ne $record.Size) { throw "Installer size mismatch: $($record.Path)" }
+            $digest = (Get-FileHash -LiteralPath $record.Path -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($digest -ne $record.Sha256.ToLowerInvariant()) { throw "Installer SHA-256 mismatch: $($record.Path)" }
+          }
 
       - name: Chạy vòng đời thật trong máy ảo GitHub dùng một lần
         shell: powershell
         env:
           CANDIDATE_SHA256: ${{ inputs.sha256sums_sha256 }}
         run: |
+          New-Item -ItemType Directory -Path C:\HermesEvidence -Force | Out-Null
+          [System.IO.File]::WriteAllText(
+            'C:\HermesEvidence\workflow-preflight.json',
+            "{`"runId`":`"$env:GITHUB_RUN_ID`",`"attempt`":`"$env:GITHUB_RUN_ATTEMPT`",`"harnessCommit`":`"$env:GITHUB_SHA`"}`n"
+          )
           $candidate = (Resolve-Path 'candidate\Hermes-Vietnamese-Windows-x64-Setup.exe').Path
           $previous = (Resolve-Path 'previous\Hermes-Vietnamese-Windows-x64-Setup.exe').Path
           $rollback = (Resolve-Path 'rollback\Hermes-Vietnamese-Windows-x64-Setup.exe').Path
