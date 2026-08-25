@@ -29,7 +29,7 @@ test("Vietnamese release tags map to deterministic Electron SemVer", () => {
   assert.throws(() => parseVietnameseReleaseTag("v0.20.0"), /vi-vX.Y.Z-N/)
 })
 
-test("local Vietnamese candidate identity stays separate from the published v31 descriptor", () => {
+test("unpublished v32 candidate stays separate from the current public v31 descriptor", () => {
   const desktopPackage = JSON.parse(
     fs.readFileSync(new URL("../apps/desktop/package.json", import.meta.url), "utf8"),
   )
@@ -46,9 +46,11 @@ test("local Vietnamese candidate identity stays separate from the published v31 
 
   assert.equal(runtime.status, 0, runtime.stderr)
   assert.equal(publicRelease.tag, "vi-v0.31.0-7")
-  assert.equal(publicRelease.featuredCandidate.tag, "vi-v0.31.0-7")
-  assert.equal(publicRelease.featuredCandidate.published, true)
-  assert.notEqual(publicRelease.featuredCandidate.tag, expectedTag)
+  assert.notEqual(publicRelease.tag, expectedTag)
+  assert.equal(publicRelease.featuredCandidate.tag, expectedTag)
+  assert.equal(publicRelease.featuredCandidate.productVersion, VI_PRODUCT_RELEASE.productVersion)
+  assert.equal(publicRelease.featuredCandidate.releaseClass, "community-prerelease")
+  assert.equal(publicRelease.featuredCandidate.published, false)
   assert.equal(candidate.tag, expectedTag)
   assert.equal(candidate.productVersion, VI_PRODUCT_RELEASE.productVersion)
   assert.equal(candidate.baseVersion, VI_PRODUCT_RELEASE.technicalVersion)
