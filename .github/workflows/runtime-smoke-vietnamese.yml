@@ -201,7 +201,11 @@ jobs:
             'C:\HermesEvidence\draft-download-attempt.json',
             "{`"runId`":`"$env:GITHUB_RUN_ID`",`"attempt`":`"$env:GITHUB_RUN_ATTEMPT`",`"harnessCommit`":`"$env:GITHUB_SHA`"}`n"
           )
-          New-Item -ItemType Directory -Path candidate, previous, rollback | Out-Null
+          $inputRoot = Join-Path $env:RUNNER_TEMP 'hermes-v32-release-inputs'
+          $candidateDir = Join-Path $inputRoot 'candidate'
+          $previousDir = Join-Path $inputRoot 'previous'
+          $rollbackDir = Join-Path $inputRoot 'rollback'
+          New-Item -ItemType Directory -Path $candidateDir, $previousDir, $rollbackDir | Out-Null
 
           $releaseJson = gh api --paginate "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" --slurp
           if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate candidate drafts' }
@@ -223,17 +227,18 @@ jobs:
             Authorization = "Bearer $env:GH_TOKEN"
             'X-GitHub-Api-Version' = '2022-11-28'
           }
-          Invoke-WebRequest -Uri $asset.url -Headers $headers -OutFile candidate\Hermes-Vietnamese-Windows-x64-Setup.exe
+          $candidatePath = Join-Path $candidateDir 'Hermes-Vietnamese-Windows-x64-Setup.exe'
+          Invoke-WebRequest -Uri $asset.url -Headers $headers -OutFile $candidatePath
 
-          gh release download vi-v0.31.0-7 --repo $env:GITHUB_REPOSITORY --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir previous
+          gh release download vi-v0.31.0-7 --repo $env:GITHUB_REPOSITORY --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir $previousDir
           if ($LASTEXITCODE -ne 0) { throw 'Cannot download pinned v31 installer' }
-          gh release download vi-v0.20.4-39 --repo $env:GITHUB_REPOSITORY --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir rollback
+          gh release download vi-v0.20.4-39 --repo $env:GITHUB_REPOSITORY --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir $rollbackDir
           if ($LASTEXITCODE -ne 0) { throw 'Cannot download pinned vi39 installer' }
 
           $records = @(
-            @{ Path = 'candidate\Hermes-Vietnamese-Windows-x64-Setup.exe'; Size = 341176379; Sha256 = $env:CANDIDATE_SHA256 },
-            @{ Path = 'previous\Hermes-Vietnamese-Windows-x64-Setup.exe'; Size = 340302846; Sha256 = 'cca0f3c0255e5e8736676a4d7ccb52c6e1b75eb73b94b8d1c3ca5dc91e57e840' },
-            @{ Path = 'rollback\Hermes-Vietnamese-Windows-x64-Setup.exe'; Size = 340105286; Sha256 = 'e4e0b60d7821b0e72af7b79e745b723c035f588c49bb11782778214a3e0c6d31' }
+            @{ Path = $candidatePath; Size = 341176379; Sha256 = $env:CANDIDATE_SHA256 },
+            @{ Path = (Join-Path $previousDir 'Hermes-Vietnamese-Windows-x64-Setup.exe'); Size = 340302846; Sha256 = 'cca0f3c0255e5e8736676a4d7ccb52c6e1b75eb73b94b8d1c3ca5dc91e57e840' },
+            @{ Path = (Join-Path $rollbackDir 'Hermes-Vietnamese-Windows-x64-Setup.exe'); Size = 340105286; Sha256 = 'e4e0b60d7821b0e72af7b79e745b723c035f588c49bb11782778214a3e0c6d31' }
           )
           foreach ($record in $records) {
             $item = Get-Item -LiteralPath $record.Path
@@ -252,9 +257,10 @@ jobs:
             'C:\HermesEvidence\workflow-preflight.json',
             "{`"runId`":`"$env:GITHUB_RUN_ID`",`"attempt`":`"$env:GITHUB_RUN_ATTEMPT`",`"harnessCommit`":`"$env:GITHUB_SHA`"}`n"
           )
-          $candidate = (Resolve-Path 'candidate\Hermes-Vietnamese-Windows-x64-Setup.exe').Path
-          $previous = (Resolve-Path 'previous\Hermes-Vietnamese-Windows-x64-Setup.exe').Path
-          $rollback = (Resolve-Path 'rollback\Hermes-Vietnamese-Windows-x64-Setup.exe').Path
+          $inputRoot = Join-Path $env:RUNNER_TEMP 'hermes-v32-release-inputs'
+          $candidate = (Resolve-Path (Join-Path $inputRoot 'candidate\Hermes-Vietnamese-Windows-x64-Setup.exe')).Path
+          $previous = (Resolve-Path (Join-Path $inputRoot 'previous\Hermes-Vietnamese-Windows-x64-Setup.exe')).Path
+          $rollback = (Resolve-Path (Join-Path $inputRoot 'rollback\Hermes-Vietnamese-Windows-x64-Setup.exe')).Path
           $nodeRuntime = Split-Path -Parent (Get-Command node.exe).Source
           $evidence = "C:\HermesEvidence\v32-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
           node scripts/windows-lifecycle-acceptance/run.mjs `
