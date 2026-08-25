@@ -1,7 +1,7 @@
 # Bàn giao v32 → v32.1: định tuyến Skill, MCP và đa-agent
 
 Ngày ghi: 2026-08-26  
-Trạng thái: **quyết định sản phẩm đã được chủ dự án đồng ý; chưa triển khai**  
+Trạng thái: **quyết định sản phẩm đã được chủ dự án đồng ý; triển khai đã bắt đầu**
 Phạm vi: candidate kế tiếp sau `vi-v0.32.0-1`; không sửa hoặc thay byte v32 đã công bố.
 
 ## 1. Mục tiêu
@@ -34,30 +34,36 @@ Kết quả mong muốn:
 - Public URL:
   `https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.0-1`.
 
-### Repository tại thời điểm ghi log
+### Repository và lát cắt đang làm
 
 - Worktree: `projects/hermes-v32`.
 - Branch: `feat/v32-token-context-ux`.
-- HEAD: `89bec778af35e694622835498b6d458e445166e9`.
+- Base handoff commit: `5344db8172c07e64b6bd2f6f09166649573753d9`.
+- Capability-profile checkpoint: `244ffd407` (`feat: add deterministic work
+  profile contract`).
 - Remote push: `https://github.com/LucDinhLe/hermes-agent-vietnamese.git`.
-- Worktree sạch trước khi thêm log này.
+- Hai file triển khai đã nằm trong checkpoint:
+  `hermes_cli/capability_profile.py` và
+  `tests/hermes_cli/test_capability_profile.py`.
+- Test đỏ ban đầu bắt được việc module chưa tồn tại. Sau khi thêm contract cục
+  bộ, runner chuẩn `scripts/run_tests.sh` đạt 4/4 test.
+- Module hiện có local mapping, đề xuất 8–15 Skill đã cài, lưu `allowed`,
+  `disabled`, `work_profile` và selection hash. Chưa nối API, UI, session router,
+  subagent router hoặc MCP router.
 
-### Audit hồ sơ đang dùng trên máy chủ dự án
+### Baseline fresh profile cô lập
 
-- `skills.disabled: []`.
-- Có 83 `SKILL.md` trong hồ sơ đang hoạt động.
-- Runtime đóng gói có 77 Skill bundled và 115 Skill optional.
-- Danh mục Skill thực tế do `build_skills_system_prompt()` tạo dài 8.924 ký
-  tự, ước tính khoảng 2.231 token theo phép `chars / 4`.
-- Tổng nội dung của 83 `SKILL.md` là 893.041 byte; nội dung này **không** được
-  nạp toàn bộ mặc định, chỉ nạp theo nhu cầu qua `skill_view`.
-- `mcp_servers` không có trong `config.yaml`: 0 MCP được cấu hình.
-- Có 0 user plugin và 0 desktop plugin trong hồ sơ này.
-
-Giới hạn bằng chứng: đây là hồ sơ thật đã nâng cấp từ v31 lên v32. Nó chứng minh
-trạng thái hiện tại của máy chủ dự án, nhưng chưa chứng minh fresh install v32
-luôn kích hoạt đúng 83 Skill. Phiên sau phải đo lại trên profile hoàn toàn mới
-trước khi gọi đây là lỗi mặc định của installer/onboarding.
+- Đã tạo `HERMES_HOME` mới hoàn toàn, không dùng profile thật.
+- Bundled sync chép 82 gói Skill; Windows nhận 72 Skill hợp lệ/phù hợp và bật
+  toàn bộ vì config mới chưa có `skills.disabled`.
+- Skill index dài 8.797 ký tự, ước tính khoảng 2.199 token theo phép `chars / 4`.
+- Fresh profile có 0 MCP server; `mcp.json` không tồn tại.
+- Baseline có ba cảnh báo import provider plugin do Windows Application Control
+  chặn một DLL Python trong AppData. Cảnh báo này không làm sai số đếm Skill/MCP
+  và phải được giữ tách biệt khỏi feature này.
+- Profile thật của chủ dự án đã được tối giản riêng thành 9 Skill bật, 66 Skill
+  tắt và 0 MCP. Đây là cấu hình vận hành cá nhân, không phải bằng chứng sản phẩm
+  hoặc nơi chạy test.
 
 ### Cơ chế v32 đã có và phải giữ
 
@@ -129,6 +135,31 @@ Quy tắc MCP:
 - MCP mới bật chỉ có hiệu lực ở agent/session mới. Tool Search bridge giữ
   `tools[]` model-facing ổn định.
 
+### 3.5 Dò Skill ngoài bộ hiện hành với ngân sách token tối thiểu
+
+- Khi nhiệm vụ không khớp bộ Skill hiện hành, Hermes tự dò metadata trong toàn
+  bộ kho Skill đã cài bằng mã cục bộ. Việc dò không gọi model/provider, không
+  cần mạng và không được tính thành một model attempt.
+- Không đưa toàn bộ catalog hoặc toàn bộ nội dung `SKILL.md` vào system prompt.
+  Catalog đầy đủ nằm ngoài model context; phiên chỉ nhận mô tả của tập Skill
+  nhỏ nhất cần cho nhiệm vụ.
+- Skill đã nằm trong **Kho được phép** có thể được chọn tự động cho session/agent
+  mới. Parent đang chạy vẫn giữ prompt byte-stable; nếu cần, parent giao nhánh
+  hẹp cho subagent mới với đúng Skill đó.
+- Skill đã cài nhưng chưa được người dùng cho phép chỉ được **đề xuất**. UI nêu
+  tên Skill, lý do, phạm vi và ảnh hưởng dự kiến; người dùng xác nhận một lần
+  trước khi Skill được thêm vào Kho được phép.
+- Không bật/tắt Skill giữa các lượt của parent session. Thay đổi áp dụng cho
+  session/agent mới, nhờ đó giữ prompt cache và tránh tính lại prefix lớn.
+- Mục tiêu định tuyến mỗi nhiệm vụ là khoảng 3–8 Skill; starter profile lúc khai
+  sinh vẫn có thể chứa 8–15 Skill được người dùng duyệt.
+- Câu hỏi đơn giản dùng năng lực chung phải có 0 model call phân loại, 0
+  subagent và 0 tool-loop.
+- Mọi model attempt, tool call và token của subagent sau định tuyến vẫn được
+  cộng vào root Token Governor và hiển thị tách parent/child.
+- MCP không dùng cơ chế tự bật này. MCP luôn cần trạng thái đã cài, đã kết nối,
+  đúng scope và đã được người dùng cho phép.
+
 ## 4. Điều không làm
 
 - Không sửa artifact/tag/asset `vi-v0.32.0-1` đã công bố.
@@ -164,7 +195,9 @@ Quy tắc MCP:
 ### D. Agent/subagent router
 
 - Parent Lean; simple task không router LLM và không subagent.
-- Chọn tập Skill nhỏ nhất từ allowlist.
+- Dò catalog cục bộ khi allowlist hiện hành không đủ; 0 provider/network call.
+- Chọn tập Skill nhỏ nhất từ allowlist, mục tiêu 3–8 Skill mỗi nhiệm vụ.
+- Skill ngoài Kho được phép chỉ được đề xuất; không silent-enable.
 - Child context và capability không rò sang parent/sibling.
 - Aggregate Governor và telemetry hiển thị breakdown parent/child.
 
@@ -188,8 +221,17 @@ Quy tắc MCP:
 - Fresh profile không cần mạng để hoàn tất onboarding hoặc chọn Skip.
 - Fresh profile có 0 MCP active và không mở MCP I/O.
 - User upgrade giữ nguyên Skill, MCP, draft, session và credential scope.
+- Dò Skill trong catalog tạo 0 model attempt, 0 provider token và 0 network I/O.
+- Catalog 72 Skill của baseline không được nhét vào mọi model call; benchmark
+  phải báo exact index token của parent, session set và child set.
+- Skill đã được phép có thể được chọn cho agent/session mới mà không đổi system
+  prompt của parent đang chạy.
+- Skill chưa được phép phải dừng ở recommendation + confirmation; config không
+  được silent-mutate.
+- Skill mới xuất hiện sau bundled sync mặc định ở trạng thái chưa được phép nếu
+  profile đã có allowlist.
 - Simple prompt: 1 main response, 0 tool, 0 subagent, 0 background review.
-- Skill index của starter profile phải nhỏ hơn baseline 8.924 ký tự; báo cả số
+- Skill index của starter profile phải nhỏ hơn baseline 8.797 ký tự; báo cả số
   token thực tế/estimate, không chỉ phần trăm.
 - Skill/tool profile hash giữ nguyên qua call 1, call 2 và resume.
 - Child chỉ thấy Skill/MCP được giao; sibling và parent không nhận schema/content.
@@ -204,7 +246,9 @@ Quy tắc MCP:
 
 - Tên product-facing của starter packs và số pack tối thiểu.
 - Ngưỡng deterministic để quyết định single-agent hay multi-agent.
-- Mức giảm skill-index/token tối thiểu để chặn candidate.
+- Mức giảm skill-index/token tối thiểu để chặn candidate. Tối thiểu bắt buộc là
+  thấp hơn baseline fresh 8.797 ký tự (~2.199 token), đồng thời phải báo số đo
+  exact thay vì chỉ báo phần trăm.
 - MCP tool allowlist lưu ở profile, session hay capability receipt riêng.
 - Candidate kế tiếp mang version `0.32.1-vi.1` hay chuyển thẳng `0.33.0-vi.1`.
 
@@ -213,31 +257,39 @@ không cần chốt để chạy baseline A.
 
 ## 8. Continuation state
 
-Phiên tiếp theo bắt đầu tại lát cắt **A. Fresh-profile baseline**:
+Phiên tiếp theo bắt đầu tại lát cắt **B. Capability profile contract**:
 
-1. Đọc file này, `docs/v32/go-no-go.md`, ba decision log v32 và rulebook.
-2. Xác minh worktree/branch/HEAD/remote, bảo toàn mọi thay đổi chưa commit.
-3. Tạo profile cô lập; tuyệt đối không dùng hoặc sửa profile thật.
-4. Đo fresh default Skill/MCP/tool surface và lưu JSON evidence không chứa
-   credential hoặc dữ liệu người dùng.
-5. Viết regression test đỏ cho hành vi mặc định cần đổi.
-6. Chưa sửa UI/router trước khi baseline phân biệt bundled với migration.
+1. Đọc file này, `docs/v32/go-no-go.md`, ba decision log v32, rulebook và mọi
+   `AGENTS.md` áp dụng.
+2. Xác minh branch/HEAD/remote và giữ nguyên các file chưa commit. Không xóa
+   `.tmp/`; đây là baseline cô lập đang ignored/untracked.
+3. Chạy lại test hiện có bằng `scripts/run_tests.sh`; hiện trạng kỳ vọng 4/4.
+4. Viết test đỏ rồi hoàn thiện contract cho hai việc còn thiếu: Skill mới sync
+   vào profile có allowlist phải mặc định chưa được phép; local discovery phải
+   trả recommendation mà không silent-mutate config hoặc gọi provider/network.
+5. Nối backend API bằng config writer/lock/profile scope hiện hữu. Manual toggle
+   phải cập nhật `skills.allowed` khi work profile đã tồn tại và giữ hành vi cũ
+   cho legacy profile.
+6. Sau backend xanh mới nối onboarding và Settings. Mọi chuỗi UI mới phải cập
+   nhật đủ `en`, `ja`, `zh`, `zh-hant` cùng tiếng Việt nguồn của ứng dụng.
+7. Sau UI mới nối session/subagent routing, giữ parent prompt byte-stable và
+   thêm benchmark token cho full catalog, parent, session và child.
 
-Không cần live provider probe cho lát cắt A. Dùng mock provider khi cần model
-path. Mọi build, push, staging, cài lên profile thật hoặc public promotion của
-candidate kế tiếp phải tuân theo quyền và release gate riêng.
+Không cần live provider probe cho các lát cắt trên. Dùng mock provider và profile
+cô lập. Không sửa profile Hermes thật. Mọi build, push, staging, cài candidate
+hoặc public promotion của candidate kế tiếp phải tuân theo release gate riêng.
 
 ## 9. Release handoff
 
 ```text
-Decision: design approved / implementation not started
+Decision: candidate only / implementation in progress
 Candidate: none for v32.1; immutable public base is 81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f, 0.32.0-vi.1, 341176379 bytes, efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac
-Audience allowed: documentation/isolated baseline only
-Gates passed: v32 technical GO; current-profile Skill/MCP audit recorded
-Gates failed or missing: fresh-profile baseline, implementation, regression, benchmark, packaged lifecycle
-Evidence: 83 active profile skills; 8,924-char skill index (~2,231 token estimate); 0 configured MCP; 0 user plugins
-Residual risks: upgraded profile may not represent fresh defaults; dynamic capability changes can break prompt cache; MCP permissions and multi-agent fan-out need fail-closed contracts
+Audience allowed: source implementation and isolated tests only
+Gates passed: v32 technical GO; isolated fresh baseline; capability-profile unit slice 4/4
+Gates failed or missing: backend/API wiring, first-run UI, dynamic discovery, session/subagent router, MCP router, integration/E2E, benchmark, packaged lifecycle
+Evidence: fresh bundled sync 82 packages; 72 active relevant skills; 8,797-char skill index (~2,199 token estimate); 0 configured MCP; local capability profile tests 4/4
+Residual risks: future synced skills can bypass a static disabled snapshot until allowlist enforcement is wired; dynamic capability changes can break prompt cache; MCP permissions and multi-agent fan-out need fail-closed contracts
 Rollback target: vi-v0.20.4-39
 Public actions taken: none
-Next smallest step: isolated fresh-profile baseline and failing regression fixture
+Next smallest step: regression for local catalog discovery and future-sync fail-closed allowlist, then backend API wiring
 ```
