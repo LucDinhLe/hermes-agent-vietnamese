@@ -1,5 +1,26 @@
 # Tiến độ
 
+## Cập nhật 2026-08-26 — lát cắt B, allowlist fail-closed và dò Skill cục bộ
+
+- Tiếp quản trên `feat/v32-token-context-ux` tại `551b46e69`; giữ nguyên
+  `.tmp/` và không dùng hồ sơ Hermes thật.
+- Regression đỏ chứng minh Skill bundled mới lọt khỏi snapshot
+  `skills.disabled` của profile đã có `skills.allowed`; local task discovery
+  chưa có contract.
+- `reconcile_allowed_skill_catalog()` giữ legacy profile nguyên trạng, còn
+  profile có allowlist sẽ khóa mọi bundled Skill ngoài quyền trước khi sync
+  chép file. Nếu ghi config lỗi, sync dừng trước copy thay vì fail-open.
+- `discover_task_skills()` phân loại bằng bảng local, chọn tối đa 8 Skill đã
+  được phép cho session/agent mới và chỉ trả recommendation cho Skill chưa
+  được phép. Contract ghi 0 model attempt, không provider/network và không
+  mutate config.
+- Canonical runner đạt 39/39 trên
+  `tests/hermes_cli/test_capability_profile.py` và
+  `tests/tools/test_skills_sync.py`.
+- Bước nhỏ tiếp theo: nối backend API profile-scoped bằng
+  `_CONFIG_MUTATION_LOCK`, `load_config`/`save_config`; manual toggle phải cập
+  nhật `skills.allowed` khi work profile tồn tại và giữ legacy behavior.
+
 ## Cập nhật 2026-08-24 — continuity >350k và Governor opaque fail-closed
 
 - Implementation tip trước checkpoint test:
