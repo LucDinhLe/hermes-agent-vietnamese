@@ -219,8 +219,25 @@ function Wait-Uninstalled {
 function Invoke-NativeLogged {
   param([string]$Executable, [string[]]$Arguments, [string]$LogName)
   $logPath = Join-Path $EvidenceRoot $LogName
-  & $Executable @Arguments 2>&1 | Tee-Object -FilePath $logPath
-  $exitCode = $LASTEXITCODE
+  $nativeOutput = @()
+  $exitCode = $null
+  $previousErrorActionPreference = $ErrorActionPreference
+  try {
+    # Native stderr may contain non-fatal Node/Chromium warnings. Capture it as
+    # evidence without allowing ErrorActionPreference=Stop to turn a zero exit
+    # code into a PowerShell terminating error.
+    $ErrorActionPreference = 'Continue'
+    $nativeOutput = @(& $Executable @Arguments 2>&1)
+    $exitCode = $LASTEXITCODE
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
+  }
+  $nativeLines = @($nativeOutput | ForEach-Object { $_.ToString() })
+  if ($nativeLines.Count -gt 0) {
+    $nativeLines | Tee-Object -FilePath $logPath
+  } else {
+    [System.IO.File]::WriteAllText($logPath, '', $Utf8NoBom)
+  }
   Assert-True ($exitCode -eq 0) "native command failed with exit code $exitCode; see $LogName"
   return $LogName
 }

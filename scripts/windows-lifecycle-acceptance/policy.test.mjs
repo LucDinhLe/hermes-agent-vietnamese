@@ -152,6 +152,15 @@ test('guest parameters never shadow the read-only PowerShell HOME variable', () 
   assert.match(guestScript, /\[string\]\$HermesHome/)
 })
 
+test('native stderr warnings are logged while the native exit code remains authoritative', () => {
+  const nativeLogger = guestScript.match(/function Invoke-NativeLogged \{[\s\S]*?\r?\n\}/)?.[0] ?? ''
+  assert.match(nativeLogger, /\$ErrorActionPreference = 'Continue'/)
+  assert.match(nativeLogger, /\$nativeOutput = @\(& \$Executable @Arguments 2>&1\)/)
+  assert.match(nativeLogger, /\$exitCode = \$LASTEXITCODE/)
+  assert.match(nativeLogger, /Assert-True \(\$exitCode -eq 0\)/)
+  assert.doesNotMatch(nativeLogger, /2>&1 \| Tee-Object/)
+})
+
 test('sandbox configuration disables host-facing channels and maps only evidence writable', () => {
   const xml = buildWindowsSandboxConfig({
     evidenceDir: 'C:\\Evidence & Results',
