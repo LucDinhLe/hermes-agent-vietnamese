@@ -264,7 +264,7 @@ Các checkpoint đã hoàn thành trên `feat/v32-token-context-ux`:
 - `853af78fe`: manual Skill toggle giữ `skills.allowed` đồng bộ.
 - `5d87c54e4`: API capability profile-scoped dùng config writer/lock hiện hữu.
 - Lát cắt Desktop tiếp theo đã nối client API, trang **Work Profile** trong
-  Settings và first-run work setup với preview/edit/Save/Skip. Mọi mutation
+  Settings và first-run work setup với preview/edit/Back/Save/Skip. Mọi mutation
   chỉ xảy ra sau Save hoặc Skip; mở Settings và preview không ghi config. Chuỗi
   mới có đủ `en`, `vi`, `ja`, `zh`, `zh-hant` và fallback `ar`.
 
