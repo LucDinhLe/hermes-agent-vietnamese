@@ -472,7 +472,11 @@ async function runConfiguredPhase(context: LifecycleContext): Promise<void> {
 const actionConfigured = process.env.HERMES_LIFECYCLE_ACTION !== undefined
 
 test.describe('v32 Windows Sandbox lifecycle phase', () => {
-  test.describe.configure({ mode: 'serial', timeout: 360_000 })
+  // Every phase mutates a real installed profile. A Playwright retry would
+  // reuse that dirty state and replace the original failure with a misleading
+  // "first run must be empty" error, so the lifecycle harness retries only by
+  // starting a fresh disposable VM.
+  test.describe.configure({ mode: 'serial', retries: 0, timeout: 360_000 })
   test.skip(!actionConfigured, 'Lifecycle harness controls are absent; this spec is sandbox-only.')
 
   test('runs one exact, guest-isolated lifecycle action', async () => {

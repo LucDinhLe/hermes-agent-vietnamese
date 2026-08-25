@@ -25,6 +25,7 @@ const lifecycleSpec = fs.readFileSync(
   new URL('../../apps/desktop/e2e/v32-lifecycle-acceptance.spec.ts', import.meta.url),
   'utf8'
 )
+const fixtureScript = fs.readFileSync(new URL('../../apps/desktop/e2e/fixtures.ts', import.meta.url), 'utf8')
 
 const candidate = {
   commit: V32_CANDIDATE_COMMIT,
@@ -193,6 +194,14 @@ test('lifecycle E2E accepts only the isolation mode already validated by the gue
   assert.match(lifecycleSpec, /isStrictlyWithin\(HOSTED_EVIDENCE_ROOT, evidenceRoot\)/)
   assert.match(lifecycleSpec, /isStrictlyWithin\(evidenceRoot, screenshotPath\)/)
   assert.match(lifecycleSpec, /unsupported HERMES_LIFECYCLE_ISOLATION_MODE/)
+})
+
+test('localized onboarding readiness uses the overlay contract and never retries a dirty lifecycle profile', () => {
+  const onboardingWait = fixtureScript.match(/export async function waitForOnboarding[\s\S]*?\r?\n\}/)?.[0] ?? ''
+  assert.match(onboardingWait, /locator\('\[class\*=\"z-\(--z-onboarding\)\"\]'\)/)
+  assert.match(onboardingWait, /overlay\.locator\('button'\)\.first\(\)\.waitFor/)
+  assert.doesNotMatch(onboardingWait, /text\.includes/)
+  assert.match(lifecycleSpec, /test\.describe\.configure\(\{ mode: 'serial', retries: 0, timeout: 360_000 \}\)/)
 })
 
 test('sandbox configuration disables host-facing channels and maps only evidence writable', () => {

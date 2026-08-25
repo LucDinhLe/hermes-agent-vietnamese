@@ -780,29 +780,13 @@ export async function waitForAppReady(
  * Wait for the onboarding overlay to appear (no provider configured).
  */
 export async function waitForOnboarding(page: Page, timeoutMs = 60_000): Promise<void> {
-  // The onboarding overlay contains a heading with "Choose your provider"
-  // or similar text. We look for any text that indicates the picker.
-  await page.waitForFunction(
-    () => {
-      const root = document.getElementById('root')
+  // Bind readiness to the onboarding overlay's dedicated stacking rung, not
+  // English copy. Release candidates can be localized while retaining the
+  // same interactive overlay contract.
+  const overlay = page.locator('[class*="z-(--z-onboarding)"]').filter({ has: page.locator('h2') })
 
-      if (!root) {
-        return false
-      }
-
-      const text = root.textContent ?? ''
-
-      return (
-        text.includes('provider') ||
-        text.includes('Provider') ||
-        text.includes('Choose') ||
-        text.includes('API key') ||
-        text.includes('Sign in')
-      )
-    },
-    undefined,
-    { timeout: timeoutMs }
-  )
+  await overlay.waitFor({ state: 'visible', timeout: timeoutMs })
+  await overlay.locator('button').first().waitFor({ state: 'visible', timeout: timeoutMs })
 }
 
 /**
