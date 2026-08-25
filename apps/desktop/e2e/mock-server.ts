@@ -82,6 +82,50 @@ export interface ScriptedTurn {
   }>
 }
 
+/**
+ * Keep scripted model output inside the exact tool schema advertised by the
+ * resident agent. Lean sessions deliberately defer built-in tools behind the
+ * `tool_call` bridge, so emitting a direct `todo` call there tests a model
+ * hallucination instead of exercising the granted safe tool. Full sessions
+ * still receive the original direct call when that schema is advertised.
+ */
+function adaptScriptedTurnToAdvertisedTools(
+  turn: ScriptedTurn,
+  advertisedTools: unknown,
+): ScriptedTurn {
+  if (!turn.toolCalls?.length || !Array.isArray(advertisedTools)) {
+    return turn
+  }
+
+  const advertisedNames = new Set(
+    advertisedTools
+      .map((tool: any) => tool?.function?.name)
+      .filter((name: unknown): name is string => typeof name === 'string' && name.length > 0),
+  )
+
+  if (!advertisedNames.has('tool_call')) {
+    return turn
+  }
+
+  let adapted = false
+  const toolCalls = turn.toolCalls.map((toolCall) => {
+    if (advertisedNames.has(toolCall.name)) {
+      return toolCall
+    }
+
+    adapted = true
+    return {
+      name: 'tool_call',
+      args: {
+        name: toolCall.name,
+        arguments: toolCall.args,
+      },
+    }
+  })
+
+  return adapted ? { ...turn, toolCalls } : turn
+}
+
 const INTERIM_SCRIPT: ScriptedTurn[] = [
   {
     text: 'Let me start by planning the approach.',
@@ -477,9 +521,9 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
             _taskPanelResumeIndex++
             const respond = () => {
               if (stream) {
-                streamScriptedTurn(res, model, turn)
+                streamScriptedTurn(res, model, turn, parsed.tools)
               } else {
-                nonStreamingScriptedTurn(res, model, turn)
+                nonStreamingScriptedTurn(res, model, turn, parsed.tools)
               }
             }
 
@@ -495,9 +539,9 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
 
           if (includesBlockingClarifyTrigger(parsed.messages)) {
             if (stream) {
-              streamScriptedTurn(res, model, BLOCKING_CLARIFY_TURN)
+              streamScriptedTurn(res, model, BLOCKING_CLARIFY_TURN, parsed.tools)
             } else {
-              nonStreamingScriptedTurn(res, model, BLOCKING_CLARIFY_TURN)
+              nonStreamingScriptedTurn(res, model, BLOCKING_CLARIFY_TURN, parsed.tools)
             }
             return
           }
@@ -506,9 +550,9 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
             const turn = QUEUE_STOP_SCRIPT[_queueStopIndex] ?? QUEUE_STOP_SCRIPT[QUEUE_STOP_SCRIPT.length - 1]
             _queueStopIndex++
             if (stream) {
-              streamScriptedTurn(res, model, turn)
+              streamScriptedTurn(res, model, turn, parsed.tools)
             } else {
-              nonStreamingScriptedTurn(res, model, turn)
+              nonStreamingScriptedTurn(res, model, turn, parsed.tools)
             }
             return
           }
@@ -518,9 +562,9 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
             const turn = script[_verificationStopIndex] ?? script[script.length - 1]
             _verificationStopIndex++
             if (stream) {
-              streamScriptedTurn(res, model, turn)
+              streamScriptedTurn(res, model, turn, parsed.tools)
             } else {
-              nonStreamingScriptedTurn(res, model, turn)
+              nonStreamingScriptedTurn(res, model, turn, parsed.tools)
             }
             return
           }
@@ -529,9 +573,9 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
             const turn = CORRECTION_SWITCH_SCRIPT[_correctionSwitchIndex] ?? CORRECTION_SWITCH_SCRIPT[CORRECTION_SWITCH_SCRIPT.length - 1]
             _correctionSwitchIndex++
             if (stream) {
-              streamScriptedTurn(res, model, turn)
+              streamScriptedTurn(res, model, turn, parsed.tools)
             } else {
-              nonStreamingScriptedTurn(res, model, turn)
+              nonStreamingScriptedTurn(res, model, turn, parsed.tools)
             }
             return
           }
@@ -542,9 +586,9 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
             _sidebarCrossIndex++
 
             if (stream) {
-              streamScriptedTurn(res, model, turn)
+              streamScriptedTurn(res, model, turn, parsed.tools)
             } else {
-              nonStreamingScriptedTurn(res, model, turn)
+              nonStreamingScriptedTurn(res, model, turn, parsed.tools)
             }
             return
           }
@@ -554,9 +598,9 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
             _sidebarScriptIndex++
 
             if (stream) {
-              streamScriptedTurn(res, model, turn)
+              streamScriptedTurn(res, model, turn, parsed.tools)
             } else {
-              nonStreamingScriptedTurn(res, model, turn)
+              nonStreamingScriptedTurn(res, model, turn, parsed.tools)
             }
             return
           }
@@ -565,9 +609,9 @@ export function startMockServer(options: MockServerOptions = {}): Promise<MockSe
             const turn = INTERIM_SCRIPT[_scriptIndex] ?? INTERIM_SCRIPT[INTERIM_SCRIPT.length - 1]
             _scriptIndex++
             if (stream) {
-              streamScriptedTurn(res, model, turn)
+              streamScriptedTurn(res, model, turn, parsed.tools)
             } else {
-              nonStreamingScriptedTurn(res, model, turn)
+              nonStreamingScriptedTurn(res, model, turn, parsed.tools)
             }
             return
           }
@@ -739,7 +783,9 @@ function streamScriptedTurn(
   res: ServerResponse,
   model: string,
   turn: ScriptedTurn,
+  advertisedTools?: unknown,
 ): void {
+  turn = adaptScriptedTurnToAdvertisedTools(turn, advertisedTools)
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -810,7 +856,9 @@ function nonStreamingScriptedTurn(
   res: ServerResponse,
   model: string,
   turn: ScriptedTurn,
+  advertisedTools?: unknown,
 ): void {
+  turn = adaptScriptedTurnToAdvertisedTools(turn, advertisedTools)
   const hasToolCalls = turn.toolCalls && turn.toolCalls.length > 0
   const finishReason = hasToolCalls ? 'tool_calls' : 'stop'
 

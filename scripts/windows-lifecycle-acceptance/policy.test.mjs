@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import test from 'node:test'
 
+import { restartMockServer, startMockServer } from '../../apps/desktop/e2e/mock-server.ts'
+
 import {
   REQUIRED_LIFECYCLE_GATES,
   ROLLBACK_COMMIT,
@@ -218,6 +220,44 @@ test('safe tool-loop phases expose only the built-in todo toolset', () => {
     /context\.action === 'safe-tool' \|\| context\.action === 'verify-update'[\s\S]*?HERMES_TUI_TOOLSETS: 'todo'/
   )
   assert.doesNotMatch(lifecycleSpec, /HERMES_TUI_TOOLSETS: '(?:all|\*)'/)
+})
+
+test('mock safe tool loop follows the exact advertised lean bridge schema', async () => {
+  restartMockServer()
+  const mock = await startMockServer()
+
+  try {
+    const response = await fetch(`${mock.url}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [{ role: 'user', content: 'E2E_INTERIM_TRIGGER' }],
+        model: 'mock-model',
+        stream: false,
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'tool_call',
+              parameters: { type: 'object' }
+            }
+          }
+        ]
+      })
+    })
+
+    assert.equal(response.status, 200)
+    const payload = await response.json()
+    const call = payload.choices[0].message.tool_calls[0]
+    const args = JSON.parse(call.function.arguments)
+    assert.equal(call.function.name, 'tool_call')
+    assert.equal(args.name, 'todo')
+    assert.deepEqual(args.arguments, {
+      todos: [{ id: '1', content: 'Plan', status: 'in_progress' }]
+    })
+  } finally {
+    await mock.close()
+  }
 })
 
 test('sandbox configuration disables host-facing channels and maps only evidence writable', () => {
