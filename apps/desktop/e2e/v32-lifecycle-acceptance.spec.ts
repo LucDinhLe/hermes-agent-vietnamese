@@ -370,6 +370,45 @@ async function captureEvidence(page: Page, context: LifecycleContext): Promise<v
   }
 }
 
+async function clickTopmostVisibleButton(page: Page, name: RegExp, timeout = 30_000): Promise<void> {
+  const buttons = page.getByRole('button', { name })
+  let hitTargetIndex = -1
+
+  await expect
+    .poll(
+      async () => {
+        hitTargetIndex = -1
+
+        for (let index = (await buttons.count()) - 1; index >= 0; index -= 1) {
+          const button = buttons.nth(index)
+
+          if (!(await button.isVisible())) {
+            continue
+          }
+
+          const receivesPointer = await button.evaluate(element => {
+            const rect = element.getBoundingClientRect()
+            const hitTarget = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+
+            return hitTarget !== null && (hitTarget === element || element.contains(hitTarget))
+          })
+
+          if (receivesPointer) {
+            hitTargetIndex = index
+
+            break
+          }
+        }
+
+        return hitTargetIndex
+      },
+      { timeout }
+    )
+    .toBeGreaterThanOrEqual(0)
+
+  await buttons.nth(hitTargetIndex).click()
+}
+
 async function openGuiUninstall(page: Page, mode: 'full' | 'lite'): Promise<void> {
   // The public Windows settings shortcut is intentionally global, including
   // while the composer owns focus. Use that real user path here because the
@@ -378,28 +417,21 @@ async function openGuiUninstall(page: Page, mode: 'full' | 'lite'): Promise<void
   // testing before it could exercise the uninstall UI at all.
   await page.keyboard.press('Control+,')
 
-  const about = page.getByRole('button', { name: /^(About|Giới thiệu)$/i })
-  await expect(about).toBeVisible({ timeout: 30_000 })
-  await about.click()
+  await clickTopmostVisibleButton(page, /^(About|Giới thiệu)$/i)
 
-  const option =
+  const optionName =
     mode === 'lite'
-      ? page.getByRole('button', {
-          name: /^(Uninstall GUI \+ agent, keep my data|Gỡ giao diện và AI agent, giữ dữ liệu)/i
-        })
-      : page.getByRole('button', {
-          name: /^(Uninstall everything|Gỡ toàn bộ Hermes Vietnamese)/i
-        })
+      ? /^(Uninstall GUI \+ agent, keep my data|Gỡ giao diện và AI agent, giữ dữ liệu)/i
+      : /^(Uninstall everything|Gỡ toàn bộ Hermes Vietnamese)/i
 
-  await expect(option).toBeVisible({ timeout: 60_000 })
-  await option.click()
+  await clickTopmostVisibleButton(page, optionName, 60_000)
   await expect(page.getByText(/^(Confirm uninstall|Xác nhận gỡ cài đặt)$/i)).toBeVisible()
 }
 
 async function confirmGuiUninstall(running: RunningApp): Promise<void> {
   const child = running.app.process()
 
-  await running.page.getByRole('button', { name: /^(Yes, uninstall|Đồng ý, gỡ cài đặt)$/i }).click()
+  await clickTopmostVisibleButton(running.page, /^(Yes, uninstall|Đồng ý, gỡ cài đặt)$/i)
   await expect.poll(() => child.exitCode !== null || child.signalCode !== null, { timeout: 120_000 }).toBe(true)
   expect(child.signalCode).toBeNull()
   expect(child.exitCode).toBe(0)
