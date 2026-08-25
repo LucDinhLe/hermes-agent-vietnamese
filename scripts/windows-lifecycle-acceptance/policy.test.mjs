@@ -237,8 +237,10 @@ test('GUI uninstall opens Settings through its global Windows shortcut before us
   assert.match(uninstallHelper, /clickTopmostVisibleButton\(page, optionName, 60_000\)/)
   assert.doesNotMatch(uninstallHelper, /Open settings|Mở cài đặt/)
   assert.match(pointerHelper, /document\.elementFromPoint/)
-  assert.match(pointerHelper, /element\.contains\(hitTarget\)/)
-  assert.match(pointerHelper, /await buttons\.nth\(hitTargetIndex\)\.click\(\)/)
+  assert.match(pointerHelper, /const element = await button\.elementHandle\(\)/)
+  assert.match(pointerHelper, /node\.contains\(hitTarget\)/)
+  assert.match(pointerHelper, /await element\.click\(\{ timeout: 1_000 \}\)/)
+  assert.doesNotMatch(pointerHelper, /hitTargetIndex|buttons\.nth\(hitTargetIndex\)/)
   assert.doesNotMatch(pointerHelper, /dispatchEvent|evaluate\([^)]*\.click/)
 })
 

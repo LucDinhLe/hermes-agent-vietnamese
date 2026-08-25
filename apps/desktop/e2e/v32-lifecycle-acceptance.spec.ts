@@ -372,13 +372,10 @@ async function captureEvidence(page: Page, context: LifecycleContext): Promise<v
 
 async function clickTopmostVisibleButton(page: Page, name: RegExp, timeout = 30_000): Promise<void> {
   const buttons = page.getByRole('button', { name })
-  let hitTargetIndex = -1
 
   await expect
     .poll(
       async () => {
-        hitTargetIndex = -1
-
         for (let index = (await buttons.count()) - 1; index >= 0; index -= 1) {
           const button = buttons.nth(index)
 
@@ -386,27 +383,44 @@ async function clickTopmostVisibleButton(page: Page, name: RegExp, timeout = 30_
             continue
           }
 
-          const receivesPointer = await button.evaluate(element => {
-            const rect = element.getBoundingClientRect()
-            const hitTarget = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+          // Keep the exact handle that passed hit-testing. Settings contains a
+          // responsive navigation copy behind the modal; re-resolving the
+          // locator after this check can select that covered copy if React
+          // reorders the matching nodes between animation frames.
+          const element = await button.elementHandle()
 
-            return hitTarget !== null && (hitTarget === element || element.contains(hitTarget))
-          })
+          if (element === null) {
+            continue
+          }
 
-          if (receivesPointer) {
-            hitTargetIndex = index
+          try {
+            const receivesPointer = await element.evaluate(node => {
+              const rect = node.getBoundingClientRect()
+              const hitTarget = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
 
-            break
+              return hitTarget !== null && (hitTarget === node || node.contains(hitTarget))
+            })
+
+            if (!receivesPointer) {
+              continue
+            }
+
+            await element.click({ timeout: 1_000 })
+
+            return true
+          } catch {
+            // A responsive Settings render may detach a previously visible
+            // node. Rescan and click only a newly hit-testable exact handle.
+          } finally {
+            await element.dispose()
           }
         }
 
-        return hitTargetIndex
+        return false
       },
       { timeout }
     )
-    .toBeGreaterThanOrEqual(0)
-
-  await buttons.nth(hitTargetIndex).click()
+    .toBe(true)
 }
 
 async function openGuiUninstall(page: Page, mode: 'full' | 'lite'): Promise<void> {
