@@ -1,5 +1,19 @@
 # Tiến độ
 
+## Cập nhật 2026-08-26 — API work profile profile-scoped
+
+- Thêm API đọc state, local recommendation, apply/skip và local task discovery
+  trên Skills router hiện hữu; request có thể nhắm named profile và không làm
+  rò state sang profile chạy dashboard.
+- Recommendation/discovery chỉ đọc, dùng mapping cục bộ và báo 0 model attempt,
+  không provider/network. Apply dùng `_CONFIG_MUTATION_LOCK`, config writer
+  chuẩn và từ chối Skill chưa cài trước khi ghi.
+- Canonical runner đạt 63/63 trên 5 file: capability contract, bundled sync,
+  manual toggle, profile-scoped Skills API và event-loop/off-thread regression.
+  Tất cả dùng `HERMES_HOME` tạm; profile Hermes thật không bị đọc hoặc sửa.
+- Bước nhỏ tiếp theo: nối First-run và Settings UI vào API này, cập nhật đầy đủ
+  locale `vi`, `en`, `ja`, `zh`, `zh-hant`, rồi chạy component/a11y tests.
+
 ## Cập nhật 2026-08-26 — lát cắt B, allowlist fail-closed và dò Skill cục bộ
 
 - Tiếp quản trên `feat/v32-token-context-ux` tại `551b46e69`; giữ nguyên
