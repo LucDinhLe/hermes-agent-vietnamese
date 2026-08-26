@@ -184,6 +184,26 @@
 - Bước nhỏ tiếp theo: nối backend API profile-scoped bằng
   `_CONFIG_MUTATION_LOCK`, `load_config`/`save_config`; manual toggle phải cập
   nhật `skills.allowed` khi work profile tồn tại và giữ legacy behavior.
+## Cập nhật 2026-08-26 — đồng bộ sidebar Dự án/phiên cho candidate `vi-v0.32.0-4`
+
+- Audit hai trạng thái sidebar xác nhận `vi-v0.32.0-3` mới chữa lỗi scope làm
+  người dùng tưởng mất phiên; candidate đó chưa đồng bộ giao diện. Tổng quan chỉ
+  xem trước ba phiên mà không báo phần còn lại, còn khi mở dự án thì tiêu đề đổi
+  thành tên dự án và hàng dự án/nút xổ xuống biến mất.
+- Source fix giữ tiêu đề **Dự án** ở cả hai trạng thái; dự án đang mở vẫn là
+  hàng có biểu tượng, menu, nút xổ xuống và phần thân đầy đủ. Tổng quan báo đúng
+  **Hiển thị thêm N phiên** và mở full view. Không thay đổi database hoặc vòng
+  đời phiên.
+- Thêm hai regression giao diện cho số phiên bị cắt và entered-project disclosure.
+  Lát cắt trực tiếp đạt 71/71; toàn UI đạt 4.957/4.957; backend project contract
+  đạt 60/60; lifecycle policy đạt 4/4; Desktop typecheck, ESLint, Prettier và
+  `git diff --check` đạt.
+- Hai test phụ ngoài gate dùng literal đường dẫn POSIX (`/tmp`, `/a`) không tương
+  thích kỳ vọng chuẩn hóa đường dẫn Windows; 74 test còn lại trong lượt mở rộng
+  đạt. Đây là khác biệt test theo nền tảng, không phải lỗi dữ liệu.
+- `vi-v0.32.0-3` giữ nguyên byte và không được vá đè. Candidate tiếp theo là
+  `vi-v0.32.0-4`; chưa build, chưa cài hồ sơ thật, chưa tag/release/đổi Latest.
+
 ## Cập nhật 2026-08-26 — sự cố tưởng mất phiên khi mở Dự án trên v32
 
 - Audit read-only hồ sơ Hermes thật xác nhận `state.db` còn đủ 11 phiên và 752

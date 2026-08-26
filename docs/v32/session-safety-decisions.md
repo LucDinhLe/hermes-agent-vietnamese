@@ -74,6 +74,18 @@ Candidate không được GO nếu thiếu một trong các bằng chứng:
 - Sau Ẩn/Xóa, `projects.tree` phải tái phân loại toàn bộ phiên sang workspace tự
   nhận diện hoặc Home; không phiên nào được rơi khỏi `scoped_session_ids`.
 
+### SS-008 — Một mô hình hiển thị Dự án/phiên
+
+- Phần sidebar ở chế độ nhóm luôn mang tên **Dự án**; mở một dự án không được
+  biến phần này thành một danh sách phiên phẳng có cấu trúc khác.
+- Dự án đang mở vẫn phải hiện thành một hàng có biểu tượng, menu và nút xổ
+  xuống. Khi mở nút xổ xuống, phần thân hiển thị đầy đủ cây phiên đã hydrate.
+- Màn hình tổng quan được phép xem trước tối đa ba phiên để giữ gọn, nhưng nếu
+  còn phiên chưa hiện phải báo đúng **Hiển thị thêm N phiên** và mở được danh
+  sách đầy đủ; không được im lặng làm người dùng tưởng chỉ có ba phiên.
+- Mở, thu gọn hoặc thoát một hàng Dự án chỉ đổi trạng thái giao diện, không được
+  thay đổi `hidden`, `archived`, số phiên hoặc số tin nhắn.
+
 ## Áp dụng cho v32.1
 
 Các quyết định này là release blocker, không phải việc cải thiện sau phát hành.
