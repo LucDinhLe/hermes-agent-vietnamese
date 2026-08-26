@@ -10,6 +10,7 @@ import {
   liveSessionProjectId,
   mergeRepoWorktreeGroups,
   NO_PROJECT_ID,
+  otherProjectSessionCount,
   overlayLiveLanes,
   overlayLivePreviews,
   sessionProjectColor,
@@ -478,6 +479,19 @@ const homeNode = (sessions: SessionInfo[]): SidebarProjectTree =>
     ],
     sessionCount: sessions.length
   })
+
+describe('otherProjectSessionCount', () => {
+  it('keeps the exact number of sessions outside the entered project visible', () => {
+    const projects = [
+      projectNode({ id: NO_PROJECT_ID, isNoProject: true, sessionCount: 4 }),
+      projectNode({ id: 'p_entered', sessionCount: 3 }),
+      projectNode({ id: 'p_other', sessionCount: 5 })
+    ]
+
+    expect(otherProjectSessionCount(projects, 'p_entered')).toBe(9)
+    expect(otherProjectSessionCount(projects, NO_PROJECT_ID)).toBe(8)
+  })
+})
 
 describe('liveSessionProjectId', () => {
   it('maps a brand-new (unpersisted) session to its auto project (the repo root)', () => {

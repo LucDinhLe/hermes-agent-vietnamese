@@ -12,7 +12,6 @@ import { desktopDefaultCwd, isDesktopFsRemoteMode, selectDesktopPaths, writeDesk
 import { desktopGit, isGitEndpointMissingError } from '@/lib/desktop-git'
 import { isMissingRpcMethod } from '@/lib/gateway-rpc'
 import { isUnderPath } from '@/lib/path-compare'
-import { persistentAtom } from '@/lib/persisted'
 import { $gateway, activeGateway, ensureActiveGatewayOpen } from '@/store/gateway'
 import { setSidebarAgentsGrouped } from '@/store/layout'
 import { notify } from '@/store/notifications'
@@ -48,9 +47,7 @@ export const $activeProjectId = atom<null | string>(null)
 export const $projectTree = atom<SidebarProjectTree[]>([])
 export const $projectTreeLoading = atom(false)
 
-export type ProjectTreeOwner =
-  | { connectionId: string; profile: string; scope: 'profile' }
-  | { scope: 'all-profiles' }
+export type ProjectTreeOwner = { connectionId: string; profile: string; scope: 'profile' } | { scope: 'all-profiles' }
 
 // Provenance of the currently cached projects.tree snapshot. The tree is
 // deliberately retained on refresh failure, so consumers that persist data
@@ -155,17 +152,13 @@ export const $reposScanning = atom(false)
 // The sidebar's grouped view is a project switcher: ALL_PROJECTS shows the
 // project overview (a list you drill into), and a concrete id means you've
 // "entered" that project so only its worktrees/branches/sessions show. This is
-// pure view state (localStorage), distinct from the durable active-project
-// pointer in projects.db — though entering a project also makes it active so new
-// chats land there, exactly as selecting a profile does.
+// deliberately EPHEMERAL view state: persisting it across app restarts made a
+// healthy global session history look deleted. The durable active-project
+// pointer remains separate in projects.db so new chats can still land in the
+// user's chosen project without filtering the next launch.
 export const ALL_PROJECTS = '__all_projects__'
 
-const PROJECT_SCOPE_KEY = 'hermes.desktop.projectScope'
-
-export const $projectScope = persistentAtom<string>(PROJECT_SCOPE_KEY, ALL_PROJECTS, {
-  decode: raw => raw || ALL_PROJECTS,
-  encode: value => value || ALL_PROJECTS
-})
+export const $projectScope = atom<string>(ALL_PROJECTS)
 
 // Enter a project: scope the sidebar to it and make it the active project
 // (best-effort — the durable pointer is nice-to-have, the view scope is the

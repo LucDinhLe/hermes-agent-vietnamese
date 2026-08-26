@@ -119,6 +119,18 @@ export const DEFAULT_BRANCH_LABEL = 'main'
 export const NO_PROJECT_ID = '__no_project__'
 
 /**
+ * Exact number of sessions outside the entered project, using the backend's
+ * authoritative, disjoint project totals. Keeping this visible prevents a
+ * scoped project view from being mistaken for session deletion.
+ */
+export function otherProjectSessionCount(projects: readonly SidebarProjectTree[], enteredProjectId: string): number {
+  const total = projects.reduce((sum, project) => sum + Math.max(0, project.sessionCount || 0), 0)
+  const entered = projects.find(project => project.id === enteredProjectId)?.sessionCount ?? 0
+
+  return Math.max(0, total - Math.max(0, entered))
+}
+
+/**
  * A session with nowhere to be placed: no cwd and no recorded repo root. These
  * are the rows the Home bucket owns, and the only ones the live overlay can
  * hand it — a row WITH a cwd that the backend still couldn't place (junk root,

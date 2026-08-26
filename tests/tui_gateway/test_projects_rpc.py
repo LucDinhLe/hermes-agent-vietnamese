@@ -285,6 +285,27 @@ def test_delete_removes_project(tmp_path):
     assert "projects.delete" in server._methods
 
 
+def test_project_lifecycle_never_hides_archives_or_deletes_sessions(tmp_path):
+    db = server._get_db()
+    session_id = "project-safety-session"
+    db.create_session(session_id, "cli", cwd=str(tmp_path))
+    before = db.get_session(session_id)
+
+    created = _call(
+        "projects.create", {"name": "Safety", "folders": [str(tmp_path)]}
+    )["project"]
+    _call("projects.archive", {"id": created["id"]})
+    _call("projects.archive", {"id": created["id"], "restore": True})
+    _call("projects.delete", {"id": created["id"]})
+
+    after = db.get_session(session_id)
+    assert after is not None
+    assert before is not None
+    assert after["id"] == before["id"]
+    assert after["hidden"] == before["hidden"] == 0
+    assert after["archived"] == before["archived"] == 0
+
+
 def test_discover_repos_is_registered_long_handler():
     assert "projects.discover_repos" in server._methods
     assert "projects.discover_repos" in server._LONG_HANDLERS
@@ -292,19 +313,37 @@ def test_discover_repos_is_registered_long_handler():
     assert "projects.record_repos" in server._LONG_HANDLERS
 
 
-def test_record_repos_persists_and_shows_zero_session_repo(tmp_path):
+def test_record_repos_persists_and_shows_zero_session_repo(monkeypatch, tmp_path):
     repo = tmp_path / "fresh-repo"
     repo.mkdir()
+    policy = {"enabled": True, "roots": [], "exclude_paths": []}
+    monkeypatch.setattr(
+        server,
+        "_load_cfg",
+        lambda: {
+            "desktop": {
+                "repo_scan_enabled": True,
+                "repo_scan_roots": [],
+                "repo_scan_exclude_paths": [],
+            }
+        },
+    )
 
     # Repo-first: a scanned repo with no hermes sessions still surfaces.
-    _call("projects.record_repos", {"repos": [{"root": str(repo), "label": "fresh-repo"}]})
+    _call(
+        "projects.record_repos",
+        {
+            "repos": [{"root": str(repo), "label": "fresh-repo"}],
+            "discovery_policy": policy,
+        },
+    )
 
     by_label = {r["label"]: r for r in _call("projects.discover_repos")["repos"]}
     assert "fresh-repo" in by_label
     assert by_label["fresh-repo"]["sessions"] == 0
 
 
-def test_scan_time_is_not_treated_as_session_activity(tmp_path):
+def test_scan_time_is_not_treated_as_session_activity(monkeypatch, tmp_path):
     """A scanned repo with no sessions must not rank as recently active.
 
     ``discovered_repos.last_seen`` records when the disk scan last saw the
@@ -319,10 +358,25 @@ def test_scan_time_is_not_treated_as_session_activity(tmp_path):
 
     never_opened = tmp_path / "never-opened"
     never_opened.mkdir()
+    policy = {"enabled": True, "roots": [], "exclude_paths": []}
+    monkeypatch.setattr(
+        server,
+        "_load_cfg",
+        lambda: {
+            "desktop": {
+                "repo_scan_enabled": True,
+                "repo_scan_roots": [],
+                "repo_scan_exclude_paths": [],
+            }
+        },
+    )
 
     _call(
         "projects.record_repos",
-        {"repos": [{"root": str(never_opened)}, {"root": str(worked_in)}]},
+        {
+            "repos": [{"root": str(never_opened)}, {"root": str(worked_in)}],
+            "discovery_policy": policy,
+        },
     )
 
     by_root = {r["root"]: r for r in _call("projects.discover_repos")["repos"]}
@@ -391,7 +445,28 @@ def test_disabled_discovery_clears_cache_and_rejects_new_scan(monkeypatch, tmp_p
         ["git", "init"], cwd=session_repo, check=True, capture_output=True
     )
     server._get_db().create_session("session-repo", "cli", cwd=str(session_repo))
-    _call("projects.record_repos", {"repos": [{"root": str(repo)}]})
+    monkeypatch.setattr(
+        server,
+        "_load_cfg",
+        lambda: {
+            "desktop": {
+                "repo_scan_enabled": True,
+                "repo_scan_roots": [],
+                "repo_scan_exclude_paths": [],
+            }
+        },
+    )
+    _call(
+        "projects.record_repos",
+        {
+            "repos": [{"root": str(repo)}],
+            "discovery_policy": {
+                "enabled": True,
+                "roots": [],
+                "exclude_paths": [],
+            },
+        },
+    )
 
     monkeypatch.setattr(
         server,
@@ -458,5 +533,3 @@ def test_nondefault_policy_rejects_stale_or_legacy_results(monkeypatch, tmp_path
     assert stale["accepted"] is False
     assert accepted["accepted"] is True
     assert any(item["root"] == str(root) for item in accepted["repos"])
-
-

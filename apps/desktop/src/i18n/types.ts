@@ -1862,7 +1862,7 @@ export interface Translations {
       enter: (label: string) => string
       reorder: (label: string) => string
       toggle: (label: string, open: boolean) => string
-      back: string
+      back: (otherSessionCount: number) => string
     }
     newSessionIn: (label: string) => string
     showMoreIn: (count: number, label: string) => string

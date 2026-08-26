@@ -45,21 +45,27 @@ phiên trong luồng tạo dự án; xóa dự án cũng để phiên quay về 
 ## Bản sửa
 
 - Bỏ độ mờ khỏi lối quay về và đổi nhãn thành thông điệp rõ rằng các phiên khác
-  vẫn còn.
+  vẫn còn, kèm số lượng chính xác nằm ngoài dự án đang mở.
+- Chuyển project scope thành trạng thái tạm thời; mở lại Hermes luôn trở về toàn
+  bộ dự án/phiên thay vì khôi phục bộ lọc của lần chạy trước.
 - Gắn nhãn **Tự động tìm thấy** lên kho do cơ chế quét phát hiện.
 - Thêm nút **Ẩn khỏi danh sách dự án** ngay trên thẻ kho tự dò.
+- Tắt tự dò kho git theo mặc định; người dùng phải chủ động bật trong Cài đặt.
+- Giữ `sessions.auto_prune=false` và `sessions.auto_archive=false` làm mặc định.
+- Khóa regression backend: tạo, lưu trữ, khôi phục và xóa dự án không được đổi
+  `hidden`/`archived` hoặc xóa phiên trong `state.db`.
 - Bổ sung regression khóa khả năng nhìn thấy/click lối thoát và khả năng nhận
   diện/ẩn kho tự dò.
 
 ## Xác minh
 
-- 10 tệp kiểm thử UI dự án: 134/134 đạt.
-- Hai ca hồi quy mới: chạy đỏ trước sửa, xanh sau sửa.
+- 15 tệp kiểm thử UI/dự án/cấu hình/i18n: 206/206 đạt.
+- Các ca hồi quy mới cho scope tạm thời, số phiên ngoài dự án và discovery
+  opt-in: chạy đỏ trước sửa, xanh sau sửa.
 - Desktop TypeScript typecheck: đạt.
 - ESLint trên toàn bộ tệp thay đổi: đạt.
-- Backend dự án trên Windows: 30/32 đạt. Hai lỗi còn lại chỉ do test dùng kỳ
-  vọng đường dẫn POSIX trên Windows (`/tmp/hermes` được chuẩn hóa thành
-  `C:\\tmp\\hermes`); không phải lỗi chức năng của lát cắt này.
+- Backend safety slice trên Windows: 27/27 đạt, gồm regression chứng minh vòng
+  đời dự án không ẩn, archive hoặc xóa phiên.
 - Hồ sơ thật không bị dùng để chạy test và không bị sửa trong quá trình audit.
 
 ## Trạng thái phát hành

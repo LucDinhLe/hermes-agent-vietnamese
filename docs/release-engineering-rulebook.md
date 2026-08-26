@@ -175,11 +175,15 @@ Chỉ dùng user/hồ sơ cô lập. Không đọc, nhập hoặc khôi phục d
 - [ ] Runtime/bootstrap, gateway và onboarding đạt.
 - [ ] Tạo/đổi tên phiên, kiểm tab phiên/Browser và panel phải.
 - [ ] Với hồ sơ có phiên cũ chưa gắn thư mục, tạo và mở một dự án rồi xác nhận
-      lối **Tất cả dự án** luôn dễ thấy, các phiên cũ vẫn truy cập được và không
-      phiên nào tự đổi sang hidden/archived hoặc bị xóa.
-- [ ] Kho git do Hermes tự dò phải được ghi rõ là tự động tìm thấy và có thao
-      tác ẩn ngay trong trang Dự án; không được trình bày như dự án người dùng
-      vừa tạo.
+      lối **Tất cả dự án** luôn dễ thấy, báo đúng số phiên nằm ngoài dự án, các
+      phiên đó vẫn truy cập được và không phiên nào tự đổi sang hidden/archived
+      hoặc bị xóa. Khởi động lại phải trở về toàn bộ dự án, không khôi phục scope
+      lọc cũ.
+- [ ] Tự dò kho git phải **tắt mặc định** và chỉ chạy sau khi người dùng bật.
+      Kho được tìm thấy phải có nhãn nguồn cùng thao tác ẩn ngay trong trang Dự
+      án; không được trình bày như dự án người dùng vừa tạo.
+- [ ] Regression backend phải chứng minh chuỗi tạo → lưu trữ → khôi phục →
+      xóa dự án không làm thay đổi hoặc xóa bất kỳ hàng nào trong `state.db`.
 - [ ] Connector Chrome và Edge dùng profile cô lập phải vượt fixture HTTP và
       HTTPS có non-default port: preview chỉ có metadata, import, persistence
       sau restart, revoke cả grant cũ/mới và quét redaction.

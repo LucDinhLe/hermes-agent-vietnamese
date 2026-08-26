@@ -2288,7 +2288,7 @@ export const vi = defineLocale({
       enter: label => `Mở ${label}`,
       reorder: label => `Sắp xếp lại ${label}`,
       toggle: (label, open) => `${open ? 'Hiển thị' : 'Ẩn'} ${label} phiên`,
-      back: 'Tất cả dự án · các phiên khác vẫn còn'
+      back: count => (count > 0 ? `Tất cả dự án · còn ${count} phiên khác` : 'Tất cả dự án')
     },
     newSessionIn: label => `Phiên mới trong ${label}`,
     showMoreIn: (count, label) => `Hiển thị thêm ${count} phiên trong ${label}`,
