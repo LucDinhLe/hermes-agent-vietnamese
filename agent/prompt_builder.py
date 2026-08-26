@@ -1765,6 +1765,7 @@ def build_skills_system_prompt(
     available_toolsets: "set[str] | None" = None,
     compact_categories: "frozenset[str] | None" = None,
     skills_dir_override: "Path | None" = None,
+    skill_names: "frozenset[str] | None" = None,
 ) -> str:
     """Build a compact skill index for the system prompt.
 
@@ -1780,11 +1781,16 @@ def build_skills_system_prompt(
     are read-only — they appear in the index but new skills are always created
     in the local dir.  Local skills take precedence when names collide.
 
+    ``skill_names`` is an exact per-agent receipt. ``None`` preserves legacy
+    behavior; an empty set renders no Skill index. It only narrows visibility
+    and never changes profile config or the process-wide prompt snapshot.
+
     ``compact_categories`` (e.g. from the coding posture — see
     agent/coding_context.py) demotes whole categories to a names-only line in
     the rendered index. Nothing is ever hidden: every skill name stays
     visible and loadable via ``skill_view`` / ``skills_list``; only the
-    descriptions are dropped, and a footer note explains the demotion.
+    descriptions are dropped, and a footer note explains the demotion. When an
+    exact ``skill_names`` receipt is supplied, only that receipt is visible.
     """
     # Home resolution is EXPLICIT when a caller passes skills_dir_override
     # (the agent knows its own profile home from its session_db path). This
@@ -1818,6 +1824,7 @@ def build_skills_system_prompt(
             available_toolsets,
             compact_categories,
             project_dirs=project_dirs,
+            skill_names=skill_names,
         )
     finally:
         if _home_token is not None:
@@ -1831,6 +1838,7 @@ def _build_skills_system_prompt_inner(
     available_toolsets: "set[str] | None",
     compact_categories: "frozenset[str] | None",
     project_dirs: "list[Path] | None" = None,
+    skill_names: "frozenset[str] | None" = None,
 ) -> str:
     # Include the resolved platform so per-platform disabled-skill lists
     # produce distinct cache entries (gateway serves multiple platforms).
@@ -1846,6 +1854,7 @@ def _build_skills_system_prompt_inner(
         _platform_hint,
         tuple(sorted(disabled)),
         tuple(sorted(compact_categories or ())),
+        None if skill_names is None else tuple(sorted(skill_names)),
     )
     with _SKILLS_PROMPT_CACHE_LOCK:
         cached = _SKILLS_PROMPT_CACHE.get(cache_key)
@@ -1870,6 +1879,10 @@ def _build_skills_system_prompt_inner(
                 continue
             skill_name = entry.get("skill_name") or ""
             frontmatter_name = entry.get("frontmatter_name") or skill_name
+            if skill_names is not None and not (
+                skill_name in skill_names or frontmatter_name in skill_names
+            ):
+                continue
             platforms = entry.get("platforms") or []
             if not skill_matches_platform_list(platforms):
                 continue
@@ -1895,6 +1908,11 @@ def _build_skills_system_prompt_inner(
             if not is_compatible:
                 continue
             skill_name = entry["skill_name"]
+            if skill_names is not None and not (
+                skill_name in skill_names
+                or entry["frontmatter_name"] in skill_names
+            ):
+                continue
             if entry["frontmatter_name"] in disabled or skill_name in disabled:
                 continue
             if not _skill_should_show(
@@ -1924,6 +1942,10 @@ def _build_skills_system_prompt_inner(
                         continue
                     entry = _build_snapshot_entry(skill_file, proj_dir, frontmatter, desc)
                     fm_name = entry["frontmatter_name"]
+                    if skill_names is not None and not (
+                        fm_name in skill_names or entry["skill_name"] in skill_names
+                    ):
+                        continue
                     if fm_name in project_names:
                         continue
                     if fm_name in disabled or entry["skill_name"] in disabled:
@@ -2023,6 +2045,10 @@ def _build_skills_system_prompt_inner(
                 entry = _build_snapshot_entry(skill_file, ext_dir, frontmatter, desc)
                 skill_name = entry["skill_name"]
                 frontmatter_name = entry["frontmatter_name"]
+                if skill_names is not None and not (
+                    skill_name in skill_names or frontmatter_name in skill_names
+                ):
+                    continue
                 if frontmatter_name in seen_skill_names:
                     continue
                 if frontmatter_name in disabled or skill_name in disabled:

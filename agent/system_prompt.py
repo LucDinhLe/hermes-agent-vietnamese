@@ -512,6 +512,7 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
             available_toolsets=avail_toolsets,
             compact_categories=_compact_cats or None,
             skills_dir_override=_agent_skills_dir(agent),
+            skill_names=getattr(agent, "_capability_skills", None),
         )
     else:
         skills_prompt = ""
@@ -778,6 +779,14 @@ def build_system_prompt_parts(agent: Any, system_message: Optional[str] = None) 
     # system message is one cache unit regardless of internal order.)
     if skills_prompt:
         volatile_parts.append(skills_prompt)
+    try:
+        from agent.capability_router import capability_recommendation_prompt
+
+        capability_recommendations = capability_recommendation_prompt(agent)
+        if capability_recommendations:
+            volatile_parts.append(capability_recommendations)
+    except Exception:
+        pass
 
     if agent._memory_store:
         if agent._memory_enabled:

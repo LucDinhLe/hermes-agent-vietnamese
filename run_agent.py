@@ -8800,7 +8800,9 @@ class AIAgent:
                 set_turn_governor,
             )
 
-            turn_governor = get_turn_governor()
+            turn_governor = get_turn_governor() or getattr(
+                self, "_active_turn_governor", None
+            )
             if turn_governor is None:
                 turn_governor = TurnGovernor(
                     turn_id=relay_turn_id,

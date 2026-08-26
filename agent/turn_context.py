@@ -733,6 +733,11 @@ def build_turn_context(
 
     # ── System prompt (cached per session for prefix caching) ──
     if agent._cached_system_prompt is None:
+        from agent.capability_router import initialize_new_session_capabilities
+
+        initialize_new_session_capabilities(
+            agent, original_user_message, conversation_history
+        )
         restore_or_build_system_prompt(agent, system_message, conversation_history)
 
     active_system_prompt = agent._cached_system_prompt

@@ -29,7 +29,7 @@ from contextvars import ContextVar
 import logging
 import threading
 import time
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any, Collection, Dict, List, Optional, Tuple
 
 from tools.registry import (
     CHECK_FN_CACHE_BYPASS,
@@ -1231,6 +1231,7 @@ def handle_function_call(
     disabled_toolsets: Optional[List[str]] = None,
     tool_profile: str = "full",
     tool_catalog_defs: Optional[List[Dict[str, Any]]] = None,
+    capability_skills: Optional[Collection[str]] = None,
 ) -> str:
     """
     Main function call dispatcher that routes calls to the tool registry.
@@ -1266,6 +1267,14 @@ def handle_function_call(
     if not isinstance(function_args, dict):
         function_args = {}
     _tool_middleware_trace = list(tool_request_middleware_trace or [])
+
+    if capability_skills is not None and function_name == "skill_manage":
+        return tool_error(
+            "skill_manage is not available inside a task-scoped capability "
+            "receipt. Recommend capability changes for user approval and a "
+            "new session/agent instead.",
+            error_type="capability_scope_read_only",
+        )
 
     # ── Tool Search bridge dispatch ──────────────────────────────────
     # tool_search and tool_describe are pure catalog reads — handle them
@@ -1315,6 +1324,12 @@ def handle_function_call(
                 ) or []
             except Exception:
                 current_defs = []
+        if capability_skills is not None:
+            current_defs = [
+                definition
+                for definition in current_defs
+                if (definition.get("function") or {}).get("name") != "skill_manage"
+            ]
         if function_name == _ts_mod.TOOL_SEARCH_NAME:
             return _return_bridge_result(
                 _ts_mod.dispatch_tool_search(
@@ -1383,6 +1398,7 @@ def handle_function_call(
                 disabled_toolsets=disabled_toolsets,
                 tool_profile=tool_profile,
                 tool_catalog_defs=current_defs,
+                capability_skills=capability_skills,
             )
 
     _tool_original_args = dict(function_args)
@@ -1533,6 +1549,12 @@ def handle_function_call(
                 # Prefer the caller-provided list so subagents can't overwrite
                 # the parent's tool set via the process-global.
                 sandbox_enabled = enabled_tools if enabled_tools is not None else _last_resolved_tool_names
+                if capability_skills is not None:
+                    sandbox_enabled = [
+                        name
+                        for name in sandbox_enabled
+                        if name not in {"skills_list", "skill_view", "skill_manage"}
+                    ]
                 def _dispatch(next_args: Dict[str, Any]) -> Any:
                     return registry.dispatch(
                         function_name, next_args,
@@ -1542,11 +1564,18 @@ def handle_function_call(
                     )
             else:
                 def _dispatch(next_args: Dict[str, Any]) -> Any:
+                    capability_kwargs = (
+                        {"capability_skills": frozenset(capability_skills)}
+                        if function_name in {"skills_list", "skill_view"}
+                        and capability_skills is not None
+                        else {}
+                    )
                     return registry.dispatch(
                         function_name, next_args,
                         task_id=task_id,
                         session_id=session_id,
                         user_task=user_task,
+                        **capability_kwargs,
                     )
             if skip_tool_execution_middleware:
                 result = _dispatch(function_args)

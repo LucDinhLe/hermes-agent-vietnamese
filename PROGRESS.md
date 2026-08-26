@@ -1,5 +1,34 @@
 # Tiến độ
 
+## Cập nhật 2026-08-26 — router Skill cho session/subagent mới
+
+- Session root mới và child agent nay dò metadata Skill cục bộ đúng một lần
+  trước request đầu. Profile có `skills.allowed` chỉ cấp các Skill khớp đã được
+  phép; match đã cài nhưng chưa allow trở thành recommendation có lý do. Legacy
+  profile không allowlist giữ nguyên hành vi.
+- Receipt tách `selected` và `recommended`, giới hạn selection tối đa 8, ghi
+  hash vào `session.model_config` trước khi tạo row và khôi phục fail-closed khi
+  resume. Prompt đã persist được dùng nguyên byte; call sau và resume không
+  phân loại lại hay bật/tắt Skill giữa phiên.
+- System prompt và `skills_list`/`skill_view` của agent task-scoped chỉ thấy
+  receipt được giao. `skill_manage` bị khóa, `tool_call` tiếp tục truyền scope,
+  còn `execute_code` không được sinh stub Skill để tránh đường vòng đọc hoặc
+  sửa Skill chưa được phép. Recommendation không ghi profile config.
+- Child giữ chính Root Token Governor kể cả khi worker mất ContextVar; regression
+  xác nhận model attempt của child được cộng vào breakdown `subagent`. Kết quả
+  delegate trả cả selected/recommended/reason và bằng chứng 0 model/provider/
+  network call cho bước routing; parent prompt đang chạy không đổi byte.
+- Canonical source gate đạt 278/278, 1 skip trên 13 file cho capability contract,
+  session init/resume, prompt builder, delegate, Tool Search, model dispatch và
+  Turn Governor. `git diff --check` đạt. Không live probe, build, provider call,
+  mạng, profile Hermes thật, push hay hành động public.
+- Một lượt thăm dò rộng hơn còn ba assertion đường dẫn POSIX có sẵn trên
+  Windows (`test_system_prompt.py` một ca, `test_skills_tool.py` hai ca); mã bị
+  lỗi nằm ngoài phần thay đổi và không được ghi nhận là gate xanh.
+- Bước nhỏ tiếp theo: benchmark exact số ký tự/token cho full catalog, parent,
+  session và child (bao gồm simple prompt); sau đó mới khóa MCP permission router
+  fail-closed, không tự cài/đăng nhập/cấp quyền.
+
 ## Cập nhật 2026-08-26 — marker khai sinh chỉ dành cho profile mới
 
 - Thêm marker `skills.work_profile.onboarding_required` tại đúng hai điểm khai

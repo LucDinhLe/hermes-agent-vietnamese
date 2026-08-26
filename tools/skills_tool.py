@@ -801,7 +801,11 @@ def _sort_skills(skills: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sorted(skills, key=lambda s: (s.get("category") or "", s["name"]))
 
 
-def skills_list(category: str = None, task_id: str = None) -> str:
+def skills_list(
+    category: str = None,
+    task_id: str = None,
+    allowed_skills: frozenset[str] | None = None,
+) -> str:
     """
     List all available skills (progressive disclosure tier 1 - minimal metadata).
 
@@ -835,6 +839,11 @@ def skills_list(category: str = None, task_id: str = None) -> str:
                 all_skills.append(plugin_skill)
         except Exception:
             logger.debug("Plugin skill listing failed", exc_info=True)
+
+        if allowed_skills is not None:
+            all_skills = [
+                skill for skill in all_skills if skill.get("name") in allowed_skills
+            ]
 
         if not all_skills:
             return json.dumps(
@@ -2005,7 +2014,9 @@ registry.register(
     toolset="skills",
     schema=SKILLS_LIST_SCHEMA,
     handler=lambda args, **kw: skills_list(
-        category=args.get("category"), task_id=kw.get("task_id")
+        category=args.get("category"),
+        task_id=kw.get("task_id"),
+        allowed_skills=kw.get("capability_skills"),
     ),
     check_fn=check_skills_requirements,
     emoji="📚",
@@ -2123,6 +2134,14 @@ def _skill_view_with_bump(args, **kw):
     """Invoke skill_view, then bump view_count on success. Best-effort: a
     telemetry failure never breaks the tool call."""
     name = args.get("name", "")
+    capability_skills = kw.get("capability_skills")
+    if capability_skills is not None and name not in capability_skills:
+        return tool_error(
+            f"Skill '{name}' is not assigned to this agent. "
+            "Return it as a recommendation for user approval instead of loading it.",
+            error_type="skill_not_assigned",
+            skill=name,
+        )
     task_id = kw.get("task_id")
     # ── Repeat-view dedup ────────────────────────────────────────────
     # Mirrors read_file's unchanged-stub: when this session already

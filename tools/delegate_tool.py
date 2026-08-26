@@ -1575,6 +1575,24 @@ def _inherit_parent_base_url(parent_agent, fallback_base_url: Optional[str]) -> 
     return fallback_base_url or None
 
 
+def _route_child_capabilities(parent_agent, task: str):
+    from agent.capability_router import route_agent_capabilities
+
+    return route_agent_capabilities(parent_agent, task)
+
+
+def _attach_child_capability_receipt(child, route) -> None:
+    from agent.capability_router import attach_agent_capability_receipt
+
+    attach_agent_capability_receipt(child, route)
+
+
+def _child_capability_payload(child) -> Optional[Dict[str, Any]]:
+    from agent.capability_router import capability_payload
+
+    return capability_payload(child)
+
+
 def _build_child_agent(
     task_index: int,
     goal: str,
@@ -1632,6 +1650,7 @@ def _build_child_agent(
     tui_depth = max(0, child_depth - 1)  # 0 = first-level child for the UI
 
     delegation_cfg = _load_config()
+    capability_route = _route_child_capabilities(parent_agent, goal)
 
     # When no explicit toolsets given, inherit from parent's enabled toolsets
     # so disabled tools (e.g. web) don't leak to subagents.
@@ -1986,6 +2005,17 @@ def _build_child_agent(
                     pass
             raise
     child._print_fn = getattr(parent_agent, "_print_fn", None)
+    _attach_child_capability_receipt(child, capability_route)
+    # Keep detached/background children on the originating root turn budget
+    # even if a worker thread loses the ContextVar binding.
+    try:
+        from agent.turn_budget import get_turn_governor, governor_for_agent
+
+        child._active_turn_governor = (
+            get_turn_governor() or governor_for_agent(parent_agent)
+        )
+    except Exception:
+        child._active_turn_governor = None
     # Ownership transfer for the dedicated handle: the child's close() must
     # release it (nothing else holds a reference), and no parent teardown can
     # close it out from under a background child (#81267).
@@ -2909,6 +2939,9 @@ def _run_single_child(
                 "_child_role": getattr(child, "_delegate_role", None),
                 "diagnostic_path": diagnostic_path,
             }
+            _capabilities = _child_capability_payload(child)
+            if _capabilities is not None:
+                _error_entry["capabilities"] = _capabilities
             if _late_pending_steer:
                 _error_entry["missed_steer"] = _late_pending_steer
                 _error_entry["error"] += (
@@ -3122,6 +3155,9 @@ def _run_single_child(
                 else 0.0
             ),
         }
+        _capabilities = _child_capability_payload(child)
+        if _capabilities is not None:
+            entry["capabilities"] = _capabilities
         # Per-delegation spend, serialized back to the model alongside
         # tokens/api_calls so the parent can see what each delegation cost.
         # Mirrors _child_cost_usd (which is stripped pre-serialization and

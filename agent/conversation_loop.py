@@ -765,6 +765,20 @@ def _restore_or_build_system_prompt(agent, system_message, conversation_history)
         try:
             session_row = agent._session_db.get_session(agent.session_id)
             if session_row is not None:
+                try:
+                    from agent.capability_router import (
+                        restore_agent_capability_receipt,
+                    )
+
+                    restore_agent_capability_receipt(
+                        agent, session_row.get("model_config")
+                    )
+                except Exception:
+                    logger.warning(
+                        "Capability receipt restore failed; retaining the "
+                        "agent's current fail-closed scope",
+                        exc_info=True,
+                    )
                 raw_prompt = session_row.get("system_prompt")
                 if raw_prompt is None:
                     stored_state = "null"

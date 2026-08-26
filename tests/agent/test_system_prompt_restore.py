@@ -21,6 +21,11 @@ from unittest.mock import MagicMock
 import pytest
 
 from agent.conversation_loop import _restore_or_build_system_prompt
+from agent.capability_router import (
+    CAPABILITY_RECEIPT_KEY,
+    attach_agent_capability_receipt,
+)
+from hermes_cli.capability_profile import TaskSkillDiscovery
 
 
 def _make_agent(session_db=None, prebuilt_prompt: str = "BUILT_PROMPT"):
@@ -220,6 +225,39 @@ class TestPromptStabilityInvariant:
         assert agent._cached_system_prompt == stored
         # Byte-level check
         assert agent._cached_system_prompt.encode("utf-8") == stored.encode("utf-8")
+
+    def test_capability_receipt_restores_scope_without_touching_prompt_bytes(self):
+        stored = "Frozen parent prompt with a task-scoped Skill index"
+        source = MagicMock()
+        source._session_init_model_config = {}
+        attach_agent_capability_receipt(
+            source,
+            TaskSkillDiscovery(
+                selected=("codebase-inspection",),
+                recommended=("github-code-review",),
+                reasons={"github-code-review": "Useful for software building."},
+            ),
+        )
+        db = MagicMock()
+        db.get_session.return_value = {
+            "system_prompt": stored,
+            "model_config": {
+                CAPABILITY_RECEIPT_KEY: source._session_init_model_config[
+                    CAPABILITY_RECEIPT_KEY
+                ]
+            },
+        }
+        agent = _make_agent(session_db=db)
+        agent._session_init_model_config = {}
+
+        _restore_or_build_system_prompt(
+            agent, None, [{"role": "user", "content": "hi"}]
+        )
+
+        assert agent._cached_system_prompt.encode("utf-8") == stored.encode("utf-8")
+        assert agent._capability_skills == ("codebase-inspection",)
+        assert agent._capability_recommended_skills == ("github-code-review",)
+        agent._build_system_prompt.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
