@@ -269,12 +269,17 @@ Các checkpoint đã hoàn thành trên `feat/v32-token-context-ux`:
   install và fresh named-profile create. Clone giữ config nguồn; update/repair
   và legacy profile không được backfill. Desktop chỉ nhắc khi API trả marker
   tường minh; Save/Skip xóa trạng thái pending bằng completion receipt.
-- Lát cắt hiện tại nối local discovery vào session root mới và delegate child.
+- Router đã nối local discovery vào session root mới và delegate child.
   Exact receipt chỉ chứa Skill đã allow, recommendation không cấp quyền, và
   mọi đường `skill_view`/`skills_list`/Tool Search/execute_code đều giữ scope.
   Receipt có hash được persist trước call đầu và restore fail-closed; prompt
   parent/call 2/resume không bị dựng lại hoặc toggle giữa phiên. Child reuse
   Root Token Governor và trả breakdown/receipt về parent.
+- Benchmark capability offline đã khóa production renderer bằng profile cô lập:
+  full 72 Skill = 8.797 chars/2.204 token ước tính; parent/session 6 Skill =
+  2.257 chars/565 token cùng hash; child 4 Skill = 2.098 chars/525 token. Simple
+  prompt dùng mock responder đạt 1 main, 0 tool/subagent/background review và
+  0 live provider/network/process.
 
 Gate gần nhất:
 
@@ -283,17 +288,17 @@ Gate gần nhất:
 - Desktop marker/onboarding/profile scope: 26/26.
 - Router source gate: 278/278, 1 skip trên 13 file cho local receipt, session
   init/resume, prompt cache, delegate, Tool Search, model dispatch và Governor.
+- Gate tổng hợp sau benchmark: 210/210, 1 skip trên 13 file cho benchmark,
+  capability profile, router/session, delegate, Tool Search và Governor.
 - Desktop typecheck xanh; changed-file lint xanh; `git diff --check` xanh.
 - Không live probe, không provider/model/network call, không build candidate,
   không dùng profile thật; `.tmp/` vẫn được giữ nguyên.
 
 Việc còn lại, theo thứ tự:
 
-1. Thêm benchmark exact cho full catalog, parent 3–8 Skill, session và child;
-   khóa riêng simple prompt ở 1 main response, 0 tool/subagent/background review.
-2. Nối MCP permission router: exact server/tool scope, không auto install/login/
+1. Nối MCP permission router: exact server/tool scope, không auto install/login/
    permission, không configured server thì 0 startup/network/process.
-3. Chỉ sau source/integration/UI E2E xanh mới chạy packaged lifecycle gate.
+2. Chỉ sau source/integration/UI E2E xanh mới chạy packaged lifecycle gate.
 
 Không cần live provider probe cho các lát cắt trên. Dùng mock provider và profile
 cô lập. Không sửa profile Hermes thật. Mọi build, push, staging, cài candidate
@@ -305,11 +310,11 @@ hoặc public promotion của candidate kế tiếp phải tuân theo release ga
 Decision: candidate only / implementation in progress
 Candidate: none for v32.1; immutable public base is 81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f, 0.32.0-vi.1, 341176379 bytes, efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac
 Audience allowed: source implementation and isolated tests only
-Gates passed: v32 technical GO; isolated fresh baseline; fail-closed allowlist/local discovery; profile-scoped backend API; Desktop client/Settings/first-run UI; durable fresh-profile-only marker; session/subagent exact Skill receipt; prompt byte stability across call 2/resume; fail-closed receipt hash restore; scoped skill tools/Tool Search/execute_code; shared Root Governor parent/child breakdown; router source gate 278/278 with 1 skip; earlier Python 61/61 plus template 56/56 and named-profile 2/2; Desktop targeted 26/26; typecheck and changed-file lint
-Gates failed or missing: exact token benchmark; MCP permission router; integration/UI E2E; packaged lifecycle
-Evidence: fresh bundled sync 82 packages; 72 active relevant skills; 8,797-char full skill index (~2,199 token estimate); 0 configured MCP; task routing reports 0 model/provider/network and does not mutate profile config; unallowed Skill is recommendation-only; selected receipt is hashed/persisted before first call and restored without changing prompt bytes; child attempts charge the Root Governor
-Residual risks: exact parent/session/child token measurements and simple-prompt benchmark are not yet recorded; MCP remains outside the new permission receipt; three unrelated POSIX-path assertions fail on Windows in broader non-gate probes, and the full profile suite retains six unrelated POSIX-on-Windows failures
+Gates passed: v32 technical GO; isolated fresh baseline; fail-closed allowlist/local discovery; profile-scoped backend API; Desktop client/Settings/first-run UI; durable fresh-profile-only marker; session/subagent exact Skill receipt; prompt byte stability across call 2/resume; fail-closed receipt hash restore; scoped skill tools/Tool Search/execute_code; shared Root Governor parent/child breakdown; exact offline full/parent/session/child capability benchmark; simple prompt 1/0/0/0 contract; post-benchmark source gate 210/210 with 1 skip; earlier router source gate 278/278 with 1 skip; Python 61/61 plus template 56/56 and named-profile 2/2; Desktop targeted 26/26; typecheck and changed-file lint
+Gates failed or missing: MCP permission router; integration/UI E2E; packaged lifecycle
+Evidence: fresh bundled sync 82 packages; 72 active relevant skills; full index 8,797 chars/8,829 bytes/2,204 Hermes-estimated tokens; parent/session 6 Skills at 2,257 chars/565 tokens with identical receipt hash; child 4 Skills at 2,098 chars/525 tokens; simple prompt produces 1 main response and 0 tool/subagent/background review with 0 live provider/network/process; 0 configured MCP; task routing reports 0 model/provider/network and does not mutate profile config; unallowed Skill is recommendation-only; selected receipt is hashed/persisted before first call and restored without changing prompt bytes; child attempts charge the Root Governor
+Residual risks: MCP remains outside the new permission receipt; three unrelated POSIX-path assertions fail on Windows in broader non-gate probes, and the full profile suite retains six unrelated POSIX-on-Windows failures
 Rollback target: vi-v0.20.4-39
 Public actions taken: none
-Next smallest step: exact offline benchmark for full catalog versus parent/session/child receipts and simple prompt; then red tests for a fail-closed MCP server/tool receipt with zero startup/network/process when unconfigured
+Next smallest step: red tests for a fail-closed MCP server/tool receipt with zero startup/network/process when unconfigured
 ```

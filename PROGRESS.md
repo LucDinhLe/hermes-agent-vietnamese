@@ -1,5 +1,24 @@
 # Tiến độ
 
+## Cập nhật 2026-08-26 — benchmark exact capability receipt offline
+
+- Thêm harness offline chỉ nhận `skills/` của profile cô lập, render đúng Skill
+  index production và chặn fail-closed mọi network/process attempt. Script từ
+  chối profile Hermes thật; không dựng agent hay dò provider/model.
+- Baseline 72 Skill đo exact 8.797 ký tự, 8.829 byte, 2.204 token ước tính.
+  Parent/session receipt 6 Skill cùng hash: 2.257 ký tự, 2.269 byte, 565 token;
+  child 4 Skill: 2.098 ký tự, 2.110 byte, 525 token. Parent giảm 74,34% so với
+  full catalog và session persist byte/hash-stable.
+- Simple prompt dùng mock responder: đúng 1 main response, 0 tool, 0 subagent,
+  0 background review; 0 live provider/network/process call.
+- Regression được ghi đỏ trước khi thêm module. Gate tổng hợp benchmark +
+  router/session/delegate/Tool Search/Governor đạt 210/210, 1 skip trên 13 file.
+  Evidence nằm tại
+  `docs/v32/benchmarks/capability-scope-benchmark-2026-08-26.md`.
+- Bước nhỏ tiếp theo: MCP permission router fail-closed theo exact server/tool
+  receipt; không configured thì 0 startup/network/process và tuyệt đối không
+  tự cài, đăng nhập hoặc cấp quyền.
+
 ## Cập nhật 2026-08-26 — router Skill cho session/subagent mới
 
 - Session root mới và child agent nay dò metadata Skill cục bộ đúng một lần
