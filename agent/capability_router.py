@@ -119,6 +119,58 @@ def _mcp_server_component(tool_name: str) -> str:
     return server if separator else ""
 
 
+def validate_mcp_capability_record(record: Any) -> Optional[dict[str, Any]]:
+    """Return a normalized exact MCP receipt, or ``None`` if untrusted."""
+    if not isinstance(record, Mapping):
+        return None
+    tools_value = record.get("tools")
+    servers_value = record.get("servers")
+    reasons_value = record.get("reasons")
+    if not (
+        record.get("version") == CAPABILITY_RECEIPT_VERSION
+        and isinstance(tools_value, list)
+        and isinstance(servers_value, Mapping)
+        and isinstance(reasons_value, Mapping)
+    ):
+        return None
+    tools = tuple(str(name).strip() for name in tools_value if str(name).strip())
+    if len(tools) != len(tools_value) or len(set(tools)) != len(tools):
+        return None
+    servers: dict[str, tuple[str, ...]] = {}
+    for raw_server, raw_names in servers_value.items():
+        server = str(raw_server)
+        if not server or not isinstance(raw_names, list):
+            return None
+        names = tuple(str(name).strip() for name in raw_names if str(name).strip())
+        if len(names) != len(raw_names):
+            return None
+        servers[server] = names
+    mapped_tools = tuple(
+        name for server in sorted(servers) for name in servers[server]
+    )
+    if not (
+        all(name.startswith(_MCP_TOOL_PREFIX) for name in tools)
+        and mapped_tools == tools
+        and all(
+            _mcp_server_component(name) == server
+            for server, names in servers.items()
+            for name in names
+        )
+        and record.get("selection_hash") == _mcp_selection_hash(tools, servers)
+    ):
+        return None
+    selected = set(tools)
+    return {
+        "tools": tools,
+        "servers": servers,
+        "reasons": {
+            str(name): str(reason)
+            for name, reason in reasons_value.items()
+            if str(name) in selected
+        },
+    }
+
+
 def _route_terms(value: str) -> set[str]:
     normalized = unicodedata.normalize("NFKD", str(value or "").lower())
     ascii_value = "".join(char for char in normalized if not unicodedata.combining(char))
@@ -425,63 +477,11 @@ def restore_agent_capability_receipt(agent: Any, model_config: Any) -> bool:
             if str(name) in visible
         }
 
-    mcp_valid = isinstance(mcp_record, Mapping)
-    mcp_tools_value = mcp_record.get("tools") if mcp_valid else None
-    mcp_servers_value = mcp_record.get("servers") if mcp_valid else None
-    mcp_reasons_value = mcp_record.get("reasons") if mcp_valid else None
-    mcp_tools = (
-        tuple(str(name).strip() for name in mcp_tools_value if str(name).strip())
-        if isinstance(mcp_tools_value, list)
-        else ()
-    )
-    raw_mcp_servers = (
-        {
-            str(server): tuple(str(name) for name in names)
-            for server, names in mcp_servers_value.items()
-            if isinstance(names, list)
-        }
-        if isinstance(mcp_servers_value, Mapping)
-        else {}
-    )
-    mapped_mcp_tools = tuple(
-        name
-        for server in sorted(raw_mcp_servers)
-        for name in raw_mcp_servers[server]
-    )
-    mcp_valid = bool(
-        mcp_valid
-        and mcp_record.get("version") == CAPABILITY_RECEIPT_VERSION
-        and isinstance(mcp_tools_value, list)
-        and isinstance(mcp_servers_value, Mapping)
-        and isinstance(mcp_reasons_value, Mapping)
-        and mcp_record.get("selection_hash")
-        == _mcp_selection_hash(mcp_tools, raw_mcp_servers)
-        and all(name.startswith(_MCP_TOOL_PREFIX) for name in mcp_tools)
-        and len(set(mcp_tools)) == len(mcp_tools)
-        and mapped_mcp_tools == mcp_tools
-        and all(
-            _mcp_server_component(name) == server
-            for server, names in raw_mcp_servers.items()
-            for name in names
-        )
-    )
-    if not mcp_valid:
-        mcp_tools = ()
-        mcp_servers_value = {}
-        raw_mcp_servers = {}
-        mcp_reasons_value = {}
-    selected_set = set(mcp_tools)
-    normalized_servers = {
-        str(server): tuple(
-            str(name) for name in names if str(name) in selected_set
-        )
-        for server, names in raw_mcp_servers.items()
-    }
-    if set(name for names in normalized_servers.values() for name in names) != selected_set:
-        mcp_tools = ()
-        normalized_servers = {}
-        mcp_reasons_value = {}
-        mcp_valid = False
+    validated_mcp = validate_mcp_capability_record(mcp_record)
+    mcp_valid = validated_mcp is not None
+    mcp_tools = validated_mcp["tools"] if validated_mcp else ()
+    normalized_servers = validated_mcp["servers"] if validated_mcp else {}
+    mcp_reasons_value = validated_mcp["reasons"] if validated_mcp else {}
     agent._capability_mcp_tools = mcp_tools
     agent._capability_mcp_servers = normalized_servers
     agent._capability_mcp_reasons = {

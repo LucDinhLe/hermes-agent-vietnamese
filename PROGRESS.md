@@ -2,6 +2,11 @@
 
 ## Cập nhật 2026-08-26 — MCP exact permission receipt fail-closed
 
+- Backend có endpoint chỉ-đọc `/api/mcp/assignments` lấy receipt theo đúng
+  `session_id + profile`, dùng SessionDB profile scope hiện hữu và cùng validator
+  fail-closed với resume. API chỉ trả exact tools/server/reasons đã gán, không
+  connect, reload, mutate config hay cấp quyền. Regression chứng minh default và
+  named profile có cùng session ID không rò sang nhau; mapping giả mạo trả rỗng.
 - Session root mới chỉ gán đúng MCP tool đã kết nối và khớp nhiệm vụ từ catalog
   schema cục bộ; bước định tuyến báo 0 model/provider/network call, không cài,
   đăng nhập, cấp quyền hay ghi cấu hình. Child chỉ được thu hẹp receipt của
@@ -21,8 +26,9 @@
   sẵn, không thuộc lát cắt); kiểm tra MCP riêng đạt 8/8. Ruff, bytecode compile
   và `git diff --check` đạt. Không live probe, provider/network/process call,
   build candidate, profile Hermes thật, push hay hành động public.
-- Bước nhỏ tiếp theo: nối trạng thái `assigned` chỉ-đọc vào API/session UI và
-  chạy integration/UI E2E profile-scoped; sau đó mới cân nhắc packaged lifecycle.
+- Bước nhỏ tiếp theo: nối typed Desktop client và badge `assigned` theo session
+  vào MCP tab, đủ locale và UI E2E profile-scoped; sau đó mới cân nhắc packaged
+  lifecycle.
 
 ## Cập nhật 2026-08-26 — benchmark exact capability receipt offline
 

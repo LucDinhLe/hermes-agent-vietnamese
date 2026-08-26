@@ -1041,6 +1041,90 @@ class TestWebServerEndpoints:
 
 
 
+    def test_mcp_assignment_endpoint_reads_exact_session_receipt_fail_closed(self):
+        from agent.capability_router import _mcp_selection_hash
+        from hermes_state import SessionDB
+        from hermes_cli.profiles import create_profile
+
+        tools = ["mcp__docs__search"]
+        servers = {"docs": tools}
+        receipt = {
+            "version": 1,
+            "tools": tools,
+            "servers": servers,
+            "reasons": {tools[0]: "Local task terms: documentation, search"},
+            "selection_hash": _mcp_selection_hash(tools, servers),
+        }
+        db = SessionDB()
+        try:
+            db.create_session(
+                session_id="mcp-assigned-session",
+                source="cli",
+                model_config={"mcp_capability_receipt": receipt},
+            )
+            forged = dict(receipt)
+            forged["servers"] = {"crm": tools}
+            forged["selection_hash"] = _mcp_selection_hash(tools, forged["servers"])
+            db.create_session(
+                session_id="mcp-forged-session",
+                source="cli",
+                model_config={"mcp_capability_receipt": forged},
+            )
+        finally:
+            db.close()
+
+        named_tools = ["mcp__crm__delete_contact"]
+        named_servers = {"crm": named_tools}
+        named_receipt = {
+            "version": 1,
+            "tools": named_tools,
+            "servers": named_servers,
+            "reasons": {named_tools[0]: "Local task terms: contact, delete"},
+            "selection_hash": _mcp_selection_hash(named_tools, named_servers),
+        }
+        profile_dir = create_profile("mcp-work", no_alias=True)
+        named_db = SessionDB(db_path=profile_dir / "state.db")
+        try:
+            named_db.create_session(
+                session_id="mcp-assigned-session",
+                source="cli",
+                model_config={"mcp_capability_receipt": named_receipt},
+            )
+        finally:
+            named_db.close()
+
+        exact = self.client.get(
+            "/api/mcp/assignments", params={"session_id": "mcp-assigned-session"}
+        )
+        assert exact.status_code == 200
+        assert exact.json() == {
+            "session_id": "mcp-assigned-session",
+            "assigned": True,
+            "tools": tools,
+            "servers": servers,
+            "reasons": receipt["reasons"],
+        }
+
+        named = self.client.get(
+            "/api/mcp/assignments",
+            params={"session_id": "mcp-assigned-session", "profile": "mcp-work"},
+        )
+        assert named.status_code == 200
+        assert named.json()["tools"] == named_tools
+        assert named.json()["servers"] == named_servers
+
+        rejected = self.client.get(
+            "/api/mcp/assignments", params={"session_id": "mcp-forged-session"}
+        )
+        assert rejected.status_code == 200
+        assert rejected.json() == {
+            "session_id": "mcp-forged-session",
+            "assigned": False,
+            "tools": [],
+            "servers": {},
+            "reasons": {},
+        }
+
     def test_import_sessions_endpoint_imports_exported_json(self):
         from hermes_state import SessionDB
 
