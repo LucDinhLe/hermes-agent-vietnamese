@@ -13,6 +13,9 @@
   không tạo config write hay cấp quyền. Copy đã đủ en/vi/ja/zh/zh-hant/ar.
 - Desktop client gate đạt 29/29; ba cấu hình TypeScript, Prettier và
   changed-file ESLint đều xanh.
+- Component regression đạt 1/1 và gate Desktop gộp đạt 30/30: nhãn
+  assigned bám đúng session/profile/backend, biến mất khi receipt rỗng,
+  chuyển đúng server khi profile đổi và không gọi config writer.
 - Session root mới chỉ gán đúng MCP tool đã kết nối và khớp nhiệm vụ từ catalog
   schema cục bộ; bước định tuyến báo 0 model/provider/network call, không cài,
   đăng nhập, cấp quyền hay ghi cấu hình. Child chỉ được thu hẹp receipt của
@@ -32,9 +35,9 @@
   sẵn, không thuộc lát cắt); kiểm tra MCP riêng đạt 8/8. Ruff, bytecode compile
   và `git diff --check` đạt. Không live probe, provider/network/process call,
   build candidate, profile Hermes thật, push hay hành động public.
-- Bước nhỏ tiếp theo: chạy component/integration E2E cho chuyển profile,
-  session không receipt và receipt thay đổi; chỉ sau khi xanh mới cân nhắc
-  packaged lifecycle.
+- Phạm vi source v32.1 đã hoàn tất. Bước còn lại chỉ là packaged
+  lifecycle/candidate gate, phải được cho phép riêng; lát cắt này không build,
+  cài, live probe, push, merge hay public.
 
 ## Cập nhật 2026-08-26 — benchmark exact capability receipt offline
 
