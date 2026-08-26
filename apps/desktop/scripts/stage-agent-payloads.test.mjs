@@ -70,6 +70,11 @@ test('site-packages install refuses sdists and targets the payload dir', () => {
   // native, so no --platform cross-tags belong here.
   assert.equal(args[0], 'install')
   assert.ok(args.includes('--require-hashes'))
+  // uv export materializes the full transitive lock graph. The payload install
+  // must not resolve metadata again, read checkout overrides, or upgrade pins.
+  assert.ok(args.includes('--no-deps'))
+  assert.ok(args.includes('--no-config'))
+  assert.ok(!args.includes('--upgrade'))
   assert.ok(args.includes('--only-binary'))
   assert.equal(args[args.indexOf('-r') + 1], 'requirements-payload.txt')
   assert.equal(args[args.indexOf('--target') + 1], '/out/site-packages')
@@ -285,8 +290,8 @@ test('source-build exceptions stay target-specific and exclude covered native wh
   // Fully wheel-covered targets keep the pure only-binary shape.
   const linux = resolveTargets('linux', 'x64')
   assert.deepEqual(pipTargetArgs({ sitePackagesDir: '/sp', sourceBuild: linux.sourceBuild ?? [] }), [
-    'install', '--require-hashes', '--only-binary', ':all:', '-r', 'requirements-payload.txt',
-    '--target', '/sp', '--upgrade', '--no-compile'
+    'install', '--require-hashes', '--no-deps', '--no-config', '--only-binary', ':all:', '-r',
+    'requirements-payload.txt', '--target', '/sp', '--no-compile'
   ])
 
   // cryptography 50.0.0 publishes macOS ARM64 wheels but no Intel wheel.

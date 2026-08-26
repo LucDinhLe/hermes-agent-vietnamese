@@ -150,13 +150,13 @@ export function pipTargetArgs({ sitePackagesDir, sourceBuild = [] }) {
   return [
     "install",
     "--require-hashes",
+    // The export already contains the complete transitive graph. Do not
+    // resolve package metadata again or reapply the checkout's uv overrides.
+    "--no-deps", "--no-config",
     "--only-binary", ":all:",
     ...(sourceBuild.length > 0 ? ["--no-binary", sourceBuild.join(",")] : []),
     "-r", "requirements-payload.txt",
     "--target", sitePackagesDir,
-    // pip warns without this when --target sees an existing dir; staging
-    // wipes first, so upgrade semantics never actually apply.
-    "--upgrade",
     // No console-script shims: the bundle always launches `python -m`,
     // and --target's scripts would carry the BUILD host's shebang paths.
     "--no-compile",

@@ -155,6 +155,10 @@ chuỗi trên.
       stable phải fail. PE machine field phải khớp target arch.
 - [ ] Python, Hermes payload, dependency, installer metadata, icon và license
       hiện diện.
+- [ ] Cây dependency payload xuất đầy đủ từ `uv.lock` phải được cài bằng
+      `--require-hashes --no-deps --no-config`, không dùng `--upgrade`; không
+      phân giải lại metadata bậc hai hoặc áp lại override sau export. Regression
+      phải chạy với `uv` đóng gói hiện hành.
 - [ ] Gói resident đầy đủ nhận marker bootstrap schema 1 hợp lệ từ bản cũ kể
       cả khi marker chưa có `desktopVersion`; không quay lại network bootstrap
       hoặc chạy runtime quản lý trong AppData.

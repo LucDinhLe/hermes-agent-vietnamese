@@ -1162,5 +1162,11 @@ Tạo checkpoint Git, đẩy nhánh và chạy workflow pre-release sáu nền t
   Hermes cloud backup hay đường upload tự động.
 - Source gate hiện tại đạt UI 4.955/4.955 trên 549 tệp, lát cắt Dự án 38/38,
   backend project/config/tree 60/60, lifecycle policy 4/4, typecheck và lint.
-- Chưa push, build, cài hoặc công bố `vi-v0.32.0-2`; cần source gate và quyền
-  push repository công khai trước khi tạo immutable artifact.
+- Nhánh hotfix đã push tại `75bfe1a0397077a235d6c08b5bbccfd61a72a0bb`.
+  Lượt build `vi-v0.32.0-2` dừng trước artifact vì `uv pip` phân giải lại một
+  dependency bậc hai trong chế độ hash. Không có installer được tạo.
+- Regression mới buộc cài đúng cây export đầy đủ bằng
+  `--require-hashes --no-deps --no-config`, bỏ `--upgrade`. Probe thật với uv
+  0.12.5 đã cài đúng 64 package và import được native modules. Candidate kế
+  tiếp là `vi-v0.32.0-3` và phải chạy lại toàn bộ source/provenance gate trước
+  lượt build duy nhất mới.
