@@ -1587,10 +1587,42 @@ def _attach_child_capability_receipt(child, route) -> None:
     attach_agent_capability_receipt(child, route)
 
 
-def _child_capability_payload(child) -> Optional[Dict[str, Any]]:
-    from agent.capability_router import capability_payload
+def _route_child_mcp_capabilities(parent_agent, task: str):
+    from agent.capability_router import route_agent_mcp_capabilities
 
-    return capability_payload(child)
+    raw_allowed = getattr(parent_agent, "_capability_mcp_tools", None)
+    allowed = (
+        tuple(raw_allowed)
+        if isinstance(raw_allowed, (list, tuple, set, frozenset))
+        else None
+    )
+    return route_agent_mcp_capabilities(
+        parent_agent,
+        task,
+        allowed_tools=allowed,
+    )
+
+
+def _attach_child_mcp_capability_receipt(child, route) -> None:
+    from agent.capability_router import (
+        apply_agent_mcp_scope,
+        attach_agent_mcp_capability_receipt,
+    )
+
+    attach_agent_mcp_capability_receipt(child, route)
+    apply_agent_mcp_scope(child)
+
+
+def _child_capability_payload(child) -> Optional[Dict[str, Any]]:
+    from agent.capability_router import capability_payload, mcp_capability_payload
+
+    payload = capability_payload(child)
+    mcp_payload = mcp_capability_payload(child)
+    if mcp_payload is not None and mcp_payload["tools"]:
+        if payload is None:
+            payload = {}
+        payload["mcp"] = mcp_payload
+    return payload
 
 
 def _build_child_agent(
@@ -1651,6 +1683,7 @@ def _build_child_agent(
 
     delegation_cfg = _load_config()
     capability_route = _route_child_capabilities(parent_agent, goal)
+    mcp_capability_route = _route_child_mcp_capabilities(parent_agent, goal)
 
     # When no explicit toolsets given, inherit from parent's enabled toolsets
     # so disabled tools (e.g. web) don't leak to subagents.
@@ -2006,6 +2039,7 @@ def _build_child_agent(
             raise
     child._print_fn = getattr(parent_agent, "_print_fn", None)
     _attach_child_capability_receipt(child, capability_route)
+    _attach_child_mcp_capability_receipt(child, mcp_capability_route)
     # Keep detached/background children on the originating root turn budget
     # even if a worker thread loses the ContextVar binding.
     try:

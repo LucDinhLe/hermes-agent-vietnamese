@@ -280,6 +280,15 @@ Các checkpoint đã hoàn thành trên `feat/v32-token-context-ux`:
   2.257 chars/565 token cùng hash; child 4 Skill = 2.098 chars/525 token. Simple
   prompt dùng mock responder đạt 1 main, 0 tool/subagent/background review và
   0 live provider/network/process.
+- MCP permission router đã khóa exact server/tool receipt cho root/session và
+  child. Chỉ schema đã kết nối trong snapshot cục bộ mới được chọn; child chỉ
+  thu hẹp parent. Receipt được persist trước prompt đầu và restore kiểm tra hash,
+  prefix, duplicate, thứ tự và server component, sai thì về 0 MCP.
+- Direct dispatch, Tool Search listing/search/describe/call, `execute_code`,
+  late refresh/reload và delegate đều dùng cùng exact scope. Profile không có
+  server enabled, chỉ có server disabled hoặc config không đọc được thì không
+  tạo discovery thread/import runtime/network/process. Không có đường tự cài,
+  đăng nhập, cấp quyền hoặc ghi cấu hình trong router.
 
 Gate gần nhất:
 
@@ -291,14 +300,18 @@ Gate gần nhất:
 - Gate tổng hợp sau benchmark: 210/210, 1 skip trên 13 file cho benchmark,
   capability profile, router/session, delegate, Tool Search và Governor.
 - Desktop typecheck xanh; changed-file lint xanh; `git diff --check` xanh.
+- MCP source gate: 298/298 trên 13 file khi loại một assertion case-fold biến
+  môi trường Windows có sẵn ngoài lát cắt; MCP exact receipt riêng 8/8. Ruff,
+  bytecode compile và `git diff --check` xanh.
 - Không live probe, không provider/model/network call, không build candidate,
   không dùng profile thật; `.tmp/` vẫn được giữ nguyên.
 
 Việc còn lại, theo thứ tự:
 
-1. Nối MCP permission router: exact server/tool scope, không auto install/login/
-   permission, không configured server thì 0 startup/network/process.
-2. Chỉ sau source/integration/UI E2E xanh mới chạy packaged lifecycle gate.
+1. Nối trạng thái MCP `assigned` chỉ-đọc từ session receipt vào API và Desktop,
+   để UI phân biệt rõ catalog/install/connected/assigned mà không cấp quyền.
+2. Chạy integration/UI E2E profile-scoped; chỉ sau khi xanh mới chạy packaged
+   lifecycle gate.
 
 Không cần live provider probe cho các lát cắt trên. Dùng mock provider và profile
 cô lập. Không sửa profile Hermes thật. Mọi build, push, staging, cài candidate
@@ -310,11 +323,11 @@ hoặc public promotion của candidate kế tiếp phải tuân theo release ga
 Decision: candidate only / implementation in progress
 Candidate: none for v32.1; immutable public base is 81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f, 0.32.0-vi.1, 341176379 bytes, efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac
 Audience allowed: source implementation and isolated tests only
-Gates passed: v32 technical GO; isolated fresh baseline; fail-closed allowlist/local discovery; profile-scoped backend API; Desktop client/Settings/first-run UI; durable fresh-profile-only marker; session/subagent exact Skill receipt; prompt byte stability across call 2/resume; fail-closed receipt hash restore; scoped skill tools/Tool Search/execute_code; shared Root Governor parent/child breakdown; exact offline full/parent/session/child capability benchmark; simple prompt 1/0/0/0 contract; post-benchmark source gate 210/210 with 1 skip; earlier router source gate 278/278 with 1 skip; Python 61/61 plus template 56/56 and named-profile 2/2; Desktop targeted 26/26; typecheck and changed-file lint
-Gates failed or missing: MCP permission router; integration/UI E2E; packaged lifecycle
-Evidence: fresh bundled sync 82 packages; 72 active relevant skills; full index 8,797 chars/8,829 bytes/2,204 Hermes-estimated tokens; parent/session 6 Skills at 2,257 chars/565 tokens with identical receipt hash; child 4 Skills at 2,098 chars/525 tokens; simple prompt produces 1 main response and 0 tool/subagent/background review with 0 live provider/network/process; 0 configured MCP; task routing reports 0 model/provider/network and does not mutate profile config; unallowed Skill is recommendation-only; selected receipt is hashed/persisted before first call and restored without changing prompt bytes; child attempts charge the Root Governor
-Residual risks: MCP remains outside the new permission receipt; three unrelated POSIX-path assertions fail on Windows in broader non-gate probes, and the full profile suite retains six unrelated POSIX-on-Windows failures
+Gates passed: v32 technical GO; isolated fresh baseline; fail-closed allowlist/local discovery; profile-scoped backend API; Desktop client/Settings/first-run UI; durable fresh-profile-only marker; session/subagent exact Skill and MCP receipts; prompt byte stability across call 2/resume; fail-closed receipt hash/server restore; scoped Skill/MCP direct tools/Tool Search/execute_code/refresh; shared Root Governor parent/child breakdown; exact offline full/parent/session/child capability benchmark; simple prompt 1/0/0/0 contract; MCP source gate 298/298 with one unrelated Windows assertion excluded; post-benchmark source gate 210/210 with 1 skip; earlier router source gate 278/278 with 1 skip; Python 61/61 plus template 56/56 and named-profile 2/2; Desktop targeted 26/26; typecheck and changed-file lint
+Gates failed or missing: MCP assigned-state API/UI; integration/UI E2E; packaged lifecycle
+Evidence: fresh bundled sync 82 packages; 72 active relevant skills; full index 8,797 chars/8,829 bytes/2,204 Hermes-estimated tokens; parent/session 6 Skills at 2,257 chars/565 tokens with identical receipt hash; child 4 Skills at 2,098 chars/525 tokens; simple prompt produces 1 main response and 0 tool/subagent/background review with 0 live provider/network/process; 0 configured MCP means 0 discovery thread/runtime import/network/process; task routing reports 0 model/provider/network and does not mutate profile config; unallowed Skill is recommendation-only; MCP selection is exact to connected local schemas and child narrows parent; both receipts persist before first call and restore fail-closed; child attempts charge the Root Governor
+Residual risks: Desktop does not yet expose per-session MCP assigned state; three unrelated POSIX-path assertions fail on Windows in broader non-gate probes, one existing environment-variable case-fold assertion is excluded from the MCP source gate, and the full profile suite retains six unrelated POSIX-on-Windows failures
 Rollback target: vi-v0.20.4-39
 Public actions taken: none
-Next smallest step: red tests for a fail-closed MCP server/tool receipt with zero startup/network/process when unconfigured
+Next smallest step: red backend test for a profile-scoped, read-only per-session MCP assigned-state endpoint, then Desktop catalog/install/connected/assigned UI E2E
 ```

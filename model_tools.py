@@ -1232,6 +1232,7 @@ def handle_function_call(
     tool_profile: str = "full",
     tool_catalog_defs: Optional[List[Dict[str, Any]]] = None,
     capability_skills: Optional[Collection[str]] = None,
+    capability_mcp_tools: Optional[Collection[str]] = None,
 ) -> str:
     """
     Main function call dispatcher that routes calls to the tool registry.
@@ -1274,6 +1275,15 @@ def handle_function_call(
             "receipt. Recommend capability changes for user approval and a "
             "new session/agent instead.",
             error_type="capability_scope_read_only",
+        )
+    if (
+        capability_mcp_tools is not None
+        and function_name.startswith("mcp__")
+        and function_name not in set(capability_mcp_tools)
+    ):
+        return tool_error(
+            f"MCP tool '{function_name}' is not assigned to this session/agent.",
+            error_type="capability_scope_denied",
         )
 
     # ── Tool Search bridge dispatch ──────────────────────────────────
@@ -1329,6 +1339,14 @@ def handle_function_call(
                 definition
                 for definition in current_defs
                 if (definition.get("function") or {}).get("name") != "skill_manage"
+            ]
+        if capability_mcp_tools is not None:
+            allowed_mcp = set(capability_mcp_tools)
+            current_defs = [
+                definition
+                for definition in current_defs
+                if not str((definition.get("function") or {}).get("name", "")).startswith("mcp__")
+                or (definition.get("function") or {}).get("name") in allowed_mcp
             ]
         if function_name == _ts_mod.TOOL_SEARCH_NAME:
             return _return_bridge_result(
@@ -1399,6 +1417,7 @@ def handle_function_call(
                 tool_profile=tool_profile,
                 tool_catalog_defs=current_defs,
                 capability_skills=capability_skills,
+                capability_mcp_tools=capability_mcp_tools,
             )
 
     _tool_original_args = dict(function_args)
@@ -1554,6 +1573,13 @@ def handle_function_call(
                         name
                         for name in sandbox_enabled
                         if name not in {"skills_list", "skill_view", "skill_manage"}
+                    ]
+                if capability_mcp_tools is not None:
+                    allowed_mcp = set(capability_mcp_tools)
+                    sandbox_enabled = [
+                        name
+                        for name in sandbox_enabled
+                        if not str(name).startswith("mcp__") or name in allowed_mcp
                     ]
                 def _dispatch(next_args: Dict[str, Any]) -> Any:
                     return registry.dispatch(

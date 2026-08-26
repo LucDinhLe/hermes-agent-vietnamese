@@ -1,5 +1,29 @@
 # Tiến độ
 
+## Cập nhật 2026-08-26 — MCP exact permission receipt fail-closed
+
+- Session root mới chỉ gán đúng MCP tool đã kết nối và khớp nhiệm vụ từ catalog
+  schema cục bộ; bước định tuyến báo 0 model/provider/network call, không cài,
+  đăng nhập, cấp quyền hay ghi cấu hình. Child chỉ được thu hẹp receipt của
+  parent, không thể mở rộng sang server/tool khác.
+- Receipt lưu exact tool, server mapping, lý do và hash trước prompt đầu. Resume
+  kiểm tra hash, tool prefix, thứ tự, duplicate và server component; dữ liệu
+  sai hoặc bị sửa fail-closed về 0 MCP. Skill receipt và system prompt parent
+  giữ nguyên hợp đồng byte-stable hiện hữu.
+- Scope được giữ đồng nhất qua direct dispatch, Tool Search listing/search/
+  describe/call, `execute_code`, late refresh/reload và delegate. Tool chưa gán
+  không thể lộ schema hay gọi; mọi call của child vẫn qua Root Token Governor.
+- Startup MCP không tạo thread hoặc import runtime khi profile không có server
+  enabled, chỉ có server disabled, hay không đọc được config. Fresh profile vì
+  vậy giữ 0 MCP I/O; server chưa kết nối không có schema nên không thể được gán.
+- Regression đều được ghi đỏ trước khi sửa. Canonical source gate đạt 298/298
+  trên 13 file (loại đúng một assertion case-fold biến môi trường Windows có
+  sẵn, không thuộc lát cắt); kiểm tra MCP riêng đạt 8/8. Ruff, bytecode compile
+  và `git diff --check` đạt. Không live probe, provider/network/process call,
+  build candidate, profile Hermes thật, push hay hành động public.
+- Bước nhỏ tiếp theo: nối trạng thái `assigned` chỉ-đọc vào API/session UI và
+  chạy integration/UI E2E profile-scoped; sau đó mới cân nhắc packaged lifecycle.
+
 ## Cập nhật 2026-08-26 — benchmark exact capability receipt offline
 
 - Thêm harness offline chỉ nhận `skills/` của profile cô lập, render đúng Skill

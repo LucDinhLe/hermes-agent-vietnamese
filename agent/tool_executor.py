@@ -2496,6 +2496,7 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                             tool_profile=getattr(agent, "tool_profile", "full") or "full",
                             tool_catalog_defs=getattr(agent, "_tool_search_catalog_defs", None),
                             capability_skills=getattr(agent, "_capability_skills", None),
+                            capability_mcp_tools=getattr(agent, "_capability_mcp_tools", None),
                         )
 
                 (
@@ -2581,6 +2582,7 @@ def execute_tool_calls_sequential(agent, assistant_message, messages: list, effe
                             tool_profile=getattr(agent, "tool_profile", "full") or "full",
                             tool_catalog_defs=getattr(agent, "_tool_search_catalog_defs", None),
                             capability_skills=getattr(agent, "_capability_skills", None),
+                            capability_mcp_tools=getattr(agent, "_capability_mcp_tools", None),
                         )
 
                 (

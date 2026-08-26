@@ -7754,6 +7754,15 @@ def refresh_agent_mcp_tools(
         )
         or []
     )
+    capability_mcp_tools = getattr(agent, "_capability_mcp_tools", None)
+    if capability_mcp_tools is not None:
+        allowed_mcp = set(capability_mcp_tools)
+        new_defs = [
+            item
+            for item in new_defs
+            if not str((item.get("function") or {}).get("name", "")).startswith("mcp__")
+            or (item.get("function") or {}).get("name") in allowed_mcp
+        ]
     new_names = {t["function"]["name"] for t in new_defs}
 
     # Re-append the post-build injected families that get_tool_definitions does

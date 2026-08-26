@@ -506,10 +506,11 @@ def _freeze_session_tool_snapshot(agent) -> None:
         getattr(getattr(agent, "context_compressor", None), "context_length", 0)
         or 0
     )
+    tool_search_config = load_config()
     assembly = assemble_tool_defs(
         copy.deepcopy(raw_catalog),
         context_length=context_length,
-        config=load_config(),
+        config=tool_search_config,
         profile=getattr(agent, "tool_profile", "lean") or "lean",
     )
     # Detach the live request prefix from registry/cache-owned dictionaries.
@@ -521,6 +522,7 @@ def _freeze_session_tool_snapshot(agent) -> None:
     }
     agent._tool_schema_frozen = True
     agent._tool_search_scope_cache = None
+    agent._tool_search_config = tool_search_config
     agent._tool_profile_assembly = assembly
 
 
