@@ -1,7 +1,7 @@
 # Bàn giao v32 → v32.1: định tuyến Skill, MCP và đa-agent
 
 Ngày ghi: 2026-08-26  
-Trạng thái: **quyết định sản phẩm đã được chủ dự án đồng ý; triển khai đã bắt đầu**
+Trạng thái: **source hoàn tất; local candidate đã dựng và xác minh provenance; lifecycle còn NO-GO**
 Phạm vi: candidate kế tiếp sau `vi-v0.32.0-1`; không sửa hoặc thay byte v32 đã công bố.
 
 ## 1. Mục tiêu
@@ -40,7 +40,7 @@ Kết quả mong muốn:
 - Branch: `feat/v32-token-context-ux`.
 - Base handoff commit: `5344db8172c07e64b6bd2f6f09166649573753d9`.
 - Capability-profile checkpoint: `244ffd407` (`feat: add deterministic work
-  profile contract`).
+profile contract`).
 - Remote push: `https://github.com/LucDinhLe/hermes-agent-vietnamese.git`.
 - Hai file triển khai đã nằm trong checkpoint:
   `hermes_cli/capability_profile.py` và
@@ -269,6 +269,12 @@ Các checkpoint đã hoàn thành trên `feat/v32-token-context-ux`:
   install và fresh named-profile create. Clone giữ config nguồn; update/repair
   và legacy profile không được backfill. Desktop chỉ nhắc khi API trả marker
   tường minh; Save/Skip xóa trạng thái pending bằng completion receipt.
+- `b8b0a5c49`: nâng metadata local candidate lên v32.1 và giữ descriptor public
+  v32 bất biến.
+- `2baa74931`: payload install dùng đúng closure đã export, không resolve lại
+  bare transitive dependency dưới hash mode.
+- `5dd1b3dfa`: payload install không đọc project override làm thay exact
+  pin/hash từ requirements đã export.
 - Router đã nối local discovery vào session root mới và delegate child.
   Exact receipt chỉ chứa Skill đã allow, recommendation không cấp quyền, và
   mọi đường `skill_view`/`skills_list`/Tool Search/execute_code đều giữ scope.
@@ -314,14 +320,18 @@ Gate gần nhất:
 - MCP source gate: 298/298 trên 13 file khi loại một assertion case-fold biến
   môi trường Windows có sẵn ngoài lát cắt; MCP exact receipt riêng 8/8. Ruff,
   bytecode compile và `git diff --check` xanh.
-- Không live probe, không provider/model/network call, không build candidate,
-  không dùng profile thật; `.tmp/` vẫn được giữ nguyên.
+- Không live probe, không provider/model call, không dùng profile thật; `.tmp/`
+  vẫn được giữ nguyên. Network chỉ được dùng trong release-authorized local
+  build để tải dependency/payload đã khóa; không có hành động public.
 
 Việc còn lại:
 
 1. Source implementation và targeted integration/UI E2E đã hoàn tất.
-2. Packaged lifecycle/candidate gate chỉ chạy trong một lượt release được
-   cho phép riêng; không thuộc phạm vi lượt bàn giao này.
+2. Local candidate Windows x64 đã build và exact provenance đạt tại commit
+   `5dd1b3dfae33696dc98d323b9def5148a4482b1d`.
+3. Lifecycle policy đã ghim candidate v32.1, exact v32 public làm previous và
+   gate update v32 → v32.1; harness test đạt 22/22. Packaged lifecycle chưa
+   chạy vì host không có Windows Sandbox. Không được thay bằng cài trực tiếp.
 
 Không cần live provider probe cho các lát cắt trên. Dùng mock provider và profile
 cô lập. Không sửa profile Hermes thật. Mọi build, push, staging, cài candidate
@@ -330,14 +340,14 @@ hoặc public promotion của candidate kế tiếp phải tuân theo release ga
 ## 9. Release handoff
 
 ```text
-Decision: source implementation complete / candidate none
-Candidate: none for v32.1; immutable public base is 81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f, 0.32.0-vi.1, 341176379 bytes, efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac
-Audience allowed: source implementation and isolated tests only
+Decision: source complete / packaged build GO / lifecycle NO-GO
+Candidate: local only — 5dd1b3dfae33696dc98d323b9def5148a4482b1d, 0.32.1-vi.1, 341260235 bytes, 2edb6072e8682e147ebee57d2c268631c3aa7a2d94479aaa53ec4052fbd03fe9
+Audience allowed: source implementation, isolated tests and local artifact inspection only
 Gates passed: v32 technical GO; isolated fresh baseline; fail-closed allowlist/local discovery; profile-scoped backend API; Desktop client/Settings/first-run UI; durable fresh-profile-only marker; session/subagent exact Skill and MCP receipts; prompt byte stability across call 2/resume; fail-closed receipt hash/server restore; scoped Skill/MCP direct tools/Tool Search/execute_code/refresh; shared Root Governor parent/child breakdown; exact offline full/parent/session/child capability benchmark; simple prompt 1/0/0/0 contract; MCP source gate 298/298 with one unrelated Windows assertion excluded; MCP assigned-state backend 1/1 and Desktop client/component 30/30; post-benchmark source gate 210/210 with 1 skip; earlier router source gate 278/278 with 1 skip; Python 61/61 plus template 56/56 and named-profile 2/2; earlier Desktop targeted 26/26; all three typechecks, Prettier and changed-file lint
-Gates failed or missing: packaged lifecycle only (not authorized in this slice)
+Gates failed or missing: packaged lifecycle; Windows Sandbox unavailable
 Evidence: fresh bundled sync 82 packages; 72 active relevant skills; full index 8,797 chars/8,829 bytes/2,204 Hermes-estimated tokens; parent/session 6 Skills at 2,257 chars/565 tokens with identical receipt hash; child 4 Skills at 2,098 chars/525 tokens; simple prompt produces 1 main response and 0 tool/subagent/background review with 0 live provider/network/process; 0 configured MCP means 0 discovery thread/runtime import/network/process; task routing reports 0 model/provider/network and does not mutate profile config; unallowed Skill is recommendation-only; MCP selection is exact to connected local schemas and child narrows parent; both receipts persist before first call and restore fail-closed; child attempts charge the Root Governor
-Residual risks: packaged artifact behavior remains untested for v32.1; three unrelated POSIX-path assertions fail on Windows in broader non-gate probes, one existing environment-variable case-fold assertion is excluded from the MCP source gate, and the full profile suite retains six unrelated POSIX-on-Windows failures
+Residual risks: installer execution/update/repair/uninstall/rollback remains untested for v32.1; three unrelated POSIX-path assertions fail on Windows in broader non-gate probes, one existing environment-variable case-fold assertion is excluded from the MCP source gate, and the full profile suite retains six unrelated POSIX-on-Windows failures
 Rollback target: vi-v0.20.4-39
 Public actions taken: none
-Next smallest step: only after explicit release authorization, run the packaged lifecycle gate from the clean source checkpoints; do not infer candidate/public permission
+Next smallest step: retrieve the pinned vi-v0.20.4-39 rollback byte, then run the prepared v32 → v32.1 lifecycle only on an approved Windows Sandbox or GitHub-hosted ephemeral VM; do not infer staging/public permission
 ```

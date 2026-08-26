@@ -757,19 +757,19 @@ try {
   Add-Gate 'safeTool' $toolEvidence @{ tool = 'todo'; endpoint = 'guest-loopback-only' }
   Uninstall-NsisOnly $candidateState 'fresh-lane-cleanup.log'
 
-  # v31 -> v32 is the supported offline product path: exact full NSIS in-place.
+  # v32 -> v32.1 is the supported offline product path: exact full NSIS in-place.
   # Community prerelease feeds are disabled, so this deliberately makes no
   # claim about an in-app/feed updater.
   $upgradeHome = "$StateRoot\upgrade\home"
   $upgradeUserData = "$StateRoot\upgrade\user-data"
-  $v31State = Install-Exact $previousPath 'v31-install.log'
-  [void](Invoke-PlaywrightPhase 'seed-v31' $v31State.Binary $upgradeHome $upgradeUserData 'v31-seed.log' $false '' 'V31_LIFECYCLE_ANCHOR')
-  $upgradeSentinels = Write-Sentinels $upgradeHome $upgradeUserData 'v31-to-v32'
-  $candidateState = Install-Exact $candidatePath 'v31-to-v32-nsis-update.log'
-  Assert-InPlaceTransition $v31State $candidateState 'v31 to v32 update'
-  Assert-Sentinels $upgradeSentinels 'v31 to v32 update'
-  $updateEvidence = Invoke-PlaywrightPhase 'verify-update' $candidateState.Binary $upgradeHome $upgradeUserData 'v31-to-v32-verify.log' $true 'V31_LIFECYCLE_ANCHOR'
-  Add-Gate 'v31ToV32Update' (@('v31-install.log', 'v31-seed.log', 'v31-to-v32-nsis-update.log') + $updateEvidence) @{
+  $v32State = Install-Exact $previousPath 'v32-install.log'
+  [void](Invoke-PlaywrightPhase 'seed-v32' $v32State.Binary $upgradeHome $upgradeUserData 'v32-seed.log' $false '' 'V32_LIFECYCLE_ANCHOR')
+  $upgradeSentinels = Write-Sentinels $upgradeHome $upgradeUserData 'v32-to-v321'
+  $candidateState = Install-Exact $candidatePath 'v32-to-v321-nsis-update.log'
+  Assert-InPlaceTransition $v32State $candidateState 'v32 to v32.1 update'
+  Assert-Sentinels $upgradeSentinels 'v32 to v32.1 update'
+  $updateEvidence = Invoke-PlaywrightPhase 'verify-update' $candidateState.Binary $upgradeHome $upgradeUserData 'v32-to-v321-verify.log' $true 'V32_LIFECYCLE_ANCHOR'
+  Add-Gate 'v32ToV321Update' (@('v32-install.log', 'v32-seed.log', 'v32-to-v321-nsis-update.log') + $updateEvidence) @{
     from = [string]$Manifest.previous.tag
     mechanism = 'full-nsis-in-place'
     sameRegisteredInstallDir = $true
@@ -781,7 +781,7 @@ try {
   $candidateState = Install-Exact $candidatePath 'candidate-repair.log'
   Assert-RepairRestored $repairDamage
   Assert-Sentinels $upgradeSentinels 'candidate repair'
-  $repairEvidence = Invoke-PlaywrightPhase 'verify-repair' $candidateState.Binary $upgradeHome $upgradeUserData 'candidate-repair-verify.log' $true 'V31_LIFECYCLE_ANCHOR' 'V32_REPAIR_RECOVERED'
+  $repairEvidence = Invoke-PlaywrightPhase 'verify-repair' $candidateState.Binary $upgradeHome $upgradeUserData 'candidate-repair-verify.log' $true 'V32_LIFECYCLE_ANCHOR' 'V321_REPAIR_RECOVERED'
   Add-Gate 'repair' (@('repair-damage.json', 'candidate-repair.log') + $repairEvidence) @{
     component = 'resources/app.asar'
     mechanism = 'full-nsis-reinstall-repair'
@@ -793,7 +793,7 @@ try {
   Invoke-GuiUninstall 'lite' $candidateState $upgradeHome $upgradeUserData
   Assert-Sentinels $upgradeSentinels 'keep-data uninstall'
   $candidateState = Install-Exact $candidatePath 'keep-data-reinstall.log'
-  $liteEvidence = Invoke-PlaywrightPhase 'verify-lite-reinstall' $candidateState.Binary $upgradeHome $upgradeUserData 'keep-data-reinstall-verify.log' $true 'V31_LIFECYCLE_ANCHOR' 'V32_KEEP_DATA_REINSTALL'
+  $liteEvidence = Invoke-PlaywrightPhase 'verify-lite-reinstall' $candidateState.Binary $upgradeHome $upgradeUserData 'keep-data-reinstall-verify.log' $true 'V32_LIFECYCLE_ANCHOR' 'V321_KEEP_DATA_REINSTALL'
   Add-Gate 'uninstallKeepData' (@('uninstall-lite.log', 'keep-data-reinstall.log') + $liteEvidence) @{
     control = 'installed-app-settings-about'
     mode = 'lite'
@@ -808,23 +808,23 @@ try {
     mode = 'full'
   }
 
-  # Roll back the installed product while protecting the v32 profile. The old
+  # Roll back the installed product while protecting the v32.1 profile. The old
   # binary launches against a fresh rollback profile, never the newer schema.
-  $v32Home = "$StateRoot\rollback\v32-home"
-  $v32UserData = "$StateRoot\rollback\v32-user-data"
-  $candidateState = Install-Exact $candidatePath 'rollback-v32-install.log'
-  [void](Invoke-PlaywrightPhase 'seed-v32-rollback' $candidateState.Binary $v32Home $v32UserData 'rollback-v32-seed.log' $true '' 'V32_ROLLBACK_PROTECTED_ANCHOR')
-  $v32Sentinels = Write-Sentinels $v32Home $v32UserData 'protected-v32'
-  $beforeRollbackFingerprint = Get-TreeFingerprint @($v32Home, $v32UserData)
+  $v321Home = "$StateRoot\rollback\v321-home"
+  $v321UserData = "$StateRoot\rollback\v321-user-data"
+  $candidateState = Install-Exact $candidatePath 'rollback-v321-install.log'
+  [void](Invoke-PlaywrightPhase 'seed-v321-rollback' $candidateState.Binary $v321Home $v321UserData 'rollback-v321-seed.log' $true '' 'V321_ROLLBACK_PROTECTED_ANCHOR')
+  $v321Sentinels = Write-Sentinels $v321Home $v321UserData 'protected-v321'
+  $beforeRollbackFingerprint = Get-TreeFingerprint @($v321Home, $v321UserData)
   $rollbackState = Install-Exact $rollbackPath 'rollback-vi39-install.log'
-  Assert-InPlaceTransition $candidateState $rollbackState 'v32 to vi39 rollback'
-  Assert-Sentinels $v32Sentinels 'vi39 rollback install'
+  Assert-InPlaceTransition $candidateState $rollbackState 'v32.1 to vi39 rollback'
+  Assert-Sentinels $v321Sentinels 'vi39 rollback install'
   $rollbackEvidence = Invoke-PlaywrightPhase 'verify-rollback' $rollbackState.Binary "$StateRoot\rollback\vi39-home" "$StateRoot\rollback\vi39-user-data" 'rollback-vi39-verify.log' $false '' 'VI39_ROLLBACK_LAUNCH'
-  $afterRollbackFingerprint = Get-TreeFingerprint @($v32Home, $v32UserData)
-  Assert-True ($beforeRollbackFingerprint -eq $afterRollbackFingerprint) 'vi39 rollback changed the protected v32 profile'
-  Add-Gate 'rollbackVi39' (@('rollback-v32-install.log', 'rollback-v32-seed.log', 'rollback-vi39-install.log') + $rollbackEvidence) @{
+  $afterRollbackFingerprint = Get-TreeFingerprint @($v321Home, $v321UserData)
+  Assert-True ($beforeRollbackFingerprint -eq $afterRollbackFingerprint) 'vi39 rollback changed the protected v32.1 profile'
+  Add-Gate 'rollbackVi39' (@('rollback-v321-install.log', 'rollback-v321-seed.log', 'rollback-vi39-install.log') + $rollbackEvidence) @{
     from = [string]$Manifest.candidate.tag
-    protectedV32Profile = $true
+    protectedV321Profile = $true
     rollbackProfile = 'fresh'
     sameRegisteredInstallDir = $true
     to = [string]$Manifest.rollback.tag

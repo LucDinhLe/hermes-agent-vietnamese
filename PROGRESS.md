@@ -1,5 +1,24 @@
 # Tiến độ
 
+## Cập nhật 2026-08-26 — candidate local v32.1 và provenance đóng gói
+
+- Nâng metadata candidate lên `v32.1` / `0.32.1-vi.1` mà không sửa descriptor
+  Latest bất biến của v32. Local candidate dùng tag `vi-v0.32.1-1` và clean
+  HEAD `5dd1b3dfae33696dc98d323b9def5148a4482b1d`.
+- Hai lượt build đỏ đã phát hiện resolver payload resolve lại dependency trần
+  và đọc project override làm lệch pin/hash `cryptography`. Mỗi lỗi đều có
+  regression đỏ trước khi sửa. Gate payload đạt 63/63; release policy đạt
+  22/22; payload thật cài đủ 64 package với `cryptography==50.0.0`.
+- Windows x64 installer local dựng thành công: 341.260.235 byte, SHA-256
+  `2edb6072e8682e147ebee57d2c268631c3aa7a2d94479aaa53ec4052fbd03fe9`,
+  Authenticode `NotSigned`. Exact NSIS extraction xác minh tag/commit/class,
+  app và resident Node x64, schema-2 manifest và `updateFeedEnabled=false`.
+- Lifecycle contract đã nâng test-first sang candidate v32.1 và exact đường
+  update v32 → v32.1; toàn bộ harness test đạt 22/22. Packaged lifecycle vẫn
+  **NO-GO** vì host không có Windows Sandbox. Không cài trực tiếp, không dùng profile thật,
+  không live provider, stage, push, merge hay public. Evidence chi tiết tại
+  `docs/v32.1/local-candidate-2026-08-26.md`.
+
 ## Cập nhật 2026-08-26 — MCP exact permission receipt fail-closed
 
 - Backend có endpoint chỉ-đọc `/api/mcp/assignments` lấy receipt theo đúng

@@ -10,10 +10,10 @@ import { fileURLToPath } from 'node:url'
 import {
   ROLLBACK_COMMIT,
   ROLLBACK_TAG,
-  V31_SOURCE_COMMIT,
-  V31_SOURCE_TAG,
-  V32_CANDIDATE_COMMIT,
-  V32_CANDIDATE_TAG,
+  V32_SOURCE_COMMIT,
+  V32_SOURCE_TAG,
+  V321_CANDIDATE_COMMIT,
+  V321_CANDIDATE_TAG,
   WINDOWS_LIFECYCLE_NODE_SHA256,
   WINDOWS_LIFECYCLE_NODE_VERSION,
   assertSupportedGithubHostedWindowsRunner,
@@ -41,9 +41,9 @@ const RESULT_NAME = 'lifecycle-result.json'
 function usage() {
   return `Usage:
   node scripts/windows-lifecycle-acceptance/run.mjs \\
-    --candidate <v32 NSIS.exe> --candidate-sha256 <sha256> \\
+    --candidate <v32.1 NSIS.exe> --candidate-sha256 <sha256> \\
     --candidate-commit <40-char-sha> --harness-commit <40-char-sha> \\
-    --previous <vi-v0.31.0-7 NSIS.exe> --previous-sha256 <sha256> \\
+    --previous <vi-v0.32.0-1 NSIS.exe> --previous-sha256 <sha256> \\
     --rollback <vi-v0.20.4-39 NSIS.exe> --rollback-sha256 <sha256> \\
     --node-runtime-dir <pinned Node 26 x64 directory> \\
     --evidence-dir <new or empty directory> \\
@@ -51,7 +51,7 @@ function usage() {
 
 This command runs only in Windows Sandbox or a GitHub-hosted ephemeral Windows
 VM. It never falls back to a workstation install. Candidate commit and tags are fixed to
-${V32_CANDIDATE_COMMIT}, ${V32_CANDIDATE_TAG}, ${V31_SOURCE_TAG}, and ${ROLLBACK_TAG}.`
+${V321_CANDIDATE_COMMIT}, ${V321_CANDIDATE_TAG}, ${V32_SOURCE_TAG}, and ${ROLLBACK_TAG}.`
 }
 
 function parseArgs(argv) {
@@ -369,9 +369,9 @@ async function main() {
 
   const runId = crypto.randomUUID()
   const descriptor = validateLifecycleDescriptor({
-    candidate: inspectInstaller(args.candidate, args.candidateSha256, V32_CANDIDATE_TAG, args.candidateCommit),
+    candidate: inspectInstaller(args.candidate, args.candidateSha256, V321_CANDIDATE_TAG, args.candidateCommit),
     harnessCommit: args.harnessCommit,
-    previous: inspectInstaller(args.previous, args.previousSha256, V31_SOURCE_TAG, V31_SOURCE_COMMIT),
+    previous: inspectInstaller(args.previous, args.previousSha256, V32_SOURCE_TAG, V32_SOURCE_COMMIT),
     releaseClass: 'community-prerelease',
     rollback: inspectInstaller(args.rollback, args.rollbackSha256, ROLLBACK_TAG, ROLLBACK_COMMIT),
     runId,

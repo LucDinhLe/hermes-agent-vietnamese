@@ -9,10 +9,10 @@ import {
   ROLLBACK_COMMIT,
   ROLLBACK_SHA256,
   ROLLBACK_SIZE,
-  V31_SOURCE_COMMIT,
-  V31_SOURCE_SHA256,
-  V31_SOURCE_SIZE,
-  V32_CANDIDATE_COMMIT,
+  V32_SOURCE_COMMIT,
+  V32_SOURCE_SHA256,
+  V32_SOURCE_SIZE,
+  V321_CANDIDATE_COMMIT,
   WINDOWS_LIFECYCLE_NODE_SHA256,
   WINDOWS_LIFECYCLE_NODE_VERSION,
   assertSupportedGithubHostedWindowsRunner,
@@ -30,19 +30,19 @@ const lifecycleSpec = fs.readFileSync(
 const fixtureScript = fs.readFileSync(new URL('../../apps/desktop/e2e/fixtures.ts', import.meta.url), 'utf8')
 
 const candidate = {
-  commit: V32_CANDIDATE_COMMIT,
-  fileName: 'Hermes-0.32.0-vi.1-win-x64.exe',
+  commit: V321_CANDIDATE_COMMIT,
+  fileName: 'Hermes-0.32.1-vi.1-win-x64.exe',
   sha256: '1'.repeat(64),
   size: 320_000_000,
-  tag: 'vi-v0.32.0-1'
+  tag: 'vi-v0.32.1-1'
 }
 const previous = {
-  commit: V31_SOURCE_COMMIT,
+  commit: V32_SOURCE_COMMIT,
   fileName: 'Hermes-Vietnamese-Windows-x64-Setup.exe',
-  identitySource: 'v32-task-baseline',
-  sha256: V31_SOURCE_SHA256,
-  size: V31_SOURCE_SIZE,
-  tag: 'vi-v0.31.0-7'
+  identitySource: 'immutable-public-v32',
+  sha256: V32_SOURCE_SHA256,
+  size: V32_SOURCE_SIZE,
+  tag: 'vi-v0.32.0-1'
 }
 const rollback = {
   commit: ROLLBACK_COMMIT,
@@ -66,7 +66,7 @@ test('descriptor binds the three exact lifecycle installers and rejects byte reu
   const validated = validateLifecycleDescriptor(descriptor)
   assert.equal(validated.candidate.commit, candidate.commit)
   assert.equal(validated.harnessCommit, descriptor.harnessCommit)
-  assert.equal(validated.previous.tag, 'vi-v0.31.0-7')
+  assert.equal(validated.previous.tag, 'vi-v0.32.0-1')
   assert.equal(validated.rollback.tag, 'vi-v0.20.4-39')
 
   assert.throws(
@@ -75,7 +75,7 @@ test('descriptor binds the three exact lifecycle installers and rejects byte reu
   )
   assert.throws(
     () => validateLifecycleDescriptor({ ...descriptor, previous: { ...previous, sha256: '2'.repeat(64) } }),
-    /pinned vi-v0\.31\.0-7/
+    /pinned vi-v0\.32\.0-1/
   )
   assert.throws(
     () => validateLifecycleDescriptor({ ...descriptor, rollback: { ...rollback, tag: 'vi-v0.20.4-40' } }),
@@ -83,7 +83,7 @@ test('descriptor binds the three exact lifecycle installers and rejects byte reu
   )
   assert.throws(
     () => validateLifecycleDescriptor({ ...descriptor, candidate: { ...candidate, commit: 'a'.repeat(40) } }),
-    /pinned vi-v0\.32\.0-1 source commit/
+    /pinned vi-v0\.32\.1-1 source commit/
   )
 })
 
@@ -329,7 +329,7 @@ test('receipt validation requires every gate and exact artifact identity', () =>
       name,
       {
         detail:
-          name === 'v31ToV32Update' || name === 'rollbackVi39'
+          name === 'v32ToV321Update' || name === 'rollbackVi39'
             ? { sameRegisteredInstallDir: true }
             : name === 'networkIsolation'
               ? { mode: 'disabled' }

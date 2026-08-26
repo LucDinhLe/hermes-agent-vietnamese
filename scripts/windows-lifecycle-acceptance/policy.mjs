@@ -1,13 +1,13 @@
 const SHA256_RE = /^[0-9a-f]{64}$/
 const COMMIT_RE = /^[0-9a-f]{40}$/
 
-export const V32_CANDIDATE_TAG = 'vi-v0.32.0-1'
-export const V32_CANDIDATE_COMMIT = '81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f'
-export const V31_SOURCE_TAG = 'vi-v0.31.0-7'
+export const V321_CANDIDATE_TAG = 'vi-v0.32.1-1'
+export const V321_CANDIDATE_COMMIT = '5dd1b3dfae33696dc98d323b9def5148a4482b1d'
+export const V32_SOURCE_TAG = 'vi-v0.32.0-1'
 export const ROLLBACK_TAG = 'vi-v0.20.4-39'
-export const V31_SOURCE_COMMIT = '70b2418fdb2b35a714d4a813c6894cdbbec0a370'
-export const V31_SOURCE_SHA256 = 'cca0f3c0255e5e8736676a4d7ccb52c6e1b75eb73b94b8d1c3ca5dc91e57e840'
-export const V31_SOURCE_SIZE = 340_302_846
+export const V32_SOURCE_COMMIT = '81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f'
+export const V32_SOURCE_SHA256 = 'efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac'
+export const V32_SOURCE_SIZE = 341_176_379
 export const ROLLBACK_COMMIT = 'd270974d2651e72f169fffe34c955eeae7977458'
 export const ROLLBACK_SHA256 = 'e4e0b60d7821b0e72af7b79e745b723c035f588c49bb11782778214a3e0c6d31'
 export const ROLLBACK_SIZE = 340_105_286
@@ -31,7 +31,7 @@ export const REQUIRED_LIFECYCLE_GATES = Object.freeze([
   'uxContextMeter',
   'compaction',
   'safeTool',
-  'v31ToV32Update',
+  'v32ToV321Update',
   'repair',
   'uninstallKeepData',
   'uninstallDeleteData',
@@ -110,7 +110,7 @@ export function validateLifecycleDescriptor(descriptor) {
     throw new Error('lifecycle descriptor schemaVersion must be 1')
   }
   if (descriptor.releaseClass !== 'community-prerelease') {
-    throw new Error('v32 lifecycle acceptance requires releaseClass=community-prerelease')
+    throw new Error('v32.1 lifecycle acceptance requires releaseClass=community-prerelease')
   }
 
   const runId = requireString(descriptor.runId, 'runId')
@@ -123,14 +123,14 @@ export function validateLifecycleDescriptor(descriptor) {
     throw new Error('harnessCommit must be a full lowercase 40-character commit SHA')
   }
 
-  const candidate = validateArtifact(descriptor.candidate, 'candidate', V32_CANDIDATE_TAG, {
-    expectedCommit: V32_CANDIDATE_COMMIT
+  const candidate = validateArtifact(descriptor.candidate, 'candidate', V321_CANDIDATE_TAG, {
+    expectedCommit: V321_CANDIDATE_COMMIT
   })
-  const previous = validateArtifact(descriptor.previous, 'previous', V31_SOURCE_TAG, {
-    expectedCommit: V31_SOURCE_COMMIT,
-    expectedSha256: V31_SOURCE_SHA256,
-    expectedSize: V31_SOURCE_SIZE,
-    identitySource: 'v32-task-baseline'
+  const previous = validateArtifact(descriptor.previous, 'previous', V32_SOURCE_TAG, {
+    expectedCommit: V32_SOURCE_COMMIT,
+    expectedSha256: V32_SOURCE_SHA256,
+    expectedSize: V32_SOURCE_SIZE,
+    identitySource: 'immutable-public-v32'
   })
   const rollback = validateArtifact(descriptor.rollback, 'rollback', ROLLBACK_TAG, {
     expectedCommit: ROLLBACK_COMMIT,
@@ -384,7 +384,7 @@ export function validateLifecycleReceipt(receipt, descriptor) {
       throw new Error(`required lifecycle gate ${gateName} has no evidence`)
     }
     if (
-      (gateName === 'v31ToV32Update' || gateName === 'rollbackVi39') &&
+      (gateName === 'v32ToV321Update' || gateName === 'rollbackVi39') &&
       gate.detail?.sameRegisteredInstallDir !== true
     ) {
       throw new Error(`required lifecycle gate ${gateName} did not prove an in-place registered install transition`)
