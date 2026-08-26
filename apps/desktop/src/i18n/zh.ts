@@ -1149,6 +1149,7 @@ export const zh: Translations = {
       serverDisabled: name => `${name} 已禁用 — 对新会话生效。`,
       toggleFailed: (name, enabled) => `${enabled ? '开启' : '关闭'} ${name} 失败`,
       tabServers: '服务器',
+      assigned: '已分配给会话',
       tabCatalog: '目录',
       catalogLoading: '正在加载 MCP 目录…',
       catalogLoadFailed: 'MCP 目录加载失败',

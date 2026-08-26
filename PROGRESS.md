@@ -7,6 +7,12 @@
   fail-closed với resume. API chỉ trả exact tools/server/reasons đã gán, không
   connect, reload, mutate config hay cấp quyền. Regression chứng minh default và
   named profile có cùng session ID không rò sang nhau; mapping giả mạo trả rỗng.
+- Desktop client ghim request theo `session + profile + backend`. MCP tab hiển
+  nhãn `assigned` chỉ trên server có trong receipt của phiên hiện hành;
+  catalog/install/enabled/connected vẫn là các trạng thái riêng và nhãn
+  không tạo config write hay cấp quyền. Copy đã đủ en/vi/ja/zh/zh-hant/ar.
+- Desktop client gate đạt 29/29; ba cấu hình TypeScript, Prettier và
+  changed-file ESLint đều xanh.
 - Session root mới chỉ gán đúng MCP tool đã kết nối và khớp nhiệm vụ từ catalog
   schema cục bộ; bước định tuyến báo 0 model/provider/network call, không cài,
   đăng nhập, cấp quyền hay ghi cấu hình. Child chỉ được thu hẹp receipt của
@@ -26,9 +32,9 @@
   sẵn, không thuộc lát cắt); kiểm tra MCP riêng đạt 8/8. Ruff, bytecode compile
   và `git diff --check` đạt. Không live probe, provider/network/process call,
   build candidate, profile Hermes thật, push hay hành động public.
-- Bước nhỏ tiếp theo: nối typed Desktop client và badge `assigned` theo session
-  vào MCP tab, đủ locale và UI E2E profile-scoped; sau đó mới cân nhắc packaged
-  lifecycle.
+- Bước nhỏ tiếp theo: chạy component/integration E2E cho chuyển profile,
+  session không receipt và receipt thay đổi; chỉ sau khi xanh mới cân nhắc
+  packaged lifecycle.
 
 ## Cập nhật 2026-08-26 — benchmark exact capability receipt offline
 

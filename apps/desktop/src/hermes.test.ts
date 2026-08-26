@@ -14,6 +14,7 @@ import {
   getHermesConfig,
   getHermesConfigDefaults,
   getLatestSessionMessages,
+  getMcpAssignments,
   getOlderSessionMessages,
   getProfiles,
   getSessionMessages,
@@ -355,6 +356,18 @@ describe('Hermes REST helpers', () => {
     expect(api).toHaveBeenCalledWith({
       path: '/api/sessions/session-1/messages?profile=xiaoxuxu',
       profile: 'xiaoxuxu'
+    })
+  })
+
+  it('pins MCP assignment reads to the captured session profile and backend', async () => {
+    api.mockResolvedValue({ assigned: false, reasons: {}, servers: {}, session_id: 's/1', tools: [] })
+
+    await getMcpAssignments('s/1', 'work', 'remote-a')
+
+    expect(api).toHaveBeenCalledWith({
+      connectionId: 'remote-a',
+      path: '/api/mcp/assignments?session_id=s%2F1',
+      profile: 'work'
     })
   })
 

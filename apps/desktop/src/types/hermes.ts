@@ -1510,6 +1510,14 @@ export interface McpServerSummary {
   tools: string[] | null
 }
 
+export interface McpAssignmentResponse {
+  assigned: boolean
+  reasons: Record<string, string>
+  servers: Record<string, string[]>
+  session_id: string
+  tools: string[]
+}
+
 export interface McpServerTestResponse {
   ok: boolean
   error?: string

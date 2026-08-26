@@ -28,6 +28,7 @@ import type {
   HermesConfig,
   HermesConfigRecord,
   LogsResponse,
+  McpAssignmentResponse,
   McpCatalogResponse,
   McpServerSummary,
   MemoryProviderConfig,
@@ -182,6 +183,7 @@ export type {
   HermesConfig,
   HermesConfigRecord,
   LogsResponse,
+  McpAssignmentResponse,
   McpCatalogEntry,
   McpCatalogResponse,
   McpServerSummary,
@@ -2358,6 +2360,17 @@ export function listMcpServers(
   return window.hermesDesktop.api<{ servers: McpServerSummary[] }>({
     ...profileScoped(profile, connectionId),
     path: '/api/mcp/servers'
+  })
+}
+
+export function getMcpAssignments(
+  sessionId: string,
+  profile?: null | string,
+  connectionId?: null | string
+): Promise<McpAssignmentResponse> {
+  return window.hermesDesktop.api<McpAssignmentResponse>({
+    ...profileScoped(profile, connectionId),
+    path: `/api/mcp/assignments?session_id=${encodeURIComponent(sessionId)}`
   })
 }
 

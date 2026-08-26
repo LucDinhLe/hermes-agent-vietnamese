@@ -1066,6 +1066,7 @@ export const vi = defineLocale({
       serverDisabled: name => `${name} bị vô hiệu hóa - áp dụng cho các phiên mới.`,
       toggleFailed: (name, enabled) => `Không thể ${enabled ? 'bật' : 'tắt'} ${name}`,
       tabServers: 'Máy chủ',
+      assigned: 'Đã giao cho phiên',
       tabCatalog: 'Danh mục',
       catalogLoading: 'Đang tải danh mục MCP...',
       catalogLoadFailed: 'MCP không tải được danh mục',

@@ -926,6 +926,7 @@ export const ja = defineLocale({
       serverJson: 'サーバー JSON',
       remove: '削除',
       saveServer: 'サーバーを保存',
+      assigned: 'セッションに割り当て済み',
       capabilitySummary: (tools, prompts, resources) =>
         `${[`ツール ${tools} 個`, ...(prompts ? [`プロンプト ${prompts} 個`] : []), ...(resources ? [`リソース ${resources} 個`] : [])].join('、')} を有効化`,
       costTokens: tokens => `1 呼び出しあたり約 ${tokens} トークン`,

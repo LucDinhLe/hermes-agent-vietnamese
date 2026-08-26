@@ -901,6 +901,7 @@ export const zhHant = defineLocale({
       serverJson: '伺服器 JSON',
       remove: '移除',
       saveServer: '儲存伺服器',
+      assigned: '已指派給對話',
       capabilitySummary: (tools, prompts, resources) =>
         `已啟用 ${[`${tools} 個工具`, ...(prompts ? [`${prompts} 個提示`] : []), ...(resources ? [`${resources} 個資源`] : [])].join('、')}`,
       costTokens: tokens => `每次呼叫約 ${tokens} token`,

@@ -20,6 +20,7 @@ import {
   cancelMcpOAuthFlow,
   getActionStatus,
   getLogs,
+  getMcpAssignments,
   getMcpCatalog,
   getMcpOAuthFlow,
   getUsageAnalytics,
@@ -483,6 +484,18 @@ function ScopedMcpTab({ connectionId, gateway, profile }: McpTabProps) {
     queryFn: () => getMcpCatalog(profile ?? undefined, connectionId),
     staleTime: 5 * 60_000
   })
+
+  const assignmentQuery = useQuery({
+    enabled: !!activeSessionId,
+    queryKey: ['mcp-assignments', sourceKey, scopeProfileKey, activeSessionId],
+    queryFn: () => getMcpAssignments(activeSessionId!, profile ?? appProfile ?? null, connectionId),
+    staleTime: 30_000
+  })
+
+  const assignedServers = useMemo(
+    () => new Set(Object.keys(assignmentQuery.data?.servers ?? {})),
+    [assignmentQuery.data]
+  )
 
   const catalog = useMemo(() => catalogQuery.data?.entries ?? [], [catalogQuery.data])
 
@@ -1016,6 +1029,7 @@ function ScopedMcpTab({ connectionId, gateway, profile }: McpTabProps) {
             : err instanceof Error
               ? err.message
               : String(err)
+
       notifyError(new Error(message), m.invalidJson)
 
       return
@@ -1146,6 +1160,7 @@ function ScopedMcpTab({ connectionId, gateway, profile }: McpTabProps) {
                     return (
                       <McpRow
                         active={false}
+                        assigned={assignedServers.has(serverName)}
                         busy={saving}
                         enabled={serverEnabled(server)}
                         key={serverName}
@@ -1862,6 +1877,7 @@ function McpAvatar({ className, name, status }: { className?: string; name: stri
 
 function McpRow({
   active,
+  assigned,
   busy,
   enabled,
   name,
@@ -1874,6 +1890,7 @@ function McpRow({
   unused
 }: {
   active: boolean
+  assigned: boolean
   busy: boolean
   enabled: boolean
   name: string
@@ -1918,6 +1935,11 @@ function McpRow({
             {unused && (
               <span className="shrink-0 rounded bg-(--ui-bg-tertiary) px-1 py-px text-[0.58rem] font-normal text-muted-foreground/60">
                 {m.unusedPill}
+              </span>
+            )}
+            {assigned && (
+              <span className="shrink-0 rounded bg-(--ui-accent)/10 px-1 py-px text-[0.58rem] font-normal text-(--ui-accent)">
+                {m.assigned}
               </span>
             )}
           </span>

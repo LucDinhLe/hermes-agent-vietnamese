@@ -293,6 +293,10 @@ Các checkpoint đã hoàn thành trên `feat/v32-token-context-ux`:
   `session_id + profile`. Default/named profile dùng đúng state.db riêng kể cả
   khi trùng session ID; receipt sai mapping/hash trả trạng thái chưa gán. API
   không mở MCP I/O và không sửa config/session.
+- Desktop client ghim assigned-state read theo session/profile/backend; MCP tab
+  chỉ gắn nhãn assigned cho server trong receipt phiên hiện hành. Nhãn này
+  không thay đổi installed/enabled/connected và không có mutation path. Copy
+  đã có en/vi/ja/zh/zh-hant/ar; client test 29/29 và typecheck xanh.
 
 Gate gần nhất:
 
@@ -312,9 +316,9 @@ Gate gần nhất:
 
 Việc còn lại, theo thứ tự:
 
-1. Nối typed Desktop client và trạng thái MCP `assigned` theo session vào MCP
-   tab, để UI phân biệt rõ catalog/install/connected/assigned mà không cấp quyền.
-2. Chạy UI E2E profile-scoped; chỉ sau khi xanh mới chạy packaged
+1. Chạy component/integration E2E profile-scoped cho assigned badge, chuyển
+   session/profile và receipt rỗng/thay đổi.
+2. Chỉ sau khi UI E2E xanh mới chạy packaged
    lifecycle gate.
 
 Không cần live provider probe cho các lát cắt trên. Dùng mock provider và profile
@@ -328,10 +332,10 @@ Decision: candidate only / implementation in progress
 Candidate: none for v32.1; immutable public base is 81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f, 0.32.0-vi.1, 341176379 bytes, efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac
 Audience allowed: source implementation and isolated tests only
 Gates passed: v32 technical GO; isolated fresh baseline; fail-closed allowlist/local discovery; profile-scoped backend API; Desktop client/Settings/first-run UI; durable fresh-profile-only marker; session/subagent exact Skill and MCP receipts; prompt byte stability across call 2/resume; fail-closed receipt hash/server restore; scoped Skill/MCP direct tools/Tool Search/execute_code/refresh; shared Root Governor parent/child breakdown; exact offline full/parent/session/child capability benchmark; simple prompt 1/0/0/0 contract; MCP source gate 298/298 with one unrelated Windows assertion excluded; post-benchmark source gate 210/210 with 1 skip; earlier router source gate 278/278 with 1 skip; Python 61/61 plus template 56/56 and named-profile 2/2; Desktop targeted 26/26; typecheck and changed-file lint
-Gates failed or missing: MCP assigned-state Desktop UI; UI E2E; packaged lifecycle
+Gates failed or missing: MCP assigned-state component/integration E2E; packaged lifecycle
 Evidence: fresh bundled sync 82 packages; 72 active relevant skills; full index 8,797 chars/8,829 bytes/2,204 Hermes-estimated tokens; parent/session 6 Skills at 2,257 chars/565 tokens with identical receipt hash; child 4 Skills at 2,098 chars/525 tokens; simple prompt produces 1 main response and 0 tool/subagent/background review with 0 live provider/network/process; 0 configured MCP means 0 discovery thread/runtime import/network/process; task routing reports 0 model/provider/network and does not mutate profile config; unallowed Skill is recommendation-only; MCP selection is exact to connected local schemas and child narrows parent; both receipts persist before first call and restore fail-closed; child attempts charge the Root Governor
-Residual risks: Desktop does not yet expose per-session MCP assigned state; three unrelated POSIX-path assertions fail on Windows in broader non-gate probes, one existing environment-variable case-fold assertion is excluded from the MCP source gate, and the full profile suite retains six unrelated POSIX-on-Windows failures
+Residual risks: assigned badge still needs component/integration E2E across session/profile switches; three unrelated POSIX-path assertions fail on Windows in broader non-gate probes, one existing environment-variable case-fold assertion is excluded from the MCP source gate, and the full profile suite retains six unrelated POSIX-on-Windows failures
 Rollback target: vi-v0.20.4-39
 Public actions taken: none
-Next smallest step: red Desktop client/component test for profile-scoped per-session MCP assigned state, then catalog/install/connected/assigned UI E2E and locale gate
+Next smallest step: red component test for assigned badge during session/profile switches, then targeted integration E2E before any packaged lifecycle
 ```

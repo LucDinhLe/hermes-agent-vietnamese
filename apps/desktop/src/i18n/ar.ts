@@ -826,6 +826,7 @@ export const ar = defineLocale({
       serverJson: 'JSON الخادم',
       remove: 'إزالة',
       saveServer: 'حفظ الخادم',
+      assigned: 'معيّن للجلسة',
       deepLinkTitle: 'إضافة خادم MCP؟',
       deepLinkDescription:
         'طلب رابط إضافة خادم MCP هذا إلى Hermes. راجع الإعدادات الكاملة أدناه — فهي قادمة من الرابط وليست من Hermes.',

@@ -960,6 +960,7 @@ export const en: Translations = {
       serverDisabled: name => `${name} disabled — applies to new sessions.`,
       toggleFailed: (name, enabled) => `Failed to turn ${name} ${enabled ? 'on' : 'off'}`,
       tabServers: 'Servers',
+      assigned: 'Assigned',
       tabCatalog: 'Catalog',
       catalogLoading: 'Loading MCP catalog...',
       catalogLoadFailed: 'MCP catalog failed to load',

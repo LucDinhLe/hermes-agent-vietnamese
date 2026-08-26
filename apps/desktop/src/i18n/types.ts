@@ -831,6 +831,7 @@ export interface Translations {
       serverDisabled: (name: string) => string
       toggleFailed: (name: string, enabled: boolean) => string
       tabServers: string
+      assigned: string
       tabCatalog: string
       catalogLoading: string
       catalogLoadFailed: string
