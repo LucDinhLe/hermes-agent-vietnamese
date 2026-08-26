@@ -52,20 +52,24 @@ phiên trong luồng tạo dự án; xóa dự án cũng để phiên quay về 
 - Thêm nút **Ẩn khỏi danh sách dự án** ngay trên thẻ kho tự dò.
 - Tắt tự dò kho git theo mặc định; người dùng phải chủ động bật trong Cài đặt.
 - Giữ `sessions.auto_prune=false` và `sessions.auto_archive=false` làm mặc định.
+- Hiện trực tiếp nút **Ẩn khỏi danh sách dự án** và **Xóa** trên thẻ dự án.
+  Ẩn/Xóa chỉ tác động metadata trong `projects.db`; phiên đang mở không bị thay
+  bằng màn hình trống và mọi phiên được tái phân loại nhưng vẫn nhìn thấy.
 - Khóa regression backend: tạo, lưu trữ, khôi phục và xóa dự án không được đổi
   `hidden`/`archived` hoặc xóa phiên trong `state.db`.
 - Bổ sung regression khóa khả năng nhìn thấy/click lối thoát và khả năng nhận
-  diện/ẩn kho tự dò.
+  diện/ẩn kho tự dò, cùng regression giữ nguyên phiên đang mở khi xóa dự án.
 
 ## Xác minh
 
-- 15 tệp kiểm thử UI/dự án/cấu hình/i18n: 206/206 đạt.
+- Toàn bộ bộ kiểm thử UI: 4.955/4.955 đạt trên 549 tệp.
+- Lát cắt UI trực tiếp cho trang/store Dự án: 38/38 đạt.
 - Các ca hồi quy mới cho scope tạm thời, số phiên ngoài dự án và discovery
   opt-in: chạy đỏ trước sửa, xanh sau sửa.
 - Desktop TypeScript typecheck: đạt.
 - ESLint trên toàn bộ tệp thay đổi: đạt.
-- Backend safety slice trên Windows: 27/27 đạt, gồm regression chứng minh vòng
-  đời dự án không ẩn, archive hoặc xóa phiên.
+- Backend project tree/safety/config trên Windows: 60/60 đạt, gồm regression
+  chứng minh vòng đời dự án không ẩn, archive, xóa hoặc làm rơi phiên khỏi cây.
 - Hồ sơ thật không bị dùng để chạy test và không bị sửa trong quá trình audit.
 
 ## Trạng thái phát hành

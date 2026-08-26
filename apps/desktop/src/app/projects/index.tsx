@@ -2,8 +2,10 @@ import { useStore } from '@nanostores/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 
+import type { SidebarProjectTree } from '@/app/chat/sidebar/projects/workspace-groups'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { SearchField } from '@/components/ui/search-field'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
@@ -21,6 +23,8 @@ import {
   $activeProjectId,
   $projectTree,
   $projectTreeLoading,
+  archiveProject,
+  deleteProject,
   goToProject,
   openProjectCreate,
   refreshProjects,
@@ -41,6 +45,7 @@ export function ProjectsView() {
   const pinnedProjectIds = useStore($pinnedProjectIds)
   const dismissedAutoProjectIds = useStore($dismissedAutoProjectIds)
   const [query, setQuery] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<null | SidebarProjectTree>(null)
 
   const refresh = useCallback(async () => {
     await Promise.all([refreshProjects(), refreshProjectTree()])
@@ -69,6 +74,28 @@ export function ProjectsView() {
   const openProject = (id: string) => {
     goToProject(id)
     navigate(NEW_CHAT_ROUTE)
+  }
+
+  const hideProject = async (project: SidebarProjectTree) => {
+    if (project.isAuto) {
+      dismissAutoProject(project.id)
+    } else {
+      await archiveProject(project.id)
+    }
+
+    if (pinnedProjectIds.includes(project.id)) {
+      unpinProject(project.id)
+    }
+  }
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) {
+      return
+    }
+
+    const id = deleteTarget.id
+    await deleteProject(id)
+    unpinProject(id)
   }
 
   return (
@@ -160,19 +187,6 @@ export function ProjectsView() {
                           <Codicon name={pinned ? 'pinned' : 'pin'} size="0.8rem" />
                         </Button>
                       </Tip>
-                      {project.isAuto && (
-                        <Tip label={p.removeFromSidebar}>
-                          <Button
-                            aria-label={p.removeFromSidebar}
-                            className="text-(--ui-text-tertiary)"
-                            onClick={() => dismissAutoProject(project.id)}
-                            size="icon-xs"
-                            variant="ghost"
-                          >
-                            <Codicon name="close" size="0.8rem" />
-                          </Button>
-                        </Tip>
-                      )}
                     </div>
                   </div>
 
@@ -181,21 +195,42 @@ export function ProjectsView() {
                     <span>{p.tokensCount(compactNumber(project.totalTokens ?? 0))}</span>
                   </div>
 
-                  <Button
-                    className="mt-4 self-start"
-                    onClick={() => openProject(project.id)}
-                    size="xs"
-                    variant="outline"
-                  >
-                    {p.open}
-                    <Codicon name="arrow-right" size="0.7rem" />
-                  </Button>
+                  <div className="mt-4 flex flex-wrap items-center gap-1.5">
+                    <Button onClick={() => openProject(project.id)} size="xs" variant="outline">
+                      {p.open}
+                      <Codicon name="arrow-right" size="0.7rem" />
+                    </Button>
+                    <Button onClick={() => void hideProject(project)} size="xs" variant="ghost">
+                      <Codicon name="eye-closed" size="0.7rem" />
+                      {p.removeFromSidebar}
+                    </Button>
+                    {!project.isAuto && (
+                      <Button
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setDeleteTarget(project)}
+                        size="xs"
+                        variant="ghost"
+                      >
+                        <Codicon name="trash" size="0.7rem" />
+                        {p.menuDelete}
+                      </Button>
+                    )}
+                  </div>
                 </article>
               )
             })}
           </div>
         )}
       </div>
+      <ConfirmDialog
+        confirmLabel={p.menuDelete}
+        description={p.deleteConfirm}
+        destructive
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        open={Boolean(deleteTarget)}
+        title={deleteTarget ? `${p.menuDelete} "${deleteTarget.label}"?` : p.menuDelete}
+      />
     </section>
   )
 }

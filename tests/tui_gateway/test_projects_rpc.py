@@ -289,14 +289,19 @@ def test_project_lifecycle_never_hides_archives_or_deletes_sessions(tmp_path):
     db = server._get_db()
     session_id = "project-safety-session"
     db.create_session(session_id, "cli", cwd=str(tmp_path))
+    db.append_message(session_id, "user", "keep this session visible")
     before = db.get_session(session_id)
 
     created = _call(
         "projects.create", {"name": "Safety", "folders": [str(tmp_path)]}
     )["project"]
     _call("projects.archive", {"id": created["id"]})
+    archived_tree = _call("projects.tree", {"preview_limit": 3})
+    assert session_id in archived_tree["scoped_session_ids"]
     _call("projects.archive", {"id": created["id"], "restore": True})
     _call("projects.delete", {"id": created["id"]})
+    deleted_tree = _call("projects.tree", {"preview_limit": 3})
+    assert session_id in deleted_tree["scoped_session_ids"]
 
     after = db.get_session(session_id)
     assert after is not None

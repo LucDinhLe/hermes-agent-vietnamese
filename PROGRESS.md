@@ -1329,3 +1329,21 @@ Hợp nhất thiết lập Desktop lần đầu thành ba bước trên Windows,
 ## Bước phát hành tiếp theo
 
 Tạo checkpoint Git, đẩy nhánh và chạy workflow pre-release sáu nền tảng. Gói macOS/Linux cần được kiểm tra thêm trên máy thật trước khi bỏ nhãn thử nghiệm cộng đồng.
+
+## Cập nhật 2026-08-26 — hotfix an toàn phiên `vi-v0.32.0-2`
+
+- Hồ sơ thật đã có snapshot cục bộ `20260826-031728`; `state.db` integrity OK,
+  còn 11 phiên/752 tin nhắn, `hidden=0`, `archived=0`.
+- Đã đưa cửa sổ resident về **Tất cả dự án**; các phiên cũ hiển thị lại mà
+  không cần phục hồi hay ghi lại database.
+- Candidate source tách riêng khỏi nhánh v32.1 dang dở. Project scope là tạm
+  thời, tự dò repo mặc định tắt, lối thoát báo đúng số phiên bên ngoài.
+- Trang Dự án có nút **Ẩn** và **Xóa**. Hai thao tác chỉ đổi metadata dự án;
+  xóa dự án không còn phát yêu cầu mở phiên trắng và backend tree tiếp tục nhận
+  mọi session id sau archive/delete.
+- Dữ liệu tiếp tục lưu trong `HERMES_HOME` của đúng máy hoặc máy ảo; không có
+  Hermes cloud backup hay đường upload tự động.
+- Source gate hiện tại đạt UI 4.955/4.955 trên 549 tệp, lát cắt Dự án 38/38,
+  backend project/config/tree 60/60, lifecycle policy 4/4, typecheck và lint.
+- Chưa push, build, cài hoặc công bố `vi-v0.32.0-2`; cần source gate và quyền
+  push repository công khai trước khi tạo immutable artifact.

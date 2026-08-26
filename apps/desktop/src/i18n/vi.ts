@@ -2255,7 +2255,7 @@ export const vi = defineLocale({
       staleBackend:
         'Cập nhật dịch vụ nền Hermes để tạo dự án - dịch vụ nền của bạn cũ hơn ứng dụng dành cho Desktop này (Cài đặt → Cập nhật → dịch vụ nền).',
       deleteConfirm:
-        'Thao tác này sẽ xóa dự án đã lưu khỏi Hermes. Các tập tin, kho git và worktree vẫn không bị ảnh hưởng.',
+        'Thao tác này sẽ xóa dự án đã lưu khỏi Hermes. Các phiên, tập tin, kho git và worktree vẫn không bị ảnh hưởng.',
       startWork: 'Worktree mới',
       newWorktreeTitle: 'Worktree mới',
       newWorktreeDesc: 'Đặt tên nhánh cho worktree này.',

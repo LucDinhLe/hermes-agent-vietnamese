@@ -62,6 +62,18 @@ Candidate không được GO nếu thiếu một trong các bằng chứng:
 5. update giữ nguyên session count/message count;
 6. snapshot và rollback đã thử trên đúng artifact.
 
+### SS-007 — Dữ liệu ở đúng môi trường người dùng chọn
+
+- Máy thật lưu trong hồ sơ người dùng của máy thật; máy ảo lưu trong hồ sơ của
+  máy ảo. Hermes không tự tải phiên, dự án hoặc bản sao lưu lên dịch vụ cloud.
+- Thư mục dữ liệu phải tách khỏi thư mục chương trình để cập nhật/cài đè không
+  thay thế dữ liệu. Trên Windows mặc định là `%LOCALAPPDATA%\hermes`; môi trường
+  đã cấu hình `HERMES_HOME` tiếp tục dùng đúng vị trí đó.
+- Nút **Ẩn** chỉ archive metadata dự án. Nút **Xóa** chỉ xóa metadata dự án.
+  Cả hai phải giữ phiên đang mở, mọi hàng phiên và tập tin trong thư mục dự án.
+- Sau Ẩn/Xóa, `projects.tree` phải tái phân loại toàn bộ phiên sang workspace tự
+  nhận diện hoặc Home; không phiên nào được rơi khỏi `scoped_session_ids`.
+
 ## Áp dụng cho v32.1
 
 Các quyết định này là release blocker, không phải việc cải thiện sau phát hành.
