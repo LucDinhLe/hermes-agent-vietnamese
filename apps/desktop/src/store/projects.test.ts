@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { NO_PROJECT_ID, type SidebarProjectTree } from '@/app/chat/sidebar/projects/workspace-groups'
 import { $sidebarAgentsGrouped, setSidebarAgentsGrouped } from '@/store/layout'
-import { $activeGatewayProfile } from '@/store/profile'
+import { $activeGatewayProfile, $freshSessionRequest } from '@/store/profile'
 import {
   $connection,
   $currentCwd,
@@ -23,8 +23,10 @@ import {
   $sessionMutationsInFlight,
   $worktreeRefreshToken,
   ALL_PROJECTS,
+  archiveProject,
   beginSessionMutation,
   createProject,
+  deleteProject,
   endSessionMutation,
   enterProject,
   exitProjectScope,
@@ -416,6 +418,91 @@ describe('createProject', () => {
       kind: 'warning',
       message: 'sidebar.projects.ideaSaveFailed'
     })
+  })
+})
+
+describe('archiveProject', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    $activeProjectId.set('p_safe')
+    $projectScope.set('p_safe')
+    $projects.set([
+      {
+        archived: false,
+        board_slug: null,
+        color: null,
+        created_at: 0,
+        description: null,
+        folders: [{ added_at: 0, is_primary: true, label: null, path: '/srv/safe' }],
+        id: 'p_safe',
+        icon: null,
+        name: 'Safe',
+        primary_path: '/srv/safe',
+        slug: 'safe'
+      }
+    ])
+    $selectedStoredSessionId.set('session-safe')
+    $projectTree.set([{ id: 'p_safe', label: 'Safe', path: '/srv/safe', repos: [], sessionCount: 1, totalTokens: 0 }])
+    $sessions.set([
+      {
+        archived: false,
+        cwd: '/srv/safe',
+        ended_at: null,
+        id: 'session-safe',
+        input_tokens: 0,
+        is_active: false,
+        last_active: 1,
+        message_count: 1,
+        model: null,
+        output_tokens: 0,
+        preview: 'Still here',
+        source: 'cli',
+        started_at: 1,
+        title: 'Still here',
+        tool_call_count: 0
+      }
+    ])
+  })
+
+  it('archives only project metadata, exits scope, and preserves the session cache', async () => {
+    const request = vi.fn(async (method: string) =>
+      method === 'projects.archive'
+        ? {
+            active_id: null,
+            projects: [{ ...$projects.get()[0], archived: true }]
+          }
+        : { active_id: null, projects: [], scoped_session_ids: [] }
+    )
+
+    activeGateway.mockReturnValue({ connectionState: 'open', request } as never)
+
+    const sessionsBefore = $sessions.get()
+    await archiveProject('p_safe')
+
+    expect(request).toHaveBeenCalledWith('projects.archive', { id: 'p_safe' })
+    expect($projectScope.get()).toBe(ALL_PROJECTS)
+    expect($sessions.get()).toBe(sessionsBefore)
+    expect($sessions.get().map(session => session.id)).toEqual(['session-safe'])
+  })
+
+  it('deletes only project metadata and keeps its currently open session visible', async () => {
+    const request = vi.fn(async (method: string) =>
+      method === 'projects.delete'
+        ? { active_id: null, projects: [] }
+        : { active_id: null, projects: [], scoped_session_ids: ['session-safe'] }
+    )
+
+    activeGateway.mockReturnValue({ connectionState: 'open', request } as never)
+
+    const sessionsBefore = $sessions.get()
+    const freshRequestsBefore = $freshSessionRequest.get()
+    await deleteProject('p_safe')
+
+    expect(request).toHaveBeenCalledWith('projects.delete', { id: 'p_safe' })
+    expect($projectScope.get()).toBe(ALL_PROJECTS)
+    expect($selectedStoredSessionId.get()).toBe('session-safe')
+    expect($sessions.get()).toBe(sessionsBefore)
+    expect($freshSessionRequest.get()).toBe(freshRequestsBefore)
   })
 })
 

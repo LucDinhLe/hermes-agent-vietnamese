@@ -29,6 +29,8 @@ const stores = vi.hoisted(() => {
 })
 
 const actions = vi.hoisted(() => ({
+  archiveProject: vi.fn(async () => undefined),
+  deleteProject: vi.fn(async () => undefined),
   dismissAutoProject: vi.fn(),
   goToProject: vi.fn(),
   openProjectCreate: vi.fn(),
@@ -41,6 +43,7 @@ const actions = vi.hoisted(() => ({
 vi.mock('@/i18n', () => ({
   useI18n: () => ({
     t: {
+      common: { cancel: 'Cancel', done: 'Done', loading: 'Loading' },
       sidebar: {
         projects: {
           emptyDescription: 'Create a project',
@@ -49,6 +52,8 @@ vi.mock('@/i18n', () => ({
           newButton: 'New project',
           open: 'Open project',
           autoDiscovered: 'Found automatically',
+          deleteConfirm: 'Files and sessions stay safe.',
+          menuDelete: 'Delete project',
           removeFromSidebar: 'Hide from projects',
           searchPlaceholder: 'Search projects',
           sectionLabel: 'Projects',
@@ -74,6 +79,8 @@ vi.mock('@/store/projects', () => ({
   $activeProjectId: stores.activeProject,
   $projectTree: stores.tree,
   $projectTreeLoading: stores.treeLoading,
+  archiveProject: actions.archiveProject,
+  deleteProject: actions.deleteProject,
   goToProject: actions.goToProject,
   openProjectCreate: actions.openProjectCreate,
   refreshProjectTree: actions.refreshProjectTree,
@@ -117,6 +124,23 @@ describe('ProjectsView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Open project' }))
     expect(actions.goToProject).toHaveBeenCalledWith('p_alpha')
+  })
+
+  it('offers explicit hide and delete actions without coupling them to sessions', async () => {
+    render(
+      <MemoryRouter>
+        <ProjectsView />
+      </MemoryRouter>
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide from projects' }))
+    expect(actions.archiveProject).toHaveBeenCalledWith('p_alpha')
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Delete project' }).at(-1)!)
+    expect(screen.getByText('Files and sessions stay safe.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Delete project' }))
+
+    await vi.waitFor(() => expect(actions.deleteProject).toHaveBeenCalledWith('p_alpha'))
   })
 
   it('labels an automatically discovered repository and lets the user hide it', () => {

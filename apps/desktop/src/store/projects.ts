@@ -1,10 +1,6 @@
 import { atom } from 'nanostores'
 
-import {
-  liveSessionProjectId,
-  NO_PROJECT_ID,
-  type SidebarProjectTree
-} from '@/app/chat/sidebar/projects/workspace-groups'
+import { NO_PROJECT_ID, type SidebarProjectTree } from '@/app/chat/sidebar/projects/workspace-groups'
 import type { HermesGitBaseBranch, HermesGitBranch } from '@/global'
 import { getHermesConfig, type HermesGateway } from '@/hermes'
 import { translateNow } from '@/i18n'
@@ -22,14 +18,7 @@ import {
   normalizeProfileKey,
   requestFreshSession
 } from '@/store/profile'
-import {
-  $connection,
-  $selectedStoredSessionId,
-  $sessions,
-  sessionMatchesStoredId,
-  setSessions,
-  workspaceCwdForNewSession
-} from '@/store/session'
+import { $connection, sessionMatchesStoredId, setSessions, workspaceCwdForNewSession } from '@/store/session'
 import type { ProjectInfo, ProjectsPayload } from '@/types/hermes'
 
 // First-class, per-profile Projects (named, multi-folder workspaces). State is
@@ -1029,29 +1018,13 @@ export async function addProjectFolder(
   reconcileProjects()
 }
 
-// True when the session currently open in the main pane belongs to `projectId`.
-// Used so deleting a project you have a session open from kicks you back to the
-// intro draft instead of stranding you in a now-orphaned view.
-function openSessionBelongsToProject(projectId: string, projects: ProjectInfo[]): boolean {
-  const openId = $selectedStoredSessionId.get()
-
-  if (!openId) {
-    return false
-  }
-
-  const open = $sessions.get().find(s => sessionMatchesStoredId(s, openId))
-
-  return Boolean(open && liveSessionProjectId(open, projects) === projectId)
-}
-
 // Optimistic: drop the project from the cached tree + list the instant it's
 // clicked (the entered-scope effect exits if you deleted the project you were
-// inside), reconciling from the server payload. A failed delete restores both.
+// inside), reconciling from the server payload. The selected session remains
+// open: deleting project metadata must never replace a healthy conversation
+// with a blank draft. A failed delete restores both project caches.
 export async function deleteProject(id: string): Promise<void> {
   const snap = snapshotProjects()
-  // Capture membership BEFORE removal — the project's folders (which determine
-  // ownership) are gone once it's dropped from the cache.
-  const kickToIntro = openSessionBelongsToProject(id, snap.projects)
 
   $projects.set(snap.projects.filter(project => project.id !== id))
   $projectTree.set(snap.tree.filter(node => node.id !== id))
@@ -1060,14 +1033,35 @@ export async function deleteProject(id: string): Promise<void> {
     $activeProjectId.set(null)
   }
 
-  // The open session's project is gone — reset to the intro draft (the session
-  // itself survives; it just falls back to Recents).
-  if (kickToIntro) {
-    requestFreshSession()
+  if ($projectScope.get() === id) {
+    $projectScope.set(ALL_PROJECTS)
   }
 
   await persistOrRollback(snap, async () => {
     applyPayload(await gatewayRequest<ProjectsPayload>('projects.delete', { id }))
+  })
+  void refreshProjectTree()
+}
+
+// Hiding a project archives only its projects.db row. Session ownership is
+// recomputed by projects.tree, so every chat immediately falls back to an auto
+// workspace or Home; state.db is never mutated by this operation.
+export async function archiveProject(id: string): Promise<void> {
+  const snap = snapshotProjects()
+
+  $projects.set(snap.projects.map(project => (project.id === id ? { ...project, archived: true } : project)))
+  $projectTree.set(snap.tree.filter(node => node.id !== id))
+
+  if (snap.active === id) {
+    $activeProjectId.set(null)
+  }
+
+  if ($projectScope.get() === id) {
+    $projectScope.set(ALL_PROJECTS)
+  }
+
+  await persistOrRollback(snap, async () => {
+    applyPayload(await gatewayRequest<ProjectsPayload>('projects.archive', { id }))
   })
   void refreshProjectTree()
 }
