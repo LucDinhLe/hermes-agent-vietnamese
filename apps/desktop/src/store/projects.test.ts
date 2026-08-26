@@ -126,9 +126,9 @@ describe('project scope', () => {
     expect($projectScope.get()).toBe(NO_PROJECT_ID)
   })
 
-  it('persists the scope to localStorage', () => {
+  it('keeps project scope ephemeral so a restart always returns to all sessions', () => {
     enterProject('p_abc')
-    expect(window.localStorage.getItem('hermes.desktop.projectScope')).toBe('p_abc')
+    expect(window.localStorage.getItem('hermes.desktop.projectScope')).toBeNull()
   })
 })
 

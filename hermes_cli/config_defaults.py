@@ -3546,9 +3546,11 @@ DEFAULT_CONFIG = {
     # Hermes Desktop (Electron app) launch options. These only affect
     # `hermes desktop`; they do not touch the CLI/gateway.
     "desktop": {
-        # Git repository discovery for the Desktop Projects sidebar. Empty
-        # roots preserve the historical bounded scan of the user's home.
-        "repo_scan_enabled": True,
+        # Git repository discovery for the Desktop Projects sidebar is opt-in.
+        # Automatic home scans can make unrelated repositories look like
+        # projects the user just created. When explicitly enabled, empty roots
+        # retain the bounded scan of the user's home.
+        "repo_scan_enabled": False,
         "repo_scan_roots": [],
         "repo_scan_exclude_paths": [],
         # Extra Electron command-line flags appended to every desktop launch,

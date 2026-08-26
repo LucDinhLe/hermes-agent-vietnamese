@@ -15,11 +15,18 @@
   Dự án trước đây không ghi rõ nguồn tự động và không có thao tác ẩn trực tiếp.
 - Bản sửa làm lối quay về nổi rõ và nói thẳng các phiên khác vẫn còn; kho tự dò
   có nhãn **Tự động tìm thấy** và nút **Ẩn khỏi danh sách dự án**.
-- Regression giao diện dự án đạt 134/134; hai ca mới đã được chạy đỏ trước khi
-  sửa rồi xanh sau sửa. Desktop typecheck, ESLint các tệp thay đổi và
-  `git diff --check` đạt. Backend dự án đạt 30/32 trên Windows; hai ca còn lại
-  chỉ lệch kỳ vọng đường dẫn POSIX (`/tmp` so với `C:\\tmp`) có sẵn trong test,
-  không liên quan thay đổi hoặc hồ sơ thật.
+- Theo yêu cầu an toàn nâng cấp ngày 2026-08-26, project scope không còn lưu qua
+  restart; lối quay về báo chính xác số phiên ngoài dự án; tự dò git chuyển sang
+  opt-in/tắt mặc định. `sessions.auto_prune` và `sessions.auto_archive` tiếp tục
+  tắt mặc định.
+- Thêm hợp đồng backend chứng minh tạo → archive → restore → delete dự án
+  không đổi `hidden`/`archived` hoặc xóa phiên. Quyết định và quy trình xử lý
+  khách hàng được khóa tại `docs/v32/session-safety-decisions.md` và
+  `docs/v32/customer-session-incident-runbook.md`.
+- Regression giao diện/dự án/cấu hình/i18n đạt 206/206; các ca scope, số phiên
+  ngoài dự án và opt-in discovery đã chạy đỏ trước khi sửa rồi xanh sau sửa.
+  Backend safety slice đạt 27/27, gồm hợp đồng vòng đời dự án không đổi phiên.
+  Desktop typecheck, ESLint các tệp thay đổi và `git diff --check` đạt.
 - Đây mới là source fix trên nhánh cô lập từ đúng `vi-v0.32.0-1`; chưa push,
   chưa đóng gói, chưa cài đè hồ sơ thật và chưa thực hiện hành động công khai.
 

@@ -1708,7 +1708,7 @@ export const ar = defineLocale({
       enter: label => `فتح ${label}`,
       reorder: label => `إعادة ترتيب ${label}`,
       toggle: (label, open) => `${open ? 'إظهار' : 'إخفاء'} جلسات ${label}`,
-      back: 'كل المشاريع · الجلسات الأخرى ما زالت محفوظة'
+      back: count => (count > 0 ? `كل المشاريع · ${count} جلسات أخرى محفوظة` : 'كل المشاريع')
     },
     newSessionIn: label => `جلسة جديدة في ${label}`,
     showMoreIn: (count, label) => `إظهار ${count} أخرى في ${label}`,

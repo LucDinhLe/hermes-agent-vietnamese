@@ -2184,7 +2184,7 @@ export const en: Translations = {
       enter: label => `Open ${label}`,
       reorder: label => `Reorder ${label}`,
       toggle: (label, open) => `${open ? 'Show' : 'Hide'} ${label} sessions`,
-      back: 'All projects · other sessions remain available'
+      back: count => (count > 0 ? `All projects · ${count} other sessions remain available` : 'All projects')
     },
     newSessionIn: label => `New session in ${label}`,
     showMoreIn: (count, label) => `Show ${count} more in ${label}`,

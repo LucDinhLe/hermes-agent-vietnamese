@@ -161,6 +161,7 @@ import {
   excludeProjectSessions,
   liveSessionProjectId,
   orderProjectsByIds,
+  otherProjectSessionCount,
   overlayLiveLanes,
   overlayLivePreviews,
   PROJECT_PREVIEW_COUNT,
@@ -980,6 +981,7 @@ export function ChatSidebar({
 
   const inProject = Boolean(overviewEnteredProject)
   const enteredProjectId = overviewEnteredProject?.id
+  const outsideProjectSessionCount = enteredProjectId ? otherProjectSessionCount(projectTree, enteredProjectId) : 0
 
   // Entering a project lazily hydrates its full lanes (repo -> lane -> sessions)
   // from the backend — same grouping/ids as the overview, just with rows.
@@ -1880,7 +1882,9 @@ export function ChatSidebar({
                 open={agentsOpen}
                 pinned={false}
                 projectBackRow={
-                  inProject ? <ProjectBackRow label={s.projects.back} onClick={exitProjectScope} /> : undefined
+                  inProject ? (
+                    <ProjectBackRow label={s.projects.back(outsideProjectSessionCount)} onClick={exitProjectScope} />
+                  ) : undefined
                 }
                 projectContent={inProject ? enteredProjectContent : undefined}
                 projectOverview={projectOverview}

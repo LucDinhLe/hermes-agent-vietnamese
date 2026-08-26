@@ -2319,7 +2319,7 @@ export const zh: Translations = {
       enter: label => `打开 ${label}`,
       reorder: label => `重新排序 ${label}`,
       toggle: (label, open) => `${open ? '展开' : '收起'} ${label} 会话`,
-      back: '全部项目 · 其他会话仍然保留'
+      back: count => (count > 0 ? `全部项目 · 还有 ${count} 个其他会话` : '全部项目')
     },
     newSessionIn: label => `在 ${label} 中新建会话`,
     showMoreIn: (count, label) => `在 ${label} 中再显示 ${count} 个`,

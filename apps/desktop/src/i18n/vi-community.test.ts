@@ -78,4 +78,13 @@ describe('Vietnamese community interface', () => {
       expect(gateway.actionTimedOut).toBeTruthy()
     }
   })
+
+  it('keeps project-scoped sessions discoverable with an exact outside count in every locale', () => {
+    expect(vi.sidebar.projects.back(7)).toContain('7 phiên khác')
+
+    for (const locale of [en, ja, zh, zhHant]) {
+      expect(locale.sidebar.projects.back(7)).toContain('7')
+      expect(locale.sidebar.projects.back(0)).toBeTruthy()
+    }
+  })
 })

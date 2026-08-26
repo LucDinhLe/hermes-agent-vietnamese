@@ -1871,7 +1871,7 @@ export const ja = defineLocale({
         'このワークツリーにはコミットされていない変更があります。強制削除（変更を破棄）するか、レーンを隠してディスク上に残します。',
       forceRemove: '強制削除',
       enter: label => `${label} を開く`,
-      back: 'すべてのプロジェクト · 他のセッションも残っています'
+      back: count => (count > 0 ? `すべてのプロジェクト · 他に ${count} 件のセッション` : 'すべてのプロジェクト')
     },
     newSessionIn: label => `${label} で新しいセッション`,
     showMoreIn: (count, label) => `${label} でさらに ${count} 件を表示`,
