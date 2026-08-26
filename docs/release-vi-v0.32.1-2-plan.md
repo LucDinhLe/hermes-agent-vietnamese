@@ -1,8 +1,8 @@
 # Kế hoạch candidate `vi-v0.32.1-2`
 
 Ngày chốt phạm vi: 2026-08-26
-Trạng thái: source integration đang được kiểm thử; chưa build, chưa tag, chưa
-stage, chưa public và chưa đổi GitHub Latest.
+Trạng thái: source integration đã đạt gate; chưa build, chưa tag, chưa stage,
+chưa public và chưa đổi GitHub Latest.
 
 ## Mục tiêu
 

@@ -10,9 +10,11 @@
 - Gate giao điểm đạt UI 151/151, backend project/config 27/27 và lifecycle
   policy 17/17; ba lớp Desktop typecheck đạt.
 - Full UI ban đầu đạt 4.968/4.969; ca duy nhất đỏ là test About còn kỳ vọng
-  nhãn v32.0 trong khi product source đã là v32.1. Kỳ vọng đã được sửa thành
-  v32.1 và test riêng đạt 1/1; không có product behavior failure trong lượt
-  full UI.
+  nhãn v32.0 trong khi product source đã là v32.1. Sau khi sửa kỳ vọng thành
+  v32.1, lượt full UI sạch đạt 553/553 tệp và 4.969/4.969 test.
+- Python release slice sạch đạt 304 passed, 4 skipped, 0 failed. Lượt rộng hơn
+  xác nhận sáu lỗi `test_profiles.py` là giới hạn POSIX trên Windows đã biết;
+  `test_mcp_startup.py` đạt 6/6 trong process sạch.
 - Candidate kế nhiệm được đặt là `vi-v0.32.1-2` / `0.32.1-vi.2`; local
   `vi-v0.32.1-1` cũ giữ bất biến và bị supersede cho mục tiêu release vì chưa
   có hotfix. Chưa build/tag/push/stage/public/đổi Latest.
