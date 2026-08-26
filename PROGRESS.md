@@ -1,5 +1,25 @@
 # Tiến độ
 
+## Cập nhật 2026-08-26 — hợp nhất v32.1 với hotfix an toàn phiên/dự án
+
+- Tạo worktree/branch riêng `integration/v32.1-project-session-safety` từ
+  `d385de1bf`; không sửa worktree v32.1 gốc hoặc `.tmp/` của chủ dự án.
+- Đưa bốn commit chức năng project/session vào v32.1. Giữ hai payload fix mới
+  hơn `2baa74931` + `5dd1b3dfa`, không cherry-pick payload fix `6ff911685` của
+  nhánh hotfix.
+- Gate giao điểm đạt UI 151/151, backend project/config 27/27 và lifecycle
+  policy 17/17; ba lớp Desktop typecheck đạt.
+- Full UI ban đầu đạt 4.968/4.969; ca duy nhất đỏ là test About còn kỳ vọng
+  nhãn v32.0 trong khi product source đã là v32.1. Kỳ vọng đã được sửa thành
+  v32.1 và test riêng đạt 1/1; không có product behavior failure trong lượt
+  full UI.
+- Candidate kế nhiệm được đặt là `vi-v0.32.1-2` / `0.32.1-vi.2`; local
+  `vi-v0.32.1-1` cũ giữ bất biến và bị supersede cho mục tiêu release vì chưa
+  có hotfix. Chưa build/tag/push/stage/public/đổi Latest.
+- Release plan: `docs/release-vi-v0.32.1-2-plan.md`. Latest tiếp tục NO-GO cho
+  tới khi exact artifact có Authenticode `Valid` và vòng đời trên Windows guest
+  cô lập đạt, gồm update v32 → v32.1 và persistence project/session.
+
 ## Cập nhật 2026-08-26 — candidate local v32.1 và provenance đóng gói
 
 - Nâng metadata candidate lên `v32.1` / `0.32.1-vi.1` mà không sửa descriptor

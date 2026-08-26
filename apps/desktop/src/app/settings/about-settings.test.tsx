@@ -55,7 +55,7 @@ describe('AboutSettings community identity and updater source', () => {
   it('shows factual attribution, MIT license, and the community update channel without unknown git data', () => {
     render(<AboutSettings />)
 
-    expect(screen.getByText('Phiên bản v32.0')).toBeTruthy()
+    expect(screen.getByText('Phiên bản v32.1')).toBeTruthy()
     expect(screen.getByText('Phiên bản kỹ thuật')).toBeTruthy()
     expect(screen.getByText('0.20.4-vi.35')).toBeTruthy()
     expect(screen.getByText('Phiên bản Hermes Agent gốc')).toBeTruthy()
