@@ -128,6 +128,7 @@ interface SidebarSessionsSectionProps {
   // True while the backend project tree is loading (overview skeleton).
   projectsLoading?: boolean
   onEnterProject?: (id: string) => void
+  onExitProject?: () => void
   // The entered project's flattened content: main-checkout sessions render
   // directly (no redundant repo/branch header); only linked worktrees nest.
   projectContent?: SidebarProjectTree
@@ -200,6 +201,7 @@ export function SidebarSessionsSection({
   projectOverviewPreviews,
   projectsLoading = false,
   onEnterProject,
+  onExitProject,
   projectContent,
   projectRepoWorktrees,
   liveSessions,
@@ -385,24 +387,35 @@ export function SidebarSessionsSection({
   if (showProjectsSkeleton) {
     inner = <SidebarSessionSkeletons />
   } else if (projectContent) {
-    // Entered a project: the back row is always present, then either the
-    // (overlay-aware) content or a clean empty state — never a bare spinner or a
-    // blank pane while lanes hydrate.
+    // Keep the entered view structurally identical to the overview: the project
+    // remains a real row with its icon, actions, and disclosure control. Its
+    // expanded body is the complete hydrated tree rather than the overview's
+    // three-session preview, so entering a project never makes the project row
+    // or its session affordance disappear.
     inner = (
       <>
         {projectBackRow}
-        {hasProjectContent ? (
-          <EnteredProjectContent
-            liveSessions={liveSessions}
-            onNewSession={onNewSessionInWorkspace}
-            project={projectContent}
-            removedSessionIds={removedSessionIds}
-            renderRows={renderRowsDated}
-            repoWorktrees={projectRepoWorktrees}
-          />
-        ) : (
-          emptyState
-        )}
+        <ProjectOverviewRow
+          activeProjectId={activeProjectId}
+          expandedContent={
+            hasProjectContent ? (
+              <EnteredProjectContent
+                liveSessions={liveSessions}
+                onNewSession={onNewSessionInWorkspace}
+                project={projectContent}
+                removedSessionIds={removedSessionIds}
+                renderRows={renderRowsDated}
+                repoWorktrees={projectRepoWorktrees}
+              />
+            ) : (
+              emptyState
+            )
+          }
+          onExitScope={onExitProject}
+          onNewSession={onNewSessionInWorkspace}
+          project={projectContent}
+          scoped
+        />
       </>
     )
   } else if (showEmptyState) {

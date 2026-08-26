@@ -60,8 +60,16 @@ export function ProjectBackRow({ label, onClick }: { label: string; onClick: () 
 interface ProjectOverviewRowProps {
   project: SidebarProjectTree
   onEnter?: (id: string) => void
+  onExitScope?: () => void
   onNewSession?: (path: null | string) => void
   renderRows?: (sessions: SessionInfo[]) => React.ReactNode
+  // The entered-project view reuses the exact same project row as the overview,
+  // but hangs the complete hydrated tree underneath it instead of a three-row
+  // preview. `undefined` means overview mode; any React node (including an
+  // empty-state node) means this is the entered project and its label toggles
+  // the full body instead of navigating again.
+  expandedContent?: React.ReactNode
+  scoped?: boolean
   activeProjectId?: null | string
   previewSessions?: SessionInfo[]
   reorderable?: boolean
@@ -74,8 +82,11 @@ interface ProjectOverviewRowProps {
 export function ProjectOverviewRow({
   project,
   onEnter,
+  onExitScope,
   onNewSession,
   renderRows,
+  expandedContent,
+  scoped = false,
   activeProjectId,
   previewSessions,
   reorderable = false,
@@ -88,11 +99,17 @@ export function ProjectOverviewRow({
   const s = t.sidebar
   const isActive = project.id === activeProjectId
   const [open, toggleOpen] = useWorkspaceNodeOpen(project.id)
+  const entered = expandedContent !== undefined
   // The appearance popover anchors here (the full row) so it opens flush with
   // the sidebar's content edge regardless of which side the sidebar is on.
   const rowRef = useRef<HTMLDivElement>(null)
-  const fetched = (previewSessions ?? []).slice(0, PROJECT_PREVIEW_COUNT)
-  const preview = renderRows ? (fetched.length ? fetched : latestProjectSessions(project, PROJECT_PREVIEW_COUNT)) : []
+  const fetched = entered ? [] : (previewSessions ?? []).slice(0, PROJECT_PREVIEW_COUNT)
+
+  const preview =
+    !entered && renderRows ? (fetched.length ? fetched : latestProjectSessions(project, PROJECT_PREVIEW_COUNT)) : []
+
+  const hiddenSessionCount = entered ? 0 : Math.max(0, project.sessionCount - preview.length)
+  const toggleLabel = s.projects.toggle(project.label, !open)
 
   const lead = reorderable ? (
     <SidebarRowGrab
@@ -115,7 +132,15 @@ export function ProjectOverviewRow({
               delete — but it still starts sessions: a null path is the "no
               folder" chat. New session sits outermost: it's the one you reach
               for. */}
-          {!project.isNoProject && <ProjectMenu anchorRef={rowRef} isActive={isActive} project={project} />}
+          {!project.isNoProject && (
+            <ProjectMenu
+              anchorRef={rowRef}
+              isActive={isActive}
+              onExitScope={onExitScope}
+              project={project}
+              scoped={scoped}
+            />
+          )}
           {onNewSession && (
             <WorkspaceAddButton label={s.newSessionIn(project.label)} onClick={() => onNewSession(project.path)} />
           )}
@@ -125,9 +150,9 @@ export function ProjectOverviewRow({
       data-glass-opaque={dragging ? '' : undefined}
       label={
         <SidebarRowLink
-          aria-label={s.projects.enter(project.label)}
+          aria-label={entered ? undefined : s.projects.enter(project.label)}
           labelClassName={cn('hover:text-foreground hover:underline', isActive && 'text-foreground')}
-          onClick={() => onEnter?.(project.id)}
+          onClick={entered ? toggleOpen : () => onEnter?.(project.id)}
         >
           {project.label}
         </SidebarRowLink>
@@ -146,11 +171,7 @@ export function ProjectOverviewRow({
         dragHandleProps?.onPointerDown?.(event)
       }}
       ref={rowRef}
-      toggle={
-        preview.length > 0
-          ? { ariaLabel: s.projects.toggle(project.label, !open), onToggle: toggleOpen, open }
-          : undefined
-      }
+      toggle={entered || preview.length > 0 ? { ariaLabel: toggleLabel, onToggle: toggleOpen, open } : undefined}
       totals={{ costUsd: project.totalCostUsd ?? 0, tokens: project.totalTokens ?? 0 }}
     />
   )
@@ -169,7 +190,30 @@ export function ProjectOverviewRow({
           {shell}
         </ProjectContextMenu>
       )}
-      {open && preview.length > 0 && <SidebarRowNest>{renderRows?.(preview)}</SidebarRowNest>}
+      {open && entered && <SidebarRowNest>{expandedContent}</SidebarRowNest>}
+      {open && !entered && preview.length > 0 && (
+        <SidebarRowNest>
+          {renderRows?.(preview)}
+          {hiddenSessionCount > 0 && onEnter && (
+            <SidebarRowShell>
+              <SidebarRowBody
+                aria-label={s.showMoreIn(hiddenSessionCount, project.label)}
+                className="group/more w-full text-(--ui-text-tertiary) hover:text-foreground"
+                onClick={() => onEnter(project.id)}
+              >
+                <SidebarRowLead>
+                  <SidebarRowLeadGlyph>
+                    <Codicon name="ellipsis" size={SIDEBAR_LEAD_ICON_SIZE} />
+                  </SidebarRowLeadGlyph>
+                </SidebarRowLead>
+                <SidebarRowLabel className="text-xs underline-offset-4 group-hover/more:underline">
+                  {s.showMoreIn(hiddenSessionCount, project.label)}
+                </SidebarRowLabel>
+              </SidebarRowBody>
+            </SidebarRowShell>
+          )}
+        </SidebarRowNest>
+      )}
     </div>
   )
 }

@@ -166,7 +166,6 @@ import {
   overlayLivePreviews,
   PROJECT_PREVIEW_COUNT,
   ProjectBackRow,
-  ProjectMenu,
   projectTreeCwd,
   sessionRecency as sessionTime,
   type SidebarProjectTree,
@@ -1166,11 +1165,10 @@ export function ChatSidebar({
     [projectModel, syncProjectCwd]
   )
 
-  // The Sessions section is a project switcher in grouped mode: its label reads
-  // "Sessions" when flat, "Projects" at the overview, and the project's name
-  // once you've entered one.
-  const sessionsLabel =
-    inProject && enteredProject ? enteredProject.label : worktreeGroupingActive ? s.projects.sectionLabel : s.sessions
+  // Grouped mode is always the Projects section. The entered project remains a
+  // disclosed project row inside it, so the section no longer changes identity
+  // from "Projects" to a project name after navigation.
+  const sessionsLabel = worktreeGroupingActive ? s.projects.sectionLabel : s.sessions
 
   // Mirror the section's skeleton gate (projectsLoading + nothing to show yet):
   // while the skeleton is up there's no point also spinning the header count.
@@ -1722,7 +1720,7 @@ export function ChatSidebar({
                 // whichever view is active: flat recents, project lanes, and
                 // the overview previews all render the same card.
                 card={cardRows}
-                collapsible={!inProject}
+                collapsible
                 contentClassName={cn(
                   'flex min-h-0 flex-1 flex-col gap-px pb-1.75',
                   // The section is the ONE authority on whether the virtual
@@ -1800,14 +1798,6 @@ export function ChatSidebar({
                       <div className="group/workspace flex shrink-0 items-center gap-0.5">
                         {enteredProject.path && <StartWorkButton repoPath={enteredProject.path} />}
                         {/* Home has no folder and no record to rename, theme, or delete. */}
-                        {!enteredProject.isNoProject && (
-                          <ProjectMenu
-                            isActive={enteredProject.id === activeProjectId}
-                            onExitScope={exitProjectScope}
-                            project={enteredProject}
-                            scoped
-                          />
-                        )}
                         <div className="grid size-6 place-items-center">
                           <Tip label={s.showProjects}>
                             <Button
@@ -1869,6 +1859,7 @@ export function ChatSidebar({
                 onBranchSession={onBranchSession}
                 onDeleteSession={onDeleteSession}
                 onEnterProject={onEnterProject}
+                onExitProject={exitProjectScope}
                 // Unlike reorder below, this stays on across profiles: a folder
                 // is a folder, and the new session lands in the active profile
                 // — the same one the composer would have started it in.

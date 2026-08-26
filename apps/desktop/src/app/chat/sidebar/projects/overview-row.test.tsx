@@ -7,13 +7,20 @@ import type { SessionInfo } from '@/hermes'
 import { ProjectBackRow, ProjectOverviewRow } from './overview-row'
 import type { SidebarProjectTree } from './workspace-groups'
 
-afterEach(cleanup)
+const modelState = vi.hoisted(() => ({ open: false, toggleOpen: vi.fn() }))
+
+afterEach(() => {
+  cleanup()
+  modelState.open = false
+  modelState.toggleOpen.mockReset()
+})
 
 vi.mock('@/i18n', () => ({
   useI18n: () => ({
     t: {
       sidebar: {
         newSessionIn: (label: string) => `New session in ${label}`,
+        showMoreIn: (count: number, label: string) => `Show ${count} more in ${label}`,
         projects: {
           enter: (label: string) => `Enter ${label}`,
           reorder: (label: string) => `Reorder ${label}`,
@@ -27,7 +34,7 @@ vi.mock('@/i18n', () => ({
 vi.mock('./model', () => ({
   PROJECT_PREVIEW_COUNT: 3,
   latestProjectSessions: () => [],
-  useWorkspaceNodeOpen: () => [false, vi.fn()]
+  useWorkspaceNodeOpen: () => [modelState.open, modelState.toggleOpen]
 }))
 
 // ProjectMenu (the kebab) has its own dedicated test file — stub it here so
@@ -39,7 +46,7 @@ vi.mock('./project-menu', () => ({
   ProjectMenu: () => null
 }))
 
-const project = { id: 'p1', label: 'Test D' } as unknown as SidebarProjectTree
+const project = { id: 'p1', label: 'Test D', sessionCount: 0 } as unknown as SidebarProjectTree
 
 const tipTrigger = (el: HTMLElement) => el.closest('[data-slot="tooltip-trigger"]')
 
@@ -75,6 +82,40 @@ describe('ProjectOverviewRow', () => {
     // Collapsed by default, so the disclosure offers to show the sessions.
     const button = screen.getByRole('button', { name: 'Show Test D sessions' })
     expect(tipTrigger(button)).toBeTruthy()
+  })
+
+  it('makes omitted overview sessions explicit and opens the complete project view', () => {
+    const onEnter = vi.fn()
+    const projectWithMore = { ...project, sessionCount: 10 }
+    const previews = ['s1', 's2', 's3'].map(id => ({ id }) as unknown as SessionInfo)
+
+    modelState.open = true
+    render(
+      <ProjectOverviewRow
+        onEnter={onEnter}
+        previewSessions={previews}
+        project={projectWithMore}
+        renderRows={() => null}
+      />
+    )
+
+    const more = screen.getByRole('button', { name: 'Show 7 more in Test D' })
+    expect(more.textContent).toContain('Show 7 more in Test D')
+
+    fireEvent.click(more)
+    expect(onEnter).toHaveBeenCalledWith('p1')
+  })
+
+  it('keeps the entered project as an expandable row with its complete content', () => {
+    modelState.open = true
+
+    render(<ProjectOverviewRow expandedContent={<div>Every project session</div>} project={project} />)
+
+    expect(screen.getByText('Every project session')).toBeTruthy()
+
+    expect(screen.getByRole('button', { name: 'Hide Test D sessions' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Test D' }))
+    expect(modelState.toggleOpen).toHaveBeenCalledOnce()
   })
 
   it('does not render the disclosure toggle when there is nothing to preview', () => {

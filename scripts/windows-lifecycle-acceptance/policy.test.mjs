@@ -19,10 +19,10 @@ import {
 
 const candidate = {
   commit: 'a'.repeat(40),
-  fileName: 'Hermes-0.32.0-vi.3-win-x64.exe',
+  fileName: 'Hermes-0.32.0-vi.4-win-x64.exe',
   sha256: '1'.repeat(64),
   size: 320_000_000,
-  tag: 'vi-v0.32.0-3'
+  tag: 'vi-v0.32.0-4'
 }
 const previous = {
   commit: V31_SOURCE_COMMIT,
