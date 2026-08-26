@@ -70,6 +70,11 @@ test('site-packages install refuses sdists and targets the payload dir', () => {
   // native, so no --platform cross-tags belong here.
   assert.equal(args[0], 'install')
   assert.ok(args.includes('--require-hashes'))
+  // uv export already emits the complete, hash-locked closure. Asking the
+  // installer to resolve dependencies again makes uv reject transitive
+  // metadata requirements such as bare `cryptography`, even though the
+  // exported top-level entry is exactly pinned and hashed.
+  assert.ok(args.includes('--no-deps'))
   assert.ok(args.includes('--only-binary'))
   assert.equal(args[args.indexOf('-r') + 1], 'requirements-payload.txt')
   assert.equal(args[args.indexOf('--target') + 1], '/out/site-packages')
@@ -285,7 +290,7 @@ test('source-build exceptions stay target-specific and exclude covered native wh
   // Fully wheel-covered targets keep the pure only-binary shape.
   const linux = resolveTargets('linux', 'x64')
   assert.deepEqual(pipTargetArgs({ sitePackagesDir: '/sp', sourceBuild: linux.sourceBuild ?? [] }), [
-    'install', '--require-hashes', '--only-binary', ':all:', '-r', 'requirements-payload.txt',
+    'install', '--require-hashes', '--no-deps', '--only-binary', ':all:', '-r', 'requirements-payload.txt',
     '--target', '/sp', '--upgrade', '--no-compile'
   ])
 

@@ -150,6 +150,10 @@ export function pipTargetArgs({ sitePackagesDir, sourceBuild = [] }) {
   return [
     "install",
     "--require-hashes",
+    // `uv export` is the resolver and emits the complete locked closure.
+    // Re-resolving here makes uv inspect bare transitive metadata requirements
+    // and reject them under --require-hashes despite their exported pin.
+    "--no-deps",
     "--only-binary", ":all:",
     ...(sourceBuild.length > 0 ? ["--no-binary", sourceBuild.join(",")] : []),
     "-r", "requirements-payload.txt",
