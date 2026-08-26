@@ -154,6 +154,9 @@ export function pipTargetArgs({ sitePackagesDir, sourceBuild = [] }) {
     // Re-resolving here makes uv inspect bare transitive metadata requirements
     // and reject them under --require-hashes despite their exported pin.
     "--no-deps",
+    // Do not let project-level resolver overrides replace exact versions from
+    // the exported requirements file after their hashes have been selected.
+    "--no-config",
     "--only-binary", ":all:",
     ...(sourceBuild.length > 0 ? ["--no-binary", sourceBuild.join(",")] : []),
     "-r", "requirements-payload.txt",

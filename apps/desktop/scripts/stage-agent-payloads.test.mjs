@@ -75,6 +75,9 @@ test('site-packages install refuses sdists and targets the payload dir', () => {
   // metadata requirements such as bare `cryptography`, even though the
   // exported top-level entry is exactly pinned and hashed.
   assert.ok(args.includes('--no-deps'))
+  // Installing an exported lock must not rediscover [tool.uv] project
+  // overrides and replace a pinned, hashed artifact with a newer version.
+  assert.ok(args.includes('--no-config'))
   assert.ok(args.includes('--only-binary'))
   assert.equal(args[args.indexOf('-r') + 1], 'requirements-payload.txt')
   assert.equal(args[args.indexOf('--target') + 1], '/out/site-packages')
@@ -290,7 +293,7 @@ test('source-build exceptions stay target-specific and exclude covered native wh
   // Fully wheel-covered targets keep the pure only-binary shape.
   const linux = resolveTargets('linux', 'x64')
   assert.deepEqual(pipTargetArgs({ sitePackagesDir: '/sp', sourceBuild: linux.sourceBuild ?? [] }), [
-    'install', '--require-hashes', '--no-deps', '--only-binary', ':all:', '-r', 'requirements-payload.txt',
+    'install', '--require-hashes', '--no-deps', '--no-config', '--only-binary', ':all:', '-r', 'requirements-payload.txt',
     '--target', '/sp', '--upgrade', '--no-compile'
   ])
 
