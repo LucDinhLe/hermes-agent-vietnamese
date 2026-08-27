@@ -586,13 +586,39 @@ async function captureEvidence(page: Page, context: LifecycleContext): Promise<v
   }
 }
 
-async function activateTopmostVisibleButton(page: Page, name: RegExp, timeout = 30_000): Promise<void> {
+async function activateTopmostVisibleButton(
+  page: Page,
+  name: RegExp,
+  timeout = 30_000,
+  acceptPageCloseAfterActivation = false
+): Promise<void> {
   const buttons = page.getByRole('button', { name })
+  let activationAttempted = false
 
   await expect
     .poll(
       async () => {
-        for (let index = (await buttons.count()) - 1; index >= 0; index -= 1) {
+        // Electron can close the Playwright page immediately after a real
+        // uninstall confirmation receives Enter. Accept that closure only
+        // after the exact visible, topmost handle below was activated; a page
+        // that disappeared before activation remains a hard failure.
+        if (acceptPageCloseAfterActivation && activationAttempted && page.isClosed()) {
+          return true
+        }
+
+        let buttonCount: number
+
+        try {
+          buttonCount = await buttons.count()
+        } catch (error) {
+          if (acceptPageCloseAfterActivation && activationAttempted && page.isClosed()) {
+            return true
+          }
+
+          throw error
+        }
+
+        for (let index = buttonCount - 1; index >= 0; index -= 1) {
           const button = buttons.nth(index)
 
           if (!(await button.isVisible())) {
@@ -633,10 +659,15 @@ async function activateTopmostVisibleButton(page: Page, name: RegExp, timeout = 
             // Activate the exact, on-screen native button through its standard
             // keyboard path; Enter is a real user input and does not require a
             // forced click or a synthetic DOM event.
+            activationAttempted = true
             await element.press('Enter')
 
             return true
           } catch {
+            if (acceptPageCloseAfterActivation && activationAttempted && page.isClosed()) {
+              return true
+            }
+
             // A responsive Settings render may detach a previously visible
             // node. Rescan and activate only a newly hit-testable exact handle.
           } finally {
@@ -673,7 +704,7 @@ async function openGuiUninstall(page: Page, mode: 'full' | 'lite'): Promise<void
 async function confirmGuiUninstall(running: RunningApp): Promise<void> {
   const child = running.app.process()
 
-  await activateTopmostVisibleButton(running.page, /^(Yes, uninstall|Đồng ý, gỡ cài đặt)$/i)
+  await activateTopmostVisibleButton(running.page, /^(Yes, uninstall|Đồng ý, gỡ cài đặt)$/i, 30_000, true)
   await expect.poll(() => child.exitCode !== null || child.signalCode !== null, { timeout: 120_000 }).toBe(true)
   expect(child.signalCode).toBeNull()
   expect(child.exitCode).toBe(0)

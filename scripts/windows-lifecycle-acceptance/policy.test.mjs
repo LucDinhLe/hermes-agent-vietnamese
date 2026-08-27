@@ -384,10 +384,18 @@ test('GUI uninstall opens Settings through its global shortcut and activates exa
   assert.match(activationHelper, /const element = await button\.elementHandle\(\)/)
   assert.match(activationHelper, /await element\.scrollIntoViewIfNeeded\(\)/)
   assert.match(activationHelper, /node\.contains\(hitTarget\)/)
+  assert.match(activationHelper, /activationAttempted = true[\s\S]*?await element\.press\('Enter'\)/)
+  assert.match(activationHelper, /acceptPageCloseAfterActivation && activationAttempted && page\.isClosed\(\)/)
   assert.match(activationHelper, /await element\.press\('Enter'\)/)
   assert.doesNotMatch(activationHelper, /mouse\.click|element\.click|button\.click|locator\.click/)
   assert.doesNotMatch(activationHelper, /hitTargetIndex|buttons\.nth\(hitTargetIndex\)/)
   assert.doesNotMatch(activationHelper, /dispatchEvent|evaluate\([^)]*\.click/)
+  assert.match(
+    lifecycleSpec,
+    /activateTopmostVisibleButton\(running\.page, \/\^\(Yes, uninstall\|Đồng ý, gỡ cài đặt\)\$\/i, 30_000, true\)/
+  )
+  assert.match(lifecycleSpec, /child\.exitCode !== null \|\| child\.signalCode !== null/)
+  assert.match(lifecycleSpec, /expect\(child\.exitCode\)\.toBe\(0\)/)
 })
 
 test('safe tool-loop phases expose only the built-in todo toolset', () => {
