@@ -15,12 +15,15 @@
 - Python release slice sạch đạt 304 passed, 4 skipped, 0 failed. Lượt rộng hơn
   xác nhận sáu lỗi `test_profiles.py` là giới hạn POSIX trên Windows đã biết;
   `test_mcp_startup.py` đạt 6/6 trong process sạch.
-- Candidate kế nhiệm được đặt là `vi-v0.32.1-2` / `0.32.1-vi.2`; local
+- Candidate `vi-v0.32.1-2` dừng ở source gate trước build do test cũ trộn
+  candidate notes với public descriptor; tag/run giữ nguyên làm bằng chứng.
+- Candidate kế nhiệm được đặt là `vi-v0.32.1-3` / `0.32.1-vi.3`; local
   `vi-v0.32.1-1` cũ giữ bất biến và bị supersede cho mục tiêu release vì chưa
   có hotfix. Chưa build/tag/push/stage/public/đổi Latest.
-- Release plan: `docs/release-vi-v0.32.1-2-plan.md`. Latest tiếp tục NO-GO cho
-  tới khi exact artifact có Authenticode `Valid` và vòng đời trên Windows guest
-  cô lập đạt, gồm update v32 → v32.1 và persistence project/session.
+- Release plan: `docs/release-vi-v0.32.1-3-plan.md`. Latest tiếp tục NO-GO cho
+  tới khi exact artifact chứng minh Authenticode `NotSigned`, không có signer và
+  vòng đời trên Windows guest cô lập đạt, gồm update v32 → v32.1 và persistence
+  project/session.
 
 ## Cập nhật 2026-08-26 — candidate local v32.1 và provenance đóng gói
 
@@ -206,6 +209,7 @@
 - Bước nhỏ tiếp theo: nối backend API profile-scoped bằng
   `_CONFIG_MUTATION_LOCK`, `load_config`/`save_config`; manual toggle phải cập
   nhật `skills.allowed` khi work profile tồn tại và giữ legacy behavior.
+
 ## Cập nhật 2026-08-26 — đồng bộ sidebar Dự án/phiên cho candidate `vi-v0.32.0-4`
 
 - Audit hai trạng thái sidebar xác nhận `vi-v0.32.0-3` mới chữa lỗi scope làm
@@ -255,6 +259,7 @@
   Desktop typecheck, ESLint các tệp thay đổi và `git diff --check` đạt.
 - Đây mới là source fix trên nhánh cô lập từ đúng `vi-v0.32.0-1`; chưa push,
   chưa đóng gói, chưa cài đè hồ sơ thật và chưa thực hiện hành động công khai.
+
 ## Cập nhật 2026-08-24 — continuity >350k và Governor opaque fail-closed
 
 - Implementation tip trước checkpoint test:

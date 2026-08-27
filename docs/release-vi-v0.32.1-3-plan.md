@@ -1,9 +1,13 @@
-# Kế hoạch candidate `vi-v0.32.1-2`
+# Kế hoạch candidate `vi-v0.32.1-3`
 
 Ngày chốt phạm vi: 2026-08-26
 Trạng thái: source integration và release-controller hardening đã đạt gate tại
 commit `f821cee6b644a67351a735e5dbc1ae82e045ba47`; chưa build, chưa tag, chưa
 stage, chưa public và chưa đổi GitHub Latest.
+
+Ứng viên `vi-v0.32.1-2` đã dừng ở source gate trước build do một regression cũ
+trộn candidate notes với public descriptor. Tag/run `-2` được giữ bất biến làm
+bằng chứng; kế hoạch này chuyển sang ứng viên mới `vi-v0.32.1-3`.
 
 ## Mục tiêu
 
@@ -23,8 +27,8 @@ phiên/dự án. Không rebuild, đổi tag hoặc thay byte candidate đó.
 
 ## Danh tính candidate kế nhiệm
 
-- Tag dự kiến: `vi-v0.32.1-2`.
-- Desktop version: `0.32.1-vi.2`.
+- Tag dự kiến: `vi-v0.32.1-3`.
+- Desktop version: `0.32.1-vi.3`.
 - Release class trước promotion: `community-prerelease`.
 - Exact source commit, kích thước và SHA-256 chỉ được ghi sau clean source gate
   và một lượt build duy nhất.
@@ -56,7 +60,7 @@ phiên/dự án. Không rebuild, đổi tag hoặc thay byte candidate đó.
 
 Sau khi source commit sạch được freeze:
 
-1. build đúng một lần Windows x64 với tag `vi-v0.32.1-2`;
+1. build đúng một lần Windows x64 với tag `vi-v0.32.1-3`;
 2. kiểm exact embedded provenance, PE x64, schema manifest, update feed và
    SHA-256;
 3. ghi nhận trung thực Authenticode `NotSigned`, không có signer certificate và
@@ -72,7 +76,7 @@ Không dùng cài trực tiếp trên workstation thay cho guest lifecycle.
 
 ### Cơ chế fail-closed đã khóa trong source
 
-- `vi-v0.32.1-2` chỉ tạo matrix Windows x64; không dựng thêm artifact chưa được
+- `vi-v0.32.1-3` chỉ tạo matrix Windows x64; không dựng thêm artifact chưa được
   nghiệm thu rồi vô tình đưa chúng vào public release.
 - Windows x64 giữ lớp `community-prerelease` chưa ký theo quyết định của chủ dự
   án ngày 2026-08-27; signing receipt phải ghi `NotSigned` và không có signer.
@@ -88,7 +92,7 @@ Không dùng cài trực tiếp trên workstation thay cho guest lifecycle.
 Chỉ sau khi mọi gate trên đạt, promotion riêng mới được:
 
 - public đúng tag và đúng byte candidate đã nghiệm thu;
-- cập nhật descriptor/download/Latest sang `vi-v0.32.1-2`;
+- cập nhật descriptor/download/Latest sang `vi-v0.32.1-3`;
 - kiểm lại asset size, digest, trạng thái `NotSigned`, updater manifest và
   public links;
 - giữ `vi-v0.32.0-1` làm previous update source và
@@ -108,5 +112,5 @@ liệu hoặc rollback.
 - Workflow contract: 16/16 đạt; YAML và PowerShell parse đạt; Prettier và
   `git diff --check` đạt; Desktop lint 0 error.
 - Exact unsigned installer/lifecycle: chưa chạy; chờ freeze/push exact tag.
-- GitHub staging/tag/promotion: đang chờ hoàn tất đăng nhập lại và đẩy nhánh
-  tích hợp.
+- GitHub staging/tag/promotion: tài khoản `LucDinhLe` đã xác thực; chờ commit
+  sửa source gate và push exact tag `vi-v0.32.1-3`.

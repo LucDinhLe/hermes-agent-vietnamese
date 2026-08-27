@@ -6,6 +6,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_RELEASE = json.loads(
     (REPO_ROOT / ".github/public-release.json").read_text(encoding="utf-8")
 )
+CANDIDATE_RELEASE = "vi-v0.32.1-3"
 
 
 def _read(path: str) -> str:
@@ -42,22 +43,14 @@ def test_download_tables_use_current_release_and_exact_asset_names() -> None:
             )
 
 
-def test_latest_notes_use_the_exact_v32_asset() -> None:
-    assert PUBLIC_RELEASE["releaseClass"] == "community-pilot"
-    assert PUBLIC_RELEASE["artifactProvenanceClass"] == "community-prerelease"
-    prefix = (
-        "https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/"
-        f"{PUBLIC_RELEASE['tag']}/"
-    )
+def test_candidate_notes_describe_v321_without_relabeling_current_public() -> None:
+    """Candidate notes may advance before the public release descriptor does."""
     text = _read(".github/release-notes-vietnamese.md")
+    assert CANDIDATE_RELEASE in text
     assert PUBLIC_RELEASE["tag"] in text
-    assert "community pilot GitHub Latest, chưa phải stable" in text
-    assert "provenance `community-prerelease`" in text
-    for filename in PUBLIC_RELEASE["downloadFiles"]:
-        assert prefix + filename in text, (
-            ".github/release-notes-vietnamese.md is missing the Latest "
-            f"v32 URL for {filename}"
-        )
+    assert "community-prerelease, chưa phải stable" in text
+    assert "Authenticode `NotSigned`" in text
+    assert "an toàn phiên/dự án" in text
 
 
 def test_v32_relabels_the_default_release_without_claiming_stable() -> None:

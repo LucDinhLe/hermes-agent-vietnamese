@@ -4,7 +4,11 @@ Ngày khóa rà soát source: 2026-08-27
 
 ## Quyết định
 
-**Source GO, Release NO-GO** cho `vi-v0.32.1-2`.
+**Source GO, Release NO-GO** cho ứng viên kế nhiệm `vi-v0.32.1-3`.
+
+`vi-v0.32.1-2` đã dừng ở source gate trước khi build vì bài kiểm thử cũ trộn
+ghi chú ứng viên với descriptor bản đang công khai. Tag và run được giữ nguyên
+làm bằng chứng; không có installer `-2` nào được dựng hoặc phát hành.
 
 Phần khắc phục yếu điểm v32 và cổng chống mất/ẩn phiên đã hoàn tất trong source.
 Chưa được build, tag, stage, công khai hoặc thay GitHub Latest vì chưa có exact
@@ -16,8 +20,8 @@ lifecycle receipt trên installer cuối cùng.
 | ------------------------- | ------------------------------------------ |
 | Branch                    | `integration/v32.1-project-session-safety` |
 | Source hardening commit   | `f821cee6b644a67351a735e5dbc1ae82e045ba47` |
-| Tag dự kiến               | `vi-v0.32.1-2`                             |
-| Desktop version dự kiến   | `0.32.1-vi.2`                              |
+| Tag dự kiến               | `vi-v0.32.1-3`                             |
+| Desktop version dự kiến   | `0.32.1-vi.3`                              |
 | Release class             | `community-prerelease`                     |
 | Phạm vi nghiệm thu/public | Windows 10/11 x64                          |
 
@@ -34,7 +38,7 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 - Repo scan, auto archive và auto prune tắt mặc định.
 - Exact lifecycle harness thêm gate `projectSessionSafety`: hash nội dung và số
   hàng trước/sau Ẩn/Xóa, relaunch, tìm và tiếp tục phiên.
-- `vi-v0.32.1-2` chỉ dựng Windows x64; Authenticode được ghi rõ `NotSigned`,
+- `vi-v0.32.1-3` chỉ dựng Windows x64; Authenticode được ghi rõ `NotSigned`,
   không có signer certificate và không được quảng cáo stable/final.
 - Promotion riêng kiểm tag/commit/size/SHA-256, private draft, staging run,
   lifecycle run, evidence seal và tự rollback về v32 nếu hậu kiểm lỗi.
@@ -72,7 +76,7 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 
 ## Rollback
 
-- Nếu promotion v32.1 hậu kiểm lỗi: trả `vi-v0.32.1-2` về draft/prerelease và
+- Nếu promotion v32.1 hậu kiểm lỗi: trả `vi-v0.32.1-3` về draft/prerelease và
   khôi phục `vi-v0.32.0-1` làm GitHub Latest.
 - Rollback cài đặt đã khóa cho lifecycle: `vi-v0.20.4-39`, commit
   `d270974d2651e72f169fffe34c955eeae7977458`, SHA-256
