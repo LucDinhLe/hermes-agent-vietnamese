@@ -1,7 +1,7 @@
 const SHA256_RE = /^[0-9a-f]{64}$/
 const COMMIT_RE = /^[0-9a-f]{40}$/
 
-export const V321_CANDIDATE_TAG = 'vi-v0.32.1-10'
+export const V321_CANDIDATE_TAG = 'vi-v0.32.1-11'
 export const V32_SOURCE_TAG = 'vi-v0.32.0-1'
 export const ROLLBACK_TAG = 'vi-v0.20.4-39'
 export const V32_SOURCE_COMMIT = '81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f'

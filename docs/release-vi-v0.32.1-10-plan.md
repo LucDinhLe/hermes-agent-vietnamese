@@ -1,8 +1,9 @@
 # Kế hoạch candidate `vi-v0.32.1-10`
 
 Ngày chốt phạm vi: 2026-08-27
-Trạng thái: source đang được kiểm tra; chưa tag/build/stage/public. GitHub Latest
-vẫn là `vi-v0.32.0-1`.
+Trạng thái: **HISTORICAL NO-GO**. Build/staging `33061824984` xanh; lifecycle
+`33063041821` fail-closed vì harness ghi fixture sau khi app đã mở database.
+Không promotion; GitHub Latest vẫn là `vi-v0.32.0-1`.
 
 ## Mục tiêu và audience
 
@@ -30,6 +31,19 @@ Candidate `-10` dùng `Enter` trên chính semantic disclosure button cho cả �
 Hiển thị. Không dùng force click, DOM click hoặc bỏ gate. Policy test cấm quay
 lại pointer click cho hai thao tác này.
 
+## Kết quả bất biến
+
+- Exact commit: `b36d994072eb26bf75f5723aa2a08e50970dfa8f`.
+- Installer: 340.628.197 byte; SHA-256
+  `9dd1077699f64702b387de405c5cc097b0a7c9f9b1d0b7645c7d4eff24d6e14f`.
+- Authenticode: `NotSigned`, signer absent.
+- Lifecycle evidence: artifact `9642809205`, digest
+  `4b54db37d614023d32630edb16be79563450bc38483cc41ad31182fce3817bf5`.
+- Fresh install, onboarding, packaged mock runtime và relaunch đều đạt.
+- Project/session safety dừng trước fixture với `database is locked`: harness
+  đã mở Hermes trước khi ghi `projects.db`. Không có thao tác xóa/ẩn hay bằng
+  chứng mất dữ liệu. `-10` giữ nguyên, không rerun hoặc promotion.
+
 ## Gate bắt buộc
 
 - Node release/lifecycle/workflow/public contracts; ba Desktop typecheck.
@@ -44,5 +58,4 @@ lại pointer click cho hai thao tác này.
 
 ## Quyết định hiện tại
 
-**Source under verification, Release NO-GO** cho tới khi exact `-10` vượt toàn
-bộ lifecycle và hậu kiểm promotion.
+**HISTORICAL NO-GO**. Candidate kế nhiệm là `vi-v0.32.1-11`.

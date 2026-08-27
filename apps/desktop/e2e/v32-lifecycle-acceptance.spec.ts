@@ -688,6 +688,10 @@ async function runProjectSessionSafetyPhase(context: LifecycleContext): Promise<
     fs.mkdirSync(projectWorkspace, { recursive: true })
     writeMockProviderConfig(context.hermesHome, mock.url)
     writeEnvFile(context.hermesHome)
+    // Seed the isolated project database before Hermes opens it. Writing the
+    // fixture after launch races the app's project-store initialization and
+    // can fail with SQLITE_BUSY even though the product data is healthy.
+    seedProjectSafetyFixtures(context.hermesHome, projectWorkspace)
     running = await launchExactBinary(context)
     await waitForReady(running)
 
@@ -695,7 +699,6 @@ async function runProjectSessionSafetyPhase(context: LifecycleContext): Promise<
     // isolated project metadata, enter that project through the public UI, and
     // then start a new session through the real shortcut. The send path must
     // derive its cwd from the entered project; no existing session is coerced.
-    seedProjectSafetyFixtures(context.hermesHome, projectWorkspace)
     await openProjectsManager(running.page)
 
     const hideCard = projectCard(running.page, PROJECT_HIDE_NAME)

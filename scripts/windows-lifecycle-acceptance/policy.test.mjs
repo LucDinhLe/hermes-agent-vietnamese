@@ -30,10 +30,10 @@ const fixtureScript = fs.readFileSync(new URL('../../apps/desktop/e2e/fixtures.t
 
 const candidate = {
   commit: 'a'.repeat(40),
-  fileName: 'Hermes-0.32.1-vi.10-win-x64.exe',
+  fileName: 'Hermes-0.32.1-vi.11-win-x64.exe',
   sha256: '1'.repeat(64),
   size: 320_000_000,
-  tag: 'vi-v0.32.1-10'
+  tag: 'vi-v0.32.1-11'
 }
 const previous = {
   commit: V32_SOURCE_COMMIT,
@@ -250,6 +250,8 @@ test('exact lifecycle proves project metadata actions never hide or delete sessi
     projectPhase.match(
       /Hide \$\{PROJECT_HIDE_NAME\} sessions\|Ẩn \$\{PROJECT_HIDE_NAME\} phiên[\s\S]*?await running\.page\.getByRole\('button', \{ name: \/\^\(All projects/
     )?.[0] ?? ''
+  const seedFixturesIndex = projectPhase.indexOf('seedProjectSafetyFixtures(context.hermesHome, projectWorkspace)')
+  const launchCandidateIndex = projectPhase.indexOf('running = await launchExactBinary(context)')
   assert.ok(REQUIRED_LIFECYCLE_GATES.includes('projectSessionSafety'))
   assert.match(guestScript, /Invoke-PlaywrightPhase `\r?\n\s+'project-session-safety'/)
   assert.match(guestScript, /Add-Gate 'projectSessionSafety'/)
@@ -269,6 +271,9 @@ test('exact lifecycle proves project metadata actions never hide or delete sessi
     /Show \$\{PROJECT_HIDE_NAME\} sessions\|Hiển thị \$\{PROJECT_HIDE_NAME\} phiên[\s\S]*?\.press\('Enter'\)/
   )
   assert.doesNotMatch(projectDisclosure, /\.click\(\)/)
+  assert.ok(seedFixturesIndex >= 0, 'project fixtures must be seeded in the safety phase')
+  assert.ok(launchCandidateIndex >= 0, 'candidate must launch in the project safety phase')
+  assert.ok(seedFixturesIndex < launchCandidateIndex, 'project fixtures must be seeded before Hermes opens projects.db')
   assert.match(projectPhase, /not\.toContainText\(MOCK_REPLY/)
   assert.match(lifecycleSpec, /PROJECT_SESSION_MARKER = 'V321_PROJECT_SESSION_SAFETY_ANCHOR'/)
   assert.match(lifecycleSpec, /UPDATE sessions SET title = \?, title_source = 'user' WHERE id = \?/)

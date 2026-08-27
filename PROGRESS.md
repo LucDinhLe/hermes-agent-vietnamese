@@ -1,5 +1,20 @@
 # Tiến độ
 
+## Cập nhật 2026-08-27 — candidate v32.1-11 seed fixture trước khi mở database
+
+- `vi-v0.32.1-10` build/stage xanh tại run `33061824984`; installer 340.628.197
+  byte, SHA-256 `9dd1077699f64702b387de405c5cc097b0a7c9f9b1d0b7645c7d4eff24d6e14f`,
+  Authenticode `NotSigned`.
+- Lifecycle `33063041821` dừng trước fixture với `database is locked`: harness
+  đã mở Hermes rồi mới ghi `projects.db`, trùng lúc project store giữ khóa.
+  Screenshot xác nhận UI trống trước fixture; không có thao tác xóa/ẩn hoặc mất
+  dữ liệu. Evidence artifact `9642809205`, digest
+  `4b54db37d614023d32630edb16be79563450bc38483cc41ad31182fce3817bf5`.
+- Candidate `-11` seed project fixture trước khi launch Hermes; policy bắt buộc
+  thứ tự này. `-10` giữ bất biến, không rerun/promotion.
+- Kế hoạch hiện hành: `docs/release-vi-v0.32.1-11-plan.md`. Latest vẫn là
+  `vi-v0.32.0-1`.
+
 ## Cập nhật 2026-08-27 — candidate v32.1-10 kích hoạt disclosure theo ngữ nghĩa
 
 - `vi-v0.32.1-9` build/stage xanh tại run `33058450054`; installer 340.626.053
@@ -12,7 +27,7 @@
   `09ce7a5fdd92ed4f8910f9cbbc4d0f1a07f4441b13d23eb25effcd574319b6f4`.
 - Candidate `-10` dùng `Enter` trên đúng semantic button cho cả Ẩn/Hiển thị;
   policy cấm pointer click tại hai bước. `-9` giữ bất biến, không rerun/promotion.
-- Kế hoạch hiện hành: `docs/release-vi-v0.32.1-10-plan.md`. Latest vẫn là
+- Kế hoạch lịch sử: `docs/release-vi-v0.32.1-10-plan.md`. Latest vẫn là
   `vi-v0.32.0-1`.
 
 ## Cập nhật 2026-08-27 — candidate v32.1-9 retry giới hạn khi khóa tag
