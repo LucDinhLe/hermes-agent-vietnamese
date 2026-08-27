@@ -1,5 +1,20 @@
 # Tiến độ
 
+## Cập nhật 2026-08-27 — candidate v32.1-12 chờ message flush xuống database
+
+- `vi-v0.32.1-11` build/stage xanh tại run `33064470869`; installer 340.630.734
+  byte, SHA-256 `7e98e7254b9596c6e21d64973cdc3a76d27aca42c56dcfea92eccf28fc7cc416`,
+  Authenticode `NotSigned`.
+- Lifecycle `33065542015` vượt lỗi khóa database, tạo session đúng project và UI
+  hiển thị đủ prompt cùng mock reply. Harness đọc safety snapshot trước khi reply
+  thứ hai flush nên tạm đếm 1 message thay vì 2. Không có bằng chứng mất dữ liệu.
+  Evidence artifact `9643842344`, digest
+  `c321ce027d2f0dc625890891d982f89a9332d97777ad754d799a4a0b2c039266`.
+- Candidate `-12` poll `state.db` đến khi đủ hai message rồi mới chụp snapshot;
+  policy khóa thứ tự này. `-11` giữ bất biến, không rerun/promotion.
+- Kế hoạch hiện hành: `docs/release-vi-v0.32.1-12-plan.md`. Latest vẫn là
+  `vi-v0.32.0-1`.
+
 ## Cập nhật 2026-08-27 — candidate v32.1-11 seed fixture trước khi mở database
 
 - `vi-v0.32.1-10` build/stage xanh tại run `33061824984`; installer 340.628.197
@@ -12,7 +27,7 @@
   `4b54db37d614023d32630edb16be79563450bc38483cc41ad31182fce3817bf5`.
 - Candidate `-11` seed project fixture trước khi launch Hermes; policy bắt buộc
   thứ tự này. `-10` giữ bất biến, không rerun/promotion.
-- Kế hoạch hiện hành: `docs/release-vi-v0.32.1-11-plan.md`. Latest vẫn là
+- Kế hoạch lịch sử: `docs/release-vi-v0.32.1-11-plan.md`. Latest vẫn là
   `vi-v0.32.0-1`.
 
 ## Cập nhật 2026-08-27 — candidate v32.1-10 kích hoạt disclosure theo ngữ nghĩa

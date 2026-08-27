@@ -1,8 +1,9 @@
 # Kế hoạch candidate `vi-v0.32.1-11`
 
 Ngày chốt phạm vi: 2026-08-27
-Trạng thái: source đang được kiểm tra; chưa tag/build/stage/public. GitHub Latest
-vẫn là `vi-v0.32.0-1`.
+Trạng thái: **HISTORICAL NO-GO**. Build/staging `33064470869` xanh; lifecycle
+`33065542015` fail-closed vì harness đọc message count trước khi mock reply flush
+xuống database. Không promotion; GitHub Latest vẫn là `vi-v0.32.0-1`.
 
 ## Mục tiêu và audience
 
@@ -29,6 +30,20 @@ Candidate `-11` seed fixture trong profile cô lập trước khi Hermes mở da
 Policy test khóa thứ tự seed-before-launch; không dùng retry che lỗi, không bỏ
 gate và không sửa dữ liệu Hermes thật.
 
+## Kết quả bất biến
+
+- Exact commit: `92e6810b01b0973b835dbeb2b150e82b01ce146b`.
+- Installer: 340.630.734 byte; SHA-256
+  `7e98e7254b9596c6e21d64973cdc3a76d27aca42c56dcfea92eccf28fc7cc416`.
+- Authenticode: `NotSigned`, signer absent.
+- Lifecycle evidence: artifact `9643842344`, digest
+  `c321ce027d2f0dc625890891d982f89a9332d97777ad754d799a4a0b2c039266`.
+- Fresh install, onboarding, packaged mock runtime và relaunch đều đạt.
+- Project/session safety tạo phiên đúng project và UI hiển thị đủ prompt/reply,
+  nhưng safety snapshot đọc trước khi reply thứ hai flush xuống `state.db`, nên
+  message count tạm thời là 1. Không có bằng chứng mất dữ liệu. `-11` giữ nguyên,
+  không rerun hoặc promotion.
+
 ## Gate bắt buộc
 
 - Node release/lifecycle/workflow/public contracts; ba Desktop typecheck.
@@ -43,5 +58,4 @@ gate và không sửa dữ liệu Hermes thật.
 
 ## Quyết định hiện tại
 
-**Source under verification, Release NO-GO** cho tới khi exact `-11` vượt toàn
-bộ lifecycle và hậu kiểm promotion.
+**HISTORICAL NO-GO**. Candidate kế nhiệm là `vi-v0.32.1-12`.

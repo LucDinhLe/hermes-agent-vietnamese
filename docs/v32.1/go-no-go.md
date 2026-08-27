@@ -5,7 +5,7 @@ Ngày khóa rà soát source: 2026-08-27
 ## Quyết định
 
 **Source under verification, Release NO-GO** cho ứng viên kế nhiệm
-`vi-v0.32.1-11`.
+`vi-v0.32.1-12`.
 
 `vi-v0.32.1-2` đã dừng ở source gate trước khi build vì bài kiểm thử cũ trộn
 ghi chú ứng viên với descriptor bản đang công khai. Tag và run được giữ nguyên
@@ -63,8 +63,19 @@ fixture; không có thao tác xóa/ẩn hay dấu hiệu mất dữ liệu. Evid
 `-10` giữ bất biến; candidate `-11` seed fixture trước khi Hermes mở database và
 policy khóa thứ tự này.
 
+`vi-v0.32.1-11` build/stage đúng byte tại run `33064470869`: 340.630.734 byte,
+SHA-256 `7e98e7254b9596c6e21d64973cdc3a76d27aca42c56dcfea92eccf28fc7cc416`,
+Authenticode `NotSigned`. Lifecycle `33065542015` vượt điểm khóa database, tạo
+project-addressable session và hiển thị cả prompt lẫn mock reply. Nó dừng khi
+harness đọc `state.db` ngay sau UI completion: reply thứ hai chưa flush nên đếm
+1 thay vì 2. Screenshot xác nhận đủ hai tin nhắn; không có dấu hiệu mất dữ liệu.
+Evidence artifact `9643842344`, digest
+`c321ce027d2f0dc625890891d982f89a9332d97777ad754d799a4a0b2c039266`.
+`-11` giữ bất biến; candidate `-12` chờ database xác nhận đủ hai message trước
+khi chụp safety snapshot, không hạ gate nội dung.
+
 Phần khắc phục yếu điểm v32 và cổng chống mất/ẩn phiên đã hoàn tất trong source.
-Candidate cuối `-11` chưa tag/build/stage hoặc thay GitHub Latest vì chưa có
+Candidate cuối `-12` chưa tag/build/stage hoặc thay GitHub Latest vì chưa có
 exact lifecycle receipt.
 
 ## Source candidate
@@ -72,9 +83,9 @@ exact lifecycle receipt.
 | Thuộc tính                | Giá trị                                    |
 | ------------------------- | ------------------------------------------ |
 | Branch                    | `integration/v32.1-project-session-safety` |
-| Source hardening commit   | Chờ freeze exact candidate `-11`           |
-| Tag dự kiến               | `vi-v0.32.1-11`                            |
-| Desktop version dự kiến   | `0.32.1-vi.11`                             |
+| Source hardening commit   | Chờ freeze exact candidate `-12`           |
+| Tag dự kiến               | `vi-v0.32.1-12`                            |
+| Desktop version dự kiến   | `0.32.1-vi.12`                             |
 | Release class             | `community-prerelease`                     |
 | Phạm vi nghiệm thu/public | Windows 10/11 x64                          |
 
@@ -91,7 +102,7 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 - Repo scan, auto archive và auto prune tắt mặc định.
 - Exact lifecycle harness thêm gate `projectSessionSafety`: hash nội dung và số
   hàng trước/sau Ẩn/Xóa, relaunch, tìm và tiếp tục phiên.
-- `vi-v0.32.1-11` chỉ dựng Windows x64; Authenticode được ghi rõ `NotSigned`,
+- `vi-v0.32.1-12` chỉ dựng Windows x64; Authenticode được ghi rõ `NotSigned`,
   không có signer certificate và không được quảng cáo stable/final.
 - Promotion riêng kiểm tag/commit/size/SHA-256, private draft, staging run,
   lifecycle run, evidence seal và tự rollback về v32 nếu hậu kiểm lỗi.
@@ -101,7 +112,7 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 
 ## Gate còn thiếu
 
-1. Commit/push exact source branch và tạo tag bất biến `vi-v0.32.1-11`.
+1. Commit/push exact source branch và tạo tag bất biến `vi-v0.32.1-12`.
 2. Một lượt build duy nhất của Windows x64 từ exact tag.
 3. Ghi size/SHA-256, xác minh trạng thái `NotSigned` và private draft đúng byte.
 4. Exact lifecycle trên GitHub-hosted Windows VM dùng một lần, gồm update
@@ -122,7 +133,7 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 1. Installer chưa ký có thể bị SmartScreen hoặc Smart App Control cảnh báo/chặn;
    người dùng phải được báo rõ và không được hướng dẫn tắt bảo vệ toàn máy.
 2. Candidate `-5` và `-6` chứng minh phiên detached vẫn còn nguyên. Candidate
-   `-7` dừng trước thao tác mở dự án vì pointer interception. Candidate `-11`
+   `-7` dừng trước thao tác mở dự án vì pointer interception. Candidate `-12`
    phải tạo phiên project-addressable qua UI và vượt toàn bộ chuỗi trước khi
    tuyên bố installer cuối cùng đạt.
 3. GitHub Actions từng trả lỗi dịch vụ 429/500/502; mọi retry phải kiểm trước để
@@ -132,7 +143,7 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 
 ## Rollback
 
-- Nếu promotion v32.1 hậu kiểm lỗi: trả `vi-v0.32.1-11` về draft/prerelease và
+- Nếu promotion v32.1 hậu kiểm lỗi: trả `vi-v0.32.1-12` về draft/prerelease và
   khôi phục `vi-v0.32.0-1` làm GitHub Latest.
 - Rollback cài đặt đã khóa cho lifecycle: `vi-v0.20.4-39`, commit
   `d270974d2651e72f169fffe34c955eeae7977458`, SHA-256
@@ -140,7 +151,7 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 
 ## Hành động public
 
-Đã push/tag candidate bất biến `-2` đến `-10`; draft riêng tư đạt tới `-10`.
+Đã push/tag candidate bất biến `-2` đến `-11`; draft riêng tư đạt tới `-11`.
 Không candidate nào được công bố và GitHub Latest vẫn là `vi-v0.32.0-1`.
 Staging/lifecycle `-6` là run `33051008029` / `33052037180`; evidence artifact
 `9638286238`. Staging/lifecycle `-7` là `33053462058` / `33054540916`;
@@ -154,7 +165,11 @@ Build/staging `-10` là `33061824984`; lifecycle `33063041821`; evidence artifac
 `9642809205`, digest
 `4b54db37d614023d32630edb16be79563450bc38483cc41ad31182fce3817bf5`.
 
+Build/staging `-11` là `33064470869`; lifecycle `33065542015`; evidence artifact
+`9643842344`, digest
+`c321ce027d2f0dc625890891d982f89a9332d97777ad754d799a4a0b2c039266`.
+
 ## Bước nhỏ nhất tiếp theo
 
-Freeze exact tag `vi-v0.32.1-11`, build đúng một lần, chạy lifecycle và chỉ
+Freeze exact tag `vi-v0.32.1-12`, build đúng một lần, chạy lifecycle và chỉ
 promotion khi mọi receipt đều xanh.

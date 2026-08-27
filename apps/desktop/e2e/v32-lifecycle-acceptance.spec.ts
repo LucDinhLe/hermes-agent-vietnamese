@@ -713,6 +713,9 @@ async function runProjectSessionSafetyPhase(context: LifecycleContext): Promise<
     await running.page.keyboard.press('Control+N')
     await expect(transcript(running.page)).not.toContainText(MOCK_REPLY, { timeout: 30_000 })
     await sendAndWaitForReply(running.page, mock, PROJECT_SESSION_MARKER)
+    await expect
+      .poll(() => readSessionSafetySnapshot(context.hermesHome).messageCount, { timeout: 30_000 })
+      .toBeGreaterThanOrEqual(2)
 
     const seeded = readSessionSafetySnapshot(context.hermesHome)
     setSessionSafetyTitle(context.hermesHome, seeded.id)
