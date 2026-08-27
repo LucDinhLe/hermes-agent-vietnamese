@@ -1,5 +1,21 @@
 # Tiến độ
 
+## Cập nhật 2026-08-27 — lifecycle `-17` chờ khóa SQLite thay vì fail giả
+
+- Controller `598830c2d1d96774f800d28c067dbeade7b9d2fa` đã chạy lifecycle
+  `33087597148` trên đúng installer `-17`; candidate và harness commit được khóa
+  độc lập đúng thiết kế.
+- Fresh install, onboarding, packaged runtime/relaunch đạt. Run dừng trong
+  `projectSessionSafety` khi harness đọc `projects.db` song song với transaction
+  của Hermes và nhận `database is locked`. Screenshot cho thấy dự án Ẩn đã rời
+  danh sách, dự án còn lại cùng session vẫn hiển thị; chưa có bằng chứng lỗi sản
+  phẩm hay mất/ẩn session.
+- Harness thêm busy timeout và sentinel chỉ cho SQLite `BUSY/LOCKED` để
+  `expect.poll` chờ đúng trạng thái `archived=1` hoặc row bị xóa. Policy 19/19
+  và ba lớp typecheck đạt; installer/tag `-17` không đổi.
+- Evidence artifact `9653267598`, digest
+  `9e37c79770f5637a3fe08bbe597c6ba9a603cd0626818002833f2278171f448b`.
+
 ## Cập nhật 2026-08-27 — tách candidate `-17` khỏi controller nghiệm thu
 
 - `vi-v0.32.1-17` đã build/stage đúng một lần tại run `33082890636`, commit

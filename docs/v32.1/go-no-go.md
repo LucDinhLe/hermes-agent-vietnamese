@@ -136,6 +136,16 @@ Candidate `-17` được giữ nguyên. Controller nghiệm thu được sửa �
 receipt mới khóa cả candidate commit bất biến và `harnessCommit` của run. Không
 tạo `-18` khi installer không đổi byte.
 
+Controller `598830c2d1d96774f800d28c067dbeade7b9d2fa` chạy lifecycle lần hai
+`33087597148`. Fresh install, onboarding và packaged runtime/relaunch đạt. Run
+dừng trong `projectSessionSafety` khi harness đọc `projects.db` song song với
+transaction của Hermes và nhận `database is locked`. Screenshot cho thấy dự án
+Ẩn đã rời danh sách, dự án còn lại cùng session vẫn hiển thị. Evidence artifact
+`9653267598`, digest
+`9e37c79770f5637a3fe08bbe597c6ba9a603cd0626818002833f2278171f448b`.
+Đây tiếp tục là lỗi đồng bộ đọc của harness. Controller kế tiếp chỉ retry lỗi
+SQLite `BUSY/LOCKED` trong `expect.poll`; điều kiện pass dữ liệu không đổi.
+
 ## Source candidate
 
 | Thuộc tính                | Giá trị                                    |
@@ -251,6 +261,9 @@ Build/staging `-16` là `33077676475`; lifecycle `33079425120`; evidence artifac
 Build/staging `-17` là `33082890636`; lifecycle attempt đầu là `33084347847`;
 evidence artifact `9652148218`, digest
 `9c1df73290279fda671e6676f93c7759d4291f00f56ebe08793a889eb63c82cd`.
+
+Lifecycle attempt hai là `33087597148`; evidence artifact `9653267598`, digest
+`9e37c79770f5637a3fe08bbe597c6ba9a603cd0626818002833f2278171f448b`.
 
 ## Bước nhỏ nhất tiếp theo
 

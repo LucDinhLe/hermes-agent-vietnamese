@@ -287,6 +287,7 @@ test('exact lifecycle proves project metadata actions never hide or delete sessi
       /await projectCard\(running\.page, PROJECT_HIDE_NAME\)[\s\S]*?(?=await running\.app\.close\(\))/
     )?.[0] ?? ''
   const sessionRediscovery = projectPhase.match(/const sessionResult[\s\S]*?(?=await assertPersistedAnchor)/)?.[0] ?? ''
+  const projectArchiveRead = lifecycleSpec.match(/function readProjectArchived[\s\S]*?\n\}/)?.[0] ?? ''
   const seedFixturesIndex = projectPhase.indexOf('seedProjectSafetyFixtures(context.hermesHome, projectWorkspace)')
   const launchCandidateIndex = projectPhase.indexOf('running = await launchExactBinary(context)')
   const persistedReplyIndex = projectPhase.indexOf(
@@ -338,6 +339,10 @@ test('exact lifecycle proves project metadata actions never hide or delete sessi
   assert.match(projectMetadataActions, /remainingDeleteCard[\s\S]*?Delete\|Xóa[\s\S]*?\.press\('Enter'\)/)
   assert.match(projectMetadataActions, /const confirm[\s\S]*?Delete\|Xóa[\s\S]*?\.press\('Enter'\)/)
   assert.doesNotMatch(projectMetadataActions, /\.click\(\)/)
+  assert.match(projectArchiveRead, /timeout: 250/)
+  assert.match(projectArchiveRead, /database \(\?:table \)\?is locked\|database is busy/)
+  assert.match(projectArchiveRead, /return PROJECT_DATABASE_BUSY/)
+  assert.match(projectPhase, /expect\.poll\(\(\) => readProjectArchived/)
   assert.match(sessionRediscovery, /getByRole\('button', \{ name: new RegExp\(PROJECT_SESSION_TITLE, 'i'\) \}\)/)
   assert.match(sessionRediscovery, /toHaveAccessibleName\(new RegExp\(PROJECT_SESSION_TITLE, 'i'\)\)/)
   assert.match(sessionRediscovery, /sessionResult\.press\('Enter'\)/)

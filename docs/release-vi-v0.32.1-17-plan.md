@@ -48,6 +48,21 @@ Evidence artifact `9652148218`, digest
 Đây là lỗi hợp đồng harness; không có bằng chứng lỗi sản phẩm hoặc mất/ẩn dữ
 liệu.
 
+## Lifecycle attempt thứ hai
+
+Controller `598830c2d1d96774f800d28c067dbeade7b9d2fa` chạy lifecycle
+`33087597148`. Candidate tag, commit, size và SHA-256 đều khớp; receipt khóa
+đúng candidate commit riêng với harness commit. Fresh install, onboarding,
+packaged runtime và relaunch đạt. Run dừng trong `projectSessionSafety` vì
+Hermes đang giữ transaction trên `projects.db` đúng lúc kết nối đọc song song
+của harness gọi `SELECT archived`; `node:sqlite` ném `database is locked` thay
+vì để `expect.poll` chờ lần đọc kế tiếp.
+
+Screenshot cho thấy dự án Ẩn đã rời danh sách, dự án Xóa và session của nó vẫn
+hiển thị; không có bằng chứng mất/ẩn session. Evidence artifact `9653267598`,
+digest `9e37c79770f5637a3fe08bbe597c6ba9a603cd0626818002833f2278171f448b`.
+Candidate `-17` tiếp tục giữ nguyên byte.
+
 ## Quyết định không tạo `-18`
 
 Installer `-17` không đổi một byte. Theo rulebook, chỉ tăng candidate khi mã
@@ -69,6 +84,9 @@ tag.
   commit độc lập từ exact tag `vi-v0.32.1-17`.
 - Promotion đối chiếu receipt harness với lifecycle `head_sha`, không ép
   `head_sha` phải bằng candidate commit.
+- Kết nối đọc `projects.db` có busy timeout ngắn; chỉ lỗi SQLite
+  `BUSY/LOCKED` mới được đổi thành sentinel để `expect.poll` thử lại. Giá trị
+  `archived=1` và row bị xóa `null` vẫn là hai điều kiện pass duy nhất.
 
 ## Gate còn thiếu
 

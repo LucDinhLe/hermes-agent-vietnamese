@@ -451,16 +451,29 @@ function seedProjectSafetyFixtures(hermesHome: string, cwd: string): void {
   }
 }
 
-function readProjectArchived(hermesHome: string, projectId: string): null | number {
-  const database = new DatabaseSync(path.win32.join(hermesHome, 'projects.db'), { readOnly: true })
+const PROJECT_DATABASE_BUSY = 'project-database-busy' as const
 
+function readProjectArchived(hermesHome: string, projectId: string): null | number | typeof PROJECT_DATABASE_BUSY {
   try {
-    const row = database.prepare('SELECT archived FROM projects WHERE id = ?').get(projectId) as
-      { archived: number } | undefined
+    const database = new DatabaseSync(path.win32.join(hermesHome, 'projects.db'), {
+      readOnly: true,
+      timeout: 250
+    })
 
-    return row ? Number(row.archived) : null
-  } finally {
-    database.close()
+    try {
+      const row = database.prepare('SELECT archived FROM projects WHERE id = ?').get(projectId) as
+        { archived: number } | undefined
+
+      return row ? Number(row.archived) : null
+    } finally {
+      database.close()
+    }
+  } catch (error) {
+    if (error instanceof Error && /database (?:table )?is locked|database is busy/i.test(error.message)) {
+      return PROJECT_DATABASE_BUSY
+    }
+
+    throw error
   }
 }
 
