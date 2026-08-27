@@ -12,6 +12,11 @@
   và resident manifest ngay trong đúng artifact. Workflow tách product commit
   khỏi validation harness commit; overlay chỉ diễn ra sau build nên không đổi
   byte ứng viên và không cần tạo candidate `-19` cho lỗi harness này.
+- Controller rerun đầu tiên phát hiện `write_install_stamp.py` ưu tiên
+  `GITHUB_SHA` của workflow controller, khiến exact artifact bị đóng dấu harness
+  commit dù checkout là product tag. Build step hiện pin `GITHUB_SHA` của mọi
+  child process về product commit; controller commit tiếp tục được lưu riêng
+  trong signing/evidence metadata.
 - Chốt successor `vi-v0.32.1-18`; không sửa asset/tag `-17` đã public và không
   đưa tính năng v33 vào phạm vi.
 - Release workflow hiện có sẽ dựng đủ sáu target native cho `-18`. README và

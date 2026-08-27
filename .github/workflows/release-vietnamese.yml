@@ -414,6 +414,7 @@ jobs:
       - name: Dựng runtime và gói native
         shell: bash
         env:
+          CONTROLLER_COMMIT: ${{ needs.controller.outputs.commit }}
           RELEASE_CLASS: ${{ needs.verify.outputs.release_class }}
           CSC_LINK: ${{ needs.verify.outputs.release_class == 'stable' && secrets.MAC_CSC_LINK || '' }}
           CSC_KEY_PASSWORD: ${{ needs.verify.outputs.release_class == 'stable' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
@@ -424,9 +425,15 @@ jobs:
           HERMES_PAYLOAD_BUILD_PYTHON: ${{ matrix.platform == 'win32' && 'python' || 'python3' }}
           HERMES_ALLOW_WIN32_ARM64_GET_WINDOWS_LIMITATION: ${{ matrix.id == 'windows-arm64' && needs.verify.outputs.release_class == 'community-prerelease' && '1' || '0' }}
         run: |
+          test "$GITHUB_SHA" = "$CONTROLLER_COMMIT"
           if [ "$RELEASE_CLASS" != "stable" ]; then
             unset CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER
           fi
+          # write_install_stamp.py reads GITHUB_SHA before git. During a
+          # workflow_dispatch controller rerun, pin child build processes to
+          # the immutable product commit while retaining CONTROLLER_COMMIT as
+          # the separately recorded validation identity.
+          export GITHUB_SHA="$HERMES_PAYLOAD_GIT_REF"
           node scripts/build-bundled-desktop.mjs --tag="$HERMES_PAYLOAD_TAG" --no-install
 
       - name: Khóa đúng đường dẫn artifact vừa dựng

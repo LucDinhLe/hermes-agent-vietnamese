@@ -62,6 +62,7 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /Tải harness nghiệm thu độc lập, không đổi byte ứng viên/)
   assert.match(candidate, /validation_harness_commit=/)
   assert.match(candidate, /validationHarnessCommit:process\.env\.HARNESS_COMMIT/)
+  assert.match(candidate, /export GITHUB_SHA="\$HERMES_PAYLOAD_GIT_REF"/)
   for (const runner of [
     'windows-2025',
     'windows-11-arm',
