@@ -1,7 +1,7 @@
 # Kế hoạch candidate `vi-v0.32.1-18`
 
 Ngày chốt phạm vi: 2026-08-28
-Trạng thái: **đã công khai dưới dạng community prerelease; không phải Latest**.
+Trạng thái: **đã công khai và được chọn làm GitHub Latest theo xác nhận của chủ dự án; vẫn là community pilot, không phải stable**.
 
 ## Kết quả thực tế
 
@@ -26,8 +26,9 @@ Trạng thái: **đã công khai dưới dạng community prerelease; không ph�
   `e13a09aa1f30cb19e1fb8ab6ed636b5cec605fd9402fbb6f32d6daf1391d4128`.
   Windows x64 SHA-256:
   `565e1313162505999238b9c3b4f1422ec37256a1da153bae5149b5795c83c5ac`.
-- `vi-v0.32.1-17` vẫn là GitHub Latest. `-18` không thay update feed và không
-  được gọi là stable/final.
+- `vi-v0.32.1-18` là GitHub Latest theo quyết định ngày 2026-08-28 của
+  chủ dự án. Thay đổi chỉ thuộc metadata, không đổi asset, hash hay
+  update feed; bản này không được gọi là stable/final.
 
 ## Mục tiêu và audience
 
@@ -38,15 +39,16 @@ liệu và không bật Hermes cloud backup.
 
 ## Quyết định phát hành
 
-- `vi-v0.32.1-17` giữ nguyên tag, asset, hash và vai trò GitHub Latest trong khi
-  candidate đa nền tảng được nghiệm thu.
+- `vi-v0.32.1-17` giữ nguyên tag, asset và hash, trở thành bản trước để
+  quay lui sau khi `-18` được chọn làm GitHub Latest.
 - Tạo successor `vi-v0.32.1-18` vì artifact của năm target mới và Windows x64
   mang SemVer mới là byte mới; không thêm asset vào release `-17` đã bất biến.
 - Windows x64 phải chạy lại full lifecycle trên exact installer `-18`.
 - Windows ARM64, macOS Apple Silicon/Intel và Linux x64/ARM64 chỉ được công bố
   là `BUILD-ONLY-PILOT` cho tới khi có smoke riêng trên máy người dùng.
-- Candidate chưa ký, không có update feed tự động, không phải stable/final và
-  không thay GitHub Latest bằng workflow promotion pilot.
+- Candidate chưa ký, không có update feed tự động và không phải
+  stable/final. Workflow promotion pilot ban đầu không đặt Latest; bước
+  metadata sau đó chỉ đặt Latest khi chủ dự án xác nhận rõ phạm vi.
 
 ## Ma trận artifact
 
@@ -72,8 +74,8 @@ liệu và không bật Hermes cloud backup.
   phải khớp byte trong `SHA256SUMS.txt`, năm target còn lại phải khai báo
   `realMachineSmoke=false`.
 - README, README.vi, release notes và `.github/public-release.json` phải chứa
-  đủ link của 12 artifact phân phối và phân biệt rõ Latest `-17` với pilot
-  `-18`.
+  đủ link của 12 artifact phân phối, cùng trỏ Latest `-18` và ghi rõ
+  năm target ngoài Windows x64 chỉ là `BUILD-ONLY-PILOT`.
 
 ## Chuỗi công khai
 
@@ -82,13 +84,16 @@ liệu và không bật Hermes cloud backup.
 3. Build/stage một lần đủ sáu target; tải lại và kiểm manifest.
 4. Chạy full lifecycle Windows x64 từ đúng draft; sinh và upload biên nhận
    pilot sau khi receipt xanh.
-5. Chạy promotion pilot để công khai cùng byte staging. Không đặt Latest.
-6. Hậu kiểm đủ asset, URL HTTP, digest GitHub và `SHA256SUMS.txt`.
+5. Chạy promotion pilot để công khai cùng byte staging.
+6. Sau xác nhận riêng của chủ dự án, đổi metadata thành Latest,
+   giữ nguyên lớp community pilot, cảnh báo và toàn bộ asset.
+7. Hậu kiểm đủ asset, URL HTTP, digest GitHub, `SHA256SUMS.txt`,
+   tên hiển thị và endpoint GitHub Latest.
 
 ## Rollback
 
-- Nếu source/build/lifecycle/promotion lỗi, giữ `-18` ở draft và giữ
-  `vi-v0.32.1-17` làm Latest.
+- Nếu bước metadata hoặc hậu kiểm Latest lỗi, chuyển `-18` về
+  prerelease và khôi phục `vi-v0.32.1-17` làm Latest.
 - Nếu lỗi chỉ thuộc controller/hạ tầng trước staging, giữ nguyên product tag và
   sửa controller; không tạo candidate mới. Khi byte đã staging, lifecycle sửa
   harness phải dùng lại đúng byte, không rebuild.

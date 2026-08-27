@@ -2,15 +2,13 @@
 
 Tài liệu này dành cho người muốn cài Hermes bằng giao diện, kết nối tài khoản AI của mình và bắt đầu giao việc mà không cần tự dựng môi trường lập trình.
 
-> **Bản tải mặc định:** [vi-v0.32.1-17](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-17)
+> **Bản tải mặc định/Latest:** [Hermes Vietnamese v32.1 cho Windows, macOS và Linux](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18) (`vi-v0.32.1-18`)
 >
-> **Trạng thái:** community pilot công khai **Latest**, chưa phải stable; exact Windows x64 đã qua toàn bộ vòng đời; bộ cài chưa ký số
->
-> **Pilot đa nền tảng:** [vi-v0.32.1-18](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18) — đủ Windows/macOS/Linux; Windows x64 đã nghiệm thu, năm target còn lại là `BUILD-ONLY-PILOT`
+> **Trạng thái:** community pilot công khai **Latest**, chưa phải stable; Windows x64 đã qua toàn bộ vòng đời; Windows ARM64, macOS và Linux là `BUILD-ONLY-PILOT`; bộ cài chưa ký số/công chứng
 
-> **Hermes Vietnamese v32.1** (`vi-v0.32.1-17`) là **community pilot công khai đang được chọn làm Latest, chưa phải stable**. Bản Windows x64 khắc phục lỗi hiển thị/phạm vi Dự án khiến phiên cũ trông như biến mất; Ẩn/Xóa Dự án không xóa hay ẩn phiên. Exact artifact đã qua cài mới, cập nhật từ v32, mở lại, bảo toàn dữ liệu, repair, hai chế độ gỡ cài đặt và rollback.
+> **Hermes Vietnamese v32.1** (`vi-v0.32.1-18`) là **community pilot công khai đang được chọn làm Latest, chưa phải stable**. Bản Windows x64 khắc phục lỗi hiển thị/phạm vi Dự án khiến phiên cũ trông như biến mất; Ẩn/Xóa Dự án không xóa hay ẩn phiên. Exact artifact đã qua cài mới, cập nhật từ v32, mở lại, bảo toàn dữ liệu, repair, hai chế độ gỡ cài đặt và rollback.
 >
-> Tải [Windows x64 của bản Latest](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-17/Hermes-Vietnamese-Windows-x64-Setup.exe), hoặc tải đa nền tảng tại [vi-v0.32.1-18](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18). Windows ARM64, macOS và Linux chưa có smoke trên máy người dùng, chưa ký số/công chứng và chưa phải stable.
+> Tải [Windows x64 của bản Latest](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-18/Hermes-Vietnamese-Windows-x64-Setup.exe), hoặc chọn đúng bộ cài cho nền tảng trong bảng bên dưới. Windows ARM64, macOS và Linux chưa có smoke trên máy người dùng, chưa ký số/công chứng và chưa phải stable.
 
 ## Vì sao có Hermes Vietnamese?
 
@@ -119,7 +117,7 @@ Hermes gốc chưa công bố một cấu hình tối thiểu bắt buộc cho m
 ### Windows
 
 1. Vào **Cài đặt → Hệ thống → Giới thiệu → Loại hệ thống** để xem máy là x64 hay ARM64.
-2. Tải bộ cài x64 từ [trang phát hành v32.1](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-17).
+2. Tải bộ cài x64 từ [trang phát hành v32.1](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18).
 3. Mở bộ cài và hoàn tất các bước trên màn hình.
 4. Khởi động Hermes, chọn ngôn ngữ rồi chọn cài trên máy.
 5. Giữ kết nối Internet trong lần chuẩn bị đầu tiên. Tốc độ phụ thuộc mạng và máy; quá trình có thể lâu hơn vài phút vì phải tải môi trường chạy.

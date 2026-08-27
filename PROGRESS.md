@@ -1,12 +1,13 @@
 # Tiến độ
 
-## Cập nhật 2026-08-28 — chuẩn bị v32.1-18 đa nền tảng
+## Cập nhật 2026-08-28 — v32.1-18 là GitHub Latest đa nền tảng
 
 - **Đã công khai thành công** community prerelease `vi-v0.32.1-18` tại
   <https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18>.
-  Promotion run `33114927801` đạt; release có `draft=false`,
-  `prerelease=true`, đủ 28 asset và 12 artifact phân phối. GitHub Latest vẫn là
-  `vi-v0.32.1-17`, không bị pilot đa nền tảng thay thế.
+  Promotion run `33114927801` đạt; release có đủ 28 asset và 12
+  artifact phân phối. Ngày 2026-08-28, chủ dự án xác nhận đặt
+  `vi-v0.32.1-18` làm GitHub Latest. Đây là thay đổi metadata; tag,
+  target commit, 28 asset, kích thước và digest giữ nguyên.
 - Product tag giữ nguyên commit
   `2594eb396f0c5720802fc608a01a64d96d5629b2`. Manifest SHA-256 là
   `e13a09aa1f30cb19e1fb8ab6ed636b5cec605fd9402fbb6f32d6daf1391d4128`;
@@ -62,9 +63,9 @@
   update feed.
 - Source gate liên quan đã đạt: Node release/lifecycle/evidence 37/37, workflow
   contract Vitest 17/17 và Python public-download 9/9. `git diff --check` sạch.
-- Bước tiếp theo: theo dõi phản hồi prerelease; chỉ nâng audience cho từng target
-  sau khi có smoke riêng trên máy thật. Không sửa byte/tag `-18`; v33 là phạm vi
-  riêng.
+- Bước tiếp theo: theo dõi phản hồi community pilot; chỉ nâng audience
+  cho từng target sau khi có smoke riêng trên máy thật. Không sửa byte/tag
+  `-18`; v33 là phạm vi riêng.
 
 ## Cập nhật 2026-08-27 — v32.1 đã là GitHub Latest
 

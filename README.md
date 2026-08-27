@@ -18,9 +18,7 @@ Dự án được phát triển từ [Hermes Agent](https://github.com/NousResea
   <a href="LICENSE"><img src="https://img.shields.io/badge/Giấy_phép-MIT-16A34A?style=for-the-badge" alt="Giấy phép MIT"></a>
 </p>
 
-> **Bản tải mặc định/Latest: [Hermes Vietnamese v32.1](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-17)** (`vi-v0.32.1-17`) là **community pilot công khai, chưa phải stable**. [Windows x64 của bản Latest](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-17/Hermes-Vietnamese-Windows-x64-Setup.exe) đã qua cài mới, cập nhật từ v32, mở lại, bảo toàn phiên/Dự án, repair, hai chế độ gỡ cài đặt và rollback. Bộ cài hiện chưa ký số.
->
-> **Pilot đa nền tảng:** [vi-v0.32.1-18](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18) có đủ bộ cài Windows, macOS và Linux. Windows x64 qua full lifecycle; năm kiến trúc còn lại là `BUILD-ONLY-PILOT`, chưa có smoke trên máy người dùng và chưa phải stable.
+> **Bản tải mặc định/Latest: [Hermes Vietnamese v32.1 cho Windows, macOS và Linux](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18)** (`vi-v0.32.1-18`) là **community pilot công khai, chưa phải stable**. [Windows x64 của bản Latest](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-18/Hermes-Vietnamese-Windows-x64-Setup.exe) đã qua cài mới, cập nhật từ v32, mở lại, bảo toàn phiên/Dự án, repair, hai chế độ gỡ cài đặt và rollback. Windows ARM64, macOS và Linux là `BUILD-ONLY-PILOT`; Windows/macOS chưa ký số/công chứng.
 
 ## Điểm mạnh so với cách tự cài Hermes Agent từ mã nguồn
 
@@ -40,7 +38,7 @@ Hermes Vietnamese không tặng kèm model AI, tài khoản trả phí hoặc h�
 
 ### Bước 1. Tải về và cài đặt
 
-> **Bản tải mặc định hiện tại:** [vi-v0.32.1-17](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-17), community pilot Latest cho Windows x64. Bản thử đa nền tảng là [vi-v0.32.1-18](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18); chưa phải stable và chưa ký số.
+> **Bản tải mặc định hiện tại:** [vi-v0.32.1-18](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18), community pilot Latest đa nền tảng; chưa phải stable và chưa ký số/công chứng.
 
 Mở [trang phát hành vi-v0.32.1-18](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18), chọn đúng hệ điều hành và kiến trúc. Trong lần mở đầu tiên:
 
