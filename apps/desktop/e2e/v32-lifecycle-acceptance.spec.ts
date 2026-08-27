@@ -703,7 +703,7 @@ async function runProjectSessionSafetyPhase(context: LifecycleContext): Promise<
 
     await expect(hideCard).toBeVisible({ timeout: 60_000 })
     await expect(deleteCard).toBeVisible({ timeout: 60_000 })
-    await hideCard.getByRole('button', { name: /^(Open project|Mở dự án)$/i }).click()
+    await hideCard.getByRole('button', { name: /^(Open project|Mở dự án)$/i }).press('Enter')
 
     const sessionsRoot = running.page.locator('[data-sessions-mode]')
     await expect(sessionsRoot).toHaveAttribute('data-sessions-project', PROJECT_HIDE_ID, { timeout: 60_000 })

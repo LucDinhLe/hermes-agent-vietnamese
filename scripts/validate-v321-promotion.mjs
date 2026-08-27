@@ -20,7 +20,7 @@ import {
 export const V321_IDENTITY = Object.freeze({
   tag: V321_CANDIDATE_TAG,
   releaseClass: 'community-prerelease',
-  version: '0.32.1-vi.7',
+  version: '0.32.1-vi.8',
   artifact: 'Hermes-Vietnamese-Windows-x64-Setup.exe'
 })
 

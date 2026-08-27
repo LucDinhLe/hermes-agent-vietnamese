@@ -1,5 +1,21 @@
 # Tiến độ
 
+## Cập nhật 2026-08-27 — candidate v32.1-8 dùng kích hoạt bàn phím
+
+- `vi-v0.32.1-7` build/stage xanh tại run `33053462058`; installer
+  340.620.814 byte, SHA-256
+  `5da162d3918fc6a94390cba75484ba838289c9e24d63ec04bc0429a1c0739f78`,
+  Authenticode `NotSigned`.
+- Lifecycle `33054540916` dừng trước khi mở dự án: nút **Mở dự án** hiển thị,
+  enabled và ổn định nhưng hàng hành động bao quanh chặn pointer. Không có thao
+  tác project/session nào được thực thi. Evidence artifact `9639300595`, digest
+  `bf4cf2c657839d5dc4a9d69318e743ca96430758d478bbc6e34fa31b5bde1add`.
+- Harness `-8` kích hoạt chính semantic button bằng phím `Enter`, là đường nhập
+  người dùng thật và không dùng force/synthetic click. Policy khóa cấm quay lại
+  pointer click ở bước vào dự án.
+- `-7` giữ bất biến, không retry hay promotion. Latest vẫn là
+  `vi-v0.32.0-1` cho tới khi toàn bộ lifecycle và hậu kiểm `-8` đạt.
+
 ## Cập nhật 2026-08-27 — candidate v32.1-7 vào project trước khi tạo phiên
 
 - `vi-v0.32.1-6` build/stage xanh tại run `33051008029`; installer 340.620.386
@@ -72,7 +88,7 @@
 - Candidate kế nhiệm được đặt là `vi-v0.32.1-5` / `0.32.1-vi.5`; local
   `vi-v0.32.1-1` cũ giữ bất biến và bị supersede cho mục tiêu release vì chưa
   có hotfix. Chưa build/tag/push/stage/public/đổi Latest.
-- Release plan: `docs/release-vi-v0.32.1-7-plan.md`. Latest tiếp tục NO-GO cho
+- Release plan hiện hành: `docs/release-vi-v0.32.1-8-plan.md`. Latest tiếp tục NO-GO cho
   tới khi exact artifact chứng minh Authenticode `NotSigned`, không có signer và
   vòng đời trên Windows guest cô lập đạt, gồm update v32 → v32.1 và persistence
   project/session.

@@ -1,10 +1,11 @@
 # Kế hoạch candidate `vi-v0.32.1-7`
 
 Ngày chốt phạm vi: 2026-08-26
-Trạng thái: source integration và release-controller hardening đạt gate cục bộ.
-Candidate `-6` đã dừng fail-closed trong lifecycle; thay đổi harness `-7` đã đạt
-gate cục bộ nhưng chưa freeze commit, build, tag, stage hay public. GitHub Latest
-chưa đổi.
+Trạng thái lịch sử: candidate đã build/stage xanh tại run `33053462058` nhưng
+lifecycle `33054540916` dừng trước thao tác mở dự án do action row chặn pointer
+click. Không có thao tác project/session nào được thực thi. Candidate giữ bất
+biến, không promotion; kế hoạch hiện hành chuyển sang
+`docs/release-vi-v0.32.1-8-plan.md`. GitHub Latest chưa đổi.
 
 Ứng viên `vi-v0.32.1-2` đã dừng ở source gate trước build do một regression cũ
 trộn candidate notes với public descriptor. Tag/run `-2` được giữ bất biến làm
