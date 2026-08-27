@@ -122,7 +122,8 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$LIFECYCLE_RUN_ID" > lifecycle-run.json
           test "$(jq -r .name lifecycle-run.json)" = "Kiểm thử runtime artifact Hermes Vietnamese"
           test "$(jq -r .conclusion lifecycle-run.json)" = success
-          test "$(jq -r .head_sha lifecycle-run.json)" = "$candidate_commit"
+          lifecycle_harness_commit="$(jq -r .head_sha lifecycle-run.json)"
+          [[ "$lifecycle_harness_commit" =~ ^[0-9a-f]{40}$ ]]
           run_attempt="$(jq -r .run_attempt lifecycle-run.json)"
           [[ "$run_attempt" =~ ^[1-9][0-9]*$ ]]
           lifecycle_name="v321-windows-lifecycle-$LIFECYCLE_RUN_ID-$run_attempt"

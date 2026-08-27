@@ -92,6 +92,9 @@ function validateLifecycle({ artifacts, candidate, lifecycleDir, lifecycleRunId,
   const host = readJson(hostPath)
   const projectSafety = readJson(projectSafetyPath)
   const receiptRoot = path.dirname(receiptPath)
+  const harnessCommit = String(run.head_sha ?? '')
+
+  if (!COMMIT_RE.test(harnessCommit)) throw new Error('v32.1 lifecycle harness commit must be a full Git SHA')
 
   validateLifecycleReceipt(receipt, {
     candidate: {
@@ -101,7 +104,7 @@ function validateLifecycle({ artifacts, candidate, lifecycleDir, lifecycleRunId,
       size: candidate.size,
       tag: V321_IDENTITY.tag
     },
-    harnessCommit: candidate.commit,
+    harnessCommit,
     previous: {
       commit: V32_SOURCE_COMMIT,
       fileName: V321_IDENTITY.artifact,
@@ -122,7 +125,7 @@ function validateLifecycle({ artifacts, candidate, lifecycleDir, lifecycleRunId,
   })
 
   if (receipt.status !== 'passed' || host.status !== 'passed') throw new Error('v32.1 lifecycle is not passed')
-  if (receipt.harnessCommit !== candidate.commit) throw new Error('v32.1 lifecycle harness commit mismatch')
+  if (receipt.harnessCommit !== harnessCommit) throw new Error('v32.1 lifecycle harness commit mismatch')
   requireArtifact(receipt.artifacts?.candidate, { ...candidate, tag: V321_IDENTITY.tag }, 'candidate')
   requireArtifact(
     receipt.artifacts?.previous,
@@ -165,11 +168,7 @@ function validateLifecycle({ artifacts, candidate, lifecycleDir, lifecycleRunId,
   }
 
   if (String(run.id) !== String(lifecycleRunId)) throw new Error('v32.1 lifecycle run ID mismatch')
-  if (
-    run.name !== 'Kiểm thử runtime artifact Hermes Vietnamese' ||
-    run.conclusion !== 'success' ||
-    run.head_sha !== candidate.commit
-  ) {
+  if (run.name !== 'Kiểm thử runtime artifact Hermes Vietnamese' || run.conclusion !== 'success') {
     throw new Error('v32.1 lifecycle workflow identity is not successful')
   }
   const expectedArtifactName = `v321-windows-lifecycle-${lifecycleRunId}-${run.run_attempt}`

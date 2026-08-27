@@ -320,7 +320,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.tag }}
           fetch-depth: 0
           fetch-tags: true
           persist-credentials: false
@@ -359,15 +358,19 @@ jobs:
             'C:\HermesEvidence\v321-draft-download-attempt.json',
             "{`"runId`":`"$env:GITHUB_RUN_ID`",`"attempt`":`"$env:GITHUB_RUN_ATTEMPT`",`"tag`":`"$env:TAG`"}`n"
           )
-          $expectedCommit = (git rev-parse HEAD).Trim()
-          if ($LASTEXITCODE -ne 0 -or $expectedCommit -notmatch '^[0-9a-f]{40}$') {
-            throw 'Cannot resolve exact checked-out candidate commit'
+          $harnessCommit = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $harnessCommit -notmatch '^[0-9a-f]{40}$') {
+            throw 'Cannot resolve exact checked-out harness commit'
           }
-          $tagCommit = (git rev-list -n 1 $env:TAG).Trim()
-          if ($LASTEXITCODE -ne 0 -or $tagCommit -ne $expectedCommit) {
-            throw "Candidate tag does not match checked-out harness commit: tag=$tagCommit checkout=$expectedCommit"
+          if ($harnessCommit -ne $env:GITHUB_SHA) {
+            throw "Checked-out harness commit does not match workflow dispatch: checkout=$harnessCommit dispatch=$env:GITHUB_SHA"
           }
-          "CANDIDATE_COMMIT=$expectedCommit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $candidateCommit = (git rev-list -n 1 $env:TAG).Trim()
+          if ($LASTEXITCODE -ne 0 -or $candidateCommit -notmatch '^[0-9a-f]{40}$') {
+            throw 'Cannot resolve exact immutable candidate tag commit'
+          }
+          "CANDIDATE_COMMIT=$candidateCommit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "HARNESS_COMMIT=$harnessCommit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
           $inputRoot = Join-Path $env:RUNNER_TEMP 'hermes-v321-release-inputs'
           $candidateDir = Join-Path $inputRoot 'candidate'
@@ -452,7 +455,7 @@ jobs:
           New-Item -ItemType Directory -Path C:\HermesEvidence -Force | Out-Null
           [System.IO.File]::WriteAllText(
             'C:\HermesEvidence\v321-workflow-preflight.json',
-            "{`"runId`":`"$env:GITHUB_RUN_ID`",`"attempt`":`"$env:GITHUB_RUN_ATTEMPT`",`"candidateCommit`":`"$env:CANDIDATE_COMMIT`"}`n"
+            "{`"runId`":`"$env:GITHUB_RUN_ID`",`"attempt`":`"$env:GITHUB_RUN_ATTEMPT`",`"candidateCommit`":`"$env:CANDIDATE_COMMIT`",`"harnessCommit`":`"$env:HARNESS_COMMIT`"}`n"
           )
           $inputRoot = Join-Path $env:RUNNER_TEMP 'hermes-v321-release-inputs'
           $candidate = (Resolve-Path (Join-Path $inputRoot 'candidate\Hermes-Vietnamese-Windows-x64-Setup.exe')).Path
@@ -465,7 +468,7 @@ jobs:
             --candidate $candidate `
             --candidate-sha256 $env:CANDIDATE_SHA256 `
             --candidate-commit $env:CANDIDATE_COMMIT `
-            --harness-commit $env:CANDIDATE_COMMIT `
+            --harness-commit $env:HARNESS_COMMIT `
             --previous $previous `
             --previous-sha256 efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac `
             --rollback $rollback `

@@ -19,6 +19,7 @@ import {
 import { V321_IDENTITY, validateV321PromotionBundle } from './validate-v321-promotion.mjs'
 
 const candidateCommit = 'a'.repeat(40)
+const harnessCommit = 'd'.repeat(40)
 const stagingRunId = '12345'
 const lifecycleRunId = '67890'
 
@@ -126,7 +127,7 @@ function makeFixture(t) {
       }
     ],
     gates,
-    harnessCommit: candidateCommit,
+    harnessCommit,
     isolation: {
       ephemeralVm: true,
       firewallRuleCount: 8,
@@ -194,7 +195,7 @@ function makeFixture(t) {
   }
   const run = {
     conclusion: 'success',
-    head_sha: candidateCommit,
+    head_sha: harnessCommit,
     id: Number(lifecycleRunId),
     name: 'Kiểm thử runtime artifact Hermes Vietnamese',
     run_attempt: 1
@@ -254,4 +255,13 @@ test('rejects missing or misleading unsigned-status evidence', t => {
     'authenticode_status=Valid\nsigner_present=true\n'
   )
   assert.throws(() => validateV321PromotionBundle(fixture.args), /signing evidence|draft hash mismatch/)
+})
+
+test('rejects lifecycle evidence produced by a harness commit other than the workflow commit', t => {
+  const fixture = makeFixture(t)
+  fixture.args.run.head_sha = 'e'.repeat(40)
+  assert.throws(
+    () => validateV321PromotionBundle(fixture.args),
+    /expected validation harness commit|harness commit mismatch/
+  )
 })

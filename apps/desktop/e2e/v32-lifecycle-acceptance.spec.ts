@@ -53,10 +53,11 @@ const ACTIONS = [
   'project-session-safety',
   'safe-tool',
   'seed-v31',
+  'seed-v32',
   'verify-update',
   'verify-repair',
   'verify-lite-reinstall',
-  'seed-v32-rollback',
+  'seed-v321-rollback',
   'verify-rollback',
   'uninstall-lite',
   'uninstall-full'
@@ -844,7 +845,9 @@ async function runConfiguredPhase(context: LifecycleContext): Promise<void> {
 
       case 'seed-v31':
 
-      case 'seed-v32-rollback':
+      case 'seed-v32':
+
+      case 'seed-v321-rollback':
 
       case 'verify-rollback':
         await sendAndWaitForReply(running.page, mock, requiredMarker('HERMES_LIFECYCLE_SEND_TEXT'))

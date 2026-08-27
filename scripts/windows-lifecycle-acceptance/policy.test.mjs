@@ -158,6 +158,37 @@ test('guest parameters never shadow the read-only PowerShell HOME variable', () 
   assert.match(guestScript, /\[string\]\$HermesHome/)
 })
 
+test('every guest Playwright phase is declared and handled by the lifecycle spec', () => {
+  const declaredBlock = lifecycleSpec.match(/const ACTIONS = \[([\s\S]*?)\]\s+as const/)?.[1] ?? ''
+  const declared = new Set([...declaredBlock.matchAll(/'([^']+)'/g)].map(match => match[1]))
+  const handled = new Set([...lifecycleSpec.matchAll(/case '([^']+)':/g)].map(match => match[1]))
+  const literalGuestActions = [...guestScript.matchAll(/Invoke-PlaywrightPhase\s+`?\s*'([^']+)'/g)].map(
+    match => match[1]
+  )
+  const uninstallModes = [...guestScript.matchAll(/Invoke-GuiUninstall\s+'([^']+)'/g)].map(
+    match => `uninstall-${match[1]}`
+  )
+  const guestActions = [...new Set([...literalGuestActions, ...uninstallModes])].sort()
+
+  assert.deepEqual(guestActions, [
+    'onboarding',
+    'project-session-safety',
+    'safe-tool',
+    'seed-v32',
+    'seed-v321-rollback',
+    'uninstall-full',
+    'uninstall-lite',
+    'verify-lite-reinstall',
+    'verify-repair',
+    'verify-rollback',
+    'verify-update'
+  ])
+  for (const action of guestActions) {
+    assert.ok(declared.has(action), `guest action ${action} must be declared in ACTIONS`)
+    assert.ok(handled.has(action), `guest action ${action} must have an explicit switch case`)
+  }
+})
+
 test('native stderr warnings are logged while the native exit code remains authoritative', () => {
   const nativeLogger = guestScript.match(/function Invoke-NativeLogged \{[\s\S]*?\r?\n\}/)?.[0] ?? ''
   assert.match(nativeLogger, /\$ErrorActionPreference = 'Continue'/)

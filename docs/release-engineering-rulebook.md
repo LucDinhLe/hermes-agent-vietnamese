@@ -74,8 +74,9 @@ chuỗi trên.
 8. **Giữ nguyên byte:** staging, smoke và public phải dùng cùng một digest.
 9. **Một cổng lỗi là lỗi:** thành công của nền tảng khác không bù được bằng
    chứng còn thiếu.
-10. **Lỗi thoát ra ngoài phải thành regression:** sửa nguyên nhân gốc, thêm cổng
-    và tạo candidate mới; không vá đè asset đã nghiệm thu.
+10. **Lỗi thoát ra ngoài phải thành regression:** sửa nguyên nhân gốc và thêm
+    cổng. Chỉ tạo candidate mới khi source sản phẩm, đầu vào đóng gói hoặc byte
+    artifact thay đổi; không vá đè asset đã nghiệm thu.
 11. **Đường tải là hợp đồng:** README, hướng dẫn cài, release notes, `Latest`, tên
     asset và hash phải cùng trỏ một phiên bản. `.github/public-release.json` là
     nguồn hợp đồng cho bản tải mặc định.
@@ -262,6 +263,30 @@ Thiếu runtime proof thì target chỉ được công bố theo phạm vi build
 4. Chạy assertion trên fixture lỗi và bản sửa.
 5. Cập nhật rulebook, workflow/runbook và `PROGRESS.md`.
 6. Tăng phiên bản nếu byte artifact đổi. Không thay asset cùng tag.
+
+### Phân loại lỗi harness và hạ tầng
+
+Candidate sản phẩm và controller nghiệm thu là hai danh tính độc lập:
+
+- Candidate khóa bằng tag, commit sản phẩm, filename, size và SHA-256.
+- Controller khóa bằng commit chứa workflow, runner và harness đã thực thi.
+- Receipt bắt buộc ghi cả `candidate.commit` lẫn `harnessCommit`; promotion đối
+  chiếu candidate với tag bất biến và harness với `head_sha` của run nghiệm thu.
+
+Khi log chứng minh lỗi nằm ở harness hoặc hạ tầng và byte candidate không đổi:
+
+1. Giữ nguyên draft, tag, provenance, size và SHA-256 của candidate.
+2. Giữ nguyên run/evidence thất bại; không sửa hoặc xóa lịch sử.
+3. Sửa harness/controller, thêm regression có thể bắt đúng lỗi vừa gặp.
+4. Dispatch một run nghiệm thu mới từ exact controller commit và tải lại đúng
+   candidate đã staging. Không rerun build, không tăng hậu tố candidate.
+5. Chỉ dùng run mới nếu receipt xanh và khóa đủ cả hai commit. Promotion vẫn
+   fail-closed nếu candidate digest hoặc harness commit lệch.
+
+Nếu sửa mã Desktop, dependency, cấu hình đóng gói, asset đầu vào hoặc bất kỳ thứ
+gì có thể làm thay byte bộ cài, bắt buộc tạo candidate mới và chạy lại các gate
+bị ảnh hưởng. Lỗi GitHub 403/429, click của Playwright, timeout ghi fixture hoặc
+sai hợp đồng action không tự động trở thành thay đổi sản phẩm.
 
 ## Trạng thái sau v25
 

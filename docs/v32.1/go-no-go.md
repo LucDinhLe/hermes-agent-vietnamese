@@ -4,8 +4,9 @@ Ngày khóa rà soát source: 2026-08-27
 
 ## Quyết định
 
-**Source under verification, Release NO-GO** cho ứng viên kế nhiệm
-`vi-v0.32.1-17`.
+**Candidate staged, Release NO-GO** cho `vi-v0.32.1-17` tới khi một lifecycle
+run mới vượt đủ update, repair, uninstall và rollback trên chính installer đã
+khóa byte. GitHub Latest vẫn là `vi-v0.32.0-1`.
 
 `vi-v0.32.1-2` đã dừng ở source gate trước khi build vì bài kiểm thử cũ trộn
 ghi chú ứng viên với descriptor bản đang công khai. Tag và run được giữ nguyên
@@ -121,23 +122,33 @@ chặn pointer event. Không có bằng chứng mất hoặc ẩn dữ liệu. E
 `-16` giữ bất biến; candidate `-17` khóa semantic button của hàng phiên, xác
 minh accessible name và dùng `Enter`.
 
-Phần khắc phục yếu điểm v32 và cổng chống mất/ẩn phiên đã hoàn tất trong source.
-Candidate cuối `-17` chưa tag/build/stage hoặc thay GitHub Latest vì chưa có
-exact lifecycle receipt.
+`vi-v0.32.1-17` build/stage đúng byte tại run `33082890636`: 340.644.403 byte,
+SHA-256 `7e3e5870228254fec634140391fe01042e50f1b483d9d53ff171636837d65884`,
+Authenticode `NotSigned`. Lifecycle `33084347847` vượt toàn bộ
+`projectSessionSafety`: còn đúng 1 session, 2 message, digest nội dung không
+đổi, `sessionHidden=0`, `sessionArchived=0` sau Ẩn/Xóa dự án và relaunch. Run
+dừng sau đó vì guest gọi `seed-v32` nhưng spec chưa khai báo; action rollback
+`seed-v321-rollback` cũng bị khai báo sai tên. Evidence artifact `9652148218`,
+digest `9c1df73290279fda671e6676f93c7759d4291f00f56ebe08793a889eb63c82cd`.
+Đây là lỗi hợp đồng harness, không phải lỗi sản phẩm hay mất dữ liệu.
+
+Candidate `-17` được giữ nguyên. Controller nghiệm thu được sửa ở commit riêng;
+receipt mới khóa cả candidate commit bất biến và `harnessCommit` của run. Không
+tạo `-18` khi installer không đổi byte.
 
 ## Source candidate
 
 | Thuộc tính                | Giá trị                                    |
 | ------------------------- | ------------------------------------------ |
 | Branch                    | `integration/v32.1-project-session-safety` |
-| Source hardening commit   | Chờ freeze exact candidate `-17`           |
-| Tag dự kiến               | `vi-v0.32.1-17`                            |
-| Desktop version dự kiến   | `0.32.1-vi.17`                             |
+| Candidate commit          | `a6833c9400adf640c01a258f354cf96551550c75` |
+| Tag bất biến              | `vi-v0.32.1-17`                            |
+| Desktop version           | `0.32.1-vi.17`                             |
 | Release class             | `community-prerelease`                     |
 | Phạm vi nghiệm thu/public | Windows 10/11 x64                          |
 
-Commit trên là controller source đã kiểm thử, chưa phải exact candidate commit
-cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trước khi tag.
+Controller lifecycle có commit riêng và không làm thay đổi tag, provenance,
+size hoặc SHA-256 của candidate trên.
 
 ## Gate đã đạt
 
@@ -153,18 +164,20 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
   không có signer certificate và không được quảng cáo stable/final.
 - Promotion riêng kiểm tag/commit/size/SHA-256, private draft, staging run,
   lifecycle run, evidence seal và tự rollback về v32 nếu hậu kiểm lỗi.
-- Gate hiện tại: policy 18/18; release/metadata 38/38; promotion validator 3/3;
-  workflow contract 17/17; typecheck, lint 0 error, Prettier, YAML, PowerShell và
-  diff check đều đạt.
+- Regression mới đối chiếu toàn bộ action guest/spec. Local controller gates:
+  release/lifecycle Node 66/66; Desktop script Vitest 149 pass, 1 skip; Desktop
+  script Node 17/17; Python release 27/27; ba lớp typecheck, ESLint, Prettier,
+  YAML và diff check đều đạt.
 
 ## Gate còn thiếu
 
-1. Commit/push exact source branch và tạo tag bất biến `vi-v0.32.1-17`.
-2. Một lượt build duy nhất của Windows x64 từ exact tag.
-3. Ghi size/SHA-256, xác minh trạng thái `NotSigned` và private draft đúng byte.
-4. Exact lifecycle trên GitHub-hosted Windows VM dùng một lần, gồm update
+1. Hoàn tất full local gate cho controller-only change và push exact controller
+   commit.
+2. Dispatch lifecycle mới từ controller commit, tải lại chính installer `-17`;
+   không rebuild và không thay draft.
+3. Exact lifecycle trên GitHub-hosted Windows VM dùng một lần, gồm update
    v32→v32.1, project/session safety, repair, uninstall và rollback vi39.
-5. Controller commit cập nhật `.github/public-release.json` bằng exact
+4. Controller commit cập nhật `.github/public-release.json` bằng exact
    size/hash; promotion chỉ chạy sau khi mọi receipt đạt. Chủ dự án đã cho phép
    hành động public ngày 2026-08-27.
 
@@ -198,7 +211,7 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 
 ## Hành động public
 
-Đã push/tag candidate bất biến `-2` đến `-16`; draft riêng tư đạt tới `-16`.
+Đã push/tag candidate bất biến `-2` đến `-17`; draft riêng tư đạt tới `-17`.
 Không candidate nào được công bố và GitHub Latest vẫn là `vi-v0.32.0-1`.
 Staging/lifecycle `-6` là run `33051008029` / `33052037180`; evidence artifact
 `9638286238`. Staging/lifecycle `-7` là `33053462058` / `33054540916`;
@@ -235,7 +248,11 @@ Build/staging `-16` là `33077676475`; lifecycle `33079425120`; evidence artifac
 `9649684608`, digest
 `c077cf63287a7163e118b0bd1733990c3dd5c40def393cc37a95c4efb95f2df1`.
 
+Build/staging `-17` là `33082890636`; lifecycle attempt đầu là `33084347847`;
+evidence artifact `9652148218`, digest
+`9c1df73290279fda671e6676f93c7759d4291f00f56ebe08793a889eb63c82cd`.
+
 ## Bước nhỏ nhất tiếp theo
 
-Freeze exact tag `vi-v0.32.1-17`, build đúng một lần, chạy lifecycle và chỉ
-promotion khi mọi receipt đều xanh.
+Push exact controller commit, dispatch một lifecycle run mới trên chính byte
+`vi-v0.32.1-17`, và chỉ promotion khi mọi receipt đều xanh.

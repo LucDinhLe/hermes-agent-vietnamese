@@ -1,5 +1,26 @@
 # Tiến độ
 
+## Cập nhật 2026-08-27 — tách candidate `-17` khỏi controller nghiệm thu
+
+- `vi-v0.32.1-17` đã build/stage đúng một lần tại run `33082890636`, commit
+  `a6833c9400adf640c01a258f354cf96551550c75`, installer 340.644.403 byte,
+  SHA-256 `7e3e5870228254fec634140391fe01042e50f1b483d9d53ff171636837d65884`,
+  Authenticode `NotSigned`.
+- Lifecycle `33084347847` đã đạt toàn bộ gate project/session safety: 1 session,
+  2 message, digest nội dung không đổi, `hidden=0`, `archived=0` sau Ẩn/Xóa dự
+  án và relaunch. Run dừng sau đó vì hợp đồng harness thiếu `seed-v32`; action
+  rollback `seed-v321-rollback` cũng bị khai báo sai tên.
+- Candidate `-17` được giữ nguyên byte. Controller mới khai báo đủ action, thêm
+  regression đối chiếu toàn bộ guest/spec và tách `harnessCommit` khỏi
+  `candidate.commit`. Lỗi harness/hạ tầng từ nay tạo lifecycle run mới, không
+  tự động dựng candidate mới.
+- Evidence thất bại: artifact `9652148218`, digest
+  `9c1df73290279fda671e6676f93c7759d4291f00f56ebe08793a889eb63c82cd`.
+  Latest vẫn là `vi-v0.32.0-1`.
+- Controller local gates đạt: release/lifecycle Node 66/66; Desktop script
+  Vitest 149 pass, 1 skip; Desktop script Node 17/17; Python release 27/27;
+  typecheck, lint, format, YAML và diff check đều xanh.
+
 ## Cập nhật 2026-08-27 — candidate v32.1-17 kích hoạt đúng hàng phiên
 
 - `vi-v0.32.1-16` build/stage xanh tại run `33077676475`; installer 340.642.164
