@@ -1,8 +1,11 @@
 # Kế hoạch candidate `vi-v0.32.1-8`
 
 Ngày chốt phạm vi: 2026-08-27  
-Trạng thái: source integration đạt gate cục bộ; chưa build/tag/stage/public.
-GitHub Latest vẫn là `vi-v0.32.0-1`.
+Trạng thái lịch sử: source gate và build đạt tại run `33056165931`; staging
+dừng trước download/tạo draft do GitHub trả `HTTP 429` khi fetch lại tag.
+Candidate giữ bất biến, không rerun hay promotion. Kế hoạch hiện hành chuyển
+sang `docs/release-vi-v0.32.1-9-plan.md`. GitHub Latest vẫn là
+`vi-v0.32.0-1`.
 
 ## Mục tiêu
 

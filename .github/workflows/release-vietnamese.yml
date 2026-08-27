@@ -45,6 +45,15 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      - name: Tải lại tag ứng viên với retry giới hạn
+        uses: ./.github/actions/retry
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        with:
+          command: git fetch --force origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          attempts: '5'
+          delay: '15'
+
       - name: Khóa nhãn và commit ứng viên
         id: candidate
         shell: bash
@@ -57,7 +66,6 @@ jobs:
             community-prerelease|stable) ;;
             *) echo "::error::unsupported release class: $RELEASE_CLASS"; exit 1 ;;
           esac
-          git fetch --force origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
           tag_commit="$(git rev-list -n 1 "$RELEASE_TAG")"
           head_commit="$(git rev-parse HEAD)"
           test "$tag_commit" = "$head_commit" || { echo "::error::tag $RELEASE_TAG points to $tag_commit, checkout is $head_commit"; exit 1; }
@@ -67,7 +75,7 @@ jobs:
           echo "commit=$head_commit" >> "$GITHUB_OUTPUT"
           echo "release_class=$RELEASE_CLASS" >> "$GITHUB_OUTPUT"
           echo "release_title=$release_title" >> "$GITHUB_OUTPUT"
-          if [[ "$RELEASE_TAG" == "vi-v0.32.1-8" ]]; then
+          if [[ "$RELEASE_TAG" == "vi-v0.32.1-9" ]]; then
             build_matrix='{"include":[{"id":"windows-x64","label":"Windows x64","runner":"windows-2025","platform":"win32","arch":"x64"}]}'
           else
             build_matrix='{"include":[{"id":"windows-x64","label":"Windows x64","runner":"windows-2025","platform":"win32","arch":"x64"},{"id":"windows-arm64","label":"Windows ARM64","runner":"windows-11-arm","platform":"win32","arch":"arm64"},{"id":"macos-arm64","label":"macOS Apple Silicon","runner":"macos-15","platform":"darwin","arch":"arm64"},{"id":"macos-x64","label":"macOS Intel","runner":"macos-15-intel","platform":"darwin","arch":"x64"},{"id":"linux-x64","label":"Linux x64","runner":"ubuntu-24.04","platform":"linux","arch":"x64"},{"id":"linux-arm64","label":"Linux ARM64","runner":"ubuntu-24.04-arm","platform":"linux","arch":"arm64"}]}'
@@ -554,13 +562,21 @@ jobs:
         with:
           ref: ${{ needs.verify.outputs.tag }}
 
+      - name: Tải lại tag staging với retry giới hạn
+        uses: ./.github/actions/retry
+        env:
+          TAG: ${{ needs.verify.outputs.tag }}
+        with:
+          command: git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          attempts: '5'
+          delay: '15'
+
       - name: Khóa lại tag và commit trước staging
         shell: bash
         env:
           TAG: ${{ needs.verify.outputs.tag }}
           EXPECTED_COMMIT: ${{ needs.verify.outputs.commit }}
         run: |
-          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
           head_commit="$(git rev-parse HEAD)"
           tag_commit="$(git rev-list -n 1 "$TAG")"
           test "$head_commit" = "$EXPECTED_COMMIT" || { echo "::error::stage checkout is $head_commit, expected $EXPECTED_COMMIT"; exit 1; }

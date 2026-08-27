@@ -1,5 +1,18 @@
 # Tiến độ
 
+## Cập nhật 2026-08-27 — candidate v32.1-9 retry giới hạn khi khóa tag
+
+- `vi-v0.32.1-8` vượt toàn bộ source gate và build Windows x64 tại run
+  `33056165931`; SignPath được bỏ qua đúng phạm vi, provenance/checksum và
+  receipt `NotSigned` đều đạt.
+- Job staging dừng trước download artifact và trước tạo draft vì GitHub trả
+  `HTTP 429` khi fetch lại immutable tag. Không có release/draft mới, người dùng
+  và Latest không thay đổi; `-8` giữ bất biến, không rerun.
+- Candidate `-9` thêm retry giới hạn 5 lần, cách nhau 15 giây cho cả source và
+  staging tag refresh. Sau retry vẫn phải so exact tag/checkout/verified commit;
+  không khớp tiếp tục fail-closed.
+- Kế hoạch hiện hành: `docs/release-vi-v0.32.1-9-plan.md`.
+
 ## Cập nhật 2026-08-27 — candidate v32.1-8 dùng kích hoạt bàn phím
 
 - `vi-v0.32.1-7` build/stage xanh tại run `33053462058`; installer
@@ -88,7 +101,7 @@
 - Candidate kế nhiệm được đặt là `vi-v0.32.1-5` / `0.32.1-vi.5`; local
   `vi-v0.32.1-1` cũ giữ bất biến và bị supersede cho mục tiêu release vì chưa
   có hotfix. Chưa build/tag/push/stage/public/đổi Latest.
-- Release plan hiện hành: `docs/release-vi-v0.32.1-8-plan.md`. Latest tiếp tục NO-GO cho
+- Release plan hiện hành: `docs/release-vi-v0.32.1-9-plan.md`. Latest tiếp tục NO-GO cho
   tới khi exact artifact chứng minh Authenticode `NotSigned`, không có signer và
   vòng đời trên Windows guest cô lập đạt, gồm update v32 → v32.1 và persistence
   project/session.
