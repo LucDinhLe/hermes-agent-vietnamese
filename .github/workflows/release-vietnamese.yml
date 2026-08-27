@@ -37,6 +37,7 @@ jobs:
       commit: ${{ steps.candidate.outputs.commit }}
       release_class: ${{ steps.candidate.outputs.release_class }}
       release_title: ${{ steps.candidate.outputs.release_title }}
+      build_matrix: ${{ steps.candidate.outputs.build_matrix }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -66,6 +67,12 @@ jobs:
           echo "commit=$head_commit" >> "$GITHUB_OUTPUT"
           echo "release_class=$RELEASE_CLASS" >> "$GITHUB_OUTPUT"
           echo "release_title=$release_title" >> "$GITHUB_OUTPUT"
+          if [[ "$RELEASE_TAG" == "vi-v0.32.1-2" ]]; then
+            build_matrix='{"include":[{"id":"windows-x64","label":"Windows x64","runner":"windows-2025","platform":"win32","arch":"x64"}]}'
+          else
+            build_matrix='{"include":[{"id":"windows-x64","label":"Windows x64","runner":"windows-2025","platform":"win32","arch":"x64"},{"id":"windows-arm64","label":"Windows ARM64","runner":"windows-11-arm","platform":"win32","arch":"arm64"},{"id":"macos-arm64","label":"macOS Apple Silicon","runner":"macos-15","platform":"darwin","arch":"arm64"},{"id":"macos-x64","label":"macOS Intel","runner":"macos-15-intel","platform":"darwin","arch":"x64"},{"id":"linux-x64","label":"Linux x64","runner":"ubuntu-24.04","platform":"linux","arch":"x64"},{"id":"linux-arm64","label":"Linux ARM64","runner":"ubuntu-24.04-arm","platform":"linux","arch":"arm64"}]}'
+          fi
+          echo "build_matrix=$build_matrix" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -100,6 +107,7 @@ jobs:
           apps/desktop/scripts/patch-electron-builder-mac-binary.test.mjs
           apps/desktop/scripts/patch-electron-builder-windows-nsis.test.mjs
           scripts/validate-release-evidence.test.mjs
+          scripts/validate-v321-promotion.test.mjs
           scripts/validate-pilot-release-evidence.test.mjs
           scripts/validate-public-release-contract.test.mjs
           scripts/prepare-agent-browser-native.test.mjs
@@ -259,38 +267,7 @@ jobs:
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - id: windows-x64
-            label: Windows x64
-            runner: windows-2025
-            platform: win32
-            arch: x64
-          - id: windows-arm64
-            label: Windows ARM64
-            runner: windows-11-arm
-            platform: win32
-            arch: arm64
-          - id: macos-arm64
-            label: macOS Apple Silicon
-            runner: macos-15
-            platform: darwin
-            arch: arm64
-          - id: macos-x64
-            label: macOS Intel
-            runner: macos-15-intel
-            platform: darwin
-            arch: x64
-          - id: linux-x64
-            label: Linux x64
-            runner: ubuntu-24.04
-            platform: linux
-            arch: x64
-          - id: linux-arm64
-            label: Linux ARM64
-            runner: ubuntu-24.04-arm
-            platform: linux
-            arch: arm64
+      matrix: ${{ fromJSON(needs.verify.outputs.build_matrix) }}
     env:
       HERMES_DESKTOP_BUNDLED: '1'
       HERMES_PAYLOAD_TAG: ${{ needs.verify.outputs.tag }}
@@ -446,7 +423,13 @@ jobs:
           ${{ matrix.platform }} ${{ matrix.arch }} apps/desktop/release release-assets
 
       - name: Bắt buộc cấu hình SignPath cho Windows
-        if: matrix.platform == 'win32' && needs.verify.outputs.release_class == 'stable'
+        # v32.1-2 is a signed Windows x64 safety update even while it remains a
+        # community prerelease. Missing SignPath configuration must fail closed
+        # instead of silently producing another Smart App Control-blocked build.
+        if: >-
+          matrix.platform == 'win32' &&
+          (needs.verify.outputs.release_class == 'stable' ||
+          (matrix.id == 'windows-x64' && needs.verify.outputs.tag == 'vi-v0.32.1-2'))
         shell: bash
         env:
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -463,7 +446,10 @@ jobs:
 
       - name: Upload bộ cài Windows chưa ký cho SignPath
         id: upload-unsigned-windows
-        if: matrix.platform == 'win32' && needs.verify.outputs.release_class == 'stable'
+        if: >-
+          matrix.platform == 'win32' &&
+          (needs.verify.outputs.release_class == 'stable' ||
+          (matrix.id == 'windows-x64' && needs.verify.outputs.tag == 'vi-v0.32.1-2'))
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: unsigned-${{ matrix.id }}-${{ needs.verify.outputs.commit }}
@@ -473,7 +459,10 @@ jobs:
           retention-days: 1
 
       - name: Ký Authenticode bằng SignPath
-        if: matrix.platform == 'win32' && needs.verify.outputs.release_class == 'stable'
+        if: >-
+          matrix.platform == 'win32' &&
+          (needs.verify.outputs.release_class == 'stable' ||
+          (matrix.id == 'windows-x64' && needs.verify.outputs.tag == 'vi-v0.32.1-2'))
         uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -488,7 +477,10 @@ jobs:
           output-artifact-directory: signed-windows
 
       - name: Thay bằng đúng byte đã ký và xác minh Authenticode
-        if: matrix.platform == 'win32' && needs.verify.outputs.release_class == 'stable'
+        if: >-
+          matrix.platform == 'win32' &&
+          (needs.verify.outputs.release_class == 'stable' ||
+          (matrix.id == 'windows-x64' && needs.verify.outputs.tag == 'vi-v0.32.1-2'))
         shell: powershell
         run: |
           $expected = @(Get-ChildItem -LiteralPath release-assets -Filter 'Hermes-Vietnamese-Windows-*-Setup.exe')

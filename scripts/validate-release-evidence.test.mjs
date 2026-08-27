@@ -106,6 +106,32 @@ test('accepts unsigned evidence only for an explicitly warned community prerelea
   assert.throws(() => validateReleaseEvidence(community, checksumText), /warning behavior/)
 })
 
+test('accepts a signed Windows community prerelease with matching publisher evidence', () => {
+  const community = validEvidence()
+  community.releaseClass = 'community-prerelease'
+  for (const [platform, record] of Object.entries(community.platforms)) {
+    if (platform.startsWith('windows-')) {
+      record.signing = {
+        installerAuthenticode: 'Valid',
+        installedAppAuthenticode: 'Valid',
+        installerPublisher: 'Hermes Vietnamese Community',
+        installedAppPublisher: 'Hermes Vietnamese Community'
+      }
+    } else if (platform.startsWith('macos-')) {
+      record.signing = {
+        developerId: false,
+        notarized: false,
+        stapled: false,
+        userWarningVerified: true
+      }
+    }
+  }
+
+  assert.equal(validateReleaseEvidence(community, checksumText, { releaseClass: 'community-prerelease' }), community)
+  community.platforms['windows-x64'].signing.installedAppPublisher = 'Unexpected Publisher'
+  assert.throws(() => validateReleaseEvidence(community, checksumText), /publisher evidence does not match/)
+})
+
 test('never accepts unsigned evidence as stable', () => {
   const unsignedStable = validEvidence()
   unsignedStable.platforms['windows-x64'].signing.installerAuthenticode = 'NotSigned'
@@ -124,9 +150,7 @@ test('one missing platform or runtime gate makes the release NO-GO', () => {
 
 test('v31 requires the vi39 upgrade and Agents gates while older evidence stays valid', () => {
   assert.doesNotThrow(() => validateReleaseEvidence(validEvidence(), checksumText))
-  assert.doesNotThrow(() =>
-    validateReleaseEvidence(validV31Evidence(), checksumText, { tag: 'vi-v0.31.0-1' })
-  )
+  assert.doesNotThrow(() => validateReleaseEvidence(validV31Evidence(), checksumText, { tag: 'vi-v0.31.0-1' }))
 
   for (const gate of V31_RUNTIME_GATES) {
     const missingGate = validV31Evidence()

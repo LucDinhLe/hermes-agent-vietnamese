@@ -1,63 +1,60 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/vi-v0.32.0-1/assets/banner.png" alt="Hermes Vietnamese" width="100%">
+  <img src="https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/vi-v0.32.1-2/assets/banner.png" alt="Hermes Vietnamese" width="100%">
 </p>
 
-## Hermes Vietnamese v32.0
+## Hermes Vietnamese v32.1
 
-Lớp phát hành: **community pilot GitHub Latest, chưa phải stable**.
+Lớp phát hành của artifact: **community-prerelease, chưa phải stable**.
 
-`vi-v0.32.0-1` là **community pilot cho Windows 10/11 x64** và thay v31 làm
-GitHub Latest, nhưng chưa phải stable.
-Bản này tập trung sửa các lỗi chí mạng của v31 về token, phiên dài và ba luồng
-UI/UX chính.
+`vi-v0.32.1-2` là bản cập nhật an toàn cho Windows 10/11 x64, kế nhiệm
+`vi-v0.32.0-1`. Bản này chỉ được công khai ở vị trí GitHub Latest sau khi đúng
+byte Windows x64 đã ký vượt toàn bộ cổng cài mới, cập nhật, mở lại, sửa chữa,
+gỡ cài đặt, rollback và an toàn phiên/dự án trong máy ảo Windows dùng một lần.
 
-Candidate bất biến vẫn mang provenance `community-prerelease`. GitHub được đặt
-`prerelease=false` chỉ để v32 có thể thay bản v31 lỗi nghiêm trọng ở vị trí
-Latest; việc này không biến artifact chưa ký thành stable/final.
+GitHub phải đặt `prerelease=false` để bản cập nhật có thể ở vị trí Latest;
+provenance của artifact vẫn là `community-prerelease`. Điều đó không biến bản
+này thành stable/final.
 
-## Những thay đổi chính
+## Sửa lỗi phiên và Dự án
 
-- **Token Governor:** đếm lượt gọi chính, phụ, retry và tool call mà Hermes
-  quản lý; cảnh báo sớm và tạm dừng an toàn trước tool-loop không tiến triển.
-- **Phiên dài trên 300k:** compaction giữ lịch sử logic, recovery anchors và
-  continuation state để phiên có thể tiếp tục sau khi mở lại.
-- **Tool output lớn:** chỉ giữ preview có trần trong parent context; phần dư
-  được lưu thành artifact có kích thước, SHA-256 và đường đọc lại.
-- **Phân loại lỗi:** quota, context overflow và lỗi provider có trạng thái khôi
-  phục riêng; composer không còn bị khóa im lặng.
-- **UX-001:** nút `+` nhận pointer/click thật và tạo đúng một phiên.
-- **UX-002:** trang Nhắn tin có nút quay lại rõ ràng và giữ nguyên draft.
-- **UX-003:** meter tách context nền, hội thoại, lịch sử logic, compaction,
-  quota, ngân sách lượt và chi phí API-equivalent.
+- **Không làm phiên biến mất:** dữ liệu phiên/tin nhắn tiếp tục nằm trong
+  `state.db`; Ẩn hoặc Xóa Dự án chỉ thay đổi metadata trong `projects.db`.
+- **Khôi phục đúng phạm vi:** khi mở lại Hermes, giao diện trở về toàn bộ Dự án
+  và phiên; scope của một Dự án không được lưu qua lần chạy sau.
+- **Sidebar đồng nhất:** Dự án đang mở vẫn có hàng Dự án, menu và nút xổ xuống;
+  danh sách đầy đủ có lối **Tất cả dự án** rõ ràng.
+- **Không tự động che lịch sử:** tự dò kho mã, tự lưu trữ phiên và tự dọn phiên
+  đều tắt mặc định; chỉ hoạt động khi người dùng chủ động bật.
+- **Dữ liệu ở đúng máy đã chọn:** Hermes không tự tải phiên, Dự án hoặc bản sao
+  lưu lên đám mây Hermes. Cài trên máy thật thì dữ liệu ở máy thật; cài trên máy
+  ảo thì dữ liệu ở máy ảo.
 
-## Windows x64 đã nghiệm thu
+## Hoàn thiện v32.1
 
-- Windows x64: exact-artifact smoke đạt.
-- Cài mới, onboarding rỗng, mock runtime, safe tool, relaunch và persistence:
-  đạt trong máy ảo Windows dùng một lần.
-- Update trực tiếp từ `vi-v0.31.0-7`, repair khôi phục đúng byte, uninstall giữ
-  dữ liệu, uninstall xóa dữ liệu và rollback về `vi-v0.20.4-39`: đạt.
-- Chưa có smoke trên máy người dùng; toàn bộ nghiệm thu ghi dữ liệu dùng profile
-  cô lập và mock provider, không dùng hồ sơ Hermes thật.
+- Onboarding theo mục tiêu và allowlist Skill/MCP rõ ràng theo phiên/agent.
+- Restore capability fail-closed; trạng thái được gán hiển thị minh bạch.
+- Root Token Governor bao phủ main agent, subagent, retry, fallback và tool
+  loop trong phạm vi Hermes quản lý.
+- Các quyết định bảo vệ dữ liệu được khóa thành regression và release gate,
+  không chỉ là quy ước giao diện.
 
-| Thuộc tính             | Giá trị                                                            |
-| ---------------------- | ------------------------------------------------------------------ |
-| Tệp                    | `Hermes-Vietnamese-Windows-x64-Setup.exe`                          |
-| Version                | `0.32.0-vi.1`                                                      |
-| Commit trong candidate | `81a0c7c53c6e0a42ba56af82c0bc72eb31727b0f`                         |
-| Kích thước             | `341176379` byte                                                   |
-| SHA-256                | `efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac` |
+## Cổng Windows x64 bắt buộc
 
-[Tải Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.0-1/Hermes-Vietnamese-Windows-x64-Setup.exe)
+- Installer phải có Authenticode `Valid` qua SignPath; thiếu chữ ký là NO-GO.
+- Windows x64: exact-artifact smoke và provenance phải khớp tag, commit,
+  kích thước và SHA-256 của private draft.
+- Update trực tiếp từ `vi-v0.32.0-1`, repair, uninstall giữ dữ liệu, uninstall
+  xóa dữ liệu và rollback `vi-v0.20.4-39` phải đạt trên cùng exact installer.
+- Vòng đời Dự án phải chứng minh Ẩn/Xóa metadata không đổi `hidden`, `archived`,
+  số tin nhắn hoặc SHA-256 nội dung phiên; mở lại vẫn tìm và tiếp tục được phiên.
+- Không dùng profile Hermes thật hoặc tắt Smart App Control để vượt cổng.
 
-## Giới hạn và an toàn cài đặt
+## Giới hạn
 
-- Candidate hiện `NotSigned`. Hồ sơ SignPath chưa cung cấp credential ký cho
-  lượt này; Windows có thể hiện `Publisher: Unknown` hoặc SmartScreen.
-- Dự án chưa tham gia Apple Developer Program; v32 không quảng cáo artifact
-  macOS, Linux hoặc Windows ARM64 khi chưa có exact-byte evidence riêng.
-- Đây là community pilot GitHub Latest cho Windows x64, không phải stable/final.
-  v31 bị thay khỏi Latest vì các lỗi nghiêm trọng về token, context và UI/UX.
-- Chỉ cài tệp có kích thước và SHA-256 khớp bảng trên. Không tắt Microsoft
-  Defender hoặc SmartScreen trên toàn máy.
-- Rollback đã diễn tập: `vi-v0.20.4-39`.
+- Đây là community pilot Windows x64, chưa phải stable/final.
+- Chưa có smoke trên máy người dùng; nghiệm thu phát hành dùng profile cô lập,
+  mock provider và máy ảo Windows dùng một lần.
+- Dự án chưa tham gia Apple Developer Program; v32.1 không quảng cáo macOS,
+  Linux hoặc Windows ARM64 khi chưa có exact-byte evidence riêng.
+- Nếu hậu kiểm công khai lỗi, quy trình phải đưa v32.1 về draft và khôi phục
+  `vi-v0.32.0-1` làm GitHub Latest.

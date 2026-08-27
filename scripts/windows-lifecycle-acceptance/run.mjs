@@ -12,7 +12,6 @@ import {
   ROLLBACK_TAG,
   V32_SOURCE_COMMIT,
   V32_SOURCE_TAG,
-  V321_CANDIDATE_COMMIT,
   V321_CANDIDATE_TAG,
   WINDOWS_LIFECYCLE_NODE_SHA256,
   WINDOWS_LIFECYCLE_NODE_VERSION,
@@ -50,8 +49,9 @@ function usage() {
     [--isolation-mode windows-sandbox|github-hosted-ephemeral-vm]
 
 This command runs only in Windows Sandbox or a GitHub-hosted ephemeral Windows
-VM. It never falls back to a workstation install. Candidate commit and tags are fixed to
-${V321_CANDIDATE_COMMIT}, ${V321_CANDIDATE_TAG}, ${V32_SOURCE_TAG}, and ${ROLLBACK_TAG}.`
+VM. It never falls back to a workstation install. The candidate tag is fixed to
+${V321_CANDIDATE_TAG}; its full commit must match the exact checked-out tag.
+Previous and rollback tags are fixed to ${V32_SOURCE_TAG} and ${ROLLBACK_TAG}.`
 }
 
 function parseArgs(argv) {

@@ -13,6 +13,10 @@ const v32Promotion = readFileSync(
   new URL('../../../.github/workflows/promote-v32-vietnamese.yml', import.meta.url),
   'utf8'
 )
+const v321Promotion = readFileSync(
+  new URL('../../../.github/workflows/promote-v321-vietnamese.yml', import.meta.url),
+  'utf8'
+)
 const runtimeSmoke = readFileSync(
   new URL('../../../.github/workflows/runtime-smoke-vietnamese.yml', import.meta.url),
   'utf8'
@@ -28,10 +32,7 @@ const v32PromotionValidator = readFileSync(
 const jsTests = readFileSync(new URL('../../../.github/workflows/js-tests.yml', import.meta.url), 'utf8')
 const vitestConfig = readFileSync(new URL('../vitest.config.ts', import.meta.url), 'utf8')
 const builderWrapper = readFileSync(new URL('../scripts/run-electron-builder.mjs', import.meta.url), 'utf8')
-const bundledBuild = readFileSync(
-  new URL('../../../scripts/build-bundled-desktop.mjs', import.meta.url),
-  'utf8'
-)
+const bundledBuild = readFileSync(new URL('../../../scripts/build-bundled-desktop.mjs', import.meta.url), 'utf8')
 const v32PackagedSmoke = readFileSync(new URL('../e2e/v32-packaged-smoke.spec.ts', import.meta.url), 'utf8')
 
 test('node:test builder patch regressions stay out of the Vitest project', () => {
@@ -107,8 +108,7 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /src\/store\/profile-share\.test\.ts/)
   assert.match(candidate, /src\/store\/session-states-scopes\.test\.ts/)
   assert.match(candidate, /src\/store\/system-actions\.test\.ts/)
-  const fixedAgentsGate =
-    candidate.match(/- name: Kiểm thử bề mặt Agents cố định[\s\S]*?(?=\n      - name:)/)?.[0] ?? ''
+  const fixedAgentsGate = candidate.match(/- name: Kiểm thử bề mặt Agents cố định[\s\S]*?(?=\n {6}- name:)/)?.[0] ?? ''
   for (const regression of [
     'src/app/chat/session-advisor-bar.test.tsx',
     'src/app/chat/session-gateway-control.test.tsx',
@@ -198,8 +198,7 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /HERMES_PAYLOAD_GIT_REF: \$\{\{ needs\.verify\.outputs\.commit \}\}/)
   assert.match(candidate, /HERMES_DESKTOP_EXPECTED_ARTIFACT=release\/%s/)
   assert.ok(
-    candidate.indexOf('Khóa đúng đường dẫn artifact vừa dựng') <
-      candidate.indexOf('Kiểm tra đúng payload đóng gói'),
+    candidate.indexOf('Khóa đúng đường dẫn artifact vừa dựng') < candidate.indexOf('Kiểm tra đúng payload đóng gói'),
     'exact distribution artifact path must be bound before packaged validation'
   )
   assert.match(candidate, /uv sync --locked --python 3\.11 --extra dev/)
@@ -250,27 +249,18 @@ test('candidate workflow fails closed on unsigned feeds and the Windows ARM64 na
   }
 
   const stableMetadata =
-    candidate.match(
-      /- name: Lập metadata cập nhật theo đúng artifact đã dựng[\s\S]*?(?=\n      - name:)/
-    )?.[0] ?? ''
+    candidate.match(/- name: Lập metadata cập nhật theo đúng artifact đã dựng[\s\S]*?(?=\n {6}- name:)/)?.[0] ?? ''
   assert.match(stableMetadata, /if: needs\.verify\.outputs\.release_class == 'stable'/)
   assert.match(stableMetadata, /generate-community-update-metadata\.mjs[\s\S]*\)" stable/)
 
   const communityFeedGate =
-    candidate.match(
-      /- name: Chặn feed cập nhật cho community prerelease chưa ký[\s\S]*?(?=\n      - name:)/
-    )?.[0] ?? ''
-  assert.match(
-    communityFeedGate,
-    /if: needs\.verify\.outputs\.release_class == 'community-prerelease'/
-  )
+    candidate.match(/- name: Chặn feed cập nhật cho community prerelease chưa ký[\s\S]*?(?=\n {6}- name:)/)?.[0] ?? ''
+  assert.match(communityFeedGate, /if: needs\.verify\.outputs\.release_class == 'community-prerelease'/)
   assert.match(communityFeedGate, /feeds=\(release-assets\/latest\*\.yml\)/)
   assert.match(communityFeedGate, /community-prerelease must not publish stable update metadata/)
   assert.ok(
     candidate.indexOf('Chặn feed cập nhật cho community prerelease chưa ký') <
-      candidate.lastIndexOf(
-        'collect-community-artifacts.mjs checksums release-assets SHA256SUMS.txt'
-      ),
+      candidate.lastIndexOf('collect-community-artifacts.mjs checksums release-assets SHA256SUMS.txt'),
     'community feed absence must be checked before the combined manifest is written'
   )
 
@@ -283,8 +273,7 @@ test('candidate workflow fails closed on unsigned feeds and the Windows ARM64 na
   assert.match(candidate, /read_window_below=unavailable/)
   assert.match(candidate, /stable_eligible=false/)
   assert.ok(
-    candidate.indexOf('Ghi giới hạn build-only Windows ARM64') <
-      candidate.indexOf('Ghi lại checksum sau ký'),
+    candidate.indexOf('Ghi giới hạn build-only Windows ARM64') < candidate.indexOf('Ghi lại checksum sau ký'),
     'the Windows ARM64 limitation must be covered by release checksums'
   )
 })
@@ -442,6 +431,34 @@ test('v32 runtime smoke binds the exact candidate to an ephemeral Windows lifecy
     'lifecycle archive must retain Playwright hidden receipts covered by its manifest'
   )
   assert.match(runtimeSmoke, /if: always\(\)/)
+})
+
+test('v32.1 safety update requires signed x64 bytes and its own exact lifecycle lane', () => {
+  assert.match(candidate, /matrix\.id == 'windows-x64' && needs\.verify\.outputs\.tag == 'vi-v0\.32\.1-2'/)
+  assert.match(candidate, /build_matrix: \$\{\{ steps\.candidate\.outputs\.build_matrix \}\}/)
+  assert.match(candidate, /if \[\[ "\$RELEASE_TAG" == "vi-v0\.32\.1-2" \]\]/)
+  assert.match(candidate, /matrix: \$\{\{ fromJSON\(needs\.verify\.outputs\.build_matrix\) \}\}/)
+  assert.match(runtimeSmoke, /exact-bytes:[\s\S]*?inputs\.tag != 'vi-v0\.32\.1-2'/)
+  assert.match(runtimeSmoke, /evidence:[\s\S]*?inputs\.tag != 'vi-v0\.32\.1-2'/)
+  assert.match(runtimeSmoke, /windows_x64_sha256:/)
+  assert.match(runtimeSmoke, /v321-windows-lifecycle:/)
+  assert.match(runtimeSmoke, /if: inputs\.tag == 'vi-v0\.32\.1-2' && inputs\.release_class == 'community-prerelease'/)
+  assert.match(runtimeSmoke, /ref: \$\{\{ inputs\.tag \}\}/)
+  assert.match(runtimeSmoke, /gh api "repos\/\$env:GITHUB_REPOSITORY\/commits\/\$env:TAG" --jq \.sha/)
+  assert.match(runtimeSmoke, /CANDIDATE_COMMIT=\$expectedCommit/)
+  assert.match(runtimeSmoke, /gh release download vi-v0\.32\.0-1/)
+  assert.match(runtimeSmoke, /--candidate-commit \$env:CANDIDATE_COMMIT/)
+  assert.match(runtimeSmoke, /--harness-commit \$env:CANDIDATE_COMMIT/)
+  assert.match(runtimeSmoke, /--previous-sha256 efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac/)
+  assert.match(runtimeSmoke, /v32\.1 candidate Authenticode is \$\(\$signature\.Status\), not Valid/)
+  assert.match(runtimeSmoke, /v321-windows-lifecycle-\$\{\{ github\.run_id \}\}/)
+  assert.match(v321Promotion, /^name: Công khai Hermes Vietnamese v32\.1$/m)
+  assert.match(v321Promotion, /node scripts\/validate-v321-promotion\.mjs/)
+  assert.match(v321Promotion, /test "\$previous_latest" = vi-v0\.32\.0-1/)
+  assert.match(v321Promotion, /-F draft=true -F prerelease=true -f make_latest=false/)
+  assert.match(v321Promotion, /rollback-v321-verify\.json/)
+  assert.match(v321Promotion, /-f make_latest=true/)
+  assert.match(v321Promotion, /assert_tag_binding/)
 })
 
 test('v32 promotion revalidates private bytes and full lifecycle evidence before publication', () => {

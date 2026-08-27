@@ -8,14 +8,15 @@
  * guest or fall back to a dev Electron binary.
  */
 
+import { createHash } from 'node:crypto'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 
-import { _electron, expect, installErrorBannerGuard, test, type ElectronApplication, type Page } from './test'
 import {
-  PACKAGED_BINARY_PATH,
   buildAppEnv,
+  PACKAGED_BINARY_PATH,
   type Sandbox,
   validatePackagedCandidateProvenance,
   waitForAppReady,
@@ -23,12 +24,19 @@ import {
   writeEnvFile,
   writeMockProviderConfig
 } from './fixtures'
-import { INTERIM_TEXTS, MOCK_REPLY, restartMockServer, startMockServer, type MockServer } from './mock-server'
+import { INTERIM_TEXTS, MOCK_REPLY, type MockServer, restartMockServer, startMockServer } from './mock-server'
+import { _electron, type ElectronApplication, expect, installErrorBannerGuard, type Page, test } from './test'
 
 const GUEST_STATE_ROOT = 'C:\\HermesLifecycle'
 const GUEST_EVIDENCE_ROOT = 'C:\\HermesHarness\\Evidence'
 const HOSTED_EVIDENCE_ROOT = 'C:\\HermesEvidence'
 const TOOL_TRIGGER = 'E2E_INTERIM_TRIGGER'
+const PROJECT_SESSION_MARKER = 'V321_PROJECT_SESSION_SAFETY_ANCHOR'
+const PROJECT_SESSION_TITLE = 'V32.1 project session safety'
+const PROJECT_HIDE_ID = 'p_lifecycle_hide'
+const PROJECT_HIDE_NAME = 'Lifecycle Hide Safety'
+const PROJECT_DELETE_ID = 'p_lifecycle_delete'
+const PROJECT_DELETE_NAME = 'Lifecycle Delete Safety'
 
 const selfUninstallAction =
   process.env.HERMES_LIFECYCLE_ACTION === 'uninstall-lite' || process.env.HERMES_LIFECYCLE_ACTION === 'uninstall-full'
@@ -42,6 +50,7 @@ test.use(selfUninstallAction ? { screenshot: 'off', trace: 'off' } : {})
 
 const ACTIONS = [
   'onboarding',
+  'project-session-safety',
   'safe-tool',
   'seed-v31',
   'verify-update',
@@ -58,6 +67,7 @@ type LifecycleAction = (typeof ACTIONS)[number]
 interface LifecycleContext {
   action: LifecycleAction
   binaryPath: string
+  evidenceRoot: string
   hermesHome: string
   screenshotPath: string
   userDataDir: string
@@ -140,6 +150,7 @@ function loadLifecycleContext(): LifecycleContext {
   if (profileUsername !== username) {
     throw new Error('lifecycle phase refused a user profile that does not match the active guest account')
   }
+
   if (isolationMode === 'windows-sandbox') {
     if (username !== 'wdagutilityaccount') {
       throw new Error('lifecycle phase refused to launch outside Windows Sandbox WDAGUtilityAccount')
@@ -166,6 +177,7 @@ function loadLifecycleContext(): LifecycleContext {
   if (!isStrictlyWithin(GUEST_STATE_ROOT, hermesHome) || !isStrictlyWithin(GUEST_STATE_ROOT, userDataDir)) {
     throw new Error(`lifecycle state must stay beneath ${GUEST_STATE_ROOT}`)
   }
+
   if (isolationMode === 'windows-sandbox') {
     if (evidenceRoot.toLowerCase() !== path.win32.resolve(GUEST_EVIDENCE_ROOT).toLowerCase()) {
       throw new Error(`Windows Sandbox evidence root must be ${GUEST_EVIDENCE_ROOT}`)
@@ -173,15 +185,19 @@ function loadLifecycleContext(): LifecycleContext {
   } else if (!isStrictlyWithin(HOSTED_EVIDENCE_ROOT, evidenceRoot)) {
     throw new Error(`hosted lifecycle evidence root must stay beneath ${HOSTED_EVIDENCE_ROOT}`)
   }
+
   if (!isStrictlyWithin(evidenceRoot, screenshotPath)) {
     throw new Error('lifecycle screenshot must stay beneath HERMES_LIFECYCLE_EVIDENCE_ROOT')
   }
+
   if (path.win32.extname(screenshotPath).toLowerCase() !== '.png') {
     throw new Error('HERMES_LIFECYCLE_SCREENSHOT must name a PNG file')
   }
+
   if (isStrictlyWithin(userProfile, hermesHome) || isStrictlyWithin(userProfile, userDataDir)) {
     throw new Error('lifecycle state must not use the guest profile, so a host profile can never be substituted')
   }
+
   assertDistinctTrees(hermesHome, userDataDir, 'HERMES_HOME and Electron userData')
 
   const binaryStat = fs.statSync(binaryPath, { throwIfNoEntry: false })
@@ -189,9 +205,11 @@ function loadLifecycleContext(): LifecycleContext {
   if (!binaryStat?.isFile() || path.win32.extname(binaryPath).toLowerCase() !== '.exe') {
     throw new Error(`exact installed executable is missing: ${binaryPath}`)
   }
+
   if (path.win32.resolve(PACKAGED_BINARY_PATH).toLowerCase() !== binaryPath.toLowerCase()) {
     throw new Error('fixture packaged path does not match HERMES_PACKAGED_BINARY_PATH')
   }
+
   if (fs.existsSync(screenshotPath)) {
     throw new Error(`refusing to overwrite lifecycle evidence: ${screenshotPath}`)
   }
@@ -201,11 +219,12 @@ function loadLifecycleContext(): LifecycleContext {
   if (requireProvenance !== undefined && requireProvenance !== '0' && requireProvenance !== '1') {
     throw new Error('HERMES_LIFECYCLE_REQUIRE_PROVENANCE must be 0, 1, or unset')
   }
+
   if (requireProvenance === '1') {
     validatePackagedCandidateProvenance()
   }
 
-  return { action, binaryPath, hermesHome, screenshotPath, userDataDir }
+  return { action, binaryPath, evidenceRoot, hermesHome, screenshotPath, userDataDir }
 }
 
 function ensureEmptyDirectory(directory: string, label: string): void {
@@ -231,6 +250,7 @@ function buildExactAppEnv(context: LifecycleContext): Record<string, string> {
     root: GUEST_STATE_ROOT,
     userDataDir: context.userDataDir
   }
+
   const env = buildAppEnv(sandbox, {
     HERMES_DESKTOP_APP_NAME: `HermesLifecycle-${context.action}-${Date.now()}`,
     NO_PROXY: '127.0.0.1,localhost',
@@ -253,6 +273,7 @@ function buildExactAppEnv(context: LifecycleContext): Record<string, string> {
   delete env.HERMES_DESKTOP_BOOT_FAKE_ERROR
   delete env.HERMES_DESKTOP_BOOT_FAKE_STEP_MS
   delete env.HERMES_PACKAGED_BINARY_PATH
+
   for (const name of Object.keys(env)) {
     if (name.startsWith('HERMES_LIFECYCLE_')) {
       delete env[name]
@@ -305,6 +326,159 @@ async function waitForReady(running: RunningApp): Promise<void> {
 
 function transcript(page: Page) {
   return page.locator('[data-slot="aui_thread-viewport"]')
+}
+
+interface SessionSafetySnapshot {
+  archived: number
+  cwd: string
+  hidden: number
+  id: string
+  messageCount: number
+  messageDigest: string
+  title: string
+}
+
+function readSessionSafetySnapshot(hermesHome: string): SessionSafetySnapshot {
+  const database = new DatabaseSync(path.win32.join(hermesHome, 'state.db'), { readOnly: true })
+
+  try {
+    const match = database
+      .prepare(
+        `SELECT session_id
+           FROM messages
+          WHERE instr(COALESCE(content, ''), ?) > 0
+          ORDER BY id DESC
+          LIMIT 1`
+      )
+      .get(PROJECT_SESSION_MARKER) as { session_id?: string } | undefined
+
+    if (!match?.session_id) {
+      throw new Error('project/session safety marker is missing from state.db')
+    }
+
+    const session = database
+      .prepare('SELECT id, cwd, title, archived, hidden FROM sessions WHERE id = ?')
+      .get(match.session_id) as
+      { archived: number; cwd: null | string; hidden: number; id: string; title: null | string } | undefined
+
+    const messages = database
+      .prepare('SELECT id, role, content, active, compacted FROM messages WHERE session_id = ? ORDER BY id')
+      .all(match.session_id) as Array<Record<string, unknown>>
+
+    if (!session || !session.cwd) {
+      throw new Error('project/session safety session is missing a project-addressable cwd')
+    }
+
+    return {
+      archived: Number(session.archived),
+      cwd: session.cwd,
+      hidden: Number(session.hidden),
+      id: session.id,
+      messageCount: messages.length,
+      messageDigest: createHash('sha256').update(JSON.stringify(messages), 'utf8').digest('hex'),
+      title: session.title ?? ''
+    }
+  } finally {
+    database.close()
+  }
+}
+
+function setSessionSafetyTitle(hermesHome: string, sessionId: string): void {
+  const database = new DatabaseSync(path.win32.join(hermesHome, 'state.db'))
+
+  try {
+    database
+      .prepare("UPDATE sessions SET title = ?, title_source = 'user' WHERE id = ?")
+      .run(PROJECT_SESSION_TITLE, sessionId)
+  } finally {
+    database.close()
+  }
+}
+
+function seedProjectSafetyFixtures(hermesHome: string, cwd: string): void {
+  const database = new DatabaseSync(path.win32.join(hermesHome, 'projects.db'))
+  const parent = path.win32.dirname(cwd)
+  const now = Math.floor(Date.now() / 1000)
+
+  try {
+    database.exec(`
+      PRAGMA foreign_keys=ON;
+      CREATE TABLE IF NOT EXISTS projects (
+        id TEXT PRIMARY KEY, slug TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+        description TEXT, icon TEXT, color TEXT, board_slug TEXT,
+        primary_path TEXT, created_at INTEGER NOT NULL,
+        archived INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS project_folders (
+        project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        path TEXT NOT NULL, label TEXT, is_primary INTEGER NOT NULL DEFAULT 0,
+        added_at INTEGER NOT NULL, PRIMARY KEY (project_id, path)
+      );
+      CREATE INDEX IF NOT EXISTS idx_project_folders_path ON project_folders(path);
+      CREATE TABLE IF NOT EXISTS project_meta (key TEXT PRIMARY KEY, value TEXT);
+      CREATE TABLE IF NOT EXISTS discovered_repos (
+        root TEXT PRIMARY KEY, label TEXT, last_seen INTEGER NOT NULL
+      );
+      DELETE FROM project_folders WHERE project_id IN ('${PROJECT_HIDE_ID}', '${PROJECT_DELETE_ID}');
+      DELETE FROM projects WHERE id IN ('${PROJECT_HIDE_ID}', '${PROJECT_DELETE_ID}');
+    `)
+
+    const insertProject = database.prepare(
+      `INSERT INTO projects (id, slug, name, primary_path, created_at, archived)
+       VALUES (?, ?, ?, ?, ?, 0)`
+    )
+
+    const insertFolder = database.prepare(
+      `INSERT INTO project_folders (project_id, path, label, is_primary, added_at)
+       VALUES (?, ?, NULL, 1, ?)`
+    )
+
+    database.exec('BEGIN IMMEDIATE')
+
+    try {
+      insertProject.run(PROJECT_HIDE_ID, 'lifecycle-hide-safety', PROJECT_HIDE_NAME, cwd, now)
+      insertFolder.run(PROJECT_HIDE_ID, cwd, now)
+      insertProject.run(PROJECT_DELETE_ID, 'lifecycle-delete-safety', PROJECT_DELETE_NAME, parent, now + 1)
+      insertFolder.run(PROJECT_DELETE_ID, parent, now + 1)
+      database.exec('COMMIT')
+    } catch (error) {
+      database.exec('ROLLBACK')
+      throw error
+    }
+  } finally {
+    database.close()
+  }
+}
+
+function readProjectArchived(hermesHome: string, projectId: string): null | number {
+  const database = new DatabaseSync(path.win32.join(hermesHome, 'projects.db'), { readOnly: true })
+
+  try {
+    const row = database.prepare('SELECT archived FROM projects WHERE id = ?').get(projectId) as
+      { archived: number } | undefined
+
+    return row ? Number(row.archived) : null
+  } finally {
+    database.close()
+  }
+}
+
+function expectSessionSafetyUnchanged(before: SessionSafetySnapshot, after: SessionSafetySnapshot): void {
+  expect(after.id).toBe(before.id)
+  expect(after.archived).toBe(0)
+  expect(after.hidden).toBe(0)
+  expect(after.messageCount).toBe(before.messageCount)
+  expect(after.messageDigest).toBe(before.messageDigest)
+  expect(after.title).toBe(PROJECT_SESSION_TITLE)
+}
+
+async function openProjectsManager(page: Page): Promise<void> {
+  await page.getByRole('button', { name: /^(Projects|Dự án)$/i }).click()
+  await expect(page.getByRole('heading', { name: /^(Projects|Dự án)$/i })).toBeVisible({ timeout: 60_000 })
+}
+
+function projectCard(page: Page, name: string) {
+  return page.locator('article').filter({ has: page.getByRole('heading', { exact: true, name }) })
 }
 
 function composer(page: Page) {
@@ -503,6 +677,128 @@ async function runOnboardingPhase(context: LifecycleContext): Promise<void> {
   }
 }
 
+async function runProjectSessionSafetyPhase(context: LifecycleContext): Promise<void> {
+  ensureLifecycleDirectories(context)
+  restartMockServer()
+  const mock = await startMockServer()
+  let running: RunningApp | null = null
+
+  try {
+    writeMockProviderConfig(context.hermesHome, mock.url)
+    writeEnvFile(context.hermesHome)
+    running = await launchExactBinary(context)
+    await waitForReady(running)
+    await sendAndWaitForReply(running.page, mock, PROJECT_SESSION_MARKER)
+
+    const seeded = readSessionSafetySnapshot(context.hermesHome)
+    setSessionSafetyTitle(context.hermesHome, seeded.id)
+    const before = readSessionSafetySnapshot(context.hermesHome)
+
+    expect(before.archived).toBe(0)
+    expect(before.hidden).toBe(0)
+    expect(before.messageCount).toBeGreaterThanOrEqual(2)
+    expect(before.title).toBe(PROJECT_SESSION_TITLE)
+
+    seedProjectSafetyFixtures(context.hermesHome, before.cwd)
+    await openProjectsManager(running.page)
+
+    const hideCard = projectCard(running.page, PROJECT_HIDE_NAME)
+    const deleteCard = projectCard(running.page, PROJECT_DELETE_NAME)
+
+    await expect(hideCard).toBeVisible({ timeout: 60_000 })
+    await expect(deleteCard).toBeVisible({ timeout: 60_000 })
+    await hideCard.getByRole('button', { name: /^(Open project|Mở dự án)$/i }).click()
+
+    const sessionsRoot = running.page.locator('[data-sessions-mode]')
+    await expect(sessionsRoot).toHaveAttribute('data-sessions-project', PROJECT_HIDE_ID, { timeout: 60_000 })
+    await running.page
+      .getByRole('button', {
+        name: new RegExp(`^(Hide ${PROJECT_HIDE_NAME} sessions|Ẩn ${PROJECT_HIDE_NAME} phiên)$`, 'i')
+      })
+      .click()
+    await expect(
+      running.page.getByRole('button', {
+        name: new RegExp(`^(Show ${PROJECT_HIDE_NAME} sessions|Hiển thị ${PROJECT_HIDE_NAME} phiên)$`, 'i')
+      })
+    ).toBeVisible()
+    await running.page
+      .getByRole('button', {
+        name: new RegExp(`^(Show ${PROJECT_HIDE_NAME} sessions|Hiển thị ${PROJECT_HIDE_NAME} phiên)$`, 'i')
+      })
+      .click()
+    await running.page.getByRole('button', { name: /^(All projects|Tất cả dự án)/i }).click()
+    await expect(sessionsRoot).toHaveAttribute('data-sessions-mode', 'projects')
+
+    await openProjectsManager(running.page)
+    await projectCard(running.page, PROJECT_HIDE_NAME)
+      .getByRole('button', { name: /^(Hide from projects|Ẩn khỏi danh sách dự án)$/i })
+      .click()
+    await expect.poll(() => readProjectArchived(context.hermesHome, PROJECT_HIDE_ID), { timeout: 30_000 }).toBe(1)
+    expectSessionSafetyUnchanged(before, readSessionSafetySnapshot(context.hermesHome))
+
+    const remainingDeleteCard = projectCard(running.page, PROJECT_DELETE_NAME)
+    await expect(remainingDeleteCard).toBeVisible({ timeout: 60_000 })
+    await remainingDeleteCard.getByRole('button', { name: /^(Delete|Xóa)$/i }).click()
+    const confirm = running.page.getByRole('dialog').filter({ hasText: PROJECT_DELETE_NAME })
+    await expect(confirm).toBeVisible()
+    await confirm.getByRole('button', { name: /^(Delete|Xóa)$/i }).click()
+    await expect.poll(() => readProjectArchived(context.hermesHome, PROJECT_DELETE_ID), { timeout: 30_000 }).toBeNull()
+    expectSessionSafetyUnchanged(before, readSessionSafetySnapshot(context.hermesHome))
+
+    await running.app.close()
+    running = null
+
+    // Relaunch the same exact installed binary and profile. Project scope must
+    // not persist; the session and every message must still be discoverable.
+    running = await launchExactBinary(context)
+    await waitForReady(running)
+    const search = running.page.getByPlaceholder(/^(Search sessions|Tìm phiên)/i)
+    await expect(search).toBeVisible({ timeout: 60_000 })
+    await search.fill(PROJECT_SESSION_TITLE)
+
+    const sessionResult = running.page
+      .locator('[data-sessions-mode]')
+      .getByText(PROJECT_SESSION_TITLE, { exact: true })
+      .first()
+
+    await expect(sessionResult).toBeVisible({ timeout: 60_000 })
+    await sessionResult.click()
+    await assertPersistedAnchor(running.page)
+    await expect
+      .poll(() => running?.page.locator('[data-sessions-mode]').getAttribute('data-sessions-mode'))
+      .not.toBe('project')
+
+    const afterRelaunch = readSessionSafetySnapshot(context.hermesHome)
+    expectSessionSafetyUnchanged(before, afterRelaunch)
+    await captureEvidence(running.page, context)
+    fs.writeFileSync(
+      path.win32.join(context.evidenceRoot, 'project-session-safety.json'),
+      `${JSON.stringify(
+        {
+          actions: ['open', 'collapse', 'return-all-projects', 'hide-metadata', 'delete-metadata', 'relaunch'],
+          messageCount: afterRelaunch.messageCount,
+          messageDigest: afterRelaunch.messageDigest,
+          projectDeleteRemoved: readProjectArchived(context.hermesHome, PROJECT_DELETE_ID) === null,
+          projectHideArchived: readProjectArchived(context.hermesHome, PROJECT_HIDE_ID) === 1,
+          relaunchScope: 'all-projects',
+          sessionArchived: afterRelaunch.archived,
+          sessionHidden: afterRelaunch.hidden,
+          sessionId: afterRelaunch.id
+        },
+        null,
+        2
+      )}\n`,
+      'utf8'
+    )
+  } finally {
+    if (running) {
+      await running.app.close().catch(() => undefined)
+    }
+
+    await mock.close()
+  }
+}
+
 async function runConfiguredPhase(context: LifecycleContext): Promise<void> {
   ensureLifecycleDirectories(context)
   restartMockServer()
@@ -519,28 +815,45 @@ async function runConfiguredPhase(context: LifecycleContext): Promise<void> {
     switch (context.action) {
       case 'safe-tool':
         await proveSafeToolLoop(running.page, mock)
+
         break
+
+      case 'project-session-safety':
+        throw new Error('project-session-safety must use its dedicated relaunch phase')
+
       case 'seed-v31':
+
       case 'seed-v32-rollback':
+
       case 'verify-rollback':
         await sendAndWaitForReply(running.page, mock, requiredMarker('HERMES_LIFECYCLE_SEND_TEXT'))
+
         break
+
       case 'verify-update':
         await assertPersistedAnchor(running.page)
         await proveSafeToolLoop(running.page, mock)
+
         break
+
       case 'verify-repair':
+
       case 'verify-lite-reinstall':
         await assertPersistedAnchor(running.page)
         await sendAndWaitForReply(running.page, mock, requiredMarker('HERMES_LIFECYCLE_SEND_TEXT'))
+
         break
+
       case 'uninstall-lite':
+
       case 'uninstall-full':
         await openGuiUninstall(running.page, context.action === 'uninstall-lite' ? 'lite' : 'full')
         await captureEvidence(running.page, context)
         await confirmGuiUninstall(running)
         uninstalled = true
+
         break
+
       case 'onboarding':
         throw new Error('onboarding must use the unconfigured lifecycle phase')
     }
@@ -552,6 +865,7 @@ async function runConfiguredPhase(context: LifecycleContext): Promise<void> {
     if (!uninstalled && running) {
       await running.app.close().catch(() => undefined)
     }
+
     await mock.close()
   }
 }
@@ -571,6 +885,8 @@ test.describe('v32 Windows Sandbox lifecycle phase', () => {
 
     if (context.action === 'onboarding') {
       await runOnboardingPhase(context)
+    } else if (context.action === 'project-session-safety') {
+      await runProjectSessionSafetyPhase(context)
     } else {
       await runConfiguredPhase(context)
     }

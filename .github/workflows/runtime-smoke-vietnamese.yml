@@ -11,6 +11,10 @@ on:
         description: 'SHA-256 của SHA256SUMS.txt; riêng v32 là SHA-256 exact Windows candidate'
         required: true
         type: string
+      windows_x64_sha256:
+        description: 'SHA-256 exact của Windows x64; bắt buộc cho vòng đời v32.1'
+        required: false
+        type: string
       release_class:
         description: 'Lớp phát hành phải khớp provenance của draft'
         required: true
@@ -25,7 +29,7 @@ permissions:
 jobs:
   exact-bytes:
     name: Byte và chữ ký — ${{ matrix.id }}
-    if: inputs.tag != 'vi-v0.32.0-1'
+    if: inputs.tag != 'vi-v0.32.0-1' && inputs.tag != 'vi-v0.32.1-2'
     runs-on: ${{ matrix.runner }}
     environment: release-smoke
     strategy:
@@ -70,7 +74,10 @@ jobs:
           node -e "const fs=require('fs'),c=require('crypto'); const h=p=>c.createHash('sha256').update(fs.readFileSync(p)).digest('hex'); if(h('candidate/SHA256SUMS.txt')!==process.env.EXPECTED_MANIFEST_SHA) process.exit(1); const line=fs.readFileSync('candidate/SHA256SUMS.txt','utf8').split(/\r?\n/).find(x=>x.endsWith('  '+process.env.ARTIFACT)); if(!line || h('candidate/'+process.env.ARTIFACT)!==line.slice(0,64)) process.exit(1)"
 
       - name: Xác minh Authenticode
-        if: runner.os == 'Windows' && inputs.release_class == 'stable'
+        if: >-
+          runner.os == 'Windows' &&
+          (inputs.release_class == 'stable' ||
+          (matrix.id == 'windows-x64' && inputs.tag == 'vi-v0.32.1-2'))
         shell: powershell
         env:
           ARTIFACT: ${{ matrix.artifact }}
@@ -79,7 +86,9 @@ jobs:
           if ($signature.Status -ne 'Valid') { throw "Authenticode is $($signature.Status), not Valid" }
 
       - name: Ghi nhận Windows unsigned cho community prerelease
-        if: runner.os == 'Windows' && inputs.release_class == 'community-prerelease'
+        if: >-
+          runner.os == 'Windows' && inputs.release_class == 'community-prerelease' &&
+          !(matrix.id == 'windows-x64' && inputs.tag == 'vi-v0.32.1-2')
         shell: powershell
         env:
           ARTIFACT: ${{ matrix.artifact }}
@@ -123,7 +132,7 @@ jobs:
 
   evidence:
     name: Đối chiếu smoke thật trên đúng máy và artifact
-    if: inputs.tag != 'vi-v0.32.0-1'
+    if: inputs.tag != 'vi-v0.32.0-1' && inputs.tag != 'vi-v0.32.1-2'
     needs: exact-bytes
     runs-on: ubuntu-24.04
     environment: release-production
@@ -299,6 +308,170 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: v32-windows-lifecycle-${{ github.run_id }}-${{ github.run_attempt }}
+          path: C:\HermesEvidence
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
+
+  v321-windows-lifecycle:
+    name: V32.1 Windows x64 — project/session safety và full lifecycle
+    if: inputs.tag == 'vi-v0.32.1-2' && inputs.release_class == 'community-prerelease'
+    permissions:
+      contents: read
+    runs-on: windows-2025
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26.5.1
+          cache: npm
+
+      - name: Cài dependency kiểm thử từ lockfile
+        shell: powershell
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Khôi phục cache ba installer exact v32.1
+        id: v321-lifecycle-input-cache
+        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: ${{ runner.temp }}\hermes-v321-release-inputs
+          key: hermes-v321-lifecycle-inputs-${{ inputs.windows_x64_sha256 }}-efc3d863a37882c6-e4e0b60d7821b0e7
+
+      - name: Tải candidate v32.1, public v32 và rollback đã khóa byte
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          CANDIDATE_SHA256: ${{ inputs.windows_x64_sha256 }}
+          CACHE_HIT: ${{ steps.v321-lifecycle-input-cache.outputs.cache-hit }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:CANDIDATE_SHA256 -notmatch '^[0-9a-fA-F]{64}$') {
+            throw 'windows_x64_sha256 must be the exact 64-character candidate SHA-256'
+          }
+
+          New-Item -ItemType Directory -Path C:\HermesEvidence -Force | Out-Null
+          [System.IO.File]::WriteAllText(
+            'C:\HermesEvidence\v321-draft-download-attempt.json',
+            "{`"runId`":`"$env:GITHUB_RUN_ID`",`"attempt`":`"$env:GITHUB_RUN_ATTEMPT`",`"tag`":`"$env:TAG`"}`n"
+          )
+          $expectedCommit = (git rev-parse HEAD).Trim()
+          if ($LASTEXITCODE -ne 0 -or $expectedCommit -notmatch '^[0-9a-f]{40}$') {
+            throw 'Cannot resolve exact checked-out candidate commit'
+          }
+          $tagCommit = (gh api "repos/$env:GITHUB_REPOSITORY/commits/$env:TAG" --jq .sha).Trim()
+          if ($LASTEXITCODE -ne 0 -or $tagCommit -ne $expectedCommit) {
+            throw "Candidate tag does not match checked-out harness commit: tag=$tagCommit checkout=$expectedCommit"
+          }
+          "CANDIDATE_COMMIT=$expectedCommit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+          $inputRoot = Join-Path $env:RUNNER_TEMP 'hermes-v321-release-inputs'
+          $candidateDir = Join-Path $inputRoot 'candidate'
+          $previousDir = Join-Path $inputRoot 'previous'
+          $rollbackDir = Join-Path $inputRoot 'rollback'
+          New-Item -ItemType Directory -Path $candidateDir, $previousDir, $rollbackDir -Force | Out-Null
+
+          $releaseJson = gh api --paginate "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" --slurp
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate candidate drafts' }
+          $pages = $releaseJson | ConvertFrom-Json
+          $matches = @()
+          foreach ($page in @($pages)) {
+            $matches += @($page | Where-Object { $_.tag_name -eq $env:TAG })
+          }
+          if ($matches.Count -ne 1) { throw "Expected one draft for $env:TAG, got $($matches.Count)" }
+          $release = $matches[0]
+          if ($release.draft -ne $true -or $release.prerelease -ne $true) {
+            throw 'v32.1 candidate is not a private prerelease draft'
+          }
+          $assets = @($release.assets | Where-Object { $_.name -eq 'Hermes-Vietnamese-Windows-x64-Setup.exe' })
+          if ($assets.Count -ne 1) { throw "Expected one Windows x64 candidate asset, got $($assets.Count)" }
+          $asset = $assets[0]
+          if ($asset.state -ne 'uploaded' -or [Int64]$asset.size -le 0) {
+            throw 'Draft candidate asset metadata is incomplete'
+          }
+          if ($asset.digest -ne "sha256:$($env:CANDIDATE_SHA256.ToLowerInvariant())") {
+            throw 'Draft candidate digest is not exact'
+          }
+
+          $candidatePath = Join-Path $candidateDir 'Hermes-Vietnamese-Windows-x64-Setup.exe'
+          if ($env:CACHE_HIT -ne 'true') {
+            $headers = @{
+              Accept = 'application/octet-stream'
+              Authorization = "Bearer $env:GH_TOKEN"
+              'X-GitHub-Api-Version' = '2022-11-28'
+            }
+            Invoke-WebRequest -Uri $asset.url -Headers $headers -OutFile $candidatePath
+            gh release download vi-v0.32.0-1 --repo $env:GITHUB_REPOSITORY --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir $previousDir
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot download pinned public v32 installer' }
+            gh release download vi-v0.20.4-39 --repo $env:GITHUB_REPOSITORY --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir $rollbackDir
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot download pinned vi39 installer' }
+          }
+
+          $records = @(
+            @{ Path = $candidatePath; Size = [Int64]$asset.size; Sha256 = $env:CANDIDATE_SHA256 },
+            @{ Path = (Join-Path $previousDir 'Hermes-Vietnamese-Windows-x64-Setup.exe'); Size = 341176379; Sha256 = 'efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac' },
+            @{ Path = (Join-Path $rollbackDir 'Hermes-Vietnamese-Windows-x64-Setup.exe'); Size = 340105286; Sha256 = 'e4e0b60d7821b0e72af7b79e745b723c035f588c49bb11782778214a3e0c6d31' }
+          )
+          foreach ($record in $records) {
+            $item = Get-Item -LiteralPath $record.Path
+            if ($item.Length -ne $record.Size) { throw "Installer size mismatch: $($record.Path)" }
+            $digest = (Get-FileHash -LiteralPath $record.Path -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($digest -ne $record.Sha256.ToLowerInvariant()) { throw "Installer SHA-256 mismatch: $($record.Path)" }
+          }
+          $signature = Get-AuthenticodeSignature -LiteralPath $candidatePath
+          if ($signature.Status -ne 'Valid' -or $null -eq $signature.SignerCertificate) {
+            throw "v32.1 candidate Authenticode is $($signature.Status), not Valid"
+          }
+
+      - name: Lưu cache ba installer exact v32.1 sau khi xác minh
+        if: steps.v321-lifecycle-input-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: ${{ runner.temp }}\hermes-v321-release-inputs
+          key: hermes-v321-lifecycle-inputs-${{ inputs.windows_x64_sha256 }}-efc3d863a37882c6-e4e0b60d7821b0e7
+
+      - name: Chạy exact v32.1 trong máy ảo GitHub dùng một lần
+        shell: powershell
+        env:
+          CANDIDATE_SHA256: ${{ inputs.windows_x64_sha256 }}
+        run: |
+          New-Item -ItemType Directory -Path C:\HermesEvidence -Force | Out-Null
+          [System.IO.File]::WriteAllText(
+            'C:\HermesEvidence\v321-workflow-preflight.json',
+            "{`"runId`":`"$env:GITHUB_RUN_ID`",`"attempt`":`"$env:GITHUB_RUN_ATTEMPT`",`"candidateCommit`":`"$env:CANDIDATE_COMMIT`"}`n"
+          )
+          $inputRoot = Join-Path $env:RUNNER_TEMP 'hermes-v321-release-inputs'
+          $candidate = (Resolve-Path (Join-Path $inputRoot 'candidate\Hermes-Vietnamese-Windows-x64-Setup.exe')).Path
+          $previous = (Resolve-Path (Join-Path $inputRoot 'previous\Hermes-Vietnamese-Windows-x64-Setup.exe')).Path
+          $rollback = (Resolve-Path (Join-Path $inputRoot 'rollback\Hermes-Vietnamese-Windows-x64-Setup.exe')).Path
+          $nodeRuntime = Split-Path -Parent (Get-Command node.exe).Source
+          $evidence = "C:\HermesEvidence\v321-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          node scripts/windows-lifecycle-acceptance/run.mjs `
+            --isolation-mode github-hosted-ephemeral-vm `
+            --candidate $candidate `
+            --candidate-sha256 $env:CANDIDATE_SHA256 `
+            --candidate-commit $env:CANDIDATE_COMMIT `
+            --harness-commit $env:CANDIDATE_COMMIT `
+            --previous $previous `
+            --previous-sha256 efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac `
+            --rollback $rollback `
+            --rollback-sha256 e4e0b60d7821b0e72af7b79e745b723c035f588c49bb11782778214a3e0c6d31 `
+            --node-runtime-dir $nodeRuntime `
+            --evidence-dir $evidence `
+            --timeout-minutes 105
+
+      - name: Lưu bằng chứng v32.1 kể cả khi fail-closed
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: v321-windows-lifecycle-${{ github.run_id }}-${{ github.run_attempt }}
           path: C:\HermesEvidence
           include-hidden-files: true
           if-no-files-found: error

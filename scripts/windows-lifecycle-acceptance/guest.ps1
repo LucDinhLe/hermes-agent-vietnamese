@@ -749,6 +749,20 @@ try {
   $packagedEvidence = Invoke-PackagedAcceptance $candidateState.Binary
   Add-Gate 'packagedMockRuntime' $packagedEvidence @{ endpoint = 'guest-loopback-only'; runtime = 'installed-resident-payload' }
   Add-Gate 'packagedSessionRelaunch' $packagedEvidence @{ sameProfile = $true }
+  $projectSafetyEvidence = Invoke-PlaywrightPhase `
+    'project-session-safety' `
+    $candidateState.Binary `
+    "$StateRoot\project-safety\home" `
+    "$StateRoot\project-safety\user-data" `
+    'project-session-safety.log' `
+    $true `
+    'V321_PROJECT_SESSION_SAFETY_ANCHOR'
+  Add-Gate 'projectSessionSafety' (@($projectSafetyEvidence) + @('project-session-safety.json')) @{
+    activeScopeAfterRelaunch = 'all-projects'
+    projectMetadataActions = @('archive', 'delete')
+    sessionRowsPreserved = $true
+    messageRowsPreserved = $true
+  }
   Add-Gate 'uxMessagingBack' $packagedEvidence @{}
   Add-Gate 'uxNewSessionPointer' $packagedEvidence @{}
   Add-Gate 'uxContextMeter' $packagedEvidence @{}

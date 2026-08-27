@@ -12,7 +12,6 @@ import {
   V32_SOURCE_COMMIT,
   V32_SOURCE_SHA256,
   V32_SOURCE_SIZE,
-  V321_CANDIDATE_COMMIT,
   WINDOWS_LIFECYCLE_NODE_SHA256,
   WINDOWS_LIFECYCLE_NODE_VERSION,
   assertSupportedGithubHostedWindowsRunner,
@@ -30,11 +29,11 @@ const lifecycleSpec = fs.readFileSync(
 const fixtureScript = fs.readFileSync(new URL('../../apps/desktop/e2e/fixtures.ts', import.meta.url), 'utf8')
 
 const candidate = {
-  commit: V321_CANDIDATE_COMMIT,
-  fileName: 'Hermes-0.32.1-vi.1-win-x64.exe',
+  commit: 'a'.repeat(40),
+  fileName: 'Hermes-0.32.1-vi.2-win-x64.exe',
   sha256: '1'.repeat(64),
   size: 320_000_000,
-  tag: 'vi-v0.32.1-1'
+  tag: 'vi-v0.32.1-2'
 }
 const previous = {
   commit: V32_SOURCE_COMMIT,
@@ -82,8 +81,8 @@ test('descriptor binds the three exact lifecycle installers and rejects byte reu
     /must be vi-v0\.20\.4-39/
   )
   assert.throws(
-    () => validateLifecycleDescriptor({ ...descriptor, candidate: { ...candidate, commit: 'a'.repeat(40) } }),
-    /pinned vi-v0\.32\.1-1 source commit/
+    () => validateLifecycleDescriptor({ ...descriptor, candidate: { ...candidate, commit: 'not-a-commit' } }),
+    /candidate\.commit must be a full lowercase 40-character commit SHA/
   )
 })
 
@@ -241,6 +240,18 @@ test('lifecycle messages use the contenteditable keyboard path instead of clicki
   assert.match(sendHelper, /await expect\(input\)\.toHaveText\(prompt\)/)
   assert.match(sendHelper, /await input\.press\('Enter'\)/)
   assert.doesNotMatch(sendHelper, /input\.click\(\)/)
+})
+
+test('exact lifecycle proves project metadata actions never hide or delete session data', () => {
+  assert.ok(REQUIRED_LIFECYCLE_GATES.includes('projectSessionSafety'))
+  assert.match(guestScript, /Invoke-PlaywrightPhase `\r?\n\s+'project-session-safety'/)
+  assert.match(guestScript, /Add-Gate 'projectSessionSafety'/)
+  assert.match(lifecycleSpec, /PROJECT_SESSION_MARKER = 'V321_PROJECT_SESSION_SAFETY_ANCHOR'/)
+  assert.match(lifecycleSpec, /UPDATE sessions SET title = \?, title_source = 'user' WHERE id = \?/)
+  assert.match(lifecycleSpec, /Hide from projects\|Ẩn khỏi danh sách dự án/)
+  assert.match(lifecycleSpec, /projectDeleteRemoved/)
+  assert.match(lifecycleSpec, /messageDigest/)
+  assert.match(lifecycleSpec, /not\.toBe\('project'\)/)
 })
 
 test('GUI uninstall opens Settings through its global shortcut and activates exact accessible controls', () => {

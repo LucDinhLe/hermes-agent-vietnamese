@@ -50,8 +50,7 @@ export function requiredRuntimeGatesForTag(tag) {
   const match = /^vi-v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)-(0|[1-9]\d*)$/.exec(String(tag))
   if (!match) throw new Error(`evidence tag is invalid: ${tag}`)
   const version = match.slice(1, 4).map(Number)
-  const requiresV31Gates =
-    version[0] > 0 || version[1] > 31 || (version[1] === 31 && version[2] >= 0)
+  const requiresV31Gates = version[0] > 0 || version[1] > 31 || (version[1] === 31 && version[2] >= 0)
 
   return requiresV31Gates ? [...REQUIRED_RUNTIME_GATES, ...V31_RUNTIME_GATES] : REQUIRED_RUNTIME_GATES
 }
@@ -115,14 +114,22 @@ export function validateReleaseEvidence(evidence, checksumText, expected = {}) {
       }
     }
     if (platform.startsWith('windows-') && evidence.releaseClass === 'community-prerelease') {
-      if (
-        record.signing?.installerAuthenticode !== 'NotSigned' ||
-        record.signing?.installedAppAuthenticode !== 'NotSigned'
-      ) {
-        throw new Error(`${platform}: community prerelease must explicitly record unsigned Windows binaries`)
-      }
-      if (record.signing?.userWarningVerified !== true) {
-        throw new Error(`${platform}: unsigned Windows warning behavior was not verified`)
+      const installerStatus = record.signing?.installerAuthenticode
+      const installedStatus = record.signing?.installedAppAuthenticode
+      if (installerStatus === 'Valid' && installedStatus === 'Valid') {
+        const installerPublisher = String(record.signing?.installerPublisher ?? '').trim()
+        const installedAppPublisher = String(record.signing?.installedAppPublisher ?? '').trim()
+        if (!installerPublisher || installerPublisher !== installedAppPublisher) {
+          throw new Error(`${platform}: signed community prerelease publisher evidence does not match`)
+        }
+      } else if (installerStatus === 'NotSigned' && installedStatus === 'NotSigned') {
+        if (record.signing?.userWarningVerified !== true) {
+          throw new Error(`${platform}: unsigned Windows warning behavior was not verified`)
+        }
+      } else {
+        throw new Error(
+          `${platform}: community prerelease must record either two Valid signatures or two explicit NotSigned binaries`
+        )
       }
     }
     if (
