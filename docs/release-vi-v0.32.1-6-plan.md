@@ -1,9 +1,10 @@
-# Kế hoạch candidate `vi-v0.32.1-5`
+# Kế hoạch candidate `vi-v0.32.1-6`
 
 Ngày chốt phạm vi: 2026-08-26
-Trạng thái: source integration và release-controller hardening đã đạt gate tại
-commit `f821cee6b644a67351a735e5dbc1ae82e045ba47`; chưa build, chưa tag, chưa
-stage, chưa public và chưa đổi GitHub Latest.
+Trạng thái: source integration và release-controller hardening đạt gate cục bộ.
+Candidate `-5` đã dừng fail-closed trong lifecycle; thay đổi harness `-6` đã đạt
+gate cục bộ nhưng chưa freeze commit, build, tag, stage hay public. GitHub Latest
+chưa đổi.
 
 Ứng viên `vi-v0.32.1-2` đã dừng ở source gate trước build do một regression cũ
 trộn candidate notes với public descriptor. Tag/run `-2` được giữ bất biến làm
@@ -11,7 +12,11 @@ bằng chứng. Ứng viên `vi-v0.32.1-3` đã build và stage draft riêng tư
 lifecycle không tìm thấy draft do một lớp mảng thừa từ `--slurp`; tag/draft/run
 được giữ bất biến và không promotion. `vi-v0.32.1-4` cũng build/stage thành
 công nhưng token lifecycle chỉ có `contents: read`, nên GitHub ẩn draft và job
-dừng trước download. `-4` giữ bất biến; kế hoạch này chuyển sang `-5`.
+dừng trước download. `vi-v0.32.1-5` đã build/stage đúng byte; lifecycle vượt
+fresh install, onboarding và packaged relaunch rồi dừng ở project/session vì
+harness tái dùng một phiên rời hợp lệ có `cwd = null`. Dữ liệu phiên vẫn còn
+nguyên; promotion dừng đúng thiết kế. `-5` giữ bất biến và kế hoạch chuyển sang
+`-6` với thao tác mở phiên mới qua UI trước gate dự án.
 
 ## Mục tiêu
 
@@ -31,8 +36,8 @@ phiên/dự án. Không rebuild, đổi tag hoặc thay byte candidate đó.
 
 ## Danh tính candidate kế nhiệm
 
-- Tag dự kiến: `vi-v0.32.1-5`.
-- Desktop version: `0.32.1-vi.5`.
+- Tag dự kiến: `vi-v0.32.1-6`.
+- Desktop version: `0.32.1-vi.6`.
 - Release class trước promotion: `community-prerelease`.
 - Exact source commit, kích thước và SHA-256 chỉ được ghi sau clean source gate
   và một lượt build duy nhất.
@@ -64,7 +69,7 @@ phiên/dự án. Không rebuild, đổi tag hoặc thay byte candidate đó.
 
 Sau khi source commit sạch được freeze:
 
-1. build đúng một lần Windows x64 với tag `vi-v0.32.1-5`;
+1. build đúng một lần Windows x64 với tag `vi-v0.32.1-6`;
 2. kiểm exact embedded provenance, PE x64, schema manifest, update feed và
    SHA-256;
 3. ghi nhận trung thực Authenticode `NotSigned`, không có signer certificate và
@@ -80,7 +85,7 @@ Không dùng cài trực tiếp trên workstation thay cho guest lifecycle.
 
 ### Cơ chế fail-closed đã khóa trong source
 
-- `vi-v0.32.1-5` chỉ tạo matrix Windows x64; không dựng thêm artifact chưa được
+- `vi-v0.32.1-6` chỉ tạo matrix Windows x64; không dựng thêm artifact chưa được
   nghiệm thu rồi vô tình đưa chúng vào public release.
 - Windows x64 giữ lớp `community-prerelease` chưa ký theo quyết định của chủ dự
   án ngày 2026-08-27; signing receipt phải ghi `NotSigned` và không có signer.
@@ -96,7 +101,7 @@ Không dùng cài trực tiếp trên workstation thay cho guest lifecycle.
 Chỉ sau khi mọi gate trên đạt, promotion riêng mới được:
 
 - public đúng tag và đúng byte candidate đã nghiệm thu;
-- cập nhật descriptor/download/Latest sang `vi-v0.32.1-5`;
+- cập nhật descriptor/download/Latest sang `vi-v0.32.1-6`;
 - kiểm lại asset size, digest, trạng thái `NotSigned`, updater manifest và
   public links;
 - giữ `vi-v0.32.0-1` làm previous update source và
@@ -115,6 +120,12 @@ liệu hoặc rollback.
 - Promotion validator v32.1: 3/3 đạt; tamper và session-hidden đều bị chặn.
 - Workflow contract: 16/16 đạt; YAML và PowerShell parse đạt; Prettier và
   `git diff --check` đạt; Desktop lint 0 error.
-- Exact unsigned installer/lifecycle: chưa chạy; chờ freeze/push exact tag.
-- GitHub staging/tag/promotion: tài khoản `LucDinhLe` đã xác thực; chờ commit
-  cấp quyền token tối thiểu để đọc draft và push exact tag `vi-v0.32.1-5`.
+- Candidate `-5` staging run `33047979498` đạt; installer 340.619.304 byte,
+  SHA-256 `22639f293af973f39f81920fd77621cbf93b6d565b39e7b63b46c90b36fd2728`,
+  Authenticode `NotSigned`.
+- Lifecycle `-5` run `33049189121` vượt tám gate đầu rồi fail-closed ở
+  `projectSessionSafety`; evidence artifact `9637160151` chứng minh phiên và
+  nội dung còn nguyên nhưng phiên thử là detached `cwd = null`.
+- Exact unsigned installer/lifecycle `-6`: chưa chạy; chờ freeze/push exact tag.
+- GitHub staging/tag/promotion: tài khoản `LucDinhLe` đã xác thực; chủ dự án đã
+  cho phép public khi toàn bộ receipt của `vi-v0.32.1-6` xanh.

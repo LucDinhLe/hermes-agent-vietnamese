@@ -30,10 +30,10 @@ const fixtureScript = fs.readFileSync(new URL('../../apps/desktop/e2e/fixtures.t
 
 const candidate = {
   commit: 'a'.repeat(40),
-  fileName: 'Hermes-0.32.1-vi.5-win-x64.exe',
+  fileName: 'Hermes-0.32.1-vi.6-win-x64.exe',
   sha256: '1'.repeat(64),
   size: 320_000_000,
-  tag: 'vi-v0.32.1-5'
+  tag: 'vi-v0.32.1-6'
 }
 const previous = {
   commit: V32_SOURCE_COMMIT,
@@ -243,9 +243,12 @@ test('lifecycle messages use the contenteditable keyboard path instead of clicki
 })
 
 test('exact lifecycle proves project metadata actions never hide or delete session data', () => {
+  const projectPhase = lifecycleSpec.match(/async function runProjectSessionSafetyPhase[\s\S]*?\r?\n\}/)?.[0] ?? ''
   assert.ok(REQUIRED_LIFECYCLE_GATES.includes('projectSessionSafety'))
   assert.match(guestScript, /Invoke-PlaywrightPhase `\r?\n\s+'project-session-safety'/)
   assert.match(guestScript, /Add-Gate 'projectSessionSafety'/)
+  assert.match(projectPhase, /page\.keyboard\.press\('Control\+N'\)/)
+  assert.match(projectPhase, /not\.toContainText\(MOCK_REPLY/)
   assert.match(lifecycleSpec, /PROJECT_SESSION_MARKER = 'V321_PROJECT_SESSION_SAFETY_ANCHOR'/)
   assert.match(lifecycleSpec, /UPDATE sessions SET title = \?, title_source = 'user' WHERE id = \?/)
   assert.match(lifecycleSpec, /Hide from projects\|Ẩn khỏi danh sách dự án/)

@@ -688,6 +688,13 @@ async function runProjectSessionSafetyPhase(context: LifecycleContext): Promise<
     writeEnvFile(context.hermesHome)
     running = await launchExactBinary(context)
     await waitForReady(running)
+
+    // The packaged smoke may leave the active conversation intentionally
+    // detached (`cwd = null`). Start through the real new-session shortcut so
+    // this phase exercises project behavior from the packaged app's configured
+    // default workspace instead of coercing or mutating an existing session.
+    await running.page.keyboard.press('Control+N')
+    await expect(transcript(running.page)).not.toContainText(MOCK_REPLY, { timeout: 30_000 })
     await sendAndWaitForReply(running.page, mock, PROJECT_SESSION_MARKER)
 
     const seeded = readSessionSafetySnapshot(context.hermesHome)

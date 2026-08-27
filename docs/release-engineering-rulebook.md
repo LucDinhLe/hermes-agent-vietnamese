@@ -174,6 +174,9 @@ Chỉ dùng user/hồ sơ cô lập. Không đọc, nhập hoặc khôi phục d
 - [ ] Cài và mở bằng đường người dùng thực tế, không cần developer tools.
 - [ ] Runtime/bootstrap, gateway và onboarding đạt.
 - [ ] Tạo/đổi tên phiên, kiểm tab phiên/Browser và panel phải.
+- [ ] Phiên detached có `cwd = null` là dữ liệu hợp lệ và phải tiếp tục hiển thị.
+      Gate dự án phải tạo hoặc mở một phiên project-addressable qua đúng thao tác
+      UI người dùng; không được ép sửa `cwd` của phiên cũ để làm cho test đạt.
 - [ ] Với hồ sơ có phiên cũ chưa gắn thư mục, tạo và mở một dự án rồi xác nhận
       lối **Tất cả dự án** luôn dễ thấy, báo đúng số phiên nằm ngoài dự án, các
       phiên đó vẫn truy cập được và không phiên nào tự đổi sang hidden/archived

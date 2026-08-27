@@ -1,5 +1,21 @@
 # Tiến độ
 
+## Cập nhật 2026-08-27 — candidate v32.1-6 sửa giả định phiên detached
+
+- `vi-v0.32.1-5` build/stage thành công tại run `33047979498`; exact installer
+  340.619.304 byte, SHA-256
+  `22639f293af973f39f81920fd77621cbf93b6d565b39e7b63b46c90b36fd2728`,
+  Authenticode `NotSigned`.
+- Lifecycle run `33049189121` vượt fresh install, onboarding, mock runtime và
+  packaged relaunch rồi dừng fail-closed ở `projectSessionSafety`. Evidence
+  artifact `9637160151` cho thấy phiên và nội dung còn nguyên nhưng phiên thử
+  là detached hợp lệ với `cwd = null`; không có mất dữ liệu sản phẩm.
+- Harness kế nhiệm mở phiên mới bằng phím tắt người dùng thật trước khi kiểm
+  liên kết dự án, không ép sửa một phiên detached hiện hữu. Candidate mới là
+  `vi-v0.32.1-6` / `0.32.1-vi.6`; `-5` giữ bất biến, không promotion.
+- Latest vẫn là `vi-v0.32.0-1`. Chỉ public `-6` nếu toàn bộ exact lifecycle và
+  hậu kiểm promotion đạt.
+
 ## Cập nhật 2026-08-27 — candidate v32.1-5 sửa quyền đọc draft
 
 - Candidate `vi-v0.32.1-4` đã stage đúng byte nhưng lifecycle dừng trước tải vì
@@ -42,7 +58,7 @@
 - Candidate kế nhiệm được đặt là `vi-v0.32.1-5` / `0.32.1-vi.5`; local
   `vi-v0.32.1-1` cũ giữ bất biến và bị supersede cho mục tiêu release vì chưa
   có hotfix. Chưa build/tag/push/stage/public/đổi Latest.
-- Release plan: `docs/release-vi-v0.32.1-5-plan.md`. Latest tiếp tục NO-GO cho
+- Release plan: `docs/release-vi-v0.32.1-6-plan.md`. Latest tiếp tục NO-GO cho
   tới khi exact artifact chứng minh Authenticode `NotSigned`, không có signer và
   vòng đời trên Windows guest cô lập đạt, gồm update v32 → v32.1 và persistence
   project/session.

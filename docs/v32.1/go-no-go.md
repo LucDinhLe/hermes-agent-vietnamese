@@ -4,7 +4,7 @@ Ngày khóa rà soát source: 2026-08-27
 
 ## Quyết định
 
-**Source GO, Release NO-GO** cho ứng viên kế nhiệm `vi-v0.32.1-5`.
+**Source GO, Release NO-GO** cho ứng viên kế nhiệm `vi-v0.32.1-6`.
 
 `vi-v0.32.1-2` đã dừng ở source gate trước khi build vì bài kiểm thử cũ trộn
 ghi chú ứng viên với descriptor bản đang công khai. Tag và run được giữ nguyên
@@ -18,6 +18,13 @@ hash và hai run được giữ bất biến làm bằng chứng; `-3` không đ
 download vì token `contents: read` không được GitHub cho thấy draft. Tag/draft/
 hash/run giữ bất biến; `-4` không được promotion.
 
+`vi-v0.32.1-5` đã build/stage draft đúng byte. Lifecycle vượt fresh install,
+onboarding, mock runtime và packaged relaunch, rồi dừng fail-closed ở gate
+project/session vì harness dùng lại một phiên detached hợp lệ có `cwd = null`.
+Evidence xác nhận session/message còn nguyên; đây là lỗi giả định của harness,
+không phải mất dữ liệu sản phẩm. Tag, draft, hash và run giữ bất biến; `-5`
+không được promotion.
+
 Phần khắc phục yếu điểm v32 và cổng chống mất/ẩn phiên đã hoàn tất trong source.
 Chưa được build, tag, stage, công khai hoặc thay GitHub Latest vì chưa có exact
 lifecycle receipt trên installer cuối cùng.
@@ -27,9 +34,9 @@ lifecycle receipt trên installer cuối cùng.
 | Thuộc tính                | Giá trị                                    |
 | ------------------------- | ------------------------------------------ |
 | Branch                    | `integration/v32.1-project-session-safety` |
-| Source hardening commit   | `f821cee6b644a67351a735e5dbc1ae82e045ba47` |
-| Tag dự kiến               | `vi-v0.32.1-5`                             |
-| Desktop version dự kiến   | `0.32.1-vi.5`                              |
+| Source hardening commit   | Chờ freeze exact candidate `-6`            |
+| Tag dự kiến               | `vi-v0.32.1-6`                             |
+| Desktop version dự kiến   | `0.32.1-vi.6`                              |
 | Release class             | `community-prerelease`                     |
 | Phạm vi nghiệm thu/public | Windows 10/11 x64                          |
 
@@ -46,7 +53,7 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 - Repo scan, auto archive và auto prune tắt mặc định.
 - Exact lifecycle harness thêm gate `projectSessionSafety`: hash nội dung và số
   hàng trước/sau Ẩn/Xóa, relaunch, tìm và tiếp tục phiên.
-- `vi-v0.32.1-5` chỉ dựng Windows x64; Authenticode được ghi rõ `NotSigned`,
+- `vi-v0.32.1-6` chỉ dựng Windows x64; Authenticode được ghi rõ `NotSigned`,
   không có signer certificate và không được quảng cáo stable/final.
 - Promotion riêng kiểm tag/commit/size/SHA-256, private draft, staging run,
   lifecycle run, evidence seal và tự rollback về v32 nếu hậu kiểm lỗi.
@@ -56,7 +63,7 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 
 ## Gate còn thiếu
 
-1. Commit/push exact source branch và tạo tag bất biến `vi-v0.32.1-5`.
+1. Commit/push exact source branch và tạo tag bất biến `vi-v0.32.1-6`.
 2. Một lượt build duy nhất của Windows x64 từ exact tag.
 3. Ghi size/SHA-256, xác minh trạng thái `NotSigned` và private draft đúng byte.
 4. Exact lifecycle trên GitHub-hosted Windows VM dùng một lần, gồm update
@@ -76,8 +83,9 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 
 1. Installer chưa ký có thể bị SmartScreen hoặc Smart App Control cảnh báo/chặn;
    người dùng phải được báo rõ và không được hướng dẫn tắt bảo vệ toàn máy.
-2. Chưa có lifecycle receipt nên chưa được tuyên bố lỗi hiển thị/mất phiên đã
-   hết trên installer cuối cùng, dù source regression đã đạt.
+2. Candidate `-5` đã chứng minh phiên detached vẫn còn nguyên nhưng lifecycle
+   chưa đi hết. Candidate `-6` phải tạo phiên project-addressable qua UI và
+   vượt toàn bộ chuỗi trước khi tuyên bố installer cuối cùng đạt.
 3. GitHub Actions từng trả lỗi dịch vụ 429/500/502; mọi retry phải kiểm trước để
    không tạo run trùng hoặc vô tình build lại cùng candidate.
 4. v32 public hiện vẫn unsigned; giữ nguyên làm previous/rollback publication
@@ -85,7 +93,7 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 
 ## Rollback
 
-- Nếu promotion v32.1 hậu kiểm lỗi: trả `vi-v0.32.1-5` về draft/prerelease và
+- Nếu promotion v32.1 hậu kiểm lỗi: trả `vi-v0.32.1-6` về draft/prerelease và
   khôi phục `vi-v0.32.0-1` làm GitHub Latest.
 - Rollback cài đặt đã khóa cho lifecycle: `vi-v0.20.4-39`, commit
   `d270974d2651e72f169fffe34c955eeae7977458`, SHA-256
@@ -93,9 +101,10 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 
 ## Hành động public
 
-Đã push/tag và stage draft riêng tư cho các candidate bất biến `-2`, `-3`, `-4`;
-không candidate nào được công bố và GitHub Latest vẫn là `vi-v0.32.0-1`.
-Candidate `-5` chưa push/tag/build/stage ở thời điểm khóa hồ sơ này.
+Đã push/tag và stage draft riêng tư cho các candidate bất biến `-2`, `-3`, `-4`,
+`-5`; không candidate nào được công bố và GitHub Latest vẫn là
+`vi-v0.32.0-1`. Staging `-5` là run `33047979498`; lifecycle fail-closed là
+run `33049189121`, evidence artifact `9637160151`.
 
 ## Bước nhỏ nhất tiếp theo
 
