@@ -202,9 +202,10 @@ function ensureDmg() {
     die('DMG mode is macOS-only; on Windows use the `nsis` mode instead.')
   }
   if (process.env.HERMES_DESKTOP_SKIP_BUILD === '1') {
-    const artifact = resolvePinnedDistributionArtifact({
-      required: process.env.HERMES_DESKTOP_BUNDLED === '1'
-    }) || resolveDmgPath()
+    const artifact =
+      resolvePinnedDistributionArtifact({
+        required: process.env.HERMES_DESKTOP_BUNDLED === '1'
+      }) || resolveDmgPath()
     if (!artifact || !exists(artifact)) {
       die(`HERMES_DESKTOP_SKIP_BUILD=1 forbids rebuilding the missing DMG: ${artifact || '(unresolved)'}`)
     }
@@ -218,9 +219,10 @@ function ensureNsis() {
     die('NSIS mode is win32-only; on macOS use the `dmg` mode instead.')
   }
   if (process.env.HERMES_DESKTOP_SKIP_BUILD === '1') {
-    const artifact = resolvePinnedDistributionArtifact({
-      required: process.env.HERMES_DESKTOP_BUNDLED === '1'
-    }) || resolveNsisPath()
+    const artifact =
+      resolvePinnedDistributionArtifact({
+        required: process.env.HERMES_DESKTOP_BUNDLED === '1'
+      }) || resolveNsisPath()
     if (!artifact || !exists(artifact)) {
       die(`HERMES_DESKTOP_SKIP_BUILD=1 forbids rebuilding the missing NSIS artifact: ${artifact || '(unresolved)'}`)
     }
@@ -337,10 +339,13 @@ function resolvePayloadPython(payloadRoot) {
   const pythonRoot = path.join(payloadRoot, 'python')
   if (!exists(pythonRoot)) return null
   const binaryName = PLATFORM === 'win32' ? 'python.exe' : 'python3'
-  for (const entry of fs.readdirSync(pythonRoot).filter(name => name.startsWith('cpython-')).sort().reverse()) {
-    const candidate = PLATFORM === 'win32'
-      ? path.join(pythonRoot, entry, binaryName)
-      : path.join(pythonRoot, entry, 'bin', binaryName)
+  for (const entry of fs
+    .readdirSync(pythonRoot)
+    .filter(name => name.startsWith('cpython-'))
+    .sort()
+    .reverse()) {
+    const candidate =
+      PLATFORM === 'win32' ? path.join(pythonRoot, entry, binaryName) : path.join(pythonRoot, entry, 'bin', binaryName)
     if (exists(candidate)) return candidate
   }
   return null
@@ -404,16 +409,23 @@ function validateResidentPayload(stamp) {
 
   const python = resolvePayloadPython(payloadRoot)
   if (!python) die(`Resident payload has no runnable Python for ${PLATFORM}-${ARCH}`)
-  const probe = spawnSync(python, ['-c', [
-    'import json, cryptography, hermes_cli, pydantic_core',
-    'major = int(cryptography.__version__.split(".", 1)[0])',
-    'assert major >= 50, cryptography.__version__',
-    'print(json.dumps({"cryptography": cryptography.__version__, "hermes": hermes_cli.__version__}))'
-  ].join('; ')], {
-    cwd: os.tmpdir(),
-    env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1', PYTHONUTF8: '1' },
-    encoding: 'utf8'
-  })
+  const probe = spawnSync(
+    python,
+    [
+      '-c',
+      [
+        'import json, cryptography, hermes_cli, pydantic_core',
+        'major = int(cryptography.__version__.split(".", 1)[0])',
+        'assert major >= 50, cryptography.__version__',
+        'print(json.dumps({"cryptography": cryptography.__version__, "hermes": hermes_cli.__version__}))'
+      ].join('; ')
+    ],
+    {
+      cwd: os.tmpdir(),
+      env: { ...process.env, PYTHONDONTWRITEBYTECODE: '1', PYTHONUTF8: '1' },
+      encoding: 'utf8'
+    }
+  )
   if (probe.status !== 0) {
     die(`Resident Python import probe failed (${probe.status}): ${(probe.stderr || probe.stdout || '').trim()}`)
   }
@@ -448,21 +460,22 @@ function validateBundle() {
   if (!stamp.commit || typeof stamp.commit !== 'string' || stamp.commit.length < 7) {
     die(`install-stamp.json is missing a usable commit field: ${JSON.stringify(stamp)}`)
   }
-  const resident = process.env.HERMES_DESKTOP_BUNDLED === '1'
-    ? validateResidentPayload(stamp)
-    : null
-  const expectedArtifact = process.env.HERMES_DESKTOP_BUNDLED === '1' && process.env.HERMES_DESKTOP_SKIP_BUILD === '1'
-    ? resolvePinnedDistributionArtifact({ required: true })
-    : null
+  const resident = process.env.HERMES_DESKTOP_BUNDLED === '1' ? validateResidentPayload(stamp) : null
+  const expectedArtifact =
+    process.env.HERMES_DESKTOP_BUNDLED === '1' && process.env.HERMES_DESKTOP_SKIP_BUILD === '1'
+      ? resolvePinnedDistributionArtifact({ required: true })
+      : null
   if (expectedArtifact) {
-    if (PLATFORM !== 'win32') {
-      die(
-        `Exact embedded provenance validation is not implemented for ${PLATFORM}; ` +
-          'the public multi-platform release remains fail-closed.'
-      )
-    }
-    const verifier = path.join(DESKTOP_ROOT, 'scripts', 'verify-windows-nsis-provenance.mjs')
-    const verification = spawnSync(process.execPath, [verifier, expectedArtifact, `--arch=${ARCH}`], {
+    const verifier = path.join(
+      DESKTOP_ROOT,
+      'scripts',
+      PLATFORM === 'win32' ? 'verify-windows-nsis-provenance.mjs' : 'verify-native-distribution-provenance.mjs'
+    )
+    const verifierArgs =
+      PLATFORM === 'win32'
+        ? [verifier, expectedArtifact, `--arch=${ARCH}`]
+        : [verifier, expectedArtifact, `--platform=${PLATFORM}`, `--arch=${ARCH}`]
+    const verification = spawnSync(process.execPath, verifierArgs, {
       cwd: DESKTOP_ROOT,
       env: process.env,
       shell: false,
@@ -471,7 +484,7 @@ function validateBundle() {
       windowsHide: true
     })
     if (verification.error || verification.status !== 0) {
-      die(`Exact embedded NSIS provenance validation failed (${verification.status ?? 'spawn'})`)
+      die(`Exact embedded distribution provenance validation failed (${verification.status ?? 'spawn'})`)
     }
   }
 

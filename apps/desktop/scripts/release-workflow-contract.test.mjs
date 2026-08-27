@@ -56,6 +56,12 @@ test('candidate workflow builds the complete resident runtime on every advertise
   assert.match(candidate, /scripts\/validate-pilot-release-evidence\.test\.mjs/)
   assert.match(candidate, /scripts\/create-v321-pilot-evidence\.test\.mjs/)
   assert.match(candidate, /scripts\/validate-public-release-contract\.test\.mjs/)
+  assert.match(candidate, /controller:\s+name: Khóa harness nghiệm thu độc lập/)
+  assert.match(candidate, /needs: \[verify, controller\]/)
+  assert.match(candidate, /verify-native-distribution-provenance\.test\.mjs/)
+  assert.match(candidate, /Tải harness nghiệm thu độc lập, không đổi byte ứng viên/)
+  assert.match(candidate, /validation_harness_commit=/)
+  assert.match(candidate, /validationHarnessCommit:process\.env\.HARNESS_COMMIT/)
   for (const runner of [
     'windows-2025',
     'windows-11-arm',

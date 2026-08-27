@@ -268,9 +268,38 @@ jobs:
           tests/tui_gateway/test_protocol.py
           tests/test_tui_gateway_server.py
 
+  controller:
+    name: Khóa harness nghiệm thu độc lập
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      commit: ${{ steps.lock.outputs.commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - id: lock
+        name: Khóa đúng workflow controller
+        shell: bash
+        run: |
+          controller_commit="$(git rev-parse HEAD)"
+          test "$controller_commit" = "$GITHUB_SHA"
+          git diff --quiet
+          git diff --cached --quiet
+          echo "commit=$controller_commit" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26
+
+      - name: Kiểm thử verifier exact artifact macOS/Linux
+        run: node --test apps/desktop/scripts/verify-native-distribution-provenance.test.mjs
+
   build:
     name: Dựng một lần — ${{ matrix.label }}
-    needs: verify
+    needs: [verify, controller]
     environment: release-signing
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
@@ -420,6 +449,30 @@ jobs:
           }
           printf 'HERMES_DESKTOP_EXPECTED_ARTIFACT=release/%s\n' "$artifact_name" >> "$GITHUB_ENV"
 
+      - name: Tải harness nghiệm thu độc lập, không đổi byte ứng viên
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.controller.outputs.commit }}
+          path: release-harness
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Khóa đúng phạm vi overlay harness sau khi đã build
+        shell: bash
+        env:
+          HARNESS_COMMIT: ${{ needs.controller.outputs.commit }}
+        run: |
+          test "$(git -C release-harness rev-parse HEAD)" = "$HARNESS_COMMIT"
+          cp release-harness/apps/desktop/scripts/test-desktop.mjs \
+            apps/desktop/scripts/test-desktop.mjs
+          cp release-harness/apps/desktop/scripts/verify-native-distribution-provenance.mjs \
+            apps/desktop/scripts/verify-native-distribution-provenance.mjs
+          changed="$(git diff --name-only)"
+          test "$changed" = "apps/desktop/scripts/test-desktop.mjs" || {
+            printf '::error::Unexpected tracked harness overlay:\n%s\n' "$changed"
+            exit 1
+          }
+
       - name: Kiểm tra đúng payload đóng gói
         shell: bash
         env:
@@ -525,6 +578,7 @@ jobs:
           {
             echo "tag=$HERMES_PAYLOAD_TAG"
             echo "commit=${{ needs.verify.outputs.commit }}"
+            echo "validation_harness_commit=${{ needs.controller.outputs.commit }}"
             echo "platform=${{ matrix.platform }}"
             echo "arch=${{ matrix.arch }}"
             echo "release_class=$HERMES_RELEASE_CLASS"
@@ -553,7 +607,7 @@ jobs:
 
   stage:
     name: Upload đúng byte vào draft
-    needs: [verify, build]
+    needs: [verify, controller, build]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -614,7 +668,7 @@ jobs:
         shell: bash
         run: |
           node apps/desktop/scripts/collect-community-artifacts.mjs checksums release-assets SHA256SUMS.txt
-          node -e "const fs=require('fs'); fs.writeFileSync('release-assets/candidate-provenance.json', JSON.stringify({tag:process.env.TAG,commit:process.env.COMMIT,releaseClass:process.env.RELEASE_CLASS,runId:process.env.RUN_ID,workflow:process.env.WORKFLOW},null,2)+'\n')"
+          node -e "const fs=require('fs'); fs.writeFileSync('release-assets/candidate-provenance.json', JSON.stringify({tag:process.env.TAG,commit:process.env.COMMIT,releaseClass:process.env.RELEASE_CLASS,runId:process.env.RUN_ID,workflow:process.env.WORKFLOW,validationHarnessCommit:process.env.HARNESS_COMMIT},null,2)+'\n')"
           (cd release-assets && sha256sum candidate-provenance.json >> SHA256SUMS.txt)
         env:
           TAG: ${{ needs.verify.outputs.tag }}
@@ -622,6 +676,7 @@ jobs:
           RELEASE_CLASS: ${{ needs.verify.outputs.release_class }}
           RUN_ID: ${{ github.run_id }}
           WORKFLOW: ${{ github.workflow }}
+          HARNESS_COMMIT: ${{ needs.controller.outputs.commit }}
 
       - name: Tạo draft mới, tuyệt đối không public
         shell: bash

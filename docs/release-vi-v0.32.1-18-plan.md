@@ -1,7 +1,8 @@
 # Kế hoạch candidate `vi-v0.32.1-18`
 
 Ngày chốt phạm vi: 2026-08-28
-Trạng thái: **source đang chuẩn bị; chưa tag, chưa build, chưa public**.
+Trạng thái: **đã tag; build run đầu xác định lỗi harness trước staging; chưa
+public**.
 
 ## Mục tiêu và audience
 
@@ -39,6 +40,9 @@ liệu và không bật Hermes cloud backup.
   leg native.
 - Lifecycle v32.1 nhận exact successor tag nhưng vẫn khóa candidate commit,
   harness commit, size và SHA-256 độc lập.
+- Build validation cũng khóa product commit và harness commit độc lập. Verifier
+  controller chỉ được overlay sau khi artifact đã dựng; DMG/AppImage phải được
+  mount/extract rồi đối chiếu provenance ngay trong exact artifact.
 - Biên nhận pilot được sinh từ `lifecycle-result.json` đã sealed; Windows x64
   phải khớp byte trong `SHA256SUMS.txt`, năm target còn lại phải khai báo
   `realMachineSmoke=false`.
@@ -60,7 +64,8 @@ liệu và không bật Hermes cloud backup.
 
 - Nếu source/build/lifecycle/promotion lỗi, giữ `-18` ở draft và giữ
   `vi-v0.32.1-17` làm Latest.
-- Nếu lỗi chỉ thuộc controller/hạ tầng và byte candidate không đổi, sửa
-  controller rồi chạy lại lifecycle; không rebuild hoặc tạo candidate mới.
+- Nếu lỗi chỉ thuộc controller/hạ tầng trước staging, giữ nguyên product tag và
+  sửa controller; không tạo candidate mới. Khi byte đã staging, lifecycle sửa
+  harness phải dùng lại đúng byte, không rebuild.
 - Nếu product source, input đóng gói hoặc artifact đổi byte, tạo candidate kế
   tiếp; không thay asset cùng tag.

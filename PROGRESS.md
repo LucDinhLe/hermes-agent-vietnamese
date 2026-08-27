@@ -2,6 +2,16 @@
 
 ## Cập nhật 2026-08-28 — chuẩn bị v32.1-18 đa nền tảng
 
+- Tag `vi-v0.32.1-18` đã khóa product commit
+  `2594eb396f0c5720802fc608a01a64d96d5629b2`; build run đầu
+  `33097339026` đạt source gate và Windows x64 exact artifact. Hai macOS và hai
+  Linux đều dựng xong nhưng harness cũ chủ động fail ở bước payload vì chưa có
+  exact embedded provenance verifier cho các nền tảng này; đây không phải lỗi
+  đóng gói sản phẩm và draft chưa được tạo.
+- Harness mới mount DMG hoặc extract AppImage rồi đối chiếu `install-stamp.json`
+  và resident manifest ngay trong đúng artifact. Workflow tách product commit
+  khỏi validation harness commit; overlay chỉ diễn ra sau build nên không đổi
+  byte ứng viên và không cần tạo candidate `-19` cho lỗi harness này.
 - Chốt successor `vi-v0.32.1-18`; không sửa asset/tag `-17` đã public và không
   đưa tính năng v33 vào phạm vi.
 - Release workflow hiện có sẽ dựng đủ sáu target native cho `-18`. README và
