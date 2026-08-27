@@ -349,6 +349,12 @@ test('exact lifecycle proves project metadata actions never hide or delete sessi
   assert.match(projectPhase, /not\.toContainText\(MOCK_REPLY/)
   assert.match(lifecycleSpec, /PROJECT_SESSION_MARKER = 'V321_PROJECT_SESSION_SAFETY_ANCHOR'/)
   assert.match(lifecycleSpec, /UPDATE sessions SET title = \?, title_source = 'user' WHERE id = \?/)
+  assert.match(lifecycleSpec, /function setSessionSafetyTitle[\s\S]*?timeout: 250/)
+  assert.match(
+    lifecycleSpec,
+    /function setSessionSafetyTitle[\s\S]*?database \(\?:table \)\?is locked\|database is busy/
+  )
+  assert.match(projectPhase, /expect\.poll\(\(\) => setSessionSafetyTitle[\s\S]*?timeout: 30_000/)
   assert.match(lifecycleSpec, /Hide from projects\|Ẩn khỏi danh sách dự án/)
   assert.match(projectMetadataActions, /Hide from projects\|Ẩn khỏi danh sách dự án[\s\S]*?\.press\('Enter'\)/)
   assert.match(projectMetadataActions, /remainingDeleteCard[\s\S]*?Delete\|Xóa[\s\S]*?\.press\('Enter'\)/)

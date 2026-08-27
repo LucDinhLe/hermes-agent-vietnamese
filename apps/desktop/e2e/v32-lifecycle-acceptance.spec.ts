@@ -384,15 +384,28 @@ function readSessionSafetySnapshot(hermesHome: string): SessionSafetySnapshot {
   }
 }
 
-function setSessionSafetyTitle(hermesHome: string, sessionId: string): void {
-  const database = new DatabaseSync(path.win32.join(hermesHome, 'state.db'))
-
+function setSessionSafetyTitle(hermesHome: string, sessionId: string): boolean {
   try {
-    database
-      .prepare("UPDATE sessions SET title = ?, title_source = 'user' WHERE id = ?")
-      .run(PROJECT_SESSION_TITLE, sessionId)
-  } finally {
-    database.close()
+    // The installed app owns state.db while this acceptance phase is running.
+    // A short app transaction must delay the harness write, not misclassify a
+    // healthy candidate as a product failure. Keep each attempt bounded and
+    // let Playwright's poll retry only the documented SQLite busy conditions.
+    const database = new DatabaseSync(path.win32.join(hermesHome, 'state.db'), { timeout: 250 })
+
+    try {
+      database
+        .prepare("UPDATE sessions SET title = ?, title_source = 'user' WHERE id = ?")
+        .run(PROJECT_SESSION_TITLE, sessionId)
+      return true
+    } finally {
+      database.close()
+    }
+  } catch (error) {
+    if (error instanceof Error && /database (?:table )?is locked|database is busy/i.test(error.message)) {
+      return false
+    }
+
+    throw error
   }
 }
 
@@ -737,7 +750,7 @@ async function runProjectSessionSafetyPhase(context: LifecycleContext): Promise<
       .toBeGreaterThanOrEqual(2)
 
     const seeded = readSessionSafetySnapshot(context.hermesHome)
-    setSessionSafetyTitle(context.hermesHome, seeded.id)
+    await expect.poll(() => setSessionSafetyTitle(context.hermesHome, seeded.id), { timeout: 30_000 }).toBe(true)
     const before = readSessionSafetySnapshot(context.hermesHome)
 
     expect(before.archived).toBe(0)
