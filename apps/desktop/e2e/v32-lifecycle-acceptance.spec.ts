@@ -681,18 +681,32 @@ async function runProjectSessionSafetyPhase(context: LifecycleContext): Promise<
   ensureLifecycleDirectories(context)
   restartMockServer()
   const mock = await startMockServer()
+  const projectWorkspace = path.win32.join(GUEST_STATE_ROOT, 'ProjectSafety', 'HideWorkspace')
   let running: RunningApp | null = null
 
   try {
+    fs.mkdirSync(projectWorkspace, { recursive: true })
     writeMockProviderConfig(context.hermesHome, mock.url)
     writeEnvFile(context.hermesHome)
     running = await launchExactBinary(context)
     await waitForReady(running)
 
-    // The packaged smoke may leave the active conversation intentionally
-    // detached (`cwd = null`). Start through the real new-session shortcut so
-    // this phase exercises project behavior from the packaged app's configured
-    // default workspace instead of coercing or mutating an existing session.
+    // A bare new chat is intentionally detached (`cwd = null`). Seed only the
+    // isolated project metadata, enter that project through the public UI, and
+    // then start a new session through the real shortcut. The send path must
+    // derive its cwd from the entered project; no existing session is coerced.
+    seedProjectSafetyFixtures(context.hermesHome, projectWorkspace)
+    await openProjectsManager(running.page)
+
+    const hideCard = projectCard(running.page, PROJECT_HIDE_NAME)
+    const deleteCard = projectCard(running.page, PROJECT_DELETE_NAME)
+
+    await expect(hideCard).toBeVisible({ timeout: 60_000 })
+    await expect(deleteCard).toBeVisible({ timeout: 60_000 })
+    await hideCard.getByRole('button', { name: /^(Open project|Mở dự án)$/i }).click()
+
+    const sessionsRoot = running.page.locator('[data-sessions-mode]')
+    await expect(sessionsRoot).toHaveAttribute('data-sessions-project', PROJECT_HIDE_ID, { timeout: 60_000 })
     await running.page.keyboard.press('Control+N')
     await expect(transcript(running.page)).not.toContainText(MOCK_REPLY, { timeout: 30_000 })
     await sendAndWaitForReply(running.page, mock, PROJECT_SESSION_MARKER)
@@ -705,19 +719,7 @@ async function runProjectSessionSafetyPhase(context: LifecycleContext): Promise<
     expect(before.hidden).toBe(0)
     expect(before.messageCount).toBeGreaterThanOrEqual(2)
     expect(before.title).toBe(PROJECT_SESSION_TITLE)
-
-    seedProjectSafetyFixtures(context.hermesHome, before.cwd)
-    await openProjectsManager(running.page)
-
-    const hideCard = projectCard(running.page, PROJECT_HIDE_NAME)
-    const deleteCard = projectCard(running.page, PROJECT_DELETE_NAME)
-
-    await expect(hideCard).toBeVisible({ timeout: 60_000 })
-    await expect(deleteCard).toBeVisible({ timeout: 60_000 })
-    await hideCard.getByRole('button', { name: /^(Open project|Mở dự án)$/i }).click()
-
-    const sessionsRoot = running.page.locator('[data-sessions-mode]')
-    await expect(sessionsRoot).toHaveAttribute('data-sessions-project', PROJECT_HIDE_ID, { timeout: 60_000 })
+    expect(path.win32.resolve(before.cwd).toLowerCase()).toBe(path.win32.resolve(projectWorkspace).toLowerCase())
     await running.page
       .getByRole('button', {
         name: new RegExp(`^(Hide ${PROJECT_HIDE_NAME} sessions|Ẩn ${PROJECT_HIDE_NAME} phiên)$`, 'i')

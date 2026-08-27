@@ -1,8 +1,8 @@
-# Kế hoạch candidate `vi-v0.32.1-6`
+# Kế hoạch candidate `vi-v0.32.1-7`
 
 Ngày chốt phạm vi: 2026-08-26
 Trạng thái: source integration và release-controller hardening đạt gate cục bộ.
-Candidate `-5` đã dừng fail-closed trong lifecycle; thay đổi harness `-6` đã đạt
+Candidate `-6` đã dừng fail-closed trong lifecycle; thay đổi harness `-7` đã đạt
 gate cục bộ nhưng chưa freeze commit, build, tag, stage hay public. GitHub Latest
 chưa đổi.
 
@@ -16,7 +16,10 @@ dừng trước download. `vi-v0.32.1-5` đã build/stage đúng byte; lifecycle
 fresh install, onboarding và packaged relaunch rồi dừng ở project/session vì
 harness tái dùng một phiên rời hợp lệ có `cwd = null`. Dữ liệu phiên vẫn còn
 nguyên; promotion dừng đúng thiết kế. `-5` giữ bất biến và kế hoạch chuyển sang
-`-6` với thao tác mở phiên mới qua UI trước gate dự án.
+`-6` với thao tác mở phiên mới qua UI trước gate dự án. Candidate `-6` tiếp tục
+chứng minh một bare `Ctrl+N` vẫn tạo phiên detached hợp lệ. Evidence không mất
+dữ liệu, nhưng gate cần vào dự án qua UI trước khi tạo phiên; `-6` giữ bất biến
+và kế hoạch chuyển sang `-7`.
 
 ## Mục tiêu
 
@@ -36,8 +39,8 @@ phiên/dự án. Không rebuild, đổi tag hoặc thay byte candidate đó.
 
 ## Danh tính candidate kế nhiệm
 
-- Tag dự kiến: `vi-v0.32.1-6`.
-- Desktop version: `0.32.1-vi.6`.
+- Tag dự kiến: `vi-v0.32.1-7`.
+- Desktop version: `0.32.1-vi.7`.
 - Release class trước promotion: `community-prerelease`.
 - Exact source commit, kích thước và SHA-256 chỉ được ghi sau clean source gate
   và một lượt build duy nhất.
@@ -69,7 +72,7 @@ phiên/dự án. Không rebuild, đổi tag hoặc thay byte candidate đó.
 
 Sau khi source commit sạch được freeze:
 
-1. build đúng một lần Windows x64 với tag `vi-v0.32.1-6`;
+1. build đúng một lần Windows x64 với tag `vi-v0.32.1-7`;
 2. kiểm exact embedded provenance, PE x64, schema manifest, update feed và
    SHA-256;
 3. ghi nhận trung thực Authenticode `NotSigned`, không có signer certificate và
@@ -85,7 +88,7 @@ Không dùng cài trực tiếp trên workstation thay cho guest lifecycle.
 
 ### Cơ chế fail-closed đã khóa trong source
 
-- `vi-v0.32.1-6` chỉ tạo matrix Windows x64; không dựng thêm artifact chưa được
+- `vi-v0.32.1-7` chỉ tạo matrix Windows x64; không dựng thêm artifact chưa được
   nghiệm thu rồi vô tình đưa chúng vào public release.
 - Windows x64 giữ lớp `community-prerelease` chưa ký theo quyết định của chủ dự
   án ngày 2026-08-27; signing receipt phải ghi `NotSigned` và không có signer.
@@ -101,7 +104,7 @@ Không dùng cài trực tiếp trên workstation thay cho guest lifecycle.
 Chỉ sau khi mọi gate trên đạt, promotion riêng mới được:
 
 - public đúng tag và đúng byte candidate đã nghiệm thu;
-- cập nhật descriptor/download/Latest sang `vi-v0.32.1-6`;
+- cập nhật descriptor/download/Latest sang `vi-v0.32.1-7`;
 - kiểm lại asset size, digest, trạng thái `NotSigned`, updater manifest và
   public links;
 - giữ `vi-v0.32.0-1` làm previous update source và
@@ -126,6 +129,12 @@ liệu hoặc rollback.
 - Lifecycle `-5` run `33049189121` vượt tám gate đầu rồi fail-closed ở
   `projectSessionSafety`; evidence artifact `9637160151` chứng minh phiên và
   nội dung còn nguyên nhưng phiên thử là detached `cwd = null`.
-- Exact unsigned installer/lifecycle `-6`: chưa chạy; chờ freeze/push exact tag.
+- Candidate `-6` staging run `33051008029` đạt; installer 340.620.386 byte,
+  SHA-256 `adc49649f80db203c34787b19fd65a2a8c1bb67896dc47f55118f27aecd41e86`,
+  Authenticode `NotSigned`.
+- Lifecycle `-6` run `33052037180` lại dừng ở `projectSessionSafety`; evidence
+  artifact `9638286238` xác nhận bare `Ctrl+N` vẫn detached và toàn bộ dữ liệu
+  còn nguyên. Harness `-7` vào project bằng UI trước khi tạo phiên.
+- Exact unsigned installer/lifecycle `-7`: chưa chạy; chờ freeze/push exact tag.
 - GitHub staging/tag/promotion: tài khoản `LucDinhLe` đã xác thực; chủ dự án đã
-  cho phép public khi toàn bộ receipt của `vi-v0.32.1-6` xanh.
+  cho phép public khi toàn bộ receipt của `vi-v0.32.1-7` xanh.
