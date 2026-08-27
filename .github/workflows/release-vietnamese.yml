@@ -423,13 +423,7 @@ jobs:
           ${{ matrix.platform }} ${{ matrix.arch }} apps/desktop/release release-assets
 
       - name: Bắt buộc cấu hình SignPath cho Windows
-        # v32.1-2 is a signed Windows x64 safety update even while it remains a
-        # community prerelease. Missing SignPath configuration must fail closed
-        # instead of silently producing another Smart App Control-blocked build.
-        if: >-
-          matrix.platform == 'win32' &&
-          (needs.verify.outputs.release_class == 'stable' ||
-          (matrix.id == 'windows-x64' && needs.verify.outputs.tag == 'vi-v0.32.1-2'))
+        if: matrix.platform == 'win32' && needs.verify.outputs.release_class == 'stable'
         shell: bash
         env:
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -446,10 +440,7 @@ jobs:
 
       - name: Upload bộ cài Windows chưa ký cho SignPath
         id: upload-unsigned-windows
-        if: >-
-          matrix.platform == 'win32' &&
-          (needs.verify.outputs.release_class == 'stable' ||
-          (matrix.id == 'windows-x64' && needs.verify.outputs.tag == 'vi-v0.32.1-2'))
+        if: matrix.platform == 'win32' && needs.verify.outputs.release_class == 'stable'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: unsigned-${{ matrix.id }}-${{ needs.verify.outputs.commit }}
@@ -459,10 +450,7 @@ jobs:
           retention-days: 1
 
       - name: Ký Authenticode bằng SignPath
-        if: >-
-          matrix.platform == 'win32' &&
-          (needs.verify.outputs.release_class == 'stable' ||
-          (matrix.id == 'windows-x64' && needs.verify.outputs.tag == 'vi-v0.32.1-2'))
+        if: matrix.platform == 'win32' && needs.verify.outputs.release_class == 'stable'
         uses: signpath/github-action-submit-signing-request@c92b958760219087e01f8d67a1669ed57afe2627 # v2
         with:
           api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
@@ -477,10 +465,7 @@ jobs:
           output-artifact-directory: signed-windows
 
       - name: Thay bằng đúng byte đã ký và xác minh Authenticode
-        if: >-
-          matrix.platform == 'win32' &&
-          (needs.verify.outputs.release_class == 'stable' ||
-          (matrix.id == 'windows-x64' && needs.verify.outputs.tag == 'vi-v0.32.1-2'))
+        if: matrix.platform == 'win32' && needs.verify.outputs.release_class == 'stable'
         shell: powershell
         run: |
           $expected = @(Get-ChildItem -LiteralPath release-assets -Filter 'Hermes-Vietnamese-Windows-*-Setup.exe')
@@ -535,7 +520,7 @@ jobs:
             echo "arch=${{ matrix.arch }}"
             echo "release_class=$HERMES_RELEASE_CLASS"
             if [[ "${{ matrix.platform }}" == "win32" ]]; then
-              powershell.exe -NoProfile -Command "Get-ChildItem release-assets/*.exe | ForEach-Object { Get-AuthenticodeSignature -LiteralPath \$_.FullName | Select-Object Path,Status,StatusMessage,SignerCertificate } | ConvertTo-Json -Depth 4"
+              powershell.exe -NoProfile -Command "Get-ChildItem release-assets/*.exe | ForEach-Object { \$signature = Get-AuthenticodeSignature -LiteralPath \$_.FullName; Write-Output ('authenticode_status=' + [string]\$signature.Status); Write-Output ('signer_present=' + [string]([bool](\$null -ne \$signature.SignerCertificate)).ToString().ToLowerInvariant()); \$signature | Select-Object Path,Status,StatusMessage,SignerCertificate | ConvertTo-Json -Depth 4 }"
             elif [[ "${{ matrix.platform }}" == "darwin" && "$HERMES_RELEASE_CLASS" == "stable" ]]; then
               codesign --verify --deep --strict --verbose=2 apps/desktop/release/mac*/Hermes.app 2>&1
               spctl --assess --type execute --verbose=4 apps/desktop/release/mac*/Hermes.app 2>&1

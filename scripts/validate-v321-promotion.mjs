@@ -187,6 +187,7 @@ function validatePublicDescriptor(publicRelease, candidate) {
     publicRelease.releaseClass !== 'community-pilot' ||
     publicRelease.artifactProvenanceClass !== V321_IDENTITY.releaseClass ||
     publicRelease.windowsX64?.filename !== V321_IDENTITY.artifact ||
+    publicRelease.windowsX64?.authenticode !== 'NotSigned' ||
     publicRelease.windowsX64?.size !== candidate.size ||
     publicRelease.windowsX64?.sha256 !== candidate.sha256
   ) {
@@ -237,6 +238,13 @@ export function validateV321PromotionBundle({
   const installer = fs.statSync(path.join(candidateDir, V321_IDENTITY.artifact))
   if (installer.size !== candidate.size || checksums.get(V321_IDENTITY.artifact) !== candidate.sha256) {
     throw new Error('v32.1 exact candidate byte mismatch')
+  }
+  const signingEvidence = fs.readFileSync(path.join(candidateDir, 'signing-windows-x64.txt'), 'utf8')
+  if (!/^authenticode_status=NotSigned$/mu.test(signingEvidence)) {
+    throw new Error('v32.1 signing evidence must explicitly record Authenticode NotSigned')
+  }
+  if (!/^signer_present=false$/mu.test(signingEvidence)) {
+    throw new Error('v32.1 signing evidence must prove no signer certificate is present')
   }
 
   const provenance = readJson(path.join(candidateDir, 'candidate-provenance.json'))

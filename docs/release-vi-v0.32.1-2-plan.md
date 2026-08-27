@@ -59,7 +59,8 @@ Sau khi source commit sạch được freeze:
 1. build đúng một lần Windows x64 với tag `vi-v0.32.1-2`;
 2. kiểm exact embedded provenance, PE x64, schema manifest, update feed và
    SHA-256;
-3. ký Authenticode bằng SignPath; chữ ký phải là `Valid`;
+3. ghi nhận trung thực Authenticode `NotSigned`, không có signer certificate và
+   cảnh báo Windows có thể hiện Publisher Unknown/SmartScreen;
 4. chạy trên Windows guest cô lập: fresh install, offline onboarding, relaunch,
    persistence, update exact public v32 → v32.1, repair, hai chế độ uninstall,
    rollback `vi-v0.20.4-39` và no-residual-process;
@@ -73,8 +74,8 @@ Không dùng cài trực tiếp trên workstation thay cho guest lifecycle.
 
 - `vi-v0.32.1-2` chỉ tạo matrix Windows x64; không dựng thêm artifact chưa được
   nghiệm thu rồi vô tình đưa chúng vào public release.
-- Windows x64 bắt buộc qua SignPath kể cả khi release class còn là
-  `community-prerelease`; thiếu organization/certificate/secret thì build fail.
+- Windows x64 giữ lớp `community-prerelease` chưa ký theo quyết định của chủ dự
+  án ngày 2026-08-27; signing receipt phải ghi `NotSigned` và không có signer.
 - Runtime smoke có lane riêng cho exact tag/commit/hash, exact public v32 làm
   nguồn update và exact `vi-v0.20.4-39` làm rollback.
 - Lane project/session đọc `state.db` trong profile guest cô lập, ghi digest và
@@ -88,13 +89,14 @@ Chỉ sau khi mọi gate trên đạt, promotion riêng mới được:
 
 - public đúng tag và đúng byte candidate đã nghiệm thu;
 - cập nhật descriptor/download/Latest sang `vi-v0.32.1-2`;
-- kiểm lại asset size, digest, Authenticode, updater manifest và public links;
+- kiểm lại asset size, digest, trạng thái `NotSigned`, updater manifest và
+  public links;
 - giữ `vi-v0.32.0-1` làm previous update source và
   `vi-v0.20.4-39` làm rollback target.
 
-Nếu SignPath chưa cấp organization/certificate hoặc exact lifecycle chưa đạt,
-quyết định vẫn là **NO-GO Latest**. Không phát hành unsigned chỉ vì v32 hiện tại
-đã từng được public unsigned.
+Nếu exact lifecycle chưa đạt, quyết định vẫn là **NO-GO Latest**. Việc bỏ
+SignPath không được phép bỏ qua hash, provenance, cảnh báo chưa ký, an toàn dữ
+liệu hoặc rollback.
 
 ## Trạng thái gate ngày 2026-08-27
 
@@ -105,6 +107,6 @@ quyết định vẫn là **NO-GO Latest**. Không phát hành unsigned chỉ v�
 - Promotion validator v32.1: 3/3 đạt; tamper và session-hidden đều bị chặn.
 - Workflow contract: 16/16 đạt; YAML và PowerShell parse đạt; Prettier và
   `git diff --check` đạt; Desktop lint 0 error.
-- Exact signed installer/lifecycle: chưa chạy vì SignPath chưa cấp cấu hình.
-- GitHub staging/tag/promotion: chưa chạy; phiên đăng nhập `gh` hiện không hợp
-  lệ và nhánh tích hợp chưa được đẩy.
+- Exact unsigned installer/lifecycle: chưa chạy; chờ freeze/push exact tag.
+- GitHub staging/tag/promotion: đang chờ hoàn tất đăng nhập lại và đẩy nhánh
+  tích hợp.

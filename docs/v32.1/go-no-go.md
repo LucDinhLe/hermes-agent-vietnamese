@@ -7,8 +7,8 @@ Ngày khóa rà soát source: 2026-08-27
 **Source GO, Release NO-GO** cho `vi-v0.32.1-2`.
 
 Phần khắc phục yếu điểm v32 và cổng chống mất/ẩn phiên đã hoàn tất trong source.
-Chưa được build, tag, stage, công khai hoặc thay GitHub Latest vì chưa có chữ ký
-SignPath và chưa có exact lifecycle receipt trên installer đã ký.
+Chưa được build, tag, stage, công khai hoặc thay GitHub Latest vì chưa có exact
+lifecycle receipt trên installer cuối cùng.
 
 ## Source candidate
 
@@ -34,8 +34,8 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 - Repo scan, auto archive và auto prune tắt mặc định.
 - Exact lifecycle harness thêm gate `projectSessionSafety`: hash nội dung và số
   hàng trước/sau Ẩn/Xóa, relaunch, tìm và tiếp tục phiên.
-- `vi-v0.32.1-2` chỉ dựng Windows x64 và bắt buộc Authenticode `Valid`; thiếu
-  SignPath thì fail-closed.
+- `vi-v0.32.1-2` chỉ dựng Windows x64; Authenticode được ghi rõ `NotSigned`,
+  không có signer certificate và không được quảng cáo stable/final.
 - Promotion riêng kiểm tag/commit/size/SHA-256, private draft, staging run,
   lifecycle run, evidence seal và tự rollback về v32 nếu hậu kiểm lỗi.
 - Gate hiện tại: policy 18/18; release/metadata 38/38; promotion validator 3/3;
@@ -44,14 +44,12 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 
 ## Gate còn thiếu
 
-1. SignPath organization, certificate, project/policy/artifact configuration và
-   GitHub secret/variables hợp lệ.
-2. GitHub CLI đăng nhập lại; đẩy exact source branch và tạo tag bất biến.
-3. Một lượt build duy nhất của Windows x64 từ exact tag.
-4. Ghi size/SHA-256, xác minh Authenticode `Valid` và private draft đúng byte.
-5. Exact lifecycle trên GitHub-hosted Windows VM dùng một lần, gồm update
+1. GitHub CLI đăng nhập lại; đẩy exact source branch và tạo tag bất biến.
+2. Một lượt build duy nhất của Windows x64 từ exact tag.
+3. Ghi size/SHA-256, xác minh trạng thái `NotSigned` và private draft đúng byte.
+4. Exact lifecycle trên GitHub-hosted Windows VM dùng một lần, gồm update
    v32→v32.1, project/session safety, repair, uninstall và rollback vi39.
-6. Controller commit cập nhật `.github/public-release.json` bằng exact
+5. Controller commit cập nhật `.github/public-release.json` bằng exact
    size/hash; promotion chỉ chạy sau khi người sở hữu cho phép hành động public.
 
 ## Dữ liệu và an toàn người dùng
@@ -63,7 +61,8 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 
 ## Rủi ro còn lại
 
-1. Chưa có chữ ký nên chưa chứng minh Smart App Control chấp nhận exact byte.
+1. Installer chưa ký có thể bị SmartScreen hoặc Smart App Control cảnh báo/chặn;
+   người dùng phải được báo rõ và không được hướng dẫn tắt bảo vệ toàn máy.
 2. Chưa có lifecycle receipt nên chưa được tuyên bố lỗi hiển thị/mất phiên đã
    hết trên installer cuối cùng, dù source regression đã đạt.
 3. GitHub auth hiện không hợp lệ; không có remote branch/tag/draft để bên thứ ba
@@ -86,5 +85,5 @@ source này.
 
 ## Bước nhỏ nhất tiếp theo
 
-Đăng nhập lại GitHub và hoàn tất cấu hình SignPath. Sau đó freeze exact tag,
-build đúng một lần, chạy lifecycle và chỉ promotion khi mọi receipt đều xanh.
+Đăng nhập lại GitHub, freeze exact tag, build đúng một lần, chạy lifecycle và
+chỉ promotion khi mọi receipt đều xanh.

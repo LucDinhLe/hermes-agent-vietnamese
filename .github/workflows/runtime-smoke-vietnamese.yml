@@ -74,10 +74,7 @@ jobs:
           node -e "const fs=require('fs'),c=require('crypto'); const h=p=>c.createHash('sha256').update(fs.readFileSync(p)).digest('hex'); if(h('candidate/SHA256SUMS.txt')!==process.env.EXPECTED_MANIFEST_SHA) process.exit(1); const line=fs.readFileSync('candidate/SHA256SUMS.txt','utf8').split(/\r?\n/).find(x=>x.endsWith('  '+process.env.ARTIFACT)); if(!line || h('candidate/'+process.env.ARTIFACT)!==line.slice(0,64)) process.exit(1)"
 
       - name: Xác minh Authenticode
-        if: >-
-          runner.os == 'Windows' &&
-          (inputs.release_class == 'stable' ||
-          (matrix.id == 'windows-x64' && inputs.tag == 'vi-v0.32.1-2'))
+        if: runner.os == 'Windows' && inputs.release_class == 'stable'
         shell: powershell
         env:
           ARTIFACT: ${{ matrix.artifact }}
@@ -86,9 +83,7 @@ jobs:
           if ($signature.Status -ne 'Valid') { throw "Authenticode is $($signature.Status), not Valid" }
 
       - name: Ghi nhận Windows unsigned cho community prerelease
-        if: >-
-          runner.os == 'Windows' && inputs.release_class == 'community-prerelease' &&
-          !(matrix.id == 'windows-x64' && inputs.tag == 'vi-v0.32.1-2')
+        if: runner.os == 'Windows' && inputs.release_class == 'community-prerelease'
         shell: powershell
         env:
           ARTIFACT: ${{ matrix.artifact }}
@@ -426,9 +421,10 @@ jobs:
             if ($digest -ne $record.Sha256.ToLowerInvariant()) { throw "Installer SHA-256 mismatch: $($record.Path)" }
           }
           $signature = Get-AuthenticodeSignature -LiteralPath $candidatePath
-          if ($signature.Status -ne 'Valid' -or $null -eq $signature.SignerCertificate) {
-            throw "v32.1 candidate Authenticode is $($signature.Status), not Valid"
+          if ($signature.Status -ne 'NotSigned' -or $null -ne $signature.SignerCertificate) {
+            throw "v32.1 community candidate must be explicitly NotSigned, got $($signature.Status)"
           }
+          Write-Warning 'v32.1 is an unsigned community pilot; Windows may show Publisher: Unknown or SmartScreen warnings'
 
       - name: Lưu cache ba installer exact v32.1 sau khi xác minh
         if: steps.v321-lifecycle-input-cache.outputs.cache-hit != 'true'

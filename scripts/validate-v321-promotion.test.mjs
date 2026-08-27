@@ -49,7 +49,10 @@ function makeFixture(t) {
   const candidate = { commit: candidateCommit, sha256: sha256(installer), size: installer.length }
   fs.writeFileSync(path.join(candidateDir, V321_IDENTITY.artifact), installer)
   fs.writeFileSync(path.join(candidateDir, 'SHA256SUMS-win32-x64.txt'), 'platform manifest\n')
-  fs.writeFileSync(path.join(candidateDir, 'signing-windows-x64.txt'), 'Status=Valid\n')
+  fs.writeFileSync(
+    path.join(candidateDir, 'signing-windows-x64.txt'),
+    'authenticode_status=NotSigned\nsigner_present=false\n'
+  )
   fs.writeFileSync(
     path.join(candidateDir, 'candidate-provenance.json'),
     `${JSON.stringify({
@@ -169,7 +172,12 @@ function makeFixture(t) {
       releaseClass: 'community-pilot',
       rollbackTag: ROLLBACK_TAG,
       tag: V321_IDENTITY.tag,
-      windowsX64: { filename: V321_IDENTITY.artifact, sha256: candidate.sha256, size: candidate.size }
+      windowsX64: {
+        authenticode: 'NotSigned',
+        filename: V321_IDENTITY.artifact,
+        sha256: candidate.sha256,
+        size: candidate.size
+      }
     })}\n`
   )
 
@@ -220,7 +228,7 @@ function makeFixture(t) {
   }
 }
 
-test('accepts only exact signed v32.1 draft bytes plus the full sealed project/session lifecycle', t => {
+test('accepts only exact explicitly unsigned v32.1 bytes plus the full sealed project/session lifecycle', t => {
   const fixture = makeFixture(t)
   assert.equal(validateV321PromotionBundle(fixture.args).status, 'passed')
 })
@@ -237,4 +245,13 @@ test('rejects a different installer byte even when the release metadata is edite
   const fixture = makeFixture(t)
   fs.appendFileSync(path.join(fixture.args.candidateDir, V321_IDENTITY.artifact), 'tamper')
   assert.throws(() => validateV321PromotionBundle(fixture.args), /draft hash mismatch|exact candidate byte mismatch/)
+})
+
+test('rejects missing or misleading unsigned-status evidence', t => {
+  const fixture = makeFixture(t)
+  fs.writeFileSync(
+    path.join(fixture.args.candidateDir, 'signing-windows-x64.txt'),
+    'authenticode_status=Valid\nsigner_present=true\n'
+  )
+  assert.throws(() => validateV321PromotionBundle(fixture.args), /signing evidence|draft hash mismatch/)
 })

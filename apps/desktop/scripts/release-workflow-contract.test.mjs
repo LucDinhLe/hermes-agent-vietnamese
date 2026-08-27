@@ -433,8 +433,8 @@ test('v32 runtime smoke binds the exact candidate to an ephemeral Windows lifecy
   assert.match(runtimeSmoke, /if: always\(\)/)
 })
 
-test('v32.1 safety update requires signed x64 bytes and its own exact lifecycle lane', () => {
-  assert.match(candidate, /matrix\.id == 'windows-x64' && needs\.verify\.outputs\.tag == 'vi-v0\.32\.1-2'/)
+test('v32.1 safety update is an explicit unsigned x64 community pilot with its own exact lifecycle lane', () => {
+  assert.doesNotMatch(candidate, /matrix\.id == 'windows-x64' && needs\.verify\.outputs\.tag == 'vi-v0\.32\.1-2'/)
   assert.match(candidate, /build_matrix: \$\{\{ steps\.candidate\.outputs\.build_matrix \}\}/)
   assert.match(candidate, /if \[\[ "\$RELEASE_TAG" == "vi-v0\.32\.1-2" \]\]/)
   assert.match(candidate, /matrix: \$\{\{ fromJSON\(needs\.verify\.outputs\.build_matrix\) \}\}/)
@@ -450,7 +450,9 @@ test('v32.1 safety update requires signed x64 bytes and its own exact lifecycle 
   assert.match(runtimeSmoke, /--candidate-commit \$env:CANDIDATE_COMMIT/)
   assert.match(runtimeSmoke, /--harness-commit \$env:CANDIDATE_COMMIT/)
   assert.match(runtimeSmoke, /--previous-sha256 efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac/)
-  assert.match(runtimeSmoke, /v32\.1 candidate Authenticode is \$\(\$signature\.Status\), not Valid/)
+  assert.match(runtimeSmoke, /v32\.1 community candidate must be explicitly NotSigned/)
+  assert.match(candidate, /authenticode_status=/)
+  assert.match(candidate, /signer_present=/)
   assert.match(runtimeSmoke, /v321-windows-lifecycle-\$\{\{ github\.run_id \}\}/)
   assert.match(v321Promotion, /^name: Công khai Hermes Vietnamese v32\.1$/m)
   assert.match(v321Promotion, /node scripts\/validate-v321-promotion\.mjs/)

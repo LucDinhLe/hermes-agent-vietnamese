@@ -8,8 +8,8 @@ Lớp phát hành của artifact: **community-prerelease, chưa phải stable**.
 
 `vi-v0.32.1-2` là bản cập nhật an toàn cho Windows 10/11 x64, kế nhiệm
 `vi-v0.32.0-1`. Bản này chỉ được công khai ở vị trí GitHub Latest sau khi đúng
-byte Windows x64 đã ký vượt toàn bộ cổng cài mới, cập nhật, mở lại, sửa chữa,
-gỡ cài đặt, rollback và an toàn phiên/dự án trong máy ảo Windows dùng một lần.
+byte Windows x64 vượt toàn bộ cổng cài mới, cập nhật, mở lại, sửa chữa, gỡ cài
+đặt, rollback và an toàn phiên/dự án trong máy ảo Windows dùng một lần.
 
 GitHub phải đặt `prerelease=false` để bản cập nhật có thể ở vị trí Latest;
 provenance của artifact vẫn là `community-prerelease`. Điều đó không biến bản
@@ -40,7 +40,8 @@ này thành stable/final.
 
 ## Cổng Windows x64 bắt buộc
 
-- Installer phải có Authenticode `Valid` qua SignPath; thiếu chữ ký là NO-GO.
+- Installer được phát hành với Authenticode `NotSigned`; manifest phải ghi rõ
+  không có chứng thư nhà phát hành và không được gọi bản này là stable/final.
 - Windows x64: exact-artifact smoke và provenance phải khớp tag, commit,
   kích thước và SHA-256 của private draft.
 - Update trực tiếp từ `vi-v0.32.0-1`, repair, uninstall giữ dữ liệu, uninstall
@@ -52,6 +53,8 @@ này thành stable/final.
 ## Giới hạn
 
 - Đây là community pilot Windows x64, chưa phải stable/final.
+- Windows có thể hiện `Publisher: Unknown`, SmartScreen hoặc Smart App Control
+  cảnh báo/chặn cài đặt. Không tắt bảo vệ toàn máy để cài.
 - Chưa có smoke trên máy người dùng; nghiệm thu phát hành dùng profile cô lập,
   mock provider và máy ảo Windows dùng một lần.
 - Dự án chưa tham gia Apple Developer Program; v32.1 không quảng cáo macOS,
