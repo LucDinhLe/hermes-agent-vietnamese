@@ -1,8 +1,33 @@
 # Kế hoạch candidate `vi-v0.32.1-18`
 
 Ngày chốt phạm vi: 2026-08-28
-Trạng thái: **đã tag; build run đầu xác định lỗi harness trước staging; chưa
-public**.
+Trạng thái: **đã công khai dưới dạng community prerelease; không phải Latest**.
+
+## Kết quả thực tế
+
+- URL công khai:
+  <https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18>.
+- Product commit bất biến:
+  `2594eb396f0c5720802fc608a01a64d96d5629b2`.
+- Build/staging run: `33101754226`; sáu target native dựng thành công và đủ 27
+  asset trước smoke. Lỗi duy nhất là GitHub HTTP 500 khi tải lại RPM ở postcheck
+  sau upload; promotion đã tải lại và đối chiếu toàn bộ byte thành công.
+- Lifecycle run đạt: `33109790978`, harness commit
+  `d26d2bec81be1c104ab2dbc75cfe9b08a7e96553`, đủ 20/20 gate và 67 file bằng
+  chứng. Evidence artifact `9663716312`, digest
+  `5ee84361a2baaf5d73175297a44ea9115671f9eb42ca95550242f31064179f25`.
+- Run gắn biên nhận từ lifecycle đã sealed: `33114738368`. Pilot evidence
+  SHA-256:
+  `7ce8c2bfbb8089669430a8dd838a1d943499c17719dc339b6780b61fe5bb0633`.
+- Promotion/postcheck run: `33114927801`, controller
+  `6ba341b5a28a88bf31eb15087727c260b981f87c`; kết quả thành công,
+  `draft=false`, `prerelease=true`, đủ 28 asset và 12 artifact phân phối.
+- Manifest SHA-256:
+  `e13a09aa1f30cb19e1fb8ab6ed636b5cec605fd9402fbb6f32d6daf1391d4128`.
+  Windows x64 SHA-256:
+  `565e1313162505999238b9c3b4f1422ec37256a1da153bae5149b5795c83c5ac`.
+- `vi-v0.32.1-17` vẫn là GitHub Latest. `-18` không thay update feed và không
+  được gọi là stable/final.
 
 ## Mục tiêu và audience
 

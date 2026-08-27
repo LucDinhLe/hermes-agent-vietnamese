@@ -2,6 +2,32 @@
 
 ## Cập nhật 2026-08-28 — chuẩn bị v32.1-18 đa nền tảng
 
+- **Đã công khai thành công** community prerelease `vi-v0.32.1-18` tại
+  <https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18>.
+  Promotion run `33114927801` đạt; release có `draft=false`,
+  `prerelease=true`, đủ 28 asset và 12 artifact phân phối. GitHub Latest vẫn là
+  `vi-v0.32.1-17`, không bị pilot đa nền tảng thay thế.
+- Product tag giữ nguyên commit
+  `2594eb396f0c5720802fc608a01a64d96d5629b2`. Manifest SHA-256 là
+  `e13a09aa1f30cb19e1fb8ab6ed636b5cec605fd9402fbb6f32d6daf1391d4128`;
+  Windows x64 installer SHA-256 là
+  `565e1313162505999238b9c3b4f1422ec37256a1da153bae5149b5795c83c5ac`.
+- Lifecycle run `33109790978` dùng harness commit
+  `d26d2bec81be1c104ab2dbc75cfe9b08a7e96553` và đạt đủ 20/20 gate, 0 gate
+  lỗi, 67 file bằng chứng. Evidence artifact `9663716312`, digest
+  `5ee84361a2baaf5d73175297a44ea9115671f9eb42ca95550242f31064179f25`.
+  Biên nhận pilot được tái dùng an toàn và gắn vào draft bởi run
+  `33114738368`; asset biên nhận có SHA-256
+  `7ce8c2bfbb8089669430a8dd838a1d943499c17719dc339b6780b61fe5bb0633`.
+- Hai harness failure trước lifecycle xanh không tạo candidate mới: run
+  `33105633511` dừng vì harness ghi `state.db` khi SQLite đang khóa; run
+  `33106816267` vượt 14 gate rồi dừng vì Playwright tiếp tục tìm nút sau khi
+  ứng dụng đã tự đóng lúc gỡ sạch. Hai đường này đã có regression lâu dài.
+- Windows x64 được phép `PILOT-GO`. Windows ARM64, macOS Apple Silicon/Intel và
+  Linux x64/ARM64 giữ đúng nhãn `BUILD-ONLY-PILOT`,
+  `realMachineSmoke=false`; tất cả đều chưa ký/công chứng và không có update
+  feed tự động.
+
 - Tag `vi-v0.32.1-18` đã khóa product commit
   `2594eb396f0c5720802fc608a01a64d96d5629b2`; build run đầu
   `33097339026` đạt source gate và Windows x64 exact artifact. Hai macOS và hai
@@ -36,8 +62,9 @@
   update feed.
 - Source gate liên quan đã đạt: Node release/lifecycle/evidence 37/37, workflow
   contract Vitest 17/17 và Python public-download 9/9. `git diff --check` sạch.
-- Bước tiếp theo: kiểm YAML/format và rà diff lần cuối, rồi commit/push/tag trước
-  khi dispatch build sáu target.
+- Bước tiếp theo: theo dõi phản hồi prerelease; chỉ nâng audience cho từng target
+  sau khi có smoke riêng trên máy thật. Không sửa byte/tag `-18`; v33 là phạm vi
+  riêng.
 
 ## Cập nhật 2026-08-27 — v32.1 đã là GitHub Latest
 
