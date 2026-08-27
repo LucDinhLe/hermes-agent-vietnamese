@@ -29,7 +29,7 @@ permissions:
 jobs:
   exact-bytes:
     name: Byte và chữ ký — ${{ matrix.id }}
-    if: inputs.tag != 'vi-v0.32.0-1' && inputs.tag != 'vi-v0.32.1-17'
+    if: inputs.tag != 'vi-v0.32.0-1' && !startsWith(inputs.tag, 'vi-v0.32.1-')
     runs-on: ${{ matrix.runner }}
     environment: release-smoke
     strategy:
@@ -127,7 +127,7 @@ jobs:
 
   evidence:
     name: Đối chiếu smoke thật trên đúng máy và artifact
-    if: inputs.tag != 'vi-v0.32.0-1' && inputs.tag != 'vi-v0.32.1-17'
+    if: inputs.tag != 'vi-v0.32.0-1' && !startsWith(inputs.tag, 'vi-v0.32.1-')
     needs: exact-bytes
     runs-on: ubuntu-24.04
     environment: release-production
@@ -310,7 +310,7 @@ jobs:
 
   v321-windows-lifecycle:
     name: V32.1 Windows x64 — project/session safety và full lifecycle
-    if: inputs.tag == 'vi-v0.32.1-17' && inputs.release_class == 'community-prerelease'
+    if: startsWith(inputs.tag, 'vi-v0.32.1-') && inputs.release_class == 'community-prerelease'
     permissions:
       # GitHub hides draft releases from read-only tokens. Write is required to
       # resolve/download the private draft; this job never mutates the release.
@@ -451,6 +451,7 @@ jobs:
         shell: powershell
         env:
           CANDIDATE_SHA256: ${{ inputs.windows_x64_sha256 }}
+          TAG: ${{ inputs.tag }}
         run: |
           New-Item -ItemType Directory -Path C:\HermesEvidence -Force | Out-Null
           [System.IO.File]::WriteAllText(
@@ -466,6 +467,7 @@ jobs:
           node scripts/windows-lifecycle-acceptance/run.mjs `
             --isolation-mode github-hosted-ephemeral-vm `
             --candidate $candidate `
+            --candidate-tag $env:TAG `
             --candidate-sha256 $env:CANDIDATE_SHA256 `
             --candidate-commit $env:CANDIDATE_COMMIT `
             --harness-commit $env:HARNESS_COMMIT `
@@ -486,3 +488,91 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 90
+
+  v321-pilot-evidence:
+    name: V32.1 — khóa biên nhận Windows và năm target build-only
+    if: >-
+      startsWith(inputs.tag, 'vi-v0.32.1-') &&
+      inputs.tag != 'vi-v0.32.1-17' &&
+      inputs.release_class == 'community-prerelease'
+    needs: v321-windows-lifecycle
+    permissions:
+      actions: read
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: v321-windows-lifecycle-${{ github.run_id }}-${{ github.run_attempt }}
+          path: lifecycle-evidence
+
+      - name: Tải manifest và provenance của đúng draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir candidate
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern SHA256SUMS.txt \
+            --pattern candidate-provenance.json \
+            --dir candidate
+
+      - name: Sinh và kiểm biên nhận pilot từ lifecycle đã sealed
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          EXPECTED_MANIFEST_SHA: ${{ inputs.sha256sums_sha256 }}
+        run: |
+          set -euo pipefail
+          mapfile -t receipts < <(find lifecycle-evidence -type f -name lifecycle-result.json -print)
+          test "${#receipts[@]}" = "1"
+          test "$(sha256sum candidate/SHA256SUMS.txt | cut -d' ' -f1)" = "$EXPECTED_MANIFEST_SHA"
+          candidate_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          test "$(node -p "require('./candidate/candidate-provenance.json').tag")" = "$TAG"
+          test "$(node -p "require('./candidate/candidate-provenance.json').commit")" = "$candidate_commit"
+          node scripts/create-v321-pilot-evidence.mjs \
+            "${receipts[0]}" \
+            candidate/candidate-provenance.json \
+            candidate/SHA256SUMS.txt \
+            "$EXPECTED_MANIFEST_SHA" \
+            pilot-release-evidence.json
+          node scripts/validate-pilot-release-evidence.mjs \
+            pilot-release-evidence.json \
+            candidate/candidate-provenance.json \
+            candidate/SHA256SUMS.txt \
+            "$TAG" \
+            "$candidate_commit" \
+            "$EXPECTED_MANIFEST_SHA" \
+            "$(node -p "require('./candidate/candidate-provenance.json').runId")" \
+            > /dev/null
+
+      - name: Gắn đúng một biên nhận vào draft rồi tải lại đối chiếu
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          EXPECTED_MANIFEST_SHA: ${{ inputs.sha256sums_sha256 }}
+        run: |
+          set -euo pipefail
+          release_json="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,assets)"
+          test "$(jq -r .isDraft <<<"$release_json")" = "true"
+          test "$(jq -r .isPrerelease <<<"$release_json")" = "true"
+          test "$(jq '[.assets[] | select(.name == "pilot-release-evidence.json")] | length' <<<"$release_json")" = "0"
+          gh release upload "$TAG" 'pilot-release-evidence.json#pilot-release-evidence.json' \
+            --repo "$GITHUB_REPOSITORY"
+          mkdir uploaded-evidence
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern pilot-release-evidence.json \
+            --dir uploaded-evidence
+          cmp pilot-release-evidence.json uploaded-evidence/pilot-release-evidence.json
+          test "$(sha256sum candidate/SHA256SUMS.txt | cut -d' ' -f1)" = "$EXPECTED_MANIFEST_SHA"

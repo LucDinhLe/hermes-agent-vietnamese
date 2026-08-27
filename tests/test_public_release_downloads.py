@@ -6,7 +6,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_RELEASE = json.loads(
     (REPO_ROOT / ".github/public-release.json").read_text(encoding="utf-8")
 )
-CANDIDATE_RELEASE = "vi-v0.32.1-17"
+CANDIDATE_RELEASE = "vi-v0.32.1-18"
 
 
 def _read(path: str) -> str:
@@ -43,6 +43,20 @@ def test_download_tables_use_current_release_and_exact_asset_names() -> None:
             )
 
 
+def test_featured_candidate_tables_link_every_cross_platform_artifact() -> None:
+    featured = PUBLIC_RELEASE["featuredCandidate"]
+    prefix = (
+        "https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/"
+        f"{featured['tag']}/"
+    )
+    for path in ("README.md", "README.vi.md"):
+        text = _read(path)
+        for filename in featured["downloadFiles"]:
+            assert prefix + filename in text, (
+                f"{path} is missing the featured URL for {filename}"
+            )
+
+
 def test_candidate_notes_describe_v321_without_relabeling_current_public() -> None:
     """Candidate notes may advance before the public release descriptor does."""
     text = _read(".github/release-notes-vietnamese.md")
@@ -53,11 +67,12 @@ def test_candidate_notes_describe_v321_without_relabeling_current_public() -> No
     assert "an toàn phiên/dự án" in text
 
 
-def test_v32_relabels_the_default_release_without_claiming_stable() -> None:
+def test_cross_platform_candidate_keeps_the_current_latest_without_claiming_stable() -> None:
     text = _read(".github/release-notes-vietnamese.md")
-    assert "GitHub Latest" in text
+    assert "mặc định/Latest vẫn là `vi-v0.32.1-17`" in text
     assert "chưa phải stable" in text
     assert "Latest đầy đủ vẫn là v31" not in text
+    assert "Stable/Latest" not in text
 
 
 def test_latest_v32_requires_a_public_readme_callout() -> None:

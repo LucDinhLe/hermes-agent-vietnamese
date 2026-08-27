@@ -54,6 +54,7 @@ test('v32 packaged relaunch owns bounded evidence instead of worker-level multi-
 test('candidate workflow builds the complete resident runtime on every advertised native target', () => {
   assert.match(candidate, /scripts\/validate-release-evidence\.test\.mjs/)
   assert.match(candidate, /scripts\/validate-pilot-release-evidence\.test\.mjs/)
+  assert.match(candidate, /scripts\/create-v321-pilot-evidence\.test\.mjs/)
   assert.match(candidate, /scripts\/validate-public-release-contract\.test\.mjs/)
   for (const runner of [
     'windows-2025',
@@ -460,17 +461,23 @@ test('v32 runtime smoke binds the exact candidate to an ephemeral Windows lifecy
 
 test('v32.1 safety update is an unsigned x64 pilot whose exact bytes are independent of its lifecycle harness', () => {
   const v321Start = runtimeSmoke.indexOf('\n  v321-windows-lifecycle:')
+  const v321EvidenceStart = runtimeSmoke.indexOf('\n  v321-pilot-evidence:')
   assert.notEqual(v321Start, -1)
-  const v321Lane = runtimeSmoke.slice(v321Start)
+  assert.notEqual(v321EvidenceStart, -1)
+  const v321Lane = runtimeSmoke.slice(v321Start, v321EvidenceStart)
+  const v321EvidenceLane = runtimeSmoke.slice(v321EvidenceStart)
   assert.doesNotMatch(candidate, /matrix\.id == 'windows-x64' && needs\.verify\.outputs\.tag == 'vi-v0\.32\.1-17'/)
   assert.match(candidate, /build_matrix: \$\{\{ steps\.candidate\.outputs\.build_matrix \}\}/)
   assert.match(candidate, /if \[\[ "\$RELEASE_TAG" == "vi-v0\.32\.1-17" \]\]/)
   assert.match(candidate, /matrix: \$\{\{ fromJSON\(needs\.verify\.outputs\.build_matrix\) \}\}/)
-  assert.match(runtimeSmoke, /exact-bytes:[\s\S]*?inputs\.tag != 'vi-v0\.32\.1-17'/)
-  assert.match(runtimeSmoke, /evidence:[\s\S]*?inputs\.tag != 'vi-v0\.32\.1-17'/)
+  assert.match(runtimeSmoke, /exact-bytes:[\s\S]*?!startsWith\(inputs\.tag, 'vi-v0\.32\.1-'\)/)
+  assert.match(runtimeSmoke, /evidence:[\s\S]*?!startsWith\(inputs\.tag, 'vi-v0\.32\.1-'\)/)
   assert.match(runtimeSmoke, /windows_x64_sha256:/)
   assert.match(runtimeSmoke, /v321-windows-lifecycle:/)
-  assert.match(v321Lane, /if: inputs\.tag == 'vi-v0\.32\.1-17' && inputs\.release_class == 'community-prerelease'/)
+  assert.match(
+    v321Lane,
+    /if: startsWith\(inputs\.tag, 'vi-v0\.32\.1-'\) && inputs\.release_class == 'community-prerelease'/
+  )
   assert.match(v321Lane, /permissions:\s+#[^\n]*\n\s+#[^\n]*\n\s+contents: write/)
   assert.match(v321Lane, /git rev-list -n 1 \$env:TAG/)
   assert.match(v321Lane, /gh @Arguments/)
@@ -484,12 +491,18 @@ test('v32.1 safety update is an unsigned x64 pilot whose exact bytes are indepen
   assert.match(v321Lane, /\$harnessCommit -ne \$env:GITHUB_SHA/)
   assert.match(v321Lane, /'release', 'download', 'vi-v0\.32\.0-1'/)
   assert.match(v321Lane, /--candidate-commit \$env:CANDIDATE_COMMIT/)
+  assert.match(v321Lane, /--candidate-tag \$env:TAG/)
   assert.match(v321Lane, /--harness-commit \$env:HARNESS_COMMIT/)
   assert.match(v321Lane, /--previous-sha256 efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac/)
   assert.match(v321Lane, /v32\.1 community candidate must be explicitly NotSigned/)
   assert.match(candidate, /authenticode_status=/)
   assert.match(candidate, /signer_present=/)
   assert.match(v321Lane, /v321-windows-lifecycle-\$\{\{ github\.run_id \}\}/)
+  assert.match(v321EvidenceLane, /needs: v321-windows-lifecycle/)
+  assert.match(v321EvidenceLane, /inputs\.tag != 'vi-v0\.32\.1-17'/)
+  assert.match(v321EvidenceLane, /create-v321-pilot-evidence\.mjs/)
+  assert.match(v321EvidenceLane, /validate-pilot-release-evidence\.mjs/)
+  assert.match(v321EvidenceLane, /pilot-release-evidence\.json#pilot-release-evidence\.json/)
   assert.match(v321Promotion, /^name: Công khai Hermes Vietnamese v32\.1$/m)
   assert.equal((v321Promotion.match(/TAG: vi-v0\.32\.1-17/g) ?? []).length, 2)
   assert.match(v321Promotion, /node scripts\/validate-v321-promotion\.mjs/)

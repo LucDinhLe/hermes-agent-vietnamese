@@ -1,5 +1,23 @@
 # Tiến độ
 
+## Cập nhật 2026-08-28 — chuẩn bị v32.1-18 đa nền tảng
+
+- Chốt successor `vi-v0.32.1-18`; không sửa asset/tag `-17` đã public và không
+  đưa tính năng v33 vào phạm vi.
+- Release workflow hiện có sẽ dựng đủ sáu target native cho `-18`. README và
+  README.vi đã chuẩn bị đủ 12 link artifact Windows/macOS/Linux; Latest vẫn là
+  `vi-v0.32.1-17` trong thời gian nghiệm thu.
+- Lifecycle v32.1 được tổng quát hóa cho successor tag, vẫn khóa candidate và
+  harness commit độc lập. Biên nhận pilot mới chỉ được sinh từ receipt full
+  lifecycle đã sealed và phải khớp Windows x64 trong manifest.
+- Năm target ngoài Windows x64 bị khóa nhãn `BUILD-ONLY-PILOT`,
+  `realMachineSmoke=false`; release notes nêu rõ chưa ký/công chứng và không có
+  update feed.
+- Source gate liên quan đã đạt: Node release/lifecycle/evidence 37/37, workflow
+  contract Vitest 17/17 và Python public-download 9/9. `git diff --check` sạch.
+- Bước tiếp theo: kiểm YAML/format và rà diff lần cuối, rồi commit/push/tag trước
+  khi dispatch build sáu target.
+
 ## Cập nhật 2026-08-27 — v32.1 đã là GitHub Latest
 
 - Promotion fail-closed `33093581951` đạt trong `37s` từ controller

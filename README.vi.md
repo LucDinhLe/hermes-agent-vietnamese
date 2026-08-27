@@ -6,11 +6,11 @@ Tài liệu này dành cho người muốn cài Hermes bằng giao diện, kết
 >
 > **Trạng thái:** community pilot công khai **Latest**, chưa phải stable; exact Windows x64 đã qua toàn bộ vòng đời; bộ cài chưa ký số
 >
-> **Nền tảng v32.1 đã nghiệm thu:** Windows 10/11 x64
+> **Pilot đa nền tảng:** [vi-v0.32.1-18](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18) — đủ Windows/macOS/Linux; Windows x64 đã nghiệm thu, năm target còn lại là `BUILD-ONLY-PILOT`
 
 > **Hermes Vietnamese v32.1** (`vi-v0.32.1-17`) là **community pilot công khai đang được chọn làm Latest, chưa phải stable**. Bản Windows x64 khắc phục lỗi hiển thị/phạm vi Dự án khiến phiên cũ trông như biến mất; Ẩn/Xóa Dự án không xóa hay ẩn phiên. Exact artifact đã qua cài mới, cập nhật từ v32, mở lại, bảo toàn dữ liệu, repair, hai chế độ gỡ cài đặt và rollback.
 >
-> Tải bản hiện tại: [Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-17/Hermes-Vietnamese-Windows-x64-Setup.exe). V32.1 chưa quảng cáo Windows ARM64, macOS hoặc Linux khi chưa có exact-byte evidence riêng.
+> Tải [Windows x64 của bản Latest](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-17/Hermes-Vietnamese-Windows-x64-Setup.exe), hoặc tải đa nền tảng tại [vi-v0.32.1-18](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18). Windows ARM64, macOS và Linux chưa có smoke trên máy người dùng, chưa ký số/công chứng và chưa phải stable.
 
 ## Vì sao có Hermes Vietnamese?
 
@@ -43,7 +43,7 @@ Hermes Vietnamese không tặng kèm model AI, tài khoản trả phí, API key 
 
 ### Bước 1. Tải về và cài đặt
 
-1. Mở [trang phát hành vi-v0.32.1-17](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-17).
+1. Mở [trang phát hành vi-v0.32.1-18](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18).
 2. Tải đúng tệp theo bảng bên dưới.
 3. Mở bộ cài và khởi động Hermes.
 4. Chọn **Tiếng Việt** hoặc **English**.
@@ -61,9 +61,16 @@ Chọn model mặc định, vào không gian làm việc và nhập mục tiêu 
 
 ## Chọn đúng bộ cài
 
-| Hệ điều hành  | Kiến trúc | Tải trực tiếp                                                                                                                                                           |
-| ------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows 10/11 | x64       | [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-17/Hermes-Vietnamese-Windows-x64-Setup.exe) |
+| Hệ điều hành  | Kiến trúc     | Tải trực tiếp                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows 10/11 | x64           | [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-18/Hermes-Vietnamese-Windows-x64-Setup.exe)                                                                                                                                                                                                                                 |
+| Windows 10/11 | ARM64         | [Hermes-Vietnamese-Windows-arm64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-18/Hermes-Vietnamese-Windows-arm64-Setup.exe)                                                                                                                                                                                                                             |
+| macOS 12+     | Apple Silicon | [DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-18/Hermes-Vietnamese-macOS-Apple-Silicon.dmg) · [ZIP](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-18/Hermes-Vietnamese-macOS-Apple-Silicon.zip)                                                                                                                           |
+| macOS 12+     | Intel x64     | [DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-18/Hermes-Vietnamese-macOS-Intel.dmg) · [ZIP](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-18/Hermes-Vietnamese-macOS-Intel.zip)                                                                                                                                           |
+| Linux         | x64           | [AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-18/Hermes-Vietnamese-Linux-x64.AppImage) · [DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-18/Hermes-Vietnamese-Linux-x64.deb) · [RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-18/Hermes-Vietnamese-Linux-x64.rpm)       |
+| Linux         | ARM64         | [AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-18/Hermes-Vietnamese-Linux-arm64.AppImage) · [DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-18/Hermes-Vietnamese-Linux-arm64.deb) · [RPM](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-18/Hermes-Vietnamese-Linux-arm64.rpm) |
+
+> Windows x64 đã qua exact-artifact lifecycle. Năm target còn lại là `BUILD-ONLY-PILOT`: đã dựng và kiểm trên runner native nhưng chưa có smoke trên máy người dùng. Windows/macOS chưa ký số hoặc công chứng.
 
 Windows 32-bit và Linux ARM 32-bit không được đóng gói.
 

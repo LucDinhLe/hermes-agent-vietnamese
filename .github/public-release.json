@@ -4,6 +4,25 @@
   "rollbackTag": "vi-v0.20.4-39",
   "releaseClass": "community-pilot",
   "artifactProvenanceClass": "community-prerelease",
+  "featuredCandidate": {
+    "tag": "vi-v0.32.1-18",
+    "releaseClass": "community-prerelease",
+    "published": true,
+    "downloadFiles": [
+      "Hermes-Vietnamese-Windows-x64-Setup.exe",
+      "Hermes-Vietnamese-Windows-arm64-Setup.exe",
+      "Hermes-Vietnamese-macOS-Apple-Silicon.dmg",
+      "Hermes-Vietnamese-macOS-Apple-Silicon.zip",
+      "Hermes-Vietnamese-macOS-Intel.dmg",
+      "Hermes-Vietnamese-macOS-Intel.zip",
+      "Hermes-Vietnamese-Linux-x64.AppImage",
+      "Hermes-Vietnamese-Linux-x64.deb",
+      "Hermes-Vietnamese-Linux-x64.rpm",
+      "Hermes-Vietnamese-Linux-arm64.AppImage",
+      "Hermes-Vietnamese-Linux-arm64.deb",
+      "Hermes-Vietnamese-Linux-arm64.rpm"
+    ]
+  },
   "windowsX64": {
     "filename": "Hermes-Vietnamese-Windows-x64-Setup.exe",
     "size": 340644403,

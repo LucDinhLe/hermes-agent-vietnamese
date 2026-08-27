@@ -117,6 +117,7 @@ jobs:
           scripts/validate-release-evidence.test.mjs
           scripts/validate-v321-promotion.test.mjs
           scripts/validate-pilot-release-evidence.test.mjs
+          scripts/create-v321-pilot-evidence.test.mjs
           scripts/validate-public-release-contract.test.mjs
           scripts/prepare-agent-browser-native.test.mjs
 

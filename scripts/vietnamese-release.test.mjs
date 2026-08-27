@@ -45,6 +45,10 @@ test('v32.1 public descriptor binds the immutable candidate and previous v32 rel
   assert.equal(publicRelease.previousTag, 'vi-v0.32.0-1')
   assert.equal(publicRelease.releaseClass, 'community-pilot')
   assert.equal(publicRelease.artifactProvenanceClass, 'community-prerelease')
+  assert.equal(publicRelease.featuredCandidate.tag, 'vi-v0.32.1-18')
+  assert.equal(publicRelease.featuredCandidate.releaseClass, 'community-prerelease')
+  assert.equal(publicRelease.featuredCandidate.published, true)
+  assert.equal(publicRelease.featuredCandidate.downloadFiles.length, 12)
   assert.equal(publicRelease.windowsX64.authenticode, 'NotSigned')
   assert.equal(publicRelease.windowsX64.size, 340644403)
   assert.equal(publicRelease.windowsX64.sha256, '7e3e5870228254fec634140391fe01042e50f1b483d9d53ff171636837d65884')
@@ -207,6 +211,17 @@ test('prerelease promotion requires the exact prepared public candidate', () => 
         tag: featuredCandidate.tag
       }),
     /target published state/
+  )
+})
+
+test('public descriptor prepares the exact v32.1 multi-platform pilot', () => {
+  const publicRelease = JSON.parse(fs.readFileSync(new URL('../.github/public-release.json', import.meta.url), 'utf8'))
+  assert.deepEqual(
+    validateFeaturedCandidatePromotion({
+      featuredCandidate: publicRelease.featuredCandidate,
+      tag: 'vi-v0.32.1-18'
+    }),
+    { published: true, tag: 'vi-v0.32.1-18' }
   )
 })
 

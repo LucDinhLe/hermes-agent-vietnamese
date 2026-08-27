@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 import { validateReleaseAssetInventory } from './release-asset-inventory.mjs'
 import { V31_RUNTIME_GATES, parseChecksumManifest, requiredRuntimeGatesForTag } from './validate-release-evidence.mjs'
+import { REQUIRED_LIFECYCLE_GATES } from './windows-lifecycle-acceptance/policy.mjs'
 
 export const PILOT_WINDOWS_GATES = Object.freeze([
   'exactBytes',
@@ -65,6 +66,14 @@ export const BUILD_ONLY_PILOT_TARGETS = Object.freeze([
   'linux-arm64'
 ])
 
+export function requiredPilotWindowsGatesForTag(tag) {
+  if (/^vi-v0\.32\.1-(1[7-9]|[2-9]\d*)$/.test(String(tag))) {
+    return REQUIRED_LIFECYCLE_GATES
+  }
+  const requiresV31 = requiredRuntimeGatesForTag(tag).includes(V31_RUNTIME_GATES[0])
+  return requiresV31 ? [...PILOT_WINDOWS_GATES, ...V31_RUNTIME_GATES] : PILOT_WINDOWS_GATES
+}
+
 function requireMatchingIdentity(record, expected, label) {
   for (const key of ['tag', 'commit', 'releaseClass']) {
     if (record?.[key] !== expected[key]) throw new Error(`${label} ${key} mismatch`)
@@ -102,8 +111,7 @@ export function validatePilotReleaseEvidence(evidence, provenance, checksumBytes
   if (!windows.artifact || checksums.get(windows.artifact) !== windows.sha256) {
     throw new Error('windows-x64 byte mismatch')
   }
-  const requiresV31 = requiredRuntimeGatesForTag(identity.tag).includes(V31_RUNTIME_GATES[0])
-  const windowsGates = requiresV31 ? [...PILOT_WINDOWS_GATES, ...V31_RUNTIME_GATES] : PILOT_WINDOWS_GATES
+  const windowsGates = requiredPilotWindowsGatesForTag(identity.tag)
   for (const gate of windowsGates) {
     if (windows.gates?.[gate] !== true) throw new Error(`windows-x64 missing ${gate}`)
   }

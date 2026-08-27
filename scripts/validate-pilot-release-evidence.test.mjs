@@ -5,6 +5,7 @@ import { test } from 'node:test'
 import {
   BUILD_ONLY_PILOT_TARGETS,
   PILOT_WINDOWS_GATES,
+  requiredPilotWindowsGatesForTag,
   validatePilotAssetInventory,
   validatePilotReleaseEvidence
 } from './validate-pilot-release-evidence.mjs'
@@ -16,7 +17,12 @@ const stagingRunId = '12345'
 const targets = ['windows-x64', ...BUILD_ONLY_PILOT_TARGETS]
 const artifacts = Object.fromEntries(targets.map((target, index) => [target, `${target}-${index}.bin`]))
 const hashes = Object.fromEntries(
-  targets.map((target, index) => [target, String(index + 1).repeat(64).slice(0, 64)])
+  targets.map((target, index) => [
+    target,
+    String(index + 1)
+      .repeat(64)
+      .slice(0, 64)
+  ])
 )
 const targetManifest = 'SHA256SUMS-win32-x64.txt'
 const targetManifestHash = 'f'.repeat(64)
@@ -27,12 +33,7 @@ const checksumBytes = Buffer.from(
   ].join('\n') + '\n'
 )
 const manifestSha = crypto.createHash('sha256').update(checksumBytes).digest('hex')
-const validAssetNames = [
-  ...Object.values(artifacts),
-  targetManifest,
-  'SHA256SUMS.txt',
-  'pilot-release-evidence.json'
-]
+const validAssetNames = [...Object.values(artifacts), targetManifest, 'SHA256SUMS.txt', 'pilot-release-evidence.json']
 
 function validFixture() {
   const identity = { tag, commit, releaseClass: 'community-prerelease' }
@@ -74,6 +75,14 @@ test('accepts a v31 pilot only with exact Windows smoke, Agents gates, and hones
   )
 })
 
+test('v32.1 successors require the sealed project/session lifecycle gates', () => {
+  const gates = requiredPilotWindowsGatesForTag('vi-v0.32.1-18')
+  assert.ok(gates.includes('projectSessionSafety'))
+  assert.ok(gates.includes('v32ToV321Update'))
+  assert.ok(gates.includes('noResidualProcesses'))
+  assert.ok(!gates.includes('updateFromV25'))
+})
+
 test('rejects a missing v31 Agents gate', () => {
   const fixture = validFixture()
   delete fixture.evidence.platforms['windows-x64'].gates.agentsSessionProjectPersistence
@@ -96,7 +105,8 @@ test('rejects provenance, staging-run, manifest, or artifact byte mismatches', (
   const wrongCommit = validFixture()
   wrongCommit.provenance.commit = 'b'.repeat(40)
   assert.throws(
-    () => validatePilotReleaseEvidence(wrongCommit.evidence, wrongCommit.provenance, checksumBytes, wrongCommit.expected),
+    () =>
+      validatePilotReleaseEvidence(wrongCommit.evidence, wrongCommit.provenance, checksumBytes, wrongCommit.expected),
     /provenance commit/
   )
 
@@ -110,14 +120,26 @@ test('rejects provenance, staging-run, manifest, or artifact byte mismatches', (
   const wrongManifest = validFixture()
   wrongManifest.expected.manifestSha = 'f'.repeat(64)
   assert.throws(
-    () => validatePilotReleaseEvidence(wrongManifest.evidence, wrongManifest.provenance, checksumBytes, wrongManifest.expected),
+    () =>
+      validatePilotReleaseEvidence(
+        wrongManifest.evidence,
+        wrongManifest.provenance,
+        checksumBytes,
+        wrongManifest.expected
+      ),
     /manifest digest/
   )
 
   const wrongArtifact = validFixture()
   wrongArtifact.evidence.platforms['linux-x64'].sha256 = '0'.repeat(64)
   assert.throws(
-    () => validatePilotReleaseEvidence(wrongArtifact.evidence, wrongArtifact.provenance, checksumBytes, wrongArtifact.expected),
+    () =>
+      validatePilotReleaseEvidence(
+        wrongArtifact.evidence,
+        wrongArtifact.provenance,
+        checksumBytes,
+        wrongArtifact.expected
+      ),
     /linux-x64 byte/
   )
 })
@@ -129,7 +151,11 @@ test('allows only manifest files, the manifest itself, and pilot evidence in the
     /asset inventory/
   )
   assert.throws(
-    () => validatePilotAssetInventory(validAssetNames.filter(name => name !== artifacts['linux-arm64']), checksumBytes),
+    () =>
+      validatePilotAssetInventory(
+        validAssetNames.filter(name => name !== artifacts['linux-arm64']),
+        checksumBytes
+      ),
     /asset inventory/
   )
 

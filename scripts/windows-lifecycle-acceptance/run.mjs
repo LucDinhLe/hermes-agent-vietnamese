@@ -40,7 +40,8 @@ const RESULT_NAME = 'lifecycle-result.json'
 function usage() {
   return `Usage:
   node scripts/windows-lifecycle-acceptance/run.mjs \\
-    --candidate <v32.1 NSIS.exe> --candidate-sha256 <sha256> \\
+    --candidate <v32.1 NSIS.exe> [--candidate-tag <vi-v0.32.1-N>] \\
+    --candidate-sha256 <sha256> \\
     --candidate-commit <40-char-sha> --harness-commit <40-char-sha> \\
     --previous <vi-v0.32.0-1 NSIS.exe> --previous-sha256 <sha256> \\
     --rollback <vi-v0.20.4-39 NSIS.exe> --rollback-sha256 <sha256> \\
@@ -49,8 +50,8 @@ function usage() {
     [--isolation-mode windows-sandbox|github-hosted-ephemeral-vm]
 
 This command runs only in Windows Sandbox or a GitHub-hosted ephemeral Windows
-VM. It never falls back to a workstation install. The candidate tag is fixed to
-${V321_CANDIDATE_TAG}; its full commit must match the exact checked-out tag.
+VM. It never falls back to a workstation install. The candidate tag must be a
+v32.1 successor at or after vi-v0.32.1-17; its full commit must match the exact tag.
 Previous and rollback tags are fixed to ${V32_SOURCE_TAG} and ${ROLLBACK_TAG}.`
 }
 
@@ -80,7 +81,7 @@ function parseArgs(argv) {
     'node-runtime-dir',
     'evidence-dir'
   ]
-  const allowed = new Set([...required, 'isolation-mode', 'timeout-minutes'])
+  const allowed = new Set([...required, 'candidate-tag', 'isolation-mode', 'timeout-minutes'])
   for (const key of values.keys()) {
     if (!allowed.has(key)) throw new Error(`unknown option: --${key}`)
   }
@@ -100,6 +101,7 @@ function parseArgs(argv) {
   return {
     candidate: path.resolve(values.get('candidate')),
     candidateCommit: values.get('candidate-commit'),
+    candidateTag: values.get('candidate-tag') || V321_CANDIDATE_TAG,
     candidateSha256: values.get('candidate-sha256').toLowerCase(),
     evidenceDir: path.resolve(values.get('evidence-dir')),
     harnessCommit: values.get('harness-commit'),
@@ -369,7 +371,7 @@ async function main() {
 
   const runId = crypto.randomUUID()
   const descriptor = validateLifecycleDescriptor({
-    candidate: inspectInstaller(args.candidate, args.candidateSha256, V321_CANDIDATE_TAG, args.candidateCommit),
+    candidate: inspectInstaller(args.candidate, args.candidateSha256, args.candidateTag, args.candidateCommit),
     harnessCommit: args.harnessCommit,
     previous: inspectInstaller(args.previous, args.previousSha256, V32_SOURCE_TAG, V32_SOURCE_COMMIT),
     releaseClass: 'community-prerelease',

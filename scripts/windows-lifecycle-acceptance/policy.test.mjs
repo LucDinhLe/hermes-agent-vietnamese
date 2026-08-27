@@ -84,6 +84,21 @@ test('descriptor binds the three exact lifecycle installers and rejects byte reu
     () => validateLifecycleDescriptor({ ...descriptor, candidate: { ...candidate, commit: 'not-a-commit' } }),
     /candidate\.commit must be a full lowercase 40-character commit SHA/
   )
+  assert.equal(
+    validateLifecycleDescriptor({
+      ...descriptor,
+      candidate: { ...candidate, fileName: 'Hermes-0.32.1-vi.18-win-x64.exe', tag: 'vi-v0.32.1-18' }
+    }).candidate.tag,
+    'vi-v0.32.1-18'
+  )
+  assert.throws(
+    () => validateLifecycleDescriptor({ ...descriptor, candidate: { ...candidate, tag: 'vi-v0.32.1-16' } }),
+    /v32\.1 successor/
+  )
+  assert.throws(
+    () => validateLifecycleDescriptor({ ...descriptor, candidate: { ...candidate, tag: 'vi-v0.32.2-1' } }),
+    /v32\.1 successor/
+  )
 })
 
 test('host gate never degrades an unsupported machine into a skipped acceptance', () => {
