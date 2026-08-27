@@ -1,8 +1,9 @@
 # Kế hoạch candidate `vi-v0.32.1-2`
 
 Ngày chốt phạm vi: 2026-08-26
-Trạng thái: source integration đã đạt gate; chưa build, chưa tag, chưa stage,
-chưa public và chưa đổi GitHub Latest.
+Trạng thái: source integration và release-controller hardening đã đạt gate tại
+commit `f821cee6b644a67351a735e5dbc1ae82e045ba47`; chưa build, chưa tag, chưa
+stage, chưa public và chưa đổi GitHub Latest.
 
 ## Mục tiêu
 
@@ -68,6 +69,19 @@ Sau khi source commit sạch được freeze:
 
 Không dùng cài trực tiếp trên workstation thay cho guest lifecycle.
 
+### Cơ chế fail-closed đã khóa trong source
+
+- `vi-v0.32.1-2` chỉ tạo matrix Windows x64; không dựng thêm artifact chưa được
+  nghiệm thu rồi vô tình đưa chúng vào public release.
+- Windows x64 bắt buộc qua SignPath kể cả khi release class còn là
+  `community-prerelease`; thiếu organization/certificate/secret thì build fail.
+- Runtime smoke có lane riêng cho exact tag/commit/hash, exact public v32 làm
+  nguồn update và exact `vi-v0.20.4-39` làm rollback.
+- Lane project/session đọc `state.db` trong profile guest cô lập, ghi digest và
+  số hàng trước/sau Ẩn/Xóa Dự án, relaunch rồi tìm và mở lại đúng phiên.
+- Promotion v32.1 dùng validator riêng, kiểm private draft và toàn bộ receipt;
+  hậu kiểm lỗi phải đưa v32.1 về draft và khôi phục v32 làm Latest.
+
 ## Promotion Latest
 
 Chỉ sau khi mọi gate trên đạt, promotion riêng mới được:
@@ -81,3 +95,16 @@ Chỉ sau khi mọi gate trên đạt, promotion riêng mới được:
 Nếu SignPath chưa cấp organization/certificate hoặc exact lifecycle chưa đạt,
 quyết định vẫn là **NO-GO Latest**. Không phát hành unsigned chỉ vì v32 hiện tại
 đã từng được public unsigned.
+
+## Trạng thái gate ngày 2026-08-27
+
+- Source/UI/Python integration: đạt theo lượt gate hợp nhất ngày 2026-08-26.
+- Typecheck Desktop ba cấu hình: đạt.
+- Release/lifecycle policy: 18/18 đạt.
+- Release validators và product metadata: 38/38 đạt.
+- Promotion validator v32.1: 3/3 đạt; tamper và session-hidden đều bị chặn.
+- Workflow contract: 16/16 đạt; YAML và PowerShell parse đạt; Prettier và
+  `git diff --check` đạt; Desktop lint 0 error.
+- Exact signed installer/lifecycle: chưa chạy vì SignPath chưa cấp cấu hình.
+- GitHub staging/tag/promotion: chưa chạy; phiên đăng nhập `gh` hiện không hợp
+  lệ và nhánh tích hợp chưa được đẩy.
