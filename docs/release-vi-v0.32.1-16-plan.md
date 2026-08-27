@@ -1,8 +1,7 @@
 # Kế hoạch candidate `vi-v0.32.1-16`
 
 Ngày chốt phạm vi: 2026-08-27
-Trạng thái: source đang được kiểm tra; chưa tag/build/stage/public. GitHub Latest
-vẫn là `vi-v0.32.0-1`.
+Trạng thái: **HISTORICAL NO-GO**. GitHub Latest vẫn là `vi-v0.32.0-1`.
 
 ## Mục tiêu và audience
 
@@ -45,5 +44,17 @@ gate và không sửa dữ liệu Hermes thật.
 
 ## Quyết định hiện tại
 
-**Source under verification, Release NO-GO** cho tới khi exact `-16` vượt toàn
-bộ lifecycle và hậu kiểm promotion.
+`vi-v0.32.1-16` được khóa tại commit
+`9cf2cdb2c92cbfb907bf771707ed5c8bfee2d6b9`. Build/staging `33077676475` xanh;
+installer 340.642.164 byte, SHA-256
+`b84e3fe29a07cace57b244036d11a1e2907764e8325b0be2e830928add32568d`,
+Authenticode `NotSigned`.
+
+Lifecycle `33079425120` vượt cài mới, onboarding, runtime đóng gói và relaunch.
+Sau Ẩn/Xóa metadata dự án, session vẫn hiện trong sidebar và dữ liệu không có
+dấu hiệu mất/ẩn. Harness dừng khi click vào `span` tiêu đề phiên bị container
+danh sách chặn pointer event. Evidence artifact `9649684608`, digest
+`c077cf63287a7163e118b0bd1733990c3dd5c40def393cc37a95c4efb95f2df1`.
+
+**HISTORICAL NO-GO**. `-16` giữ bất biến, không rerun/promotion. Candidate kế
+nhiệm là `vi-v0.32.1-17`.

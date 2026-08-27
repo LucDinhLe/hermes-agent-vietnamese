@@ -30,10 +30,10 @@ const fixtureScript = fs.readFileSync(new URL('../../apps/desktop/e2e/fixtures.t
 
 const candidate = {
   commit: 'a'.repeat(40),
-  fileName: 'Hermes-0.32.1-vi.16-win-x64.exe',
+  fileName: 'Hermes-0.32.1-vi.17-win-x64.exe',
   sha256: '1'.repeat(64),
   size: 320_000_000,
-  tag: 'vi-v0.32.1-16'
+  tag: 'vi-v0.32.1-17'
 }
 const previous = {
   commit: V32_SOURCE_COMMIT,
@@ -255,6 +255,7 @@ test('exact lifecycle proves project metadata actions never hide or delete sessi
     projectPhase.match(
       /await projectCard\(running\.page, PROJECT_HIDE_NAME\)[\s\S]*?(?=await running\.app\.close\(\))/
     )?.[0] ?? ''
+  const sessionRediscovery = projectPhase.match(/const sessionResult[\s\S]*?(?=await assertPersistedAnchor)/)?.[0] ?? ''
   const seedFixturesIndex = projectPhase.indexOf('seedProjectSafetyFixtures(context.hermesHome, projectWorkspace)')
   const launchCandidateIndex = projectPhase.indexOf('running = await launchExactBinary(context)')
   const persistedReplyIndex = projectPhase.indexOf(
@@ -306,6 +307,10 @@ test('exact lifecycle proves project metadata actions never hide or delete sessi
   assert.match(projectMetadataActions, /remainingDeleteCard[\s\S]*?Delete\|Xóa[\s\S]*?\.press\('Enter'\)/)
   assert.match(projectMetadataActions, /const confirm[\s\S]*?Delete\|Xóa[\s\S]*?\.press\('Enter'\)/)
   assert.doesNotMatch(projectMetadataActions, /\.click\(\)/)
+  assert.match(sessionRediscovery, /getByRole\('button', \{ name: new RegExp\(PROJECT_SESSION_TITLE, 'i'\) \}\)/)
+  assert.match(sessionRediscovery, /toHaveAccessibleName\(new RegExp\(PROJECT_SESSION_TITLE, 'i'\)\)/)
+  assert.match(sessionRediscovery, /sessionResult\.press\('Enter'\)/)
+  assert.doesNotMatch(sessionRediscovery, /\.click\(\)/)
   assert.match(lifecycleSpec, /projectDeleteRemoved/)
   assert.match(lifecycleSpec, /messageDigest/)
   assert.match(lifecycleSpec, /not\.toBe\('project'\)/)

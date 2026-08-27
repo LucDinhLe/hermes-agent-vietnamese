@@ -778,11 +778,12 @@ async function runProjectSessionSafetyPhase(context: LifecycleContext): Promise<
 
     const sessionResult = running.page
       .locator('[data-sessions-mode]')
-      .getByText(PROJECT_SESSION_TITLE, { exact: true })
+      .getByRole('button', { name: new RegExp(PROJECT_SESSION_TITLE, 'i') })
       .first()
 
     await expect(sessionResult).toBeVisible({ timeout: 60_000 })
-    await sessionResult.click()
+    await expect(sessionResult).toHaveAccessibleName(new RegExp(PROJECT_SESSION_TITLE, 'i'))
+    await sessionResult.press('Enter')
     await assertPersistedAnchor(running.page)
     await expect
       .poll(() => running?.page.locator('[data-sessions-mode]').getAttribute('data-sessions-mode'))

@@ -1,5 +1,20 @@
 # Tiến độ
 
+## Cập nhật 2026-08-27 — candidate v32.1-17 kích hoạt đúng hàng phiên
+
+- `vi-v0.32.1-16` build/stage xanh tại run `33077676475`; installer 340.642.164
+  byte, SHA-256 `b84e3fe29a07cace57b244036d11a1e2907764e8325b0be2e830928add32568d`,
+  Authenticode `NotSigned`.
+- Lifecycle `33079425120` vượt cài mới, onboarding, runtime đóng gói và relaunch.
+  Sau Ẩn/Xóa metadata dự án, session vẫn hiện trong sidebar. Harness dừng vì
+  click vào `span` tiêu đề bị container danh sách chặn pointer event; chưa có
+  bằng chứng mất hoặc ẩn dữ liệu. Evidence artifact `9649684608`, digest
+  `c077cf63287a7163e118b0bd1733990c3dd5c40def393cc37a95c4efb95f2df1`.
+- Candidate `-17` khóa semantic button của hàng phiên, xác minh accessible name,
+  dùng `Enter` và policy cấm pointer click. `-16` giữ bất biến, không rerun.
+- Kế hoạch hiện hành: `docs/release-vi-v0.32.1-17-plan.md`. Latest vẫn là
+  `vi-v0.32.0-1`.
+
 ## Cập nhật 2026-08-27 — candidate v32.1-16 kích hoạt action dự án bằng bàn phím
 
 - `vi-v0.32.1-15` build/stage xanh tại run `33074177455`; installer 340.639.925
@@ -12,7 +27,7 @@
   `e366e082be5442eb12b310367fd51217ffee705cfe525274f04386ea6937524f`.
 - Candidate `-16` dùng `Enter` cho Ẩn, Xóa trên card và xác nhận Xóa; policy khóa
   các đường này. `-15` giữ bất biến, không rerun/promotion.
-- Kế hoạch hiện hành: `docs/release-vi-v0.32.1-16-plan.md`. Latest vẫn là
+- Kế hoạch lịch sử: `docs/release-vi-v0.32.1-16-plan.md`. Latest vẫn là
   `vi-v0.32.0-1`.
 
 ## Cập nhật 2026-08-27 — candidate v32.1-15 khóa đúng nút điều hướng Dự án

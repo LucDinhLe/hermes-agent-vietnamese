@@ -29,7 +29,7 @@ permissions:
 jobs:
   exact-bytes:
     name: Byte và chữ ký — ${{ matrix.id }}
-    if: inputs.tag != 'vi-v0.32.0-1' && inputs.tag != 'vi-v0.32.1-16'
+    if: inputs.tag != 'vi-v0.32.0-1' && inputs.tag != 'vi-v0.32.1-17'
     runs-on: ${{ matrix.runner }}
     environment: release-smoke
     strategy:
@@ -127,7 +127,7 @@ jobs:
 
   evidence:
     name: Đối chiếu smoke thật trên đúng máy và artifact
-    if: inputs.tag != 'vi-v0.32.0-1' && inputs.tag != 'vi-v0.32.1-16'
+    if: inputs.tag != 'vi-v0.32.0-1' && inputs.tag != 'vi-v0.32.1-17'
     needs: exact-bytes
     runs-on: ubuntu-24.04
     environment: release-production
@@ -310,7 +310,7 @@ jobs:
 
   v321-windows-lifecycle:
     name: V32.1 Windows x64 — project/session safety và full lifecycle
-    if: inputs.tag == 'vi-v0.32.1-16' && inputs.release_class == 'community-prerelease'
+    if: inputs.tag == 'vi-v0.32.1-17' && inputs.release_class == 'community-prerelease'
     permissions:
       # GitHub hides draft releases from read-only tokens. Write is required to
       # resolve/download the private draft; this job never mutates the release.
