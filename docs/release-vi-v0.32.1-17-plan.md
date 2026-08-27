@@ -1,9 +1,9 @@
 # Kế hoạch candidate `vi-v0.32.1-17`
 
 Ngày chốt phạm vi: 2026-08-27
-Trạng thái: **Technical GO cho promotion community pilot Windows x64**. Exact
-candidate đã build/stage và full lifecycle đã vượt đủ 20 gate; công bố chỉ được
-thực hiện qua workflow promotion fail-closed.
+Trạng thái: **đã công khai và hậu kiểm thành công dưới dạng community pilot
+Windows x64**. Exact candidate đã vượt đủ 20 gate và trở thành GitHub Latest
+qua promotion fail-closed `33093581951`.
 
 ## Mục tiêu và audience
 
@@ -108,14 +108,15 @@ tag.
 
 ## Gate còn thiếu
 
-- Không còn gate kỹ thuật nào thiếu cho community pilot Windows x64.
-- Còn thao tác promotion và hậu kiểm công khai. Workflow phải tự trả `-17` về
-  draft và khôi phục v32 làm Latest nếu bất kỳ đối chiếu nào thất bại.
+- Không còn gate kỹ thuật hay public postcheck nào thiếu cho community pilot
+  Windows x64.
 - Stable/final vẫn bị chặn vì installer chưa ký và chưa có bằng chứng riêng cho
   các nền tảng ngoài Windows x64.
 
 ## Rollback và public
 
 Rollback public là `vi-v0.32.0-1`; rollback cài đặt lifecycle là
-`vi-v0.20.4-39`. Public descriptor đã khóa exact size/hash của `-17`; promotion
-và hậu kiểm công khai là hành động cuối cùng.
+`vi-v0.20.4-39`. Promotion run `33093581951` đã xác minh lại draft, lifecycle,
+tag, asset inventory, size, digest và release notes; release ID `377901416` có
+`draft=false`, `prerelease=false` và là GitHub Latest. Cờ GitHub này chỉ phục
+vụ vị trí Latest, không đổi provenance `community-prerelease` thành stable.

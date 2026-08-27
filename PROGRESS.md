@@ -1,5 +1,21 @@
 # Tiến độ
 
+## Cập nhật 2026-08-27 — v32.1 đã là GitHub Latest
+
+- Promotion fail-closed `33093581951` đạt trong `37s` từ controller
+  `6789469ea1337b64679d4c6605698e475766936b`; rollback tự động không bị kích
+  hoạt.
+- Release ID `377901416`, tag `vi-v0.32.1-17`, `draft=false`,
+  `prerelease=false`, đúng 5 asset và là GitHub Latest. Đây vẫn là community
+  pilot Windows x64, không phải stable/final.
+- Installer công khai: 340.644.403 byte, SHA-256
+  `7e3e5870228254fec634140391fe01042e50f1b483d9d53ff171636837d65884`;
+  Authenticode `NotSigned`.
+- Tag tiếp tục trỏ đúng product commit
+  `a6833c9400adf640c01a258f354cf96551550c75`. V32
+  `vi-v0.32.0-1` giữ vai trò previous/public rollback; `vi-v0.20.4-39` giữ vai
+  trò rollback cài đặt đã nghiệm thu.
+
 ## Cập nhật 2026-08-27 — full lifecycle `-17` đạt, sẵn sàng promotion
 
 - Controller `42082bb0681ff05d7785f5beda05a50a8bd5365b` chạy lifecycle

@@ -4,10 +4,10 @@ Ngày khóa rà soát source: 2026-08-27
 
 ## Quyết định
 
-**Technical GO cho promotion community pilot Windows 10/11 x64** của
-`vi-v0.32.1-17`. Exact installer đã vượt đủ 20 gate của full lifecycle; không
-được gọi là stable/final vì Authenticode vẫn `NotSigned` và chưa có bằng chứng
-riêng cho nền tảng khác.
+**Technical GO và public promotion hoàn tất** cho community pilot Windows 10/11
+x64 `vi-v0.32.1-17`. Exact installer đã vượt đủ 20 gate của full lifecycle và
+public postcheck; không được gọi là stable/final vì Authenticode vẫn
+`NotSigned` và chưa có bằng chứng riêng cho nền tảng khác.
 
 `vi-v0.32.1-2` đã dừng ở source gate trước khi build vì bài kiểm thử cũ trộn
 ghi chú ứng viên với descriptor bản đang công khai. Tag và run được giữ nguyên
@@ -192,10 +192,9 @@ size hoặc SHA-256 của candidate trên.
 
 ## Gate còn thiếu
 
-1. Không còn gate kỹ thuật nào thiếu cho community pilot Windows x64.
-2. Còn promotion fail-closed và hậu kiểm GitHub công khai bằng exact descriptor,
-   release notes, tag, asset inventory, size, digest và Latest.
-3. Stable/final vẫn bị chặn bởi chữ ký số và bằng chứng các nền tảng còn lại.
+1. Không còn gate kỹ thuật hoặc hậu kiểm công khai nào thiếu cho community
+   pilot Windows x64.
+2. Stable/final vẫn bị chặn bởi chữ ký số và bằng chứng các nền tảng còn lại.
 
 ## Dữ liệu và an toàn người dùng
 
@@ -224,8 +223,9 @@ size hoặc SHA-256 của candidate trên.
 
 ## Hành động public
 
-Đã push/tag candidate bất biến `-2` đến `-17`; draft riêng tư đạt tới `-17`.
-Không candidate nào được công bố và GitHub Latest vẫn là `vi-v0.32.0-1`.
+Đã push/tag candidate bất biến `-2` đến `-17`; chỉ `vi-v0.32.1-17` được công
+khai sau khi full lifecycle đạt. Các candidate cũ giữ nguyên trạng thái bằng
+chứng và không được promotion.
 Staging/lifecycle `-6` là run `33051008029` / `33052037180`; evidence artifact
 `9638286238`. Staging/lifecycle `-7` là `33053462058` / `33054540916`;
 evidence artifact `9639300595`.
@@ -271,7 +271,12 @@ Lifecycle attempt hai là `33087597148`; evidence artifact `9653267598`, digest
 Lifecycle đạt cuối cùng là `33089128551`; evidence artifact `9655062453`,
 digest `19ff0428d3bdebad2643bbe854138b171932d8d80cd7d98b5d02792dbb82bfa8`.
 
+Promotion `33093581951` đạt trong `37s`. Release ID `377901416` hiện có
+`draft=false`, `prerelease=false`, đúng 5 asset và là GitHub Latest. Installer
+công khai vẫn đúng 340.644.403 byte, SHA-256
+`7e3e5870228254fec634140391fe01042e50f1b483d9d53ff171636837d65884`.
+
 ## Bước nhỏ nhất tiếp theo
 
-Commit public descriptor/docs, chạy promotion đúng một lần với lifecycle
-`33089128551`, rồi hậu kiểm Latest và toàn bộ asset công khai.
+Theo dõi phản hồi community pilot; nếu có lỗi nghiêm trọng thì khôi phục
+`vi-v0.32.0-1` làm Latest. V33 là phạm vi riêng, không sửa byte/tag của v32.1.
