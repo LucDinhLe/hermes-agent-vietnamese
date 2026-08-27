@@ -30,10 +30,10 @@ const fixtureScript = fs.readFileSync(new URL('../../apps/desktop/e2e/fixtures.t
 
 const candidate = {
   commit: 'a'.repeat(40),
-  fileName: 'Hermes-0.32.1-vi.3-win-x64.exe',
+  fileName: 'Hermes-0.32.1-vi.4-win-x64.exe',
   sha256: '1'.repeat(64),
   size: 320_000_000,
-  tag: 'vi-v0.32.1-3'
+  tag: 'vi-v0.32.1-4'
 }
 const previous = {
   commit: V32_SOURCE_COMMIT,

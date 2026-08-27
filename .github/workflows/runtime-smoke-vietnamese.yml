@@ -29,7 +29,7 @@ permissions:
 jobs:
   exact-bytes:
     name: Byte và chữ ký — ${{ matrix.id }}
-    if: inputs.tag != 'vi-v0.32.0-1' && inputs.tag != 'vi-v0.32.1-3'
+    if: inputs.tag != 'vi-v0.32.0-1' && inputs.tag != 'vi-v0.32.1-4'
     runs-on: ${{ matrix.runner }}
     environment: release-smoke
     strategy:
@@ -127,7 +127,7 @@ jobs:
 
   evidence:
     name: Đối chiếu smoke thật trên đúng máy và artifact
-    if: inputs.tag != 'vi-v0.32.0-1' && inputs.tag != 'vi-v0.32.1-3'
+    if: inputs.tag != 'vi-v0.32.0-1' && inputs.tag != 'vi-v0.32.1-4'
     needs: exact-bytes
     runs-on: ubuntu-24.04
     environment: release-production
@@ -310,7 +310,7 @@ jobs:
 
   v321-windows-lifecycle:
     name: V32.1 Windows x64 — project/session safety và full lifecycle
-    if: inputs.tag == 'vi-v0.32.1-3' && inputs.release_class == 'community-prerelease'
+    if: inputs.tag == 'vi-v0.32.1-4' && inputs.release_class == 'community-prerelease'
     permissions:
       contents: read
     runs-on: windows-2025
@@ -361,7 +361,7 @@ jobs:
           if ($LASTEXITCODE -ne 0 -or $expectedCommit -notmatch '^[0-9a-f]{40}$') {
             throw 'Cannot resolve exact checked-out candidate commit'
           }
-          $tagCommit = (gh api "repos/$env:GITHUB_REPOSITORY/commits/$env:TAG" --jq .sha).Trim()
+          $tagCommit = (git rev-list -n 1 $env:TAG).Trim()
           if ($LASTEXITCODE -ne 0 -or $tagCommit -ne $expectedCommit) {
             throw "Candidate tag does not match checked-out harness commit: tag=$tagCommit checkout=$expectedCommit"
           }
@@ -373,16 +373,26 @@ jobs:
           $rollbackDir = Join-Path $inputRoot 'rollback'
           New-Item -ItemType Directory -Path $candidateDir, $previousDir, $rollbackDir -Force | Out-Null
 
-          $releaseJson = gh api --paginate "repos/$env:GITHUB_REPOSITORY/releases?per_page=100" --slurp
-          if ($LASTEXITCODE -ne 0) { throw 'Cannot enumerate candidate drafts' }
-          $pages = $releaseJson | ConvertFrom-Json
-          $matches = @()
-          foreach ($page in @($pages)) {
-            $matches += @($page | Where-Object { $_.tag_name -eq $env:TAG })
+          function Invoke-GhWithRetry {
+            param(
+              [Parameter(Mandatory = $true)] [string[]] $Arguments,
+              [Parameter(Mandatory = $true)] [string] $Label
+            )
+            for ($attempt = 1; $attempt -le 4; $attempt += 1) {
+              $output = @(& gh @Arguments)
+              if ($LASTEXITCODE -eq 0) { return ($output -join [Environment]::NewLine) }
+              if ($attempt -eq 4) { throw "$Label failed after $attempt attempts" }
+              $delay = 10 * $attempt
+              Write-Warning "$Label failed on attempt $attempt; retrying in $delay seconds"
+              Start-Sleep -Seconds $delay
+            }
           }
-          if ($matches.Count -ne 1) { throw "Expected one draft for $env:TAG, got $($matches.Count)" }
-          $release = $matches[0]
-          if ($release.draft -ne $true -or $release.prerelease -ne $true) {
+
+          $releaseJson = Invoke-GhWithRetry `
+            -Arguments @('release', 'view', $env:TAG, '--repo', $env:GITHUB_REPOSITORY, '--json', 'isDraft,isPrerelease,assets') `
+            -Label 'Cannot resolve the exact candidate draft'
+          $release = $releaseJson | ConvertFrom-Json
+          if ($release.isDraft -ne $true -or $release.isPrerelease -ne $true) {
             throw 'v32.1 candidate is not a private prerelease draft'
           }
           $assets = @($release.assets | Where-Object { $_.name -eq 'Hermes-Vietnamese-Windows-x64-Setup.exe' })
@@ -397,16 +407,15 @@ jobs:
 
           $candidatePath = Join-Path $candidateDir 'Hermes-Vietnamese-Windows-x64-Setup.exe'
           if ($env:CACHE_HIT -ne 'true') {
-            $headers = @{
-              Accept = 'application/octet-stream'
-              Authorization = "Bearer $env:GH_TOKEN"
-              'X-GitHub-Api-Version' = '2022-11-28'
-            }
-            Invoke-WebRequest -Uri $asset.url -Headers $headers -OutFile $candidatePath
-            gh release download vi-v0.32.0-1 --repo $env:GITHUB_REPOSITORY --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir $previousDir
-            if ($LASTEXITCODE -ne 0) { throw 'Cannot download pinned public v32 installer' }
-            gh release download vi-v0.20.4-39 --repo $env:GITHUB_REPOSITORY --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir $rollbackDir
-            if ($LASTEXITCODE -ne 0) { throw 'Cannot download pinned vi39 installer' }
+            Invoke-GhWithRetry `
+              -Arguments @('release', 'download', $env:TAG, '--repo', $env:GITHUB_REPOSITORY, '--pattern', 'Hermes-Vietnamese-Windows-x64-Setup.exe', '--dir', $candidateDir, '--clobber') `
+              -Label 'Cannot download the exact v32.1 candidate' | Out-Null
+            Invoke-GhWithRetry `
+              -Arguments @('release', 'download', 'vi-v0.32.0-1', '--repo', $env:GITHUB_REPOSITORY, '--pattern', 'Hermes-Vietnamese-Windows-x64-Setup.exe', '--dir', $previousDir, '--clobber') `
+              -Label 'Cannot download pinned public v32 installer' | Out-Null
+            Invoke-GhWithRetry `
+              -Arguments @('release', 'download', 'vi-v0.20.4-39', '--repo', $env:GITHUB_REPOSITORY, '--pattern', 'Hermes-Vietnamese-Windows-x64-Setup.exe', '--dir', $rollbackDir, '--clobber') `
+              -Label 'Cannot download pinned vi39 installer' | Out-Null
           }
 
           $records = @(

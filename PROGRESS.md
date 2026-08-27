@@ -17,10 +17,13 @@
   `test_mcp_startup.py` đạt 6/6 trong process sạch.
 - Candidate `vi-v0.32.1-2` dừng ở source gate trước build do test cũ trộn
   candidate notes với public descriptor; tag/run giữ nguyên làm bằng chứng.
-- Candidate kế nhiệm được đặt là `vi-v0.32.1-3` / `0.32.1-vi.3`; local
+- Candidate `vi-v0.32.1-3` đã build/stage draft riêng tư; lifecycle dừng trước
+  download do parser `--slurp` không tìm thấy draft. Tag/draft/run giữ bất biến,
+  không promotion.
+- Candidate kế nhiệm được đặt là `vi-v0.32.1-4` / `0.32.1-vi.4`; local
   `vi-v0.32.1-1` cũ giữ bất biến và bị supersede cho mục tiêu release vì chưa
   có hotfix. Chưa build/tag/push/stage/public/đổi Latest.
-- Release plan: `docs/release-vi-v0.32.1-3-plan.md`. Latest tiếp tục NO-GO cho
+- Release plan: `docs/release-vi-v0.32.1-4-plan.md`. Latest tiếp tục NO-GO cho
   tới khi exact artifact chứng minh Authenticode `NotSigned`, không có signer và
   vòng đời trên Windows guest cô lập đạt, gồm update v32 → v32.1 và persistence
   project/session.
