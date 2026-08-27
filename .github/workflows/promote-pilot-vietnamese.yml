@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       staging_run_id:
-        description: 'Run ID dựng/staging đã xanh trên toàn bộ artifact'
+        description: 'Run ID đã dựng và upload exact artifact; chỉ cho phép success hoặc lỗi duy nhất ở postcheck tải lại'
         required: true
         type: string
       controller_sha:
@@ -229,8 +229,59 @@ jobs:
             > candidate-tag-binding.json
           run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID")"
           test "$(jq -r .name <<<"$run_json")" = "Dựng và staging Hermes Vietnamese"
-          test "$(jq -r .conclusion <<<"$run_json")" = "success"
-          test "$(jq -r .head_sha <<<"$run_json")" = "$candidate_commit"
+          staging_harness_commit="$(node -p "require('./candidate/candidate-provenance.json').validationHarnessCommit")"
+          [[ "$staging_harness_commit" =~ ^[0-9a-f]{40}$ ]]
+          test "$(jq -r .head_sha <<<"$run_json")" = "$staging_harness_commit"
+          staging_conclusion="$(jq -r .conclusion <<<"$run_json")"
+          if [[ "$staging_conclusion" != "success" ]]; then
+            test "$staging_conclusion" = "failure"
+            gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$STAGING_RUN_ID/jobs?per_page=100" \
+              --slurp > staging-job-pages.json
+            node <<'NODE'
+          const fs = require('fs')
+          const pages = JSON.parse(fs.readFileSync('staging-job-pages.json', 'utf8'))
+          const jobs = pages.flatMap(page => page.jobs || [])
+          const requiredSuccess = new Set([
+            'Kiểm tra commit và hợp đồng ứng viên',
+            'Khóa harness nghiệm thu độc lập',
+            'Dựng một lần — Windows x64',
+            'Dựng một lần — Windows ARM64',
+            'Dựng một lần — macOS Apple Silicon',
+            'Dựng một lần — macOS Intel',
+            'Dựng một lần — Linux x64',
+            'Dựng một lần — Linux ARM64',
+          ])
+          if (jobs.length !== requiredSuccess.size + 1) {
+            throw new Error(`unexpected staging job count: ${jobs.length}`)
+          }
+          for (const name of requiredSuccess) {
+            const matches = jobs.filter(job => job.name === name)
+            if (matches.length !== 1 || matches[0].conclusion !== 'success') {
+              throw new Error(`required staging job is not uniquely successful: ${name}`)
+            }
+          }
+          const stage = jobs.find(job => job.name === 'Upload đúng byte vào draft')
+          if (!stage || stage.conclusion !== 'failure') {
+            throw new Error('draft upload job must be the sole failed job')
+          }
+          const failed = jobs.flatMap(job =>
+            (job.steps || [])
+              .filter(step => step.conclusion === 'failure')
+              .map(step => ({ job: job.name, step: step.name }))
+          )
+          if (
+            failed.length !== 1 ||
+            failed[0].job !== 'Upload đúng byte vào draft' ||
+            failed[0].step !== 'Tải lại và đối chiếu byte đã staging'
+          ) {
+            throw new Error(`staging failure is not postcheck-only: ${JSON.stringify(failed)}`)
+          }
+          const create = (stage.steps || []).filter(step => step.name === 'Tạo draft mới, tuyệt đối không public')
+          if (create.length !== 1 || create[0].conclusion !== 'success') {
+            throw new Error('draft creation/upload did not complete before postcheck failure')
+          }
+          NODE
+          fi
 
           node scripts/validate-pilot-release-evidence.mjs \
             candidate/pilot-release-evidence.json \

@@ -17,6 +17,12 @@
   commit dù checkout là product tag. Build step hiện pin `GITHUB_SHA` của mọi
   child process về product commit; controller commit tiếp tục được lưu riêng
   trong signing/evidence metadata.
+- Run `33101754226` sau đó dựng xanh cả sáu target và upload đủ 27 asset vào
+  draft. Hậu kiểm tải lại gặp HTTP 500 từ GitHub ở asset RPM sau khi upload;
+  manifest/provenance nhỏ đã tải lại được và khớp. Promotion gate chỉ cho phép
+  ngoại lệ này khi API chứng minh tám job nguồn/harness/build đều success,
+  draft creation success và đúng một failed step là postcheck tải lại; promotion
+  vẫn tự tải, đối chiếu inventory, kích thước, API digest và SHA-256 trước public.
 - Chốt successor `vi-v0.32.1-18`; không sửa asset/tag `-17` đã public và không
   đưa tính năng v33 vào phạm vi.
 - Release workflow hiện có sẽ dựng đủ sáu target native cho `-18`. README và
