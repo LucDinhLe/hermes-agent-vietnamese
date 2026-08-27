@@ -1,5 +1,24 @@
 # Tiến độ
 
+## Cập nhật 2026-08-27 — full lifecycle `-17` đạt, sẵn sàng promotion
+
+- Controller `42082bb0681ff05d7785f5beda05a50a8bd5365b` chạy lifecycle
+  `33089128551` trên đúng installer bất biến `vi-v0.32.1-17` và đạt sau
+  `40m48s`; không rebuild, không tạo `-18`.
+- Cả 20 gate bắt buộc đều đạt: cài mới, onboarding, runtime/relaunch, an toàn
+  Dự án/phiên, UX, compaction, safe tool, update v32→v32.1, repair, hai chế độ
+  uninstall, rollback vi39 và không còn process dư.
+- Safety receipt xác nhận 1 session, 2 message, digest nội dung
+  `daec8ddacea0b18aac663ff4ebb4ccf492c1de3fb43b6c3f1c263db8e0a1390e`,
+  `sessionHidden=0`, `sessionArchived=0`; relaunch trở về `all-projects`.
+- Evidence artifact `9655062453`, digest
+  `19ff0428d3bdebad2643bbe854138b171932d8d80cd7d98b5d02792dbb82bfa8`;
+  receipt seal
+  `435a8c34d0913ca120014f95e9797b50ad7f0f5c80f8ae4f93bf50e04af00238`.
+- Quyết định: Technical GO cho promotion community pilot Windows x64; stable
+  vẫn bị chặn vì Authenticode `NotSigned` và chưa có exact-byte evidence cho
+  các nền tảng khác.
+
 ## Cập nhật 2026-08-27 — lifecycle `-17` chờ khóa SQLite thay vì fail giả
 
 - Controller `598830c2d1d96774f800d28c067dbeade7b9d2fa` đã chạy lifecycle

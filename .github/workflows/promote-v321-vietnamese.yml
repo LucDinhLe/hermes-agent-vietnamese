@@ -8,11 +8,11 @@ on:
         required: true
         type: string
       windows_x64_sha256:
-        description: 'SHA-256 exact của installer Windows x64 đã ký'
+        description: 'SHA-256 exact của installer Windows x64 đã khóa byte'
         required: true
         type: string
       windows_x64_size:
-        description: 'Kích thước byte exact của installer Windows x64 đã ký'
+        description: 'Kích thước exact của installer Windows x64 đã khóa byte'
         required: true
         type: string
       staging_run_id:

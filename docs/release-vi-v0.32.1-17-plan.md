@@ -1,8 +1,9 @@
 # Kế hoạch candidate `vi-v0.32.1-17`
 
 Ngày chốt phạm vi: 2026-08-27
-Trạng thái: exact candidate đã build/stage; release vẫn **NO-GO** cho tới khi
-lifecycle mới vượt đủ gate. GitHub Latest vẫn là `vi-v0.32.0-1`.
+Trạng thái: **Technical GO cho promotion community pilot Windows x64**. Exact
+candidate đã build/stage và full lifecycle đã vượt đủ 20 gate; công bố chỉ được
+thực hiện qua workflow promotion fail-closed.
 
 ## Mục tiêu và audience
 
@@ -63,6 +64,23 @@ hiển thị; không có bằng chứng mất/ẩn session. Evidence artifact `9
 digest `9e37c79770f5637a3fe08bbe597c6ba9a603cd0626818002833f2278171f448b`.
 Candidate `-17` tiếp tục giữ nguyên byte.
 
+## Lifecycle đạt cuối cùng
+
+Controller `42082bb0681ff05d7785f5beda05a50a8bd5365b` chạy lifecycle
+`33089128551` trên đúng byte candidate `-17` và hoàn tất sau `40m48s`. Cả 20
+gate bắt buộc đều `passed`, gồm cài mới, onboarding, runtime đóng gói, mở lại,
+an toàn Dự án/phiên, UX, compaction, safe tool, update v32→v32.1, repair, gỡ
+cài đặt giữ dữ liệu, gỡ cài đặt xóa dữ liệu, rollback vi39 và không còn process
+dư.
+
+Biên nhận an toàn dữ liệu xác nhận 1 session, 2 message, digest nội dung
+`daec8ddacea0b18aac663ff4ebb4ccf492c1de3fb43b6c3f1c263db8e0a1390e`,
+`sessionHidden=0`, `sessionArchived=0`; Ẩn/Xóa chỉ đổi metadata Dự án và scope
+sau relaunch là `all-projects`. Evidence artifact `9655062453`, digest
+`19ff0428d3bdebad2643bbe854138b171932d8d80cd7d98b5d02792dbb82bfa8`;
+receipt seal
+`435a8c34d0913ca120014f95e9797b50ad7f0f5c80f8ae4f93bf50e04af00238`.
+
 ## Quyết định không tạo `-18`
 
 Installer `-17` không đổi một byte. Theo rulebook, chỉ tăng candidate khi mã
@@ -90,12 +108,14 @@ tag.
 
 ## Gate còn thiếu
 
-- Full lifecycle mới: update v32→v32.1, repair, uninstall giữ/xóa dữ liệu,
-  rollback vi39 và không còn process dư.
-- Seal evidence của run mới và validate promotion bằng exact artifact `-17`.
-- Controller commit cập nhật public descriptor/hash và promotion hậu kiểm.
+- Không còn gate kỹ thuật nào thiếu cho community pilot Windows x64.
+- Còn thao tác promotion và hậu kiểm công khai. Workflow phải tự trả `-17` về
+  draft và khôi phục v32 làm Latest nếu bất kỳ đối chiếu nào thất bại.
+- Stable/final vẫn bị chặn vì installer chưa ký và chưa có bằng chứng riêng cho
+  các nền tảng ngoài Windows x64.
 
 ## Rollback và public
 
 Rollback public là `vi-v0.32.0-1`; rollback cài đặt lifecycle là
-`vi-v0.20.4-39`. Chưa công khai `-17`; Latest và người dùng hiện tại chưa đổi.
+`vi-v0.20.4-39`. Public descriptor đã khóa exact size/hash của `-17`; promotion
+và hậu kiểm công khai là hành động cuối cùng.

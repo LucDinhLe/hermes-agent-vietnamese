@@ -4,9 +4,10 @@ Ngày khóa rà soát source: 2026-08-27
 
 ## Quyết định
 
-**Candidate staged, Release NO-GO** cho `vi-v0.32.1-17` tới khi một lifecycle
-run mới vượt đủ update, repair, uninstall và rollback trên chính installer đã
-khóa byte. GitHub Latest vẫn là `vi-v0.32.0-1`.
+**Technical GO cho promotion community pilot Windows 10/11 x64** của
+`vi-v0.32.1-17`. Exact installer đã vượt đủ 20 gate của full lifecycle; không
+được gọi là stable/final vì Authenticode vẫn `NotSigned` và chưa có bằng chứng
+riêng cho nền tảng khác.
 
 `vi-v0.32.1-2` đã dừng ở source gate trước khi build vì bài kiểm thử cũ trộn
 ghi chú ứng viên với descriptor bản đang công khai. Tag và run được giữ nguyên
@@ -146,6 +147,16 @@ transaction của Hermes và nhận `database is locked`. Screenshot cho thấy 
 Đây tiếp tục là lỗi đồng bộ đọc của harness. Controller kế tiếp chỉ retry lỗi
 SQLite `BUSY/LOCKED` trong `expect.poll`; điều kiện pass dữ liệu không đổi.
 
+Controller `42082bb0681ff05d7785f5beda05a50a8bd5365b` chạy lifecycle lần ba
+`33089128551` trên đúng candidate commit/size/SHA-256 và đạt toàn bộ 20 gate
+sau `40m48s`. Project/session receipt xác nhận 1 session, 2 message, digest
+`daec8ddacea0b18aac663ff4ebb4ccf492c1de3fb43b6c3f1c263db8e0a1390e`,
+`sessionHidden=0`, `sessionArchived=0`; Ẩn/Xóa metadata Dự án không làm đổi nội
+dung phiên và relaunch trở về `all-projects`. Evidence artifact `9655062453`,
+digest `19ff0428d3bdebad2643bbe854138b171932d8d80cd7d98b5d02792dbb82bfa8`;
+receipt seal
+`435a8c34d0913ca120014f95e9797b50ad7f0f5c80f8ae4f93bf50e04af00238`.
+
 ## Source candidate
 
 | Thuộc tính                | Giá trị                                    |
@@ -181,15 +192,10 @@ size hoặc SHA-256 của candidate trên.
 
 ## Gate còn thiếu
 
-1. Hoàn tất full local gate cho controller-only change và push exact controller
-   commit.
-2. Dispatch lifecycle mới từ controller commit, tải lại chính installer `-17`;
-   không rebuild và không thay draft.
-3. Exact lifecycle trên GitHub-hosted Windows VM dùng một lần, gồm update
-   v32→v32.1, project/session safety, repair, uninstall và rollback vi39.
-4. Controller commit cập nhật `.github/public-release.json` bằng exact
-   size/hash; promotion chỉ chạy sau khi mọi receipt đạt. Chủ dự án đã cho phép
-   hành động public ngày 2026-08-27.
+1. Không còn gate kỹ thuật nào thiếu cho community pilot Windows x64.
+2. Còn promotion fail-closed và hậu kiểm GitHub công khai bằng exact descriptor,
+   release notes, tag, asset inventory, size, digest và Latest.
+3. Stable/final vẫn bị chặn bởi chữ ký số và bằng chứng các nền tảng còn lại.
 
 ## Dữ liệu và an toàn người dùng
 
@@ -202,14 +208,11 @@ size hoặc SHA-256 của candidate trên.
 
 1. Installer chưa ký có thể bị SmartScreen hoặc Smart App Control cảnh báo/chặn;
    người dùng phải được báo rõ và không được hướng dẫn tắt bảo vệ toàn máy.
-2. Candidate `-5` và `-6` chứng minh phiên detached vẫn còn nguyên. Candidate
-   `-12` đã chứng minh phiên project-addressable có đủ nội dung nhưng dừng tại
-   thao tác **Tất cả dự án**. Candidate `-17` phải vượt toàn bộ chuỗi trước khi
-   tuyên bố installer cuối cùng đạt.
+2. Nghiệm thu dùng máy ảo GitHub một lần và mock provider, chưa thay thế smoke
+   trên mọi cấu hình máy người dùng thực tế.
 3. GitHub Actions từng trả lỗi dịch vụ 429/500/502; mọi retry phải kiểm trước để
    không tạo run trùng hoặc vô tình build lại cùng candidate.
-4. v32 public hiện vẫn unsigned; giữ nguyên làm previous/rollback publication
-   cho tới khi v32.1 vượt đủ gate.
+4. V32 public giữ vai trò previous/rollback publication nếu hậu kiểm v32.1 lỗi.
 
 ## Rollback
 
@@ -265,7 +268,10 @@ evidence artifact `9652148218`, digest
 Lifecycle attempt hai là `33087597148`; evidence artifact `9653267598`, digest
 `9e37c79770f5637a3fe08bbe597c6ba9a603cd0626818002833f2278171f448b`.
 
+Lifecycle đạt cuối cùng là `33089128551`; evidence artifact `9655062453`,
+digest `19ff0428d3bdebad2643bbe854138b171932d8d80cd7d98b5d02792dbb82bfa8`.
+
 ## Bước nhỏ nhất tiếp theo
 
-Push exact controller commit, dispatch một lifecycle run mới trên chính byte
-`vi-v0.32.1-17`, và chỉ promotion khi mọi receipt đều xanh.
+Commit public descriptor/docs, chạy promotion đúng một lần với lifecycle
+`33089128551`, rồi hậu kiểm Latest và toàn bộ asset công khai.

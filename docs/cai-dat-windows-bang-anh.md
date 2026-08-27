@@ -2,7 +2,7 @@
 
 Hướng dẫn này dành cho người tải Hermes Vietnamese bằng Microsoft Edge trên Windows 10 hoặc Windows 11. Bạn không cần mở Terminal, cài Git, cài Python hoặc sửa tệp cấu hình.
 
-> **Vì sao Windows cảnh báo?** Bản cộng đồng đã nộp hồ sơ SignPath Foundation và đang chờ xét duyệt ký số. Tệp hiện chưa có chữ ký xác minh nhà phát hành và chưa có nhiều lượt tải, nên Edge hoặc Windows SmartScreen có thể hiện cảnh báo uy tín. Dòng `Publisher: Unknown` trong các ảnh dưới đây phản ánh trạng thái chưa ký, không phải kết luận tệp an toàn hoặc có mã độc.
+> **Vì sao Windows cảnh báo?** Tệp hiện chưa có chữ ký xác minh nhà phát hành và chưa có nhiều lượt tải, nên Edge hoặc Windows SmartScreen có thể hiện cảnh báo uy tín. Dòng `Publisher: Unknown` trong các ảnh dưới đây phản ánh trạng thái chưa ký, không phải kết luận tệp an toàn hoặc có mã độc.
 
 Chỉ tiếp tục khi đủ ba điều kiện:
 
@@ -12,13 +12,13 @@ Chỉ tiếp tục khi đủ ba điều kiện:
 
 ## 1. Chọn đúng bộ cài
 
-1. Mở [bản phát hành vi-v0.32.0-1](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.0-1).
+1. Mở [bản phát hành vi-v0.32.1-17](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-17).
 2. Trong phần **Assets**, chọn:
    - Máy Windows x64 thông dụng: `Hermes-Vietnamese-Windows-x64-Setup.exe`.
-   - V32 hiện chỉ phát hành artifact đã nghiệm thu cho máy Windows x64.
+   - V32.1 hiện chỉ phát hành artifact đã nghiệm thu cho máy Windows x64.
 3. Chỉ tải tệp từ kho `LucDinhLe/hermes-agent-vietnamese` trên GitHub.
 
-Với bản v32.0 Windows x64, tệp đúng có kích thước `341.176.379` byte và SHA-256 `efc3d863a37882c669d571456711264e2aa4f60b66bf9e67ff2441ce491ceeac`.
+Với bản v32.1 Windows x64, tệp đúng có kích thước `340.644.403` byte và SHA-256 `7e3e5870228254fec634140391fe01042e50f1b483d9d53ff171636837d65884`.
 
 Nếu chưa biết máy dùng x64 hay ARM64, nhấn `Windows + I`, chọn **Hệ thống → Giới thiệu** và xem dòng **Loại hệ thống**.
 

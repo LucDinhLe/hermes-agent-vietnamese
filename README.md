@@ -13,14 +13,14 @@ Hermes Vietnamese đóng gói phần lõi đó thành trải nghiệm Desktop Vi
 Dự án được phát triển từ [Hermes Agent](https://github.com/NousResearch/hermes-agent) của Nous Research theo [giấy phép MIT](LICENSE), do [Lê Đình Lực](https://github.com/LucDinhLe) phát triển và duy trì như một dự án cá nhân vì cộng đồng. Đây là bản phân phối độc lập, không phải bản phát hành chính thức của Nous Research, OpenAI, Anthropic, Google, Microsoft hoặc Apple.
 
 <p align="center">
-  <a href="https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.0-1"><img src="https://img.shields.io/badge/Tải_bản_vi--v0.32.0--1-Windows_x64-F97316?style=for-the-badge" alt="Tải Hermes Vietnamese"></a>
+  <a href="https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-17"><img src="https://img.shields.io/badge/Tải_bản_vi--v0.32.1--17-Windows_x64-F97316?style=for-the-badge" alt="Tải Hermes Vietnamese"></a>
   <a href="README.vi.md"><img src="https://img.shields.io/badge/Hướng_dẫn-Cài_đặt_%26_kết_nối-DC2626?style=for-the-badge" alt="Hướng dẫn cài đặt và kết nối"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/Giấy_phép-MIT-16A34A?style=for-the-badge" alt="Giấy phép MIT"></a>
 </p>
 
-> **Bản tải mặc định/Latest: [Hermes Vietnamese v32.0](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.0-1)** (`vi-v0.32.0-1`) là **community pilot công khai, chưa phải stable**. Exact Windows x64 đã qua fresh install, update, relaunch, persistence, repair, uninstall và rollback. Bộ cài hiện chưa ký số.
+> **Bản tải mặc định/Latest: [Hermes Vietnamese v32.1](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-17)** (`vi-v0.32.1-17`) là **community pilot công khai, chưa phải stable**. Exact Windows x64 đã qua cài mới, cập nhật từ v32, mở lại, bảo toàn phiên/Dự án, repair, hai chế độ gỡ cài đặt và rollback. Bộ cài hiện chưa ký số.
 >
-> Tải bản hiện tại: [Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.0-1/Hermes-Vietnamese-Windows-x64-Setup.exe). V32 chưa quảng cáo Windows ARM64, macOS hoặc Linux khi chưa có exact-byte evidence riêng.
+> Tải bản hiện tại: [Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-17/Hermes-Vietnamese-Windows-x64-Setup.exe). V32.1 chưa quảng cáo Windows ARM64, macOS hoặc Linux khi chưa có exact-byte evidence riêng.
 
 ## Điểm mạnh so với cách tự cài Hermes Agent từ mã nguồn
 
@@ -40,9 +40,9 @@ Hermes Vietnamese không tặng kèm model AI, tài khoản trả phí hoặc h�
 
 ### Bước 1. Tải về và cài đặt
 
-> **Bản tải mặc định hiện tại:** [vi-v0.32.0-1](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.0-1), community pilot Latest cho Windows x64, chưa phải stable và chưa ký số.
+> **Bản tải mặc định hiện tại:** [vi-v0.32.1-17](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-17), community pilot Latest cho Windows x64, chưa phải stable và chưa ký số.
 
-Mở [trang phát hành vi-v0.32.0-1](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.0-1) và chạy bộ cài Windows x64. Trong lần mở đầu tiên:
+Mở [trang phát hành vi-v0.32.1-17](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-17) và chạy bộ cài Windows x64. Trong lần mở đầu tiên:
 
 1. Chọn **Tiếng Việt** hoặc **English**.
 2. Chọn cài Hermes trên máy.
@@ -52,9 +52,9 @@ Người dùng không cần mở Terminal, chạy lệnh hay sửa tệp cấu h
 
 Người dùng kỹ thuật có thể xem mã trình cài Windows tại [`scripts/install.ps1`](scripts/install.ps1); cài đặt bằng giao diện không yêu cầu tự chạy tệp này.
 
-| Máy đang dùng           | Tải trực tiếp                                                                                                                                        |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Windows 10/11, chip x64 | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.0-1/Hermes-Vietnamese-Windows-x64-Setup.exe) |
+| Máy đang dùng           | Tải trực tiếp                                                                                                                                      |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows 10/11, chip x64 | [Bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/vi-v0.32.1-17/Hermes-Vietnamese-Windows-x64-Setup.exe) |
 
 > **Windows báo `isn't commonly downloaded` hoặc chỉ hiện nút Delete?** Xem [hướng dẫn cài Windows từng bước bằng hình ảnh](docs/cai-dat-windows-bang-anh.md). Tệp sẽ không tự tiếp tục nếu chỉ chờ; người dùng cần mở **See more**, bấm mũi tên cạnh **Delete** và chọn **Keep anyway**.
 
