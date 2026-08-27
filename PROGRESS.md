@@ -1,5 +1,15 @@
 # Tiến độ
 
+## Cập nhật 2026-08-27 — candidate v32.1-14 khóa đúng lane Windows x64
+
+- Tag `vi-v0.32.1-13` đã push tại commit
+  `d0ec7ea78b1af756b00fb0f50ac8afad83415504`, nhưng pre-dispatch phát hiện
+  workflow build/lifecycle còn khóa v32.1 theo tag `-12`.
+- Không dispatch, không build, không draft và không promotion `-13`; người dùng
+  và Latest không đổi. Tag/commit `-13` giữ bất biến làm bằng chứng NO-GO.
+- Candidate `-14` đồng bộ exact tag giữa ma trận Windows x64, lane lifecycle và
+  contract test. Kế hoạch hiện hành: `docs/release-vi-v0.32.1-14-plan.md`.
+
 ## Cập nhật 2026-08-27 — candidate v32.1-13 kích hoạt Tất cả dự án bằng bàn phím
 
 - `vi-v0.32.1-12` build/stage xanh tại run `33066987915`; installer 340.633.138
@@ -12,7 +22,7 @@
   `3ac5cf6512ba9f62be15fe299fcdbf6aa8035f8ae2d629b8947120d87e71b407`.
 - Candidate `-13` dùng `Enter` trên đúng semantic button và policy cấm pointer
   click tại bước này. `-12` giữ bất biến, không rerun/promotion.
-- Kế hoạch hiện hành: `docs/release-vi-v0.32.1-13-plan.md`. Latest vẫn là
+- Kế hoạch lịch sử: `docs/release-vi-v0.32.1-13-plan.md`. Latest vẫn là
   `vi-v0.32.0-1`.
 
 ## Cập nhật 2026-08-27 — candidate v32.1-12 chờ message flush xuống database

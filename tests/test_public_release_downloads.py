@@ -6,7 +6,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_RELEASE = json.loads(
     (REPO_ROOT / ".github/public-release.json").read_text(encoding="utf-8")
 )
-CANDIDATE_RELEASE = "vi-v0.32.1-13"
+CANDIDATE_RELEASE = "vi-v0.32.1-14"
 
 
 def _read(path: str) -> str:

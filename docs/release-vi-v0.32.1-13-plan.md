@@ -1,8 +1,9 @@
 # Kế hoạch candidate `vi-v0.32.1-13`
 
 Ngày chốt phạm vi: 2026-08-27
-Trạng thái: source đang được kiểm tra; chưa tag/build/stage/public. GitHub Latest
-vẫn là `vi-v0.32.0-1`.
+Trạng thái: **HISTORICAL NO-GO trước build**. Tag đã push nhưng pre-dispatch
+phát hiện workflow Windows x64/lifecycle còn khóa tag `-12`. Không có run,
+installer, draft hoặc promotion; GitHub Latest vẫn là `vi-v0.32.0-1`.
 
 ## Mục tiêu và audience
 
@@ -30,6 +31,18 @@ Candidate `-13` kích hoạt đúng semantic button **Tất cả dự án** bằ
 Policy test cấm quay lại pointer click tại bước này; không dùng force/synthetic
 click, không hạ gate và không sửa dữ liệu Hermes thật.
 
+## Kết quả bất biến
+
+- Exact commit/tag: `d0ec7ea78b1af756b00fb0f50ac8afad83415504` /
+  `vi-v0.32.1-13`.
+- Pre-dispatch kiểm tra remote xác nhận tag đúng commit và không có release/run
+  trùng.
+- Workflow build chỉ thu hẹp Windows x64 khi tag bằng `vi-v0.32.1-12`; workflow
+  lifecycle cũng chỉ chuyển sang lane v32.1 tại tag `-12`. Dispatch `-13` sẽ mở
+  sai ma trận sáu nền tảng và bỏ lane lifecycle bắt buộc, nên bị dừng trước build.
+- Không có installer, draft, lifecycle receipt hoặc thay đổi người dùng. `-13`
+  giữ bất biến, không retag, không build và không promotion.
+
 ## Gate bắt buộc
 
 - Node release/lifecycle/workflow/public contracts; ba Desktop typecheck.
@@ -44,5 +57,4 @@ click, không hạ gate và không sửa dữ liệu Hermes thật.
 
 ## Quyết định hiện tại
 
-**Source under verification, Release NO-GO** cho tới khi exact `-13` vượt toàn
-bộ lifecycle và hậu kiểm promotion.
+**HISTORICAL NO-GO trước build**. Candidate kế nhiệm là `vi-v0.32.1-14`.

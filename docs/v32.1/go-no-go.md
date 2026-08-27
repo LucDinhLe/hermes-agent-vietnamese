@@ -5,7 +5,7 @@ Ngày khóa rà soát source: 2026-08-27
 ## Quyết định
 
 **Source under verification, Release NO-GO** cho ứng viên kế nhiệm
-`vi-v0.32.1-13`.
+`vi-v0.32.1-14`.
 
 `vi-v0.32.1-2` đã dừng ở source gate trước khi build vì bài kiểm thử cũ trộn
 ghi chú ứng viên với descriptor bản đang công khai. Tag và run được giữ nguyên
@@ -84,8 +84,15 @@ dự án** bị semantic button của hàng dự án con chặn. Evidence artifa
 Không có bằng chứng mất hoặc ẩn dữ liệu. `-12` giữ bất biến; candidate `-13`
 kích hoạt đúng nút bằng `Enter` và policy cấm pointer click tại bước này.
 
+Tag `vi-v0.32.1-13` đã push tại exact commit
+`d0ec7ea78b1af756b00fb0f50ac8afad83415504`. Pre-dispatch phát hiện workflow
+build và lifecycle còn khóa lane v32.1 theo tag `-12`; nếu dispatch sẽ mở sai
+ma trận sáu nền tảng và bỏ lane lifecycle bắt buộc. `-13` dừng trước run/build/
+draft, giữ bất biến và không promotion. Candidate `-14` đồng bộ exact tag trong
+cả workflow cùng contract test.
+
 Phần khắc phục yếu điểm v32 và cổng chống mất/ẩn phiên đã hoàn tất trong source.
-Candidate cuối `-13` chưa tag/build/stage hoặc thay GitHub Latest vì chưa có
+Candidate cuối `-14` chưa tag/build/stage hoặc thay GitHub Latest vì chưa có
 exact lifecycle receipt.
 
 ## Source candidate
@@ -93,9 +100,9 @@ exact lifecycle receipt.
 | Thuộc tính                | Giá trị                                    |
 | ------------------------- | ------------------------------------------ |
 | Branch                    | `integration/v32.1-project-session-safety` |
-| Source hardening commit   | Chờ freeze exact candidate `-13`           |
-| Tag dự kiến               | `vi-v0.32.1-13`                            |
-| Desktop version dự kiến   | `0.32.1-vi.13`                             |
+| Source hardening commit   | Chờ freeze exact candidate `-14`           |
+| Tag dự kiến               | `vi-v0.32.1-14`                            |
+| Desktop version dự kiến   | `0.32.1-vi.14`                             |
 | Release class             | `community-prerelease`                     |
 | Phạm vi nghiệm thu/public | Windows 10/11 x64                          |
 
@@ -112,7 +119,7 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 - Repo scan, auto archive và auto prune tắt mặc định.
 - Exact lifecycle harness thêm gate `projectSessionSafety`: hash nội dung và số
   hàng trước/sau Ẩn/Xóa, relaunch, tìm và tiếp tục phiên.
-- `vi-v0.32.1-13` chỉ dựng Windows x64; Authenticode được ghi rõ `NotSigned`,
+- `vi-v0.32.1-14` chỉ dựng Windows x64; Authenticode được ghi rõ `NotSigned`,
   không có signer certificate và không được quảng cáo stable/final.
 - Promotion riêng kiểm tag/commit/size/SHA-256, private draft, staging run,
   lifecycle run, evidence seal và tự rollback về v32 nếu hậu kiểm lỗi.
@@ -122,7 +129,7 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 
 ## Gate còn thiếu
 
-1. Commit/push exact source branch và tạo tag bất biến `vi-v0.32.1-13`.
+1. Commit/push exact source branch và tạo tag bất biến `vi-v0.32.1-14`.
 2. Một lượt build duy nhất của Windows x64 từ exact tag.
 3. Ghi size/SHA-256, xác minh trạng thái `NotSigned` và private draft đúng byte.
 4. Exact lifecycle trên GitHub-hosted Windows VM dùng một lần, gồm update
@@ -144,7 +151,7 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
    người dùng phải được báo rõ và không được hướng dẫn tắt bảo vệ toàn máy.
 2. Candidate `-5` và `-6` chứng minh phiên detached vẫn còn nguyên. Candidate
    `-12` đã chứng minh phiên project-addressable có đủ nội dung nhưng dừng tại
-   thao tác **Tất cả dự án**. Candidate `-13` phải vượt toàn bộ chuỗi trước khi
+   thao tác **Tất cả dự án**. Candidate `-14` phải vượt toàn bộ chuỗi trước khi
    tuyên bố installer cuối cùng đạt.
 3. GitHub Actions từng trả lỗi dịch vụ 429/500/502; mọi retry phải kiểm trước để
    không tạo run trùng hoặc vô tình build lại cùng candidate.
@@ -153,7 +160,7 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 
 ## Rollback
 
-- Nếu promotion v32.1 hậu kiểm lỗi: trả `vi-v0.32.1-13` về draft/prerelease và
+- Nếu promotion v32.1 hậu kiểm lỗi: trả `vi-v0.32.1-14` về draft/prerelease và
   khôi phục `vi-v0.32.0-1` làm GitHub Latest.
 - Rollback cài đặt đã khóa cho lifecycle: `vi-v0.20.4-39`, commit
   `d270974d2651e72f169fffe34c955eeae7977458`, SHA-256
@@ -161,7 +168,7 @@ cuối cùng nếu hồ sơ/descriptor còn cần một commit bổ sung trướ
 
 ## Hành động public
 
-Đã push/tag candidate bất biến `-2` đến `-12`; draft riêng tư đạt tới `-12`.
+Đã push/tag candidate bất biến `-2` đến `-13`; draft riêng tư đạt tới `-12`.
 Không candidate nào được công bố và GitHub Latest vẫn là `vi-v0.32.0-1`.
 Staging/lifecycle `-6` là run `33051008029` / `33052037180`; evidence artifact
 `9638286238`. Staging/lifecycle `-7` là `33053462058` / `33054540916`;
@@ -183,7 +190,10 @@ Build/staging `-12` là `33066987915`; lifecycle `33068095243`; evidence artifac
 `9645067367`, digest
 `3ac5cf6512ba9f62be15fe299fcdbf6aa8035f8ae2d629b8947120d87e71b407`.
 
+Candidate `-13` dừng ở pre-dispatch sau tag push; không có run, build, draft hay
+artifact. Exact commit `d0ec7ea78b1af756b00fb0f50ac8afad83415504`.
+
 ## Bước nhỏ nhất tiếp theo
 
-Freeze exact tag `vi-v0.32.1-13`, build đúng một lần, chạy lifecycle và chỉ
+Freeze exact tag `vi-v0.32.1-14`, build đúng một lần, chạy lifecycle và chỉ
 promotion khi mọi receipt đều xanh.
