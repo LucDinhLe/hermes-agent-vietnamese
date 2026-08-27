@@ -217,6 +217,9 @@ Chỉ dùng user/hồ sơ cô lập. Không đọc, nhập hoặc khôi phục d
 ### G. Staging và promotion
 
 - [ ] Candidate được upload vào draft/staging.
+- [ ] Job nghiệm thu draft riêng tư dùng quyền `contents: write` tối thiểu để
+      GitHub cho phép nhìn và tải draft; job chỉ đọc phải có contract test chứng
+      minh không gọi API sửa, xóa hoặc công bố release.
 - [ ] Hash staging khớp manifest được nghiệm thu.
 - [ ] Evidence chỉ đúng hash đó và ghi `false` cho cổng chưa chạy.
 - [ ] Release notes nêu signing, support matrix, giới hạn, repair và rollback.

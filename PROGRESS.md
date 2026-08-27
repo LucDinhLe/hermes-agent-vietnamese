@@ -1,5 +1,21 @@
 # Tiến độ
 
+## Cập nhật 2026-08-27 — candidate v32.1-5 sửa quyền đọc draft
+
+- Candidate `vi-v0.32.1-4` đã stage đúng byte nhưng lifecycle dừng trước tải vì
+  GitHub không hiển thị draft riêng tư cho token chỉ có `contents: read`; không
+  có thao tác cài đặt hoặc ghi dữ liệu nào bắt đầu.
+- Lane v32.1 kế nhiệm dùng `contents: write` tối thiểu để nhìn/tải draft nhưng
+  không có lệnh sửa release. Contract test khóa quyền này, tra tag local, retry
+  có giới hạn và cấm parser `--slurp` đã gây lỗi ở candidate `-3`.
+- Candidate được nâng bất biến sang `vi-v0.32.1-5` / `0.32.1-vi.5`; `-4` và
+  draft/run liên quan được giữ nguyên làm bằng chứng, không rebuild hay promotion.
+- Gate cục bộ hiện đạt workflow contract 16/16, lifecycle/promotion 31/31,
+  public metadata 8/8; ba workflow YAML và đoạn PowerShell tải draft parse đạt.
+- GitHub CLI đã xác thực tài khoản `LucDinhLe`. Chủ dự án cho phép push/tag,
+  dựng, nghiệm thu và promotion public khi toàn bộ receipt xanh; Latest hiện vẫn
+  là `vi-v0.32.0-1`.
+
 ## Cập nhật 2026-08-26 — hợp nhất v32.1 với hotfix an toàn phiên/dự án
 
 - Tạo worktree/branch riêng `integration/v32.1-project-session-safety` từ
@@ -20,10 +36,13 @@
 - Candidate `vi-v0.32.1-3` đã build/stage draft riêng tư; lifecycle dừng trước
   download do parser `--slurp` không tìm thấy draft. Tag/draft/run giữ bất biến,
   không promotion.
-- Candidate kế nhiệm được đặt là `vi-v0.32.1-4` / `0.32.1-vi.4`; local
+- Candidate `vi-v0.32.1-4` đã build/stage draft riêng tư; lifecycle dừng trước
+  download vì token `contents: read` không thấy draft. Tag/draft/run giữ bất biến,
+  không promotion.
+- Candidate kế nhiệm được đặt là `vi-v0.32.1-5` / `0.32.1-vi.5`; local
   `vi-v0.32.1-1` cũ giữ bất biến và bị supersede cho mục tiêu release vì chưa
   có hotfix. Chưa build/tag/push/stage/public/đổi Latest.
-- Release plan: `docs/release-vi-v0.32.1-4-plan.md`. Latest tiếp tục NO-GO cho
+- Release plan: `docs/release-vi-v0.32.1-5-plan.md`. Latest tiếp tục NO-GO cho
   tới khi exact artifact chứng minh Authenticode `NotSigned`, không có signer và
   vòng đời trên Windows guest cô lập đạt, gồm update v32 → v32.1 và persistence
   project/session.
