@@ -473,7 +473,12 @@ function expectSessionSafetyUnchanged(before: SessionSafetySnapshot, after: Sess
 }
 
 async function openProjectsManager(page: Page): Promise<void> {
-  await page.getByRole('button', { name: /^(Projects|Dự án)$/i }).click()
+  const projectsNavigation = page
+    .locator('button[data-sidebar="menu-button"]')
+    .filter({ hasText: /^(Projects|Dự án)$/i })
+
+  await expect(projectsNavigation).toHaveAccessibleName(/^(Projects|Dự án)$/i)
+  await projectsNavigation.press('Enter')
   await expect(page.getByRole('heading', { name: /^(Projects|Dự án)$/i })).toBeVisible({ timeout: 60_000 })
 }
 

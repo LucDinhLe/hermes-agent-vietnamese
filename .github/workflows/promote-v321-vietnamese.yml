@@ -61,7 +61,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: vi-v0.32.1-9
+          TAG: vi-v0.32.1-15
           EXPECTED_MANIFEST_SHA: ${{ inputs.sha256sums_sha256 }}
           EXPECTED_WINDOWS_SHA: ${{ inputs.windows_x64_sha256 }}
           EXPECTED_WINDOWS_SIZE: ${{ inputs.windows_x64_size }}
@@ -140,7 +140,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: vi-v0.32.1-9
+          TAG: vi-v0.32.1-15
           EXPECTED_MANIFEST_SHA: ${{ inputs.sha256sums_sha256 }}
           EXPECTED_WINDOWS_SHA: ${{ inputs.windows_x64_sha256 }}
           EXPECTED_WINDOWS_SIZE: ${{ inputs.windows_x64_size }}

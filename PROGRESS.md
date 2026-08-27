@@ -1,5 +1,21 @@
 # Tiến độ
 
+## Cập nhật 2026-08-27 — candidate v32.1-15 khóa đúng nút điều hướng Dự án
+
+- `vi-v0.32.1-14` build/stage xanh tại run `33071025403`; installer 340.636.957
+  byte, SHA-256 `16dfd43d512a6d79744f482306f2596d9183240d9b6f78e9d25a09c0b855d345`,
+  Authenticode `NotSigned`.
+- Lifecycle `33072409835` trở về **Tất cả dự án** và UI hiển thị đủ hai dự án
+  cùng session có nội dung. Helper mở trang Dự án khớp hai nút cùng tên nên
+  strict mode dừng; không có bằng chứng mất hoặc ẩn dữ liệu. Evidence artifact
+  `9646753190`, digest
+  `e4b13a277d2176bafb5b2eb6ab2f0cc67f0fc17bd8dcf453fa865a7ca5ef2e5d`.
+- Candidate `-15` khóa semantic button điều hướng sidebar, xác minh accessible
+  name và dùng `Enter`; policy cấm pointer click. Đồng thời promotion khóa exact
+  tag `-15` ở cả hai pha.
+- Kế hoạch hiện hành: `docs/release-vi-v0.32.1-15-plan.md`. Latest vẫn là
+  `vi-v0.32.0-1`.
+
 ## Cập nhật 2026-08-27 — candidate v32.1-14 khóa đúng lane Windows x64
 
 - Tag `vi-v0.32.1-13` đã push tại commit
@@ -8,7 +24,7 @@
 - Không dispatch, không build, không draft và không promotion `-13`; người dùng
   và Latest không đổi. Tag/commit `-13` giữ bất biến làm bằng chứng NO-GO.
 - Candidate `-14` đồng bộ exact tag giữa ma trận Windows x64, lane lifecycle và
-  contract test. Kế hoạch hiện hành: `docs/release-vi-v0.32.1-14-plan.md`.
+  contract test. Kế hoạch lịch sử: `docs/release-vi-v0.32.1-14-plan.md`.
 
 ## Cập nhật 2026-08-27 — candidate v32.1-13 kích hoạt Tất cả dự án bằng bàn phím
 

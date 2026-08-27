@@ -30,10 +30,10 @@ const fixtureScript = fs.readFileSync(new URL('../../apps/desktop/e2e/fixtures.t
 
 const candidate = {
   commit: 'a'.repeat(40),
-  fileName: 'Hermes-0.32.1-vi.14-win-x64.exe',
+  fileName: 'Hermes-0.32.1-vi.15-win-x64.exe',
   sha256: '1'.repeat(64),
   size: 320_000_000,
-  tag: 'vi-v0.32.1-14'
+  tag: 'vi-v0.32.1-15'
 }
 const previous = {
   commit: V32_SOURCE_COMMIT,
@@ -244,6 +244,7 @@ test('lifecycle messages use the contenteditable keyboard path instead of clicki
 
 test('exact lifecycle proves project metadata actions never hide or delete session data', () => {
   const projectPhase = lifecycleSpec.match(/async function runProjectSessionSafetyPhase[\s\S]*?\r?\n\}/)?.[0] ?? ''
+  const openProjectsHelper = lifecycleSpec.match(/async function openProjectsManager[\s\S]*?\r?\n\}/)?.[0] ?? ''
   const projectEntry =
     projectPhase.match(/const hideCard[\s\S]*?await running\.page\.keyboard\.press\('Control\+N'\)/)?.[0] ?? ''
   const projectDisclosure =
@@ -259,6 +260,10 @@ test('exact lifecycle proves project metadata actions never hide or delete sessi
   assert.ok(REQUIRED_LIFECYCLE_GATES.includes('projectSessionSafety'))
   assert.match(guestScript, /Invoke-PlaywrightPhase `\r?\n\s+'project-session-safety'/)
   assert.match(guestScript, /Add-Gate 'projectSessionSafety'/)
+  assert.match(openProjectsHelper, /button\[data-sidebar="menu-button"\]/)
+  assert.match(openProjectsHelper, /toHaveAccessibleName\(\/\^\(Projects\|Dự án\)\$\/i\)/)
+  assert.match(openProjectsHelper, /projectsNavigation\.press\('Enter'\)/)
+  assert.doesNotMatch(openProjectsHelper, /\.click\(\)/)
   assert.match(
     projectPhase,
     /seedProjectSafetyFixtures[\s\S]*?Open project\|Mở dự án[\s\S]*?data-sessions-project[\s\S]*?Control\+N/
