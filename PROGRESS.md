@@ -1,5 +1,20 @@
 # Tiến độ
 
+## Cập nhật 2026-08-27 — candidate v32.1-16 kích hoạt action dự án bằng bàn phím
+
+- `vi-v0.32.1-15` build/stage xanh tại run `33074177455`; installer 340.639.925
+  byte, SHA-256 `fd33557ba32f92455ce11eeb8082be9c1788ca2564621be09ecaadb804d41a54`,
+  Authenticode `NotSigned`.
+- Lifecycle `33075652568` vượt helper điều hướng Dự án và **Tất cả dự án**, rồi
+  dừng khi pointer click **Ẩn khỏi danh sách dự án** bị action container của card
+  chặn. Không có bằng chứng mất hoặc ẩn session/message. Evidence artifact
+  `9648140826`, digest
+  `e366e082be5442eb12b310367fd51217ffee705cfe525274f04386ea6937524f`.
+- Candidate `-16` dùng `Enter` cho Ẩn, Xóa trên card và xác nhận Xóa; policy khóa
+  các đường này. `-15` giữ bất biến, không rerun/promotion.
+- Kế hoạch hiện hành: `docs/release-vi-v0.32.1-16-plan.md`. Latest vẫn là
+  `vi-v0.32.0-1`.
+
 ## Cập nhật 2026-08-27 — candidate v32.1-15 khóa đúng nút điều hướng Dự án
 
 - `vi-v0.32.1-14` build/stage xanh tại run `33071025403`; installer 340.636.957
@@ -13,7 +28,7 @@
 - Candidate `-15` khóa semantic button điều hướng sidebar, xác minh accessible
   name và dùng `Enter`; policy cấm pointer click. Đồng thời promotion khóa exact
   tag `-15` ở cả hai pha.
-- Kế hoạch hiện hành: `docs/release-vi-v0.32.1-15-plan.md`. Latest vẫn là
+- Kế hoạch lịch sử: `docs/release-vi-v0.32.1-15-plan.md`. Latest vẫn là
   `vi-v0.32.0-1`.
 
 ## Cập nhật 2026-08-27 — candidate v32.1-14 khóa đúng lane Windows x64

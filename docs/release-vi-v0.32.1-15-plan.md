@@ -1,8 +1,9 @@
 # Kế hoạch candidate `vi-v0.32.1-15`
 
 Ngày chốt phạm vi: 2026-08-27
-Trạng thái: source đang được kiểm tra; chưa tag/build/stage/public. GitHub Latest
-vẫn là `vi-v0.32.0-1`.
+Trạng thái: **HISTORICAL NO-GO**. Build/staging `33074177455` xanh; lifecycle
+`33075652568` fail-closed vì pointer click nút **Ẩn khỏi danh sách dự án** bị
+vùng hành động thẻ chặn. Không promotion; GitHub Latest vẫn là `vi-v0.32.0-1`.
 
 ## Mục tiêu và audience
 
@@ -32,6 +33,22 @@ Candidate `-15` khóa helper vào semantic button có
 `Enter`. Policy cấm pointer click. Workflow promotion cũng khóa exact tag `-15`
 ở cả hai pha kiểm trước/sau publication; contract test bắt buộc hai điểm này.
 
+## Kết quả bất biến
+
+- Exact commit: `22cbcc6c9a8dc20984b3e9bf59d16d944fb9d5e4`.
+- Installer: 340.639.925 byte; SHA-256
+  `fd33557ba32f92455ce11eeb8082be9c1788ca2564621be09ecaadb804d41a54`.
+- SHA256SUMS.txt digest:
+  `ee2a0c9a7d6cfac48db1eed8499646d957cc3be4e113ef0294fcf9bcba3c77cb`.
+- Authenticode: `NotSigned`, signer absent; signing receipt digest
+  `e22d797e2c7528bb8b9a53aa1abeca9bc4ee67bac06286a995ce8a32e67b281f`.
+- Lifecycle evidence: artifact `9648140826`, digest
+  `e366e082be5442eb12b310367fd51217ffee705cfe525274f04386ea6937524f`.
+- Helper điều hướng Dự án và bước **Tất cả dự án** đều đạt. Lifecycle dừng khi
+  pointer click nút **Ẩn khỏi danh sách dự án** bị action container của chính
+  card chặn. Không có bằng chứng mất, xóa hoặc ẩn session/message.
+- `-15` giữ nguyên, không rerun hoặc promotion.
+
 ## Gate bắt buộc
 
 - Node release/lifecycle/workflow/public contracts; ba Desktop typecheck.
@@ -46,5 +63,4 @@ Candidate `-15` khóa helper vào semantic button có
 
 ## Quyết định hiện tại
 
-**Source under verification, Release NO-GO** cho tới khi exact `-15` vượt toàn
-bộ lifecycle và hậu kiểm promotion.
+**HISTORICAL NO-GO**. Candidate kế nhiệm là `vi-v0.32.1-16`.

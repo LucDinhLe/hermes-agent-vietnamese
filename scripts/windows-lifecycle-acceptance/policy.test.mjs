@@ -30,10 +30,10 @@ const fixtureScript = fs.readFileSync(new URL('../../apps/desktop/e2e/fixtures.t
 
 const candidate = {
   commit: 'a'.repeat(40),
-  fileName: 'Hermes-0.32.1-vi.15-win-x64.exe',
+  fileName: 'Hermes-0.32.1-vi.16-win-x64.exe',
   sha256: '1'.repeat(64),
   size: 320_000_000,
-  tag: 'vi-v0.32.1-15'
+  tag: 'vi-v0.32.1-16'
 }
 const previous = {
   commit: V32_SOURCE_COMMIT,
@@ -251,6 +251,10 @@ test('exact lifecycle proves project metadata actions never hide or delete sessi
     projectPhase.match(
       /Hide \$\{PROJECT_HIDE_NAME\} sessions\|Ẩn \$\{PROJECT_HIDE_NAME\} phiên[\s\S]*?await running\.page\.getByRole\('button', \{ name: \/\^\(All projects/
     )?.[0] ?? ''
+  const projectMetadataActions =
+    projectPhase.match(
+      /await projectCard\(running\.page, PROJECT_HIDE_NAME\)[\s\S]*?(?=await running\.app\.close\(\))/
+    )?.[0] ?? ''
   const seedFixturesIndex = projectPhase.indexOf('seedProjectSafetyFixtures(context.hermesHome, projectWorkspace)')
   const launchCandidateIndex = projectPhase.indexOf('running = await launchExactBinary(context)')
   const persistedReplyIndex = projectPhase.indexOf(
@@ -298,6 +302,10 @@ test('exact lifecycle proves project metadata actions never hide or delete sessi
   assert.match(lifecycleSpec, /PROJECT_SESSION_MARKER = 'V321_PROJECT_SESSION_SAFETY_ANCHOR'/)
   assert.match(lifecycleSpec, /UPDATE sessions SET title = \?, title_source = 'user' WHERE id = \?/)
   assert.match(lifecycleSpec, /Hide from projects\|Ẩn khỏi danh sách dự án/)
+  assert.match(projectMetadataActions, /Hide from projects\|Ẩn khỏi danh sách dự án[\s\S]*?\.press\('Enter'\)/)
+  assert.match(projectMetadataActions, /remainingDeleteCard[\s\S]*?Delete\|Xóa[\s\S]*?\.press\('Enter'\)/)
+  assert.match(projectMetadataActions, /const confirm[\s\S]*?Delete\|Xóa[\s\S]*?\.press\('Enter'\)/)
+  assert.doesNotMatch(projectMetadataActions, /\.click\(\)/)
   assert.match(lifecycleSpec, /projectDeleteRemoved/)
   assert.match(lifecycleSpec, /messageDigest/)
   assert.match(lifecycleSpec, /not\.toBe\('project'\)/)
