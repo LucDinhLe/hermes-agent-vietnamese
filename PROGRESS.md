@@ -1,5 +1,20 @@
 # Tiến độ
 
+## Cập nhật 2026-08-27 — candidate v32.1-10 kích hoạt disclosure theo ngữ nghĩa
+
+- `vi-v0.32.1-9` build/stage xanh tại run `33058450054`; installer 340.626.053
+  byte, SHA-256 `31812e2539c288e3f0e380ed721a260f0800601110f19dad8d3fb09cfbb7b5be`,
+  Authenticode `NotSigned`.
+- Lifecycle `33059934813` vượt fresh install, onboarding, packaged runtime,
+  relaunch và tạo phiên/nội dung trong project scope. Nó dừng khi pointer click
+  trung tâm nút **Ẩn phiên** bị mốc thời gian của hàng phiên chặn. Evidence
+  artifact `9641548178`, digest
+  `09ce7a5fdd92ed4f8910f9cbbc4d0f1a07f4441b13d23eb25effcd574319b6f4`.
+- Candidate `-10` dùng `Enter` trên đúng semantic button cho cả Ẩn/Hiển thị;
+  policy cấm pointer click tại hai bước. `-9` giữ bất biến, không rerun/promotion.
+- Kế hoạch hiện hành: `docs/release-vi-v0.32.1-10-plan.md`. Latest vẫn là
+  `vi-v0.32.0-1`.
+
 ## Cập nhật 2026-08-27 — candidate v32.1-9 retry giới hạn khi khóa tag
 
 - `vi-v0.32.1-8` vượt toàn bộ source gate và build Windows x64 tại run

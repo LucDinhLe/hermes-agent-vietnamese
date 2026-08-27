@@ -30,10 +30,10 @@ const fixtureScript = fs.readFileSync(new URL('../../apps/desktop/e2e/fixtures.t
 
 const candidate = {
   commit: 'a'.repeat(40),
-  fileName: 'Hermes-0.32.1-vi.9-win-x64.exe',
+  fileName: 'Hermes-0.32.1-vi.10-win-x64.exe',
   sha256: '1'.repeat(64),
   size: 320_000_000,
-  tag: 'vi-v0.32.1-9'
+  tag: 'vi-v0.32.1-10'
 }
 const previous = {
   commit: V32_SOURCE_COMMIT,
@@ -246,6 +246,10 @@ test('exact lifecycle proves project metadata actions never hide or delete sessi
   const projectPhase = lifecycleSpec.match(/async function runProjectSessionSafetyPhase[\s\S]*?\r?\n\}/)?.[0] ?? ''
   const projectEntry =
     projectPhase.match(/const hideCard[\s\S]*?await running\.page\.keyboard\.press\('Control\+N'\)/)?.[0] ?? ''
+  const projectDisclosure =
+    projectPhase.match(
+      /Hide \$\{PROJECT_HIDE_NAME\} sessions\|Ẩn \$\{PROJECT_HIDE_NAME\} phiên[\s\S]*?await running\.page\.getByRole\('button', \{ name: \/\^\(All projects/
+    )?.[0] ?? ''
   assert.ok(REQUIRED_LIFECYCLE_GATES.includes('projectSessionSafety'))
   assert.match(guestScript, /Invoke-PlaywrightPhase `\r?\n\s+'project-session-safety'/)
   assert.match(guestScript, /Add-Gate 'projectSessionSafety'/)
@@ -256,6 +260,15 @@ test('exact lifecycle proves project metadata actions never hide or delete sessi
   assert.match(projectPhase, /page\.keyboard\.press\('Control\+N'\)/)
   assert.match(projectEntry, /getByRole\('button', \{ name: \/\^\(Open project\|Mở dự án\)\$\/i \}\)\.press\('Enter'\)/)
   assert.doesNotMatch(projectEntry, /getByRole\('button', \{ name: \/\^\(Open project\|Mở dự án\)\$\/i \}\)\.click\(\)/)
+  assert.match(
+    projectPhase,
+    /Hide \$\{PROJECT_HIDE_NAME\} sessions\|Ẩn \$\{PROJECT_HIDE_NAME\} phiên[\s\S]*?\.press\('Enter'\)/
+  )
+  assert.match(
+    projectPhase,
+    /Show \$\{PROJECT_HIDE_NAME\} sessions\|Hiển thị \$\{PROJECT_HIDE_NAME\} phiên[\s\S]*?\.press\('Enter'\)/
+  )
+  assert.doesNotMatch(projectDisclosure, /\.click\(\)/)
   assert.match(projectPhase, /not\.toContainText\(MOCK_REPLY/)
   assert.match(lifecycleSpec, /PROJECT_SESSION_MARKER = 'V321_PROJECT_SESSION_SAFETY_ANCHOR'/)
   assert.match(lifecycleSpec, /UPDATE sessions SET title = \?, title_source = 'user' WHERE id = \?/)

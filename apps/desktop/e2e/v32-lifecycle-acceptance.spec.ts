@@ -724,7 +724,7 @@ async function runProjectSessionSafetyPhase(context: LifecycleContext): Promise<
       .getByRole('button', {
         name: new RegExp(`^(Hide ${PROJECT_HIDE_NAME} sessions|Ẩn ${PROJECT_HIDE_NAME} phiên)$`, 'i')
       })
-      .click()
+      .press('Enter')
     await expect(
       running.page.getByRole('button', {
         name: new RegExp(`^(Show ${PROJECT_HIDE_NAME} sessions|Hiển thị ${PROJECT_HIDE_NAME} phiên)$`, 'i')
@@ -734,7 +734,7 @@ async function runProjectSessionSafetyPhase(context: LifecycleContext): Promise<
       .getByRole('button', {
         name: new RegExp(`^(Show ${PROJECT_HIDE_NAME} sessions|Hiển thị ${PROJECT_HIDE_NAME} phiên)$`, 'i')
       })
-      .click()
+      .press('Enter')
     await running.page.getByRole('button', { name: /^(All projects|Tất cả dự án)/i }).click()
     await expect(sessionsRoot).toHaveAttribute('data-sessions-mode', 'projects')
 
