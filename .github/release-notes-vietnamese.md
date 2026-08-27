@@ -1,12 +1,12 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/vi-v0.32.1-12/assets/banner.png" alt="Hermes Vietnamese" width="100%">
+  <img src="https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/vi-v0.32.1-13/assets/banner.png" alt="Hermes Vietnamese" width="100%">
 </p>
 
 ## Hermes Vietnamese v32.1
 
 Lớp phát hành của artifact: **community-prerelease, chưa phải stable**.
 
-`vi-v0.32.1-12` là bản cập nhật an toàn cho Windows 10/11 x64, kế nhiệm
+`vi-v0.32.1-13` là bản cập nhật an toàn cho Windows 10/11 x64, kế nhiệm
 `vi-v0.32.0-1`. Bản này chỉ được công khai ở vị trí GitHub Latest sau khi đúng
 byte Windows x64 vượt toàn bộ cổng cài mới, cập nhật, mở lại, sửa chữa, gỡ cài
 đặt, rollback và an toàn phiên/dự án trong máy ảo Windows dùng một lần.

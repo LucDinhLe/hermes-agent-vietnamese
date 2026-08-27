@@ -30,10 +30,10 @@ const fixtureScript = fs.readFileSync(new URL('../../apps/desktop/e2e/fixtures.t
 
 const candidate = {
   commit: 'a'.repeat(40),
-  fileName: 'Hermes-0.32.1-vi.12-win-x64.exe',
+  fileName: 'Hermes-0.32.1-vi.13-win-x64.exe',
   sha256: '1'.repeat(64),
   size: 320_000_000,
-  tag: 'vi-v0.32.1-12'
+  tag: 'vi-v0.32.1-13'
 }
 const previous = {
   commit: V32_SOURCE_COMMIT,
@@ -275,6 +275,14 @@ test('exact lifecycle proves project metadata actions never hide or delete sessi
     /Show \$\{PROJECT_HIDE_NAME\} sessions\|Hiển thị \$\{PROJECT_HIDE_NAME\} phiên[\s\S]*?\.press\('Enter'\)/
   )
   assert.doesNotMatch(projectDisclosure, /\.click\(\)/)
+  assert.match(
+    projectPhase,
+    /getByRole\('button', \{ name: \/\^\(All projects\|Tất cả dự án\)\/i \}\)\.press\('Enter'\)/
+  )
+  assert.doesNotMatch(
+    projectPhase,
+    /getByRole\('button', \{ name: \/\^\(All projects\|Tất cả dự án\)\/i \}\)\.click\(\)/
+  )
   assert.ok(seedFixturesIndex >= 0, 'project fixtures must be seeded in the safety phase')
   assert.ok(launchCandidateIndex >= 0, 'candidate must launch in the project safety phase')
   assert.ok(seedFixturesIndex < launchCandidateIndex, 'project fixtures must be seeded before Hermes opens projects.db')

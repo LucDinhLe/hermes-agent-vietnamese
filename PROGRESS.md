@@ -1,5 +1,20 @@
 # Tiến độ
 
+## Cập nhật 2026-08-27 — candidate v32.1-13 kích hoạt Tất cả dự án bằng bàn phím
+
+- `vi-v0.32.1-12` build/stage xanh tại run `33066987915`; installer 340.633.138
+  byte, SHA-256 `91bfc8dc1f398ccf2d205a9c284493a492b1d5d9ef77eb6391e85e76d1923891`,
+  Authenticode `NotSigned`.
+- Lifecycle `33068095243` xác nhận project-addressable session có đủ prompt/reply
+  trong UI và database. Nó dừng khi pointer click **Tất cả dự án** bị semantic
+  button của hàng dự án con chặn; không có bằng chứng mất hoặc ẩn dữ liệu.
+  Evidence artifact `9645067367`, digest
+  `3ac5cf6512ba9f62be15fe299fcdbf6aa8035f8ae2d629b8947120d87e71b407`.
+- Candidate `-13` dùng `Enter` trên đúng semantic button và policy cấm pointer
+  click tại bước này. `-12` giữ bất biến, không rerun/promotion.
+- Kế hoạch hiện hành: `docs/release-vi-v0.32.1-13-plan.md`. Latest vẫn là
+  `vi-v0.32.0-1`.
+
 ## Cập nhật 2026-08-27 — candidate v32.1-12 chờ message flush xuống database
 
 - `vi-v0.32.1-11` build/stage xanh tại run `33064470869`; installer 340.630.734
@@ -12,7 +27,7 @@
   `c321ce027d2f0dc625890891d982f89a9332d97777ad754d799a4a0b2c039266`.
 - Candidate `-12` poll `state.db` đến khi đủ hai message rồi mới chụp snapshot;
   policy khóa thứ tự này. `-11` giữ bất biến, không rerun/promotion.
-- Kế hoạch hiện hành: `docs/release-vi-v0.32.1-12-plan.md`. Latest vẫn là
+- Kế hoạch lịch sử: `docs/release-vi-v0.32.1-12-plan.md`. Latest vẫn là
   `vi-v0.32.0-1`.
 
 ## Cập nhật 2026-08-27 — candidate v32.1-11 seed fixture trước khi mở database

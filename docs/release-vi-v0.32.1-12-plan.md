@@ -1,8 +1,9 @@
 # Kế hoạch candidate `vi-v0.32.1-12`
 
 Ngày chốt phạm vi: 2026-08-27
-Trạng thái: source đang được kiểm tra; chưa tag/build/stage/public. GitHub Latest
-vẫn là `vi-v0.32.0-1`.
+Trạng thái: **HISTORICAL NO-GO**. Build/staging `33066987915` xanh; lifecycle
+`33068095243` fail-closed vì pointer click vào **Tất cả dự án** bị hàng dự án
+con chặn. Không promotion; GitHub Latest vẫn là `vi-v0.32.0-1`.
 
 ## Mục tiêu và audience
 
@@ -29,6 +30,21 @@ Candidate `-12` giữ nguyên yêu cầu tối thiểu hai message nhưng poll d
 khi cả prompt và reply đã được ghi bền vững rồi mới chụp snapshot. Policy test
 khóa persisted-message gate trước snapshot; không dùng sleep mù và không hạ gate.
 
+## Kết quả bất biến
+
+- Exact commit: `477dc6f3f1d73be67482c8fe20a8fb03d797a30b`.
+- Installer: 340.633.138 byte; SHA-256
+  `91bfc8dc1f398ccf2d205a9c284493a492b1d5d9ef77eb6391e85e76d1923891`.
+- Authenticode: `NotSigned`, signer absent.
+- Lifecycle evidence: artifact `9645067367`, digest
+  `3ac5cf6512ba9f62be15fe299fcdbf6aa8035f8ae2d629b8947120d87e71b407`.
+- Fresh install, onboarding, packaged mock runtime và relaunch đều đạt. UI và
+  `state.db` xác nhận project-addressable session có đủ prompt/reply trước khi
+  thao tác Ẩn/Hiển thị.
+- Lifecycle dừng khi pointer click **Tất cả dự án** bị semantic button của hàng
+  dự án con chặn. Không có bằng chứng mất, xóa hoặc ẩn dữ liệu. `-12` giữ nguyên,
+  không rerun hoặc promotion.
+
 ## Gate bắt buộc
 
 - Node release/lifecycle/workflow/public contracts; ba Desktop typecheck.
@@ -43,5 +59,4 @@ khóa persisted-message gate trước snapshot; không dùng sleep mù và khôn
 
 ## Quyết định hiện tại
 
-**Source under verification, Release NO-GO** cho tới khi exact `-12` vượt toàn
-bộ lifecycle và hậu kiểm promotion.
+**HISTORICAL NO-GO**. Candidate kế nhiệm là `vi-v0.32.1-13`.

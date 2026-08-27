@@ -741,7 +741,7 @@ async function runProjectSessionSafetyPhase(context: LifecycleContext): Promise<
         name: new RegExp(`^(Show ${PROJECT_HIDE_NAME} sessions|Hiển thị ${PROJECT_HIDE_NAME} phiên)$`, 'i')
       })
       .press('Enter')
-    await running.page.getByRole('button', { name: /^(All projects|Tất cả dự án)/i }).click()
+    await running.page.getByRole('button', { name: /^(All projects|Tất cả dự án)/i }).press('Enter')
     await expect(sessionsRoot).toHaveAttribute('data-sessions-mode', 'projects')
 
     await openProjectsManager(running.page)
