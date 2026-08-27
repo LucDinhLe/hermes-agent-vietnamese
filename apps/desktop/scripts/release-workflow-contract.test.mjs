@@ -21,6 +21,10 @@ const runtimeSmoke = readFileSync(
   new URL('../../../.github/workflows/runtime-smoke-vietnamese.yml', import.meta.url),
   'utf8'
 )
+const v321EvidenceSeal = readFileSync(
+  new URL('../../../.github/workflows/seal-v321-pilot-evidence.yml', import.meta.url),
+  'utf8'
+)
 const lifecycleRunner = readFileSync(
   new URL('../../../scripts/windows-lifecycle-acceptance/run.mjs', import.meta.url),
   'utf8'
@@ -520,6 +524,25 @@ test('v32.1 safety update is an unsigned x64 pilot whose exact bytes are indepen
   assert.match(v321Promotion, /rollback-v321-verify\.json/)
   assert.match(v321Promotion, /-f make_latest=true/)
   assert.match(v321Promotion, /assert_tag_binding/)
+})
+
+test('v32.1 can seal evidence from an already successful lifecycle without rebuilding or rerunning it', () => {
+  assert.match(v321EvidenceSeal, /^name: Khóa biên nhận pilot Hermes Vietnamese v32\.1$/m)
+  assert.match(v321EvidenceSeal, /lifecycle_run_id:/)
+  assert.match(v321EvidenceSeal, /controller_sha:/)
+  assert.match(v321EvidenceSeal, /test "\$CONTROLLER_SHA" = "\$DISPATCH_SHA"/)
+  assert.match(v321EvidenceSeal, /Windows x64 full lifecycle is not uniquely successful/)
+  assert.match(v321EvidenceSeal, /runtime failure is not the known inventory-only evidence failure/)
+  assert.match(v321EvidenceSeal, /Chạy exact v32\.1 trong máy ảo GitHub dùng một lần/)
+  assert.match(v321EvidenceSeal, /Lưu bằng chứng v32\.1 kể cả khi fail-closed/)
+  assert.match(v321EvidenceSeal, /gh run download "\$LIFECYCLE_RUN_ID"/)
+  assert.match(v321EvidenceSeal, /\.harnessCommit lifecycle-result\.json/)
+  assert.equal((v321EvidenceSeal.match(/create-v321-pilot-evidence\.mjs/g) ?? []).length, 1)
+  assert.equal((v321EvidenceSeal.match(/validate-pilot-release-evidence\.mjs/g) ?? []).length, 2)
+  assert.match(v321EvidenceSeal, /expected-public-asset-names\.json/)
+  assert.match(v321EvidenceSeal, /actual-draft-asset-names\.json/)
+  assert.match(v321EvidenceSeal, /pilot-release-evidence\.json#pilot-release-evidence\.json/)
+  assert.doesNotMatch(v321EvidenceSeal, /release-vietnamese\.yml|electron-builder|build-bundled-desktop/)
 })
 
 test('v32 promotion revalidates private bytes and full lifecycle evidence before publication', () => {

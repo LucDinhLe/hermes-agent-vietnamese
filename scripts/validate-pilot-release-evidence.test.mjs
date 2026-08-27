@@ -5,6 +5,7 @@ import { test } from 'node:test'
 import {
   BUILD_ONLY_PILOT_TARGETS,
   PILOT_WINDOWS_GATES,
+  parsePilotAssetNamesJson,
   requiredPilotWindowsGatesForTag,
   validatePilotAssetInventory,
   validatePilotReleaseEvidence
@@ -168,4 +169,12 @@ test('allows only manifest files, the manifest itself, and pilot evidence in the
       ),
     /not a filename/
   )
+})
+
+test('accepts an explicit GitHub asset-name inventory and rejects malformed metadata', () => {
+  const encoded = JSON.stringify(validAssetNames)
+  assert.deepEqual(parsePilotAssetNamesJson(encoded), validAssetNames)
+  assert.throws(() => parsePilotAssetNamesJson('{'), /JSON/)
+  assert.throws(() => parsePilotAssetNamesJson({ assets: validAssetNames }), /array of non-empty filenames/)
+  assert.throws(() => parsePilotAssetNamesJson([...validAssetNames, ' padded ']), /array of non-empty filenames/)
 })

@@ -1,0 +1,212 @@
+name: Khóa biên nhận pilot Hermes Vietnamese v32.1
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Draft v32.1 successor cần gắn biên nhận'
+        required: true
+        type: string
+      sha256sums_sha256:
+        description: 'SHA-256 chính xác của SHA256SUMS.txt trong draft'
+        required: true
+        type: string
+      lifecycle_run_id:
+        description: 'Run runtime đã có job Windows x64 full lifecycle thành công'
+        required: true
+        type: string
+      controller_sha:
+        description: 'Full commit SHA của workflow biên nhận được chọn bằng --ref'
+        required: true
+        type: string
+
+concurrency:
+  group: hermes-v321-pilot-evidence-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  seal:
+    name: Tái dùng lifecycle đã sealed và gắn đúng một biên nhận
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Khóa commit điều khiển biên nhận
+        shell: bash
+        env:
+          CONTROLLER_SHA: ${{ inputs.controller_sha }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$CONTROLLER_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$CONTROLLER_SHA" = "$DISPATCH_SHA"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.controller_sha }}
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+
+      - name: Khóa đúng run có lifecycle xanh và lỗi duy nhất ở inventory biên nhận cũ
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LIFECYCLE_RUN_ID: ${{ inputs.lifecycle_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$LIFECYCLE_RUN_ID" =~ ^[1-9][0-9]*$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$LIFECYCLE_RUN_ID" > lifecycle-run.json
+          test "$(jq -r .name lifecycle-run.json)" = 'Kiểm thử runtime artifact Hermes Vietnamese'
+          test "$(jq -r .event lifecycle-run.json)" = 'workflow_dispatch'
+          test "$(jq -r .status lifecycle-run.json)" = 'completed'
+          test "$(jq -r .conclusion lifecycle-run.json)" = 'failure'
+          [[ "$(jq -r .head_sha lifecycle-run.json)" =~ ^[0-9a-f]{40}$ ]]
+
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$LIFECYCLE_RUN_ID/jobs?per_page=100" \
+            --slurp > lifecycle-job-pages.json
+          node <<'NODE'
+          const fs = require('fs')
+          const pages = JSON.parse(fs.readFileSync('lifecycle-job-pages.json', 'utf8'))
+          const jobs = pages.flatMap(page => page.jobs || [])
+          if (jobs.length !== 5) throw new Error(`unexpected lifecycle run job count: ${jobs.length}`)
+
+          const lifecycleName = 'V32.1 Windows x64 — project/session safety và full lifecycle'
+          const evidenceName = 'V32.1 — khóa biên nhận Windows và năm target build-only'
+          const skippedNames = new Set([
+            'Byte và chữ ký — $' + '{{ matrix.id }}',
+            'Đối chiếu smoke thật trên đúng máy và artifact',
+            'V32 Windows x64 — fresh, update, repair, uninstall, rollback',
+          ])
+          const lifecycle = jobs.filter(job => job.name === lifecycleName)
+          if (lifecycle.length !== 1 || lifecycle[0].conclusion !== 'success') {
+            throw new Error('Windows x64 full lifecycle is not uniquely successful')
+          }
+          for (const stepName of [
+            'Chạy exact v32.1 trong máy ảo GitHub dùng một lần',
+            'Lưu bằng chứng v32.1 kể cả khi fail-closed',
+          ]) {
+            const matches = (lifecycle[0].steps || []).filter(step => step.name === stepName)
+            if (matches.length !== 1 || matches[0].conclusion !== 'success') {
+              throw new Error(`sealed lifecycle step is not successful: ${stepName}`)
+            }
+          }
+          const evidence = jobs.filter(job => job.name === evidenceName)
+          if (evidence.length !== 1 || evidence[0].conclusion !== 'failure') {
+            throw new Error('old evidence job is not the sole expected failure')
+          }
+          const failed = jobs.flatMap(job =>
+            (job.steps || [])
+              .filter(step => step.conclusion === 'failure')
+              .map(step => ({ job: job.name, step: step.name }))
+          )
+          if (
+            failed.length !== 1 ||
+            failed[0].job !== evidenceName ||
+            failed[0].step !== 'Sinh và kiểm biên nhận pilot từ lifecycle đã sealed'
+          ) {
+            throw new Error(`runtime failure is not the known inventory-only evidence failure: ${JSON.stringify(failed)}`)
+          }
+          const skipped = jobs.filter(job => job.conclusion === 'skipped')
+          if (skipped.length !== skippedNames.size || skipped.some(job => !skippedNames.has(job.name))) {
+            throw new Error('unexpected skipped jobs in the sealed lifecycle run')
+          }
+          NODE
+
+          artifact_name="v321-windows-lifecycle-$LIFECYCLE_RUN_ID-1"
+          artifacts_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$LIFECYCLE_RUN_ID/artifacts")"
+          test "$(jq --arg name "$artifact_name" '[.artifacts[] | select(.name == $name and .expired == false and .size_in_bytes > 0)] | length' <<<"$artifacts_json")" = '1'
+          mkdir lifecycle-evidence
+          gh run download "$LIFECYCLE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "$artifact_name" \
+            --dir lifecycle-evidence
+          mapfile -t receipts < <(find lifecycle-evidence -type f -name lifecycle-result.json -print)
+          test "${#receipts[@]}" = '1'
+          cp "${receipts[0]}" lifecycle-result.json
+          test "$(jq -r .status lifecycle-result.json)" = 'passed'
+          test "$(jq -r .harnessCommit lifecycle-result.json)" = "$(jq -r .head_sha lifecycle-run.json)"
+
+      - name: Sinh biên nhận và kiểm inventory thật của draft qua GitHub API
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          EXPECTED_MANIFEST_SHA: ${{ inputs.sha256sums_sha256 }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^vi-v0\.32\.1-(1[8-9]|[2-9][0-9]*)$ ]]
+          [[ "$EXPECTED_MANIFEST_SHA" =~ ^[0-9a-f]{64}$ ]]
+          release_json="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,assets)"
+          test "$(jq -r .isDraft <<<"$release_json")" = 'true'
+          test "$(jq -r .isPrerelease <<<"$release_json")" = 'true'
+          test "$(jq '[.assets[] | select(.name == "pilot-release-evidence.json")] | length' <<<"$release_json")" = '0'
+          test "$(jq '[.assets[] | select(.state != "uploaded" or .size <= 0)] | length' <<<"$release_json")" = '0'
+
+          mkdir candidate
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern SHA256SUMS.txt \
+            --pattern candidate-provenance.json \
+            --dir candidate
+          test "$(sha256sum candidate/SHA256SUMS.txt | cut -d' ' -f1)" = "$EXPECTED_MANIFEST_SHA"
+          candidate_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          test "$(node -p "require('./candidate/candidate-provenance.json').tag")" = "$TAG"
+          test "$(node -p "require('./candidate/candidate-provenance.json').commit")" = "$candidate_commit"
+          node scripts/create-v321-pilot-evidence.mjs \
+            lifecycle-result.json \
+            candidate/candidate-provenance.json \
+            candidate/SHA256SUMS.txt \
+            "$EXPECTED_MANIFEST_SHA" \
+            pilot-release-evidence.json
+          jq '[.assets[].name] + ["pilot-release-evidence.json"]' <<<"$release_json" \
+            > expected-public-asset-names.json
+          node scripts/validate-pilot-release-evidence.mjs \
+            pilot-release-evidence.json \
+            candidate/candidate-provenance.json \
+            candidate/SHA256SUMS.txt \
+            "$TAG" \
+            "$candidate_commit" \
+            "$EXPECTED_MANIFEST_SHA" \
+            "$(node -p "require('./candidate/candidate-provenance.json').runId")" \
+            expected-public-asset-names.json \
+            > /dev/null
+
+      - name: Gắn đúng một biên nhận, tải lại và hậu kiểm inventory
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          EXPECTED_MANIFEST_SHA: ${{ inputs.sha256sums_sha256 }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" 'pilot-release-evidence.json#pilot-release-evidence.json' \
+            --repo "$GITHUB_REPOSITORY"
+          mkdir uploaded-evidence
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern pilot-release-evidence.json \
+            --dir uploaded-evidence
+          cmp pilot-release-evidence.json uploaded-evidence/pilot-release-evidence.json
+          test "$(sha256sum candidate/SHA256SUMS.txt | cut -d' ' -f1)" = "$EXPECTED_MANIFEST_SHA"
+
+          release_json="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease,assets)"
+          test "$(jq -r .isDraft <<<"$release_json")" = 'true'
+          test "$(jq -r .isPrerelease <<<"$release_json")" = 'true'
+          test "$(jq '[.assets[] | select(.state != "uploaded" or .size <= 0)] | length' <<<"$release_json")" = '0'
+          jq '[.assets[].name]' <<<"$release_json" > actual-draft-asset-names.json
+          candidate_commit="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          node scripts/validate-pilot-release-evidence.mjs \
+            uploaded-evidence/pilot-release-evidence.json \
+            candidate/candidate-provenance.json \
+            candidate/SHA256SUMS.txt \
+            "$TAG" \
+            "$candidate_commit" \
+            "$EXPECTED_MANIFEST_SHA" \
+            "$(node -p "require('./candidate/candidate-provenance.json').runId")" \
+            actual-draft-asset-names.json \
+            > /dev/null
+
+          expected_digest="sha256:$(sha256sum pilot-release-evidence.json | cut -d' ' -f1)"
+          test "$(jq '[.assets[] | select(.name == "pilot-release-evidence.json")] | length' <<<"$release_json")" = '1'
+          test "$(jq -r '.assets[] | select(.name == "pilot-release-evidence.json") | .digest' <<<"$release_json")" = "$expected_digest"

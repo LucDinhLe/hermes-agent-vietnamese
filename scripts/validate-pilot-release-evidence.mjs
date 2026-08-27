@@ -85,6 +85,14 @@ export function validatePilotAssetInventory(assetNames, checksumBytes) {
   return [...assetNames].sort()
 }
 
+export function parsePilotAssetNamesJson(value) {
+  const parsed = typeof value === 'string' ? JSON.parse(value) : value
+  if (!Array.isArray(parsed) || parsed.some(name => typeof name !== 'string' || name.trim() !== name || !name)) {
+    throw new Error('pilot asset names JSON must be an array of non-empty filenames')
+  }
+  return parsed
+}
+
 export function validatePilotReleaseEvidence(evidence, provenance, checksumBytes, expected) {
   const checksumBuffer = Buffer.isBuffer(checksumBytes) ? checksumBytes : Buffer.from(checksumBytes)
   const manifestSha = crypto.createHash('sha256').update(checksumBuffer).digest('hex')
@@ -132,22 +140,26 @@ export function validatePilotReleaseEvidence(evidence, provenance, checksumBytes
 }
 
 function main() {
-  const [evidencePath, provenancePath, checksumPath, tag, commit, manifestSha, stagingRunId] = process.argv.slice(2)
+  const [evidencePath, provenancePath, checksumPath, tag, commit, manifestSha, stagingRunId, assetNamesPath] =
+    process.argv.slice(2)
   if (!evidencePath || !provenancePath || !checksumPath || !tag || !commit || !manifestSha || !stagingRunId) {
     throw new Error(
-      'usage: validate-pilot-release-evidence.mjs <evidence.json> <provenance.json> <SHA256SUMS.txt> <tag> <commit> <manifest-sha256> <staging-run-id>'
+      'usage: validate-pilot-release-evidence.mjs <evidence.json> <provenance.json> <SHA256SUMS.txt> <tag> <commit> <manifest-sha256> <staging-run-id> [asset-names.json]'
     )
   }
   const evidence = JSON.parse(fs.readFileSync(path.resolve(evidencePath), 'utf8'))
   const provenance = JSON.parse(fs.readFileSync(path.resolve(provenancePath), 'utf8'))
   const resolvedChecksumPath = path.resolve(checksumPath)
   const checksumBytes = fs.readFileSync(resolvedChecksumPath)
-  const assetEntries = fs.readdirSync(path.dirname(resolvedChecksumPath), { withFileTypes: true })
-  if (assetEntries.some(entry => !entry.isFile())) throw new Error('pilot release inventory must contain files only')
-  validatePilotAssetInventory(
-    assetEntries.map(entry => entry.name),
-    checksumBytes
-  )
+  let assetNames
+  if (assetNamesPath) {
+    assetNames = parsePilotAssetNamesJson(fs.readFileSync(path.resolve(assetNamesPath), 'utf8'))
+  } else {
+    const assetEntries = fs.readdirSync(path.dirname(resolvedChecksumPath), { withFileTypes: true })
+    if (assetEntries.some(entry => !entry.isFile())) throw new Error('pilot release inventory must contain files only')
+    assetNames = assetEntries.map(entry => entry.name)
+  }
+  validatePilotAssetInventory(assetNames, checksumBytes)
   validatePilotReleaseEvidence(evidence, provenance, checksumBytes, {
     tag,
     commit,
