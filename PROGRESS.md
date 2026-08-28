@@ -23,6 +23,11 @@
 - Exact locked-engine materialization at `.work/candidate-dev2-r8`: 25 staged
   allowlisted paths, 24 file digests verified, receipt SHA-256
   `6449b28c038d2e971098bc295b31b60eedac5fe0d9f1ef16e23f8a0239f9b459`.
+- The functional source was committed as
+  `cf794d6e5d2b8607502bb60ddd44fc9556ea0667` and rematerialized from a clean
+  shell at `.work/candidate-dev2-cf794d6`: the same 25 paths and 24 digests
+  passed with receipt SHA-256
+  `f04bafeba42b4dac7a5f283dc0737e2f877e1914fc768c9eae870e5503643e02`.
 - Exact materialized source tests through `scripts/run_tests.sh`: prompt builder
   and turn settlement 84 PASS / 1 SKIP; adaptive/config/gateway selection 29
   PASS. The high-confidence fixtures include `chào em`, `mấy giờ rồi`, and the
@@ -37,9 +42,10 @@
 Current decision: **GO FOR CLEAN DEV.2 SOURCE CANDIDATE AND CI VALIDATION;
 NO-GO PUBLIC LATEST OR USER INSTALL UNTIL BUILD/LIFECYCLE GATES PASS**.
 
-Next smallest step: commit and push the clean V33 shell source, materialize the
-same commit in release mode, then run the Windows validation workflow. Public
-tagging/promotion remains a separate owner decision.
+The first push attempt was blocked before any bytes left the machine because
+external Git egress requires explicit owner approval. Next smallest step: after
+that approval, push the current clean V33 branch and run the Windows validation
+workflow. Public tagging/promotion remains a separate owner decision.
 
 ## 2026-08-28 — Fetchable source and first Windows CI
 
