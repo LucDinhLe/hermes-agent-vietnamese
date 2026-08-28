@@ -6,6 +6,17 @@ import path from 'node:path'
 const ROOT = path.resolve(import.meta.dirname, '..')
 const workflow = readFileSync(path.join(ROOT, '.github', 'workflows', 'validate-windows.yml'), 'utf8')
 
+test('Windows validation pins every action to an immutable commit', () => {
+  const actionUses = [...workflow.matchAll(/^\s*uses:\s*([^@\s]+)@([^\s#]+)(?:\s+#\s+(.+))?$/gm)]
+  assert.ok(actionUses.length > 0)
+
+  for (const [, action, commit, versionComment] of actionUses) {
+    assert.match(action, /^[\w.-]+\/[\w.-]+$/)
+    assert.match(commit, /^[a-f0-9]{40}$/)
+    assert.match(versionComment ?? '', /^v\d/)
+  }
+})
+
 test('Windows validation derives the engine ref from engine.lock', () => {
   assert.match(workflow, /\$lock\.source\.tag/)
   assert.match(workflow, /\$lock\.source\.commit/)
