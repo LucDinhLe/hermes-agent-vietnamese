@@ -1,5 +1,62 @@
 # Progress — Hermes Vietnamese V33
 
+## 2026-08-28 — Fetchable source and first Windows CI
+
+### Remote source
+
+- The standalone shell is now fetchable from the public branch
+  `v33/composite-shell` in `LucDinhLe/hermes-agent-vietnamese`. The exact CI
+  candidate is `3d4e4c502adbe6dab318c24618d54ac8e7b73570`; the local branch is clean
+  and tracks the same remote commit.
+- Remote `main` remains unchanged at the V32.1 commit
+  `2b47cf5824bdd032c7c965afcff374dd6990888c`. No merge, force-push, PR, tag,
+  release or installer publication was performed.
+- Before the authoritative run, all GitHub Actions were pinned to immutable
+  commit SHAs, the shell package/lock/workflow were aligned to upstream Node
+  26, checkout credentials were disabled after fetch, and the focused
+  Vietnamese UI suite was constrained to one worker. Local contracts are
+  27/27 PASS and edition verification remains PASS.
+
+### Authoritative Windows CI
+
+- Run `33183070842` on `windows-2025` completed in 17m18s at exact shell commit
+  `3d4e4c502adbe6dab318c24618d54ac8e7b73570`. Its job conclusion is RED because
+  exactly one step failed: the full upstream Electron platform suite.
+- Exact engine checkout, Node 26, shell contracts, materialization, locked
+  dependency install, Desktop typecheck, lint, focused Vietnamese UI, dormant
+  migration, bundled plugins, the full renderer suite, immutable-input check,
+  diagnostic build, receipt/stamp verification and evidence upload all PASS.
+- Full renderer PASS on the hosted runner after 11m21s. The local four-failure
+  `vi-VN` result therefore did not reproduce in the canonical CI locale.
+- Full Electron summary: 124 files passed, 11 failed and one skipped; 1,923
+  tests passed, 40 failed and five skipped. The failures are concentrated in
+  upstream Windows/POSIX path, SSH, symlink/chmod, generated-file and timing
+  assumptions; they remain a blocking gate until compared against the exact
+  untouched upstream tag on the same runner.
+- Evidence artifact `9691094896`,
+  `v33-windows-x64-evidence-3d4e4c502adbe6dab318c24618d54ac8e7b73570`,
+  is 1,997 bytes and has GitHub artifact digest
+  `sha256:1a13c5f7e071a091650621aba8517b40dcd8ee8549314067bd174be16092c346`.
+  It contains exactly `edition-receipt.json` (SHA-256
+  `cebf323c47b4a5141c51a6dbc4b5f4936a9640cb3e67359668c616135589d89b`)
+  and `install-stamp.json` (SHA-256
+  `54278b7459ce96b25ce1c9866e778fddb3358487d33c3e1e66799806060c4e4f`).
+  The receipt records `releaseMode: false`, exact engine `5fc308a70719`, exact
+  clean shell `3d4e4c502adb`, 11 overlays, two patches and 17 allowlisted changed
+  paths. The install stamp remains `dirty/local`, as required for a diagnostic
+  materialized build rather than a release artifact.
+- Runs `33182571961` and `33182960277` were cancelled by concurrency after
+  their configurations were superseded. They are not product failures and are
+  retained as process evidence.
+
+Current decision remains: **GO FOR BUILD-ONLY DEVELOPER PREVIEW; NO-GO RELEASE
+CANDIDATE, INSTALLER OR HOST LAUNCH**.
+
+Next smallest step: run the identical full Electron suite against the untouched
+locked upstream tag on the same Windows runner, then classify each of the 11
+failed files as upstream baseline or edition-induced before changing code or
+waiving any gate.
+
 ## 2026-08-28 — Composite shell implemented
 
 ### Locked inputs
@@ -47,7 +104,7 @@
 
 ### Evidence
 
-- Shell contract suite: 25/25 PASS.
+- Shell contract suite: 27/27 PASS.
 - Edition boundary: PASS — 11 overlay files, two active patches, no path outside
   `apps/desktop/`.
 - Live official engine-update dry-run: PASS; exact annotated tag object and
@@ -77,25 +134,27 @@
   `bf54d93450102268de71d5b53a97dde794f657ea5cb595c54f3f702503f08598`,
   and `dist/electron-preload.js`
   `3bb63898ad03dcfac5518981e70b8bfda0e7b043775651ed5ead07d1778d1b17`.
-- Full renderer gate remains NOT GREEN on this Windows `vi-VN` host: the
-  single-worker failed-file rerun produced 161 passes and four baseline failures.
-- Full Electron gate remains NOT GREEN: 1,903 tests passed, 50 failed and six
-  skipped; most failures are unchanged upstream POSIX/Windows assumptions. This
-  is recorded as baseline evidence, not a waiver.
+- Full renderer remains locally NOT GREEN on this Windows `vi-VN` host: the
+  single-worker failed-file rerun produced 161 passes and four baseline
+  failures. The same full gate PASS on canonical Windows CI.
+- Full Electron remains NOT GREEN. Local evidence is 1,903 passed, 50 failed
+  and six skipped; canonical Windows CI is 1,923 passed, 40 failed and five
+  skipped. This is recorded as blocking baseline evidence, not a waiver.
 
 ### Still blocked or pending
 
-- The GitHub workflow exists but has not run because this local shell has no
-  remote and no public action is authorized.
+- The fetchable-source gate is now met. Authoritative Windows run `33183070842`
+  is RED only at the full Electron platform suite; diagnostic build/provenance
+  evidence still completed successfully.
 - Migration activation needs a real native cross-process lease provider,
   Windows reparse verifier, read-only SQLite verifier, two-process tests,
   disposable-profile lifecycle and rollback rehearsal.
 - Claude bridge remains RED because upstream lacks a provider-neutral external
   process seam. Notify-only updater and corrected VNĐ display remain pending;
   VNĐ is deferred to V33.1.
-- The successful build is diagnostic output only. No packaged installer,
-  isolated-machine smoke, upgrade/downgrade lifecycle, rollback rehearsal,
-  signing, published/fetchable shell source, or CI run exists yet.
+- The successful build remains diagnostic output only. No packaged installer,
+  isolated-machine smoke, upgrade/downgrade lifecycle, rollback rehearsal or
+  signing exists yet.
 
 Current decision: **GO FOR BUILD-ONLY DEVELOPER PREVIEW; NO-GO RELEASE
 CANDIDATE OR HOST LAUNCH**.
