@@ -20,8 +20,35 @@ test('materialized inventory detects any post-receipt byte change', () => {
     materializedFiles: [{ path: relative, sha256: sha256File(target) }]
   }
 
-  assert.equal(verifyMaterializedFiles(tree, receipt), 1)
+  assert.equal(
+    verifyMaterializedFiles(tree, receipt, {
+      overlayInventory: receipt.materializedFiles
+    }),
+    1
+  )
 
   writeFileSync(target, 'mutated bytes', { encoding: 'utf8', flush: true })
   assert.throws(() => verifyMaterializedFiles(tree, receipt), /digest mismatch/)
+})
+
+test('materialized inventory cannot substitute an overlay digest declared by the contract', () => {
+  const tree = mkdtempSync(path.join(tmpdir(), 'hermes-v33-overlay-'))
+  const relative = 'apps/desktop/example.txt'
+  const target = path.join(tree, ...relative.split('/'))
+
+  mkdirSync(path.dirname(target), { recursive: true })
+  writeFileSync(target, 'substituted bytes', { encoding: 'utf8', flush: true })
+
+  const receipt = {
+    changedPaths: [relative, 'apps/desktop/build/edition-receipt.json'],
+    materializedFiles: [{ path: relative, sha256: sha256File(target) }]
+  }
+
+  assert.throws(
+    () =>
+      verifyMaterializedFiles(tree, receipt, {
+        overlayInventory: [{ path: relative, sha256: 'a'.repeat(64) }]
+      }),
+    /overlay digest mismatch/
+  )
 })

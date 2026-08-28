@@ -136,8 +136,10 @@ export function runGit(args, cwd, { allowFailure = false } = {}) {
   const result = spawnSync('git', args, {
     cwd,
     encoding: 'utf8',
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
     shell: false,
-    stdio: ['ignore', 'pipe', 'pipe']
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 60_000
   })
 
   if (result.error) {

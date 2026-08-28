@@ -10,6 +10,7 @@ const protectedIdentity = {
   appId: 'com.nousresearch.hermes',
   executableName: 'Hermes',
   protocol: 'hermes',
+  protocolSchemes: [['hermes']],
   artifactName: 'Hermes-${version}-${os}-${arch}.${ext}'
 }
 
@@ -60,6 +61,13 @@ test('branding refuses an upstream identity drift', () => {
   changed.build.appId = 'unexpected.app'
 
   assert.throws(() => brandPackageManifest(changed, edition), /must not change appId/)
+})
+
+test('branding refuses added or reordered protocol schemes', () => {
+  const changed = manifest()
+  changed.build.protocols.push({ name: 'Unexpected Protocol', schemes: ['unexpected'] })
+
+  assert.throws(() => brandPackageManifest(changed, edition), /must not change protocolSchemes/)
 })
 
 test('window title replacement is exact and fail-closed', () => {

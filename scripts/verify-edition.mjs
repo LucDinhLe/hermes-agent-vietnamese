@@ -68,7 +68,17 @@ export function verifyEdition(root = ROOT) {
     }
   }
   const overlayRoot = path.join(root, ...assertSafeRelativePath(edition.overlayRoot, 'overlay root').split('/'))
-  const productMetadata = readJson(path.join(overlayRoot, 'apps', 'desktop', 'product-metadata.json'))
+  const productMetadata = readJson(
+    path.join(
+      overlayRoot,
+      'apps',
+      'desktop',
+      'src',
+      'plugins',
+      'hermes-vietnamese',
+      'product-metadata.json'
+    )
+  )
 
   if (productMetadata?.schemaVersion !== 1) {
     throw new Error('Vietnamese product metadata must use schemaVersion 1')

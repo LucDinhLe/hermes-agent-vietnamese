@@ -73,7 +73,8 @@ test('packaged provenance binds engine stamp, shell commit, overlay, and patches
     expectedShellCommit: SHELL_COMMIT,
     requireRelease: true,
     resourcesDir: sample.resourcesDir,
-    root: ROOT
+    root: ROOT,
+    shellState: { commit: SHELL_COMMIT, dirty: false }
   })
 
   assert.match(result.receiptSha256, /^[0-9a-f]{64}$/)
@@ -92,7 +93,8 @@ test('packaged provenance rejects an install stamp from the shell commit', () =>
         expectedShellCommit: SHELL_COMMIT,
         requireRelease: true,
         resourcesDir: sample.resourcesDir,
-        root: ROOT
+        root: ROOT,
+        shellState: { commit: SHELL_COMMIT, dirty: false }
       }),
     /Install stamp engine commit mismatch/
   )
@@ -112,8 +114,55 @@ test('diagnostic CI provenance rejects a dirty shell receipt', () => {
         expectedShellCommit: SHELL_COMMIT,
         requireCleanShell: true,
         resourcesDir: sample.resourcesDir,
-        root: ROOT
+        root: ROOT,
+        shellState: { commit: SHELL_COMMIT, dirty: false }
       }),
     /Receipt shell dirty flag mismatch/
+  )
+})
+
+test('packaged provenance rejects a shell that changed after materialization', () => {
+  const sample = fixture()
+
+  assert.throws(
+    () =>
+      verifyPackagedProvenance({
+        contract: sample.contract,
+        expectedShellCommit: SHELL_COMMIT,
+        requireCleanShell: true,
+        resourcesDir: sample.resourcesDir,
+        root: ROOT,
+        shellState: { commit: 'b'.repeat(40), dirty: false }
+      }),
+    /Current shell commit mismatch/
+  )
+})
+
+test('packaged provenance binds the packaged receipt to its pre-build SHA-256', () => {
+  const sample = fixture()
+  const first = verifyPackagedProvenance({
+    contract: sample.contract,
+    expectedShellCommit: SHELL_COMMIT,
+    requireRelease: true,
+    resourcesDir: sample.resourcesDir,
+    root: ROOT,
+    shellState: { commit: SHELL_COMMIT, dirty: false }
+  })
+
+  sample.receipt.generatedAt = new Date(1).toISOString()
+  writeJson(path.join(sample.resourcesDir, 'edition-receipt.json'), sample.receipt)
+
+  assert.throws(
+    () =>
+      verifyPackagedProvenance({
+        contract: sample.contract,
+        expectedReceiptSha256: first.receiptSha256,
+        expectedShellCommit: SHELL_COMMIT,
+        requireRelease: true,
+        resourcesDir: sample.resourcesDir,
+        root: ROOT,
+        shellState: { commit: SHELL_COMMIT, dirty: false }
+      }),
+    /Packaged receipt SHA-256 mismatch/
   )
 })

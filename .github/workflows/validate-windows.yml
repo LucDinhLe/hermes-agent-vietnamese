@@ -123,11 +123,10 @@ jobs:
         id: verify_materialized
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         shell: pwsh
-        run: >-
-          npm run verify:materialized --
-          --tree ".work/materialized"
-          --shell-commit "$env:GITHUB_SHA"
-          --require-clean-shell
+        run: |
+          npm run verify:materialized -- --tree ".work/materialized" --shell-commit "$env:GITHUB_SHA" --require-clean-shell
+          $receiptSha = (Get-FileHash ".work/materialized/apps/desktop/build/edition-receipt.json" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "receipt_sha=$receiptSha" >> $env:GITHUB_OUTPUT
 
       - name: Build desktop once for diagnostic evidence
         id: build
@@ -151,6 +150,7 @@ jobs:
           npm run verify:provenance --
           --resources ".work/materialized/apps/desktop/build"
           --shell-commit "$env:GITHUB_SHA"
+          --receipt-sha256 "${{ steps.verify_materialized.outputs.receipt_sha }}"
           --require-clean-shell
 
       - name: Upload immutable build evidence

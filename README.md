@@ -14,25 +14,32 @@ trong `engine.lock.json`.
 cd "C:\Users\AUS-PRO\OneDrive\Tài liệu\Tom\projects\hermes-vietnamese-shell"
 $shellRoot = (Get-Location).Path
 $shellCommit = git rev-parse HEAD
+$runId = [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss')
+$previewRoot = Join-Path $shellRoot ".work\preview-$($shellCommit.Substring(0, 12))-$runId"
 npm test
 npm run verify
-npm run materialize -- --engine-dir "C:\Users\AUS-PRO\OneDrive\Tài liệu\Tom\projects\hermes-v33-work"
+npm run materialize -- --engine-dir "C:\Users\AUS-PRO\OneDrive\Tài liệu\Tom\projects\hermes-v33-work" --output $previewRoot
 ```
 
-Cây đã dựng nằm ở `.work/engine-<12-ký-tự-commit>` và đường dẫn thật được script
-in ra. Từ đó chạy gate upstream, rồi build đúng một lần:
+Cây đã dựng có output riêng cho từng lần chạy và đường dẫn thật được script in
+ra. Nếu bỏ `--output`, materializer cũng tự thêm một hậu tố ngẫu nhiên để không
+đụng cây cũ. Từ đó chạy gate upstream, rồi build đúng một lần:
 
 ```powershell
-cd ".work\engine-<12-ký-tự-commit>"
+Set-Location $previewRoot
 npm ci
 npm run typecheck --workspace apps/desktop
+npm run lint --workspace apps/desktop
 Push-Location apps/desktop
 npm exec -- vitest run --project ui src/i18n/vi-community.test.ts src/plugins/hermes-vietnamese/plugin.test.tsx src/plugins/hermes-vietnamese/support-report.test.ts
 npm exec -- vitest run --project electron electron/vietnamese-identity-migration.test.ts --maxWorkers=1
 Pop-Location
 npm run check:test:plugins --workspace apps/desktop
 node "$shellRoot\scripts\verify-materialized-tree.mjs" --tree (Get-Location).Path --shell-commit $shellCommit --require-clean-shell
+$receiptSha = (Get-FileHash "apps\desktop\build\edition-receipt.json" -Algorithm SHA256).Hash.ToLowerInvariant()
 npm run build --workspace apps/desktop
+Set-Location $shellRoot
+npm run verify:provenance -- --resources "$previewRoot\apps\desktop\build" --shell-commit $shellCommit --receipt-sha256 $receiptSha --require-clean-shell
 ```
 
 Đây là build chẩn đoán có `releaseMode: false`, chưa phải installer và chưa được
@@ -55,7 +62,8 @@ output đó:
 ```powershell
 $shellRoot = (Get-Location).Path
 $shellCommit = git rev-parse HEAD
-$candidateRoot = Join-Path $shellRoot ".work\candidate-<commit>"
+$runId = [DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss')
+$candidateRoot = Join-Path $shellRoot ".work\candidate-$($shellCommit.Substring(0, 12))-$runId"
 npm run materialize -- --engine-dir "C:\duong-dan\hermes-upstream" --output $candidateRoot --release
 Set-Location $candidateRoot
 npm ci
@@ -64,10 +72,11 @@ npm run test:ui --workspace apps/desktop
 npm run test:desktop:platforms --workspace apps/desktop
 npm run check:test:plugins --workspace apps/desktop
 node "$shellRoot\scripts\verify-materialized-tree.mjs" --tree $candidateRoot --shell-commit $shellCommit --require-clean-shell
+$receiptSha = (Get-FileHash "$candidateRoot\apps\desktop\build\edition-receipt.json" -Algorithm SHA256).Hash.ToLowerInvariant()
 npm run build --workspace apps/desktop
 npm run builder --workspace apps/desktop -- --dir --publish never
 Set-Location $shellRoot
-npm run verify:provenance -- --resources "$candidateRoot\apps\desktop\release\win-unpacked\resources" --shell-commit $shellCommit --require-release
+npm run verify:provenance -- --resources "$candidateRoot\apps\desktop\release\win-unpacked\resources" --shell-commit $shellCommit --receipt-sha256 $receiptSha --require-clean-shell --require-release
 ```
 
 Không chạy `pack` hoặc `dist:*` sau `build`, vì các script upstream đó tự build

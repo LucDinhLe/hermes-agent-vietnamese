@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 
 import { normalizeRepositoryUrl, readJson, resolveShellState, sha256File } from './lib/contracts.mjs'
 import { verifyEdition } from './verify-edition.mjs'
+import { expectedChangedPaths } from './verify-materialized-tree.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -22,14 +23,20 @@ function parseArgs(argv) {
       continue
     }
 
-    if (arg === '--resources' || arg === '--shell-commit') {
+    if (arg === '--resources' || arg === '--shell-commit' || arg === '--receipt-sha256') {
       const value = argv[index + 1]
 
       if (!value || value.startsWith('--')) {
         throw new Error(`${arg} requires a value`)
       }
 
-      options[arg === '--resources' ? 'resourcesDir' : 'expectedShellCommit'] = value
+      if (arg === '--resources') {
+        options.resourcesDir = value
+      } else if (arg === '--shell-commit') {
+        options.expectedShellCommit = value
+      } else {
+        options.expectedReceiptSha256 = value.toLowerCase()
+      }
       index += 1
       continue
     }
@@ -39,7 +46,7 @@ function parseArgs(argv) {
 
   if (!options.resourcesDir) {
     throw new Error(
-      'Usage: npm run verify:provenance -- --resources <directory> [--shell-commit <sha>] [--require-clean-shell] [--require-release]'
+      'Usage: npm run verify:provenance -- --resources <directory> [--shell-commit <sha>] [--receipt-sha256 <sha>] [--require-clean-shell] [--require-release]'
     )
   }
 
@@ -62,10 +69,19 @@ export function verifyPackagedProvenance(options) {
   const resourcesDir = path.resolve(options.resourcesDir)
   const receiptPath = path.join(resourcesDir, 'edition-receipt.json')
   const stampPath = path.join(resourcesDir, 'install-stamp.json')
+  const receiptSha256 = sha256File(receiptPath)
   const receipt = readJson(receiptPath)
   const stamp = readJson(stampPath)
-  const expectedShellCommit =
-    options.expectedShellCommit ?? resolveShellState(root, contract.edition.maintainer.repository).commit
+  const shell = options.shellState ?? resolveShellState(root, contract.edition.maintainer.repository)
+  const expectedShellCommit = options.expectedShellCommit ?? shell.commit
+
+  if (options.expectedReceiptSha256) {
+    if (!/^[0-9a-f]{64}$/.test(options.expectedReceiptSha256)) {
+      throw new Error('Expected receipt SHA-256 must be exactly 64 hexadecimal characters')
+    }
+
+    assertEqual(receiptSha256, options.expectedReceiptSha256, 'Packaged receipt SHA-256')
+  }
 
   assertEqual(receipt.schemaVersion, 1, 'Receipt schema')
   assertEqual(receipt.engine.tag, contract.lock.source.tag, 'Receipt engine tag')
@@ -90,18 +106,14 @@ export function verifyPackagedProvenance(options) {
     stableJson(contract.patches.map((patch) => ({ id: patch.id, sha256: patch.sha256 }))),
     'Receipt patch inventory'
   )
-  const expectedChangedPaths = [
-    ...new Set([
-      ...contract.overlayFiles,
-      ...contract.patches.flatMap((patch) => patch.paths),
-      'apps/desktop/index.html',
-      'apps/desktop/package.json',
-      'apps/desktop/build/edition-receipt.json'
-    ])
-  ].sort()
+  const expectedChangedPathInventory = expectedChangedPaths(contract)
 
-  assertEqual(stableJson(receipt.changedPaths), stableJson(expectedChangedPaths), 'Receipt changed-path inventory')
-  const expectedMaterializedPaths = expectedChangedPaths.filter(
+  assertEqual(
+    stableJson(receipt.changedPaths),
+    stableJson(expectedChangedPathInventory),
+    'Receipt changed-path inventory'
+  )
+  const expectedMaterializedPaths = expectedChangedPathInventory.filter(
     (file) => file !== 'apps/desktop/build/edition-receipt.json'
   )
 
@@ -126,10 +138,14 @@ export function verifyPackagedProvenance(options) {
   assertEqual(stamp.dirty, true, 'Install stamp composite-tree dirty flag')
 
   if (options.requireCleanShell) {
+    assertEqual(shell.commit, expectedShellCommit, 'Current shell commit')
+    assertEqual(shell.dirty, false, 'Current shell dirty flag')
     assertEqual(receipt.edition.shellDirty, false, 'Receipt shell dirty flag')
   }
 
   if (options.requireRelease) {
+    assertEqual(shell.commit, expectedShellCommit, 'Current shell commit')
+    assertEqual(shell.dirty, false, 'Current shell dirty flag')
     assertEqual(receipt.releaseMode, true, 'Receipt release mode')
     assertEqual(receipt.edition.shellDirty, false, 'Receipt shell dirty flag')
 
@@ -142,7 +158,7 @@ export function verifyPackagedProvenance(options) {
 
   return {
     receipt,
-    receiptSha256: sha256File(receiptPath),
+    receiptSha256,
     stamp,
     stampSha256: sha256File(stampPath)
   }

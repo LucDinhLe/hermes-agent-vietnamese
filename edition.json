@@ -28,6 +28,11 @@
       "appId": "com.nousresearch.hermes",
       "executableName": "Hermes",
       "protocol": "hermes",
+      "protocolSchemes": [
+        [
+          "hermes"
+        ]
+      ],
       "artifactName": "Hermes-${version}-${os}-${arch}.${ext}"
     }
   },
@@ -36,7 +41,6 @@
     "apps/desktop/build/edition-receipt.json",
     "apps/desktop/index.html",
     "apps/desktop/package.json",
-    "apps/desktop/product-metadata.json",
     "apps/desktop/electron/vietnamese-identity-migration.test.ts",
     "apps/desktop/electron/vietnamese-identity-migration.ts",
     "apps/desktop/src/i18n/vi-community.test.ts",

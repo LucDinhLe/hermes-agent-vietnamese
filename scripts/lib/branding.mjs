@@ -1,6 +1,8 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 
+export const BRANDING_PATHS = ['apps/desktop/index.html', 'apps/desktop/package.json']
+
 function identityOf(manifest) {
   return {
     appId: manifest.build?.appId,
@@ -9,7 +11,8 @@ function identityOf(manifest) {
     executableName: manifest.build?.executableName,
     packageName: manifest.name,
     packageProductName: manifest.productName,
-    protocol: manifest.build?.protocols?.[0]?.schemes?.[0]
+    protocol: manifest.build?.protocols?.[0]?.schemes?.[0],
+    protocolSchemes: manifest.build?.protocols?.map((entry) => entry.schemes)
   }
 }
 
@@ -17,7 +20,7 @@ export function assertProtectedIdentity(manifest, expected) {
   const actual = identityOf(manifest)
 
   for (const [key, value] of Object.entries(expected)) {
-    if (actual[key] !== value) {
+    if (JSON.stringify(actual[key]) !== JSON.stringify(value)) {
       throw new Error(`Branding must not change ${key}: expected ${value}, got ${actual[key]}`)
     }
   }
@@ -71,5 +74,5 @@ export function applyBranding(engineRoot, edition) {
   writeFileSync(packagePath, `${JSON.stringify(brandedManifest, null, 2)}\n`, 'utf8')
   writeFileSync(indexPath, brandIndexHtml(index, edition.branding.windowTitle), 'utf8')
 
-  return ['apps/desktop/index.html', 'apps/desktop/package.json']
+  return [...BRANDING_PATHS]
 }

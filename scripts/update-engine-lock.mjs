@@ -248,6 +248,9 @@ export function updateEngineLock(options) {
     ...edition.overlayRoot.split('/'),
     'apps',
     'desktop',
+    'src',
+    'plugins',
+    'hermes-vietnamese',
     'product-metadata.json'
   )
   const lockText = readFileSync(lockPath, 'utf8')

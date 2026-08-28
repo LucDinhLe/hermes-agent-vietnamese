@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -71,7 +72,8 @@ export function materialize(options) {
   const contract = verifyEdition(ROOT)
   const engineDir = path.resolve(options.engineDir)
   const output = path.resolve(
-    options.output ?? path.join(ROOT, '.work', `engine-${contract.lock.source.commit.slice(0, 12)}`)
+    options.output ??
+      path.join(ROOT, '.work', `engine-${contract.lock.source.commit.slice(0, 12)}-${randomUUID().slice(0, 8)}`)
   )
   const shell = resolveShellState(ROOT, contract.edition.maintainer.repository)
   const liveRemoteRefs = options.release ? verifyLiveRemoteRefs(ROOT, shell.remoteCandidates) : []

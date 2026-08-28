@@ -9,6 +9,7 @@ import {
   runGit,
   sha256File
 } from './lib/contracts.mjs'
+import { BRANDING_PATHS } from './lib/branding.mjs'
 import { verifyEdition } from './verify-edition.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -59,8 +60,23 @@ function assertJsonEqual(actual, expected, label) {
   }
 }
 
-export function verifyMaterializedFiles(tree, receipt) {
-  const expectedPaths = receipt.changedPaths.filter((file) => file !== RECEIPT_PATH)
+export function expectedChangedPaths(contract) {
+  return [
+    ...new Set([
+      ...contract.overlayFiles,
+      ...contract.patches.flatMap((patch) => patch.paths),
+      ...BRANDING_PATHS,
+      RECEIPT_PATH
+    ])
+  ].sort()
+}
+
+export function verifyMaterializedFiles(
+  tree,
+  receipt,
+  { expectedPaths = receipt.changedPaths, overlayInventory = [] } = {}
+) {
+  const expectedMaterializedPaths = expectedPaths.filter((file) => file !== RECEIPT_PATH)
   const inventory = receipt.materializedFiles
 
   if (!Array.isArray(inventory)) {
@@ -69,9 +85,17 @@ export function verifyMaterializedFiles(tree, receipt) {
 
   assertJsonEqual(
     inventory.map((entry) => entry.path),
-    expectedPaths,
+    expectedMaterializedPaths,
     'Materialized-file path inventory'
   )
+
+  const inventoryByPath = new Map(inventory.map((entry) => [entry.path, entry.sha256]))
+
+  for (const entry of overlayInventory) {
+    if (inventoryByPath.get(entry.path) !== entry.sha256) {
+      throw new Error(`Materialized overlay digest mismatch: ${entry.path}`)
+    }
+  }
 
   for (const entry of inventory) {
     const relative = assertSafeRelativePath(entry.path, 'materialized file')
@@ -98,7 +122,9 @@ export function verifyMaterializedTree(options) {
   const treeHead = runGit(['rev-parse', 'HEAD'], tree).stdout
   const stagedPaths = splitLines(runGit(['diff', '--cached', '--name-only', '--diff-filter=ACDMRTUXB'], tree).stdout)
   const unstagedPaths = splitLines(runGit(['diff', '--name-only'], tree).stdout)
+  const untrackedPaths = splitLines(runGit(['ls-files', '--others', '--exclude-standard'], tree).stdout)
   const expectedPatches = contract.patches.map((patch) => ({ id: patch.id, sha256: patch.sha256 }))
+  const expectedPaths = expectedChangedPaths(contract)
 
   if (!expectedShellCommit || !/^[0-9a-f]{40}$/.test(expectedShellCommit)) {
     throw new Error('Expected shell commit must be an exact 40-character SHA')
@@ -118,13 +144,21 @@ export function verifyMaterializedTree(options) {
 
   assertJsonEqual(receipt.edition.overlayFiles, contract.overlayInventory, 'Overlay inventory')
   assertJsonEqual(receipt.edition.patches, expectedPatches, 'Patch inventory')
-  assertJsonEqual(stagedPaths, receipt.changedPaths, 'Staged changed-path inventory')
+  assertJsonEqual(receipt.changedPaths, expectedPaths, 'Receipt changed-path inventory')
+  assertJsonEqual(stagedPaths, expectedPaths, 'Staged changed-path inventory')
 
   if (unstagedPaths.length > 0) {
     throw new Error(`Materialized tree has unstaged changes: ${unstagedPaths.join(', ')}`)
   }
 
-  const fileCount = verifyMaterializedFiles(tree, receipt)
+  if (untrackedPaths.length > 0) {
+    throw new Error(`Materialized tree has untracked non-ignored paths: ${untrackedPaths.join(', ')}`)
+  }
+
+  const fileCount = verifyMaterializedFiles(tree, receipt, {
+    expectedPaths,
+    overlayInventory: contract.overlayInventory
+  })
 
   return { fileCount, receipt, receiptSha256: sha256File(receiptPath) }
 }

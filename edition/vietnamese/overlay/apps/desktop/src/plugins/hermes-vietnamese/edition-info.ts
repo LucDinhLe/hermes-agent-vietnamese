@@ -1,4 +1,4 @@
-import productMetadata from '../../../product-metadata.json'
+import productMetadata from './product-metadata.json'
 
 export const EDITION_INFO = {
   displayName: productMetadata.displayName,
