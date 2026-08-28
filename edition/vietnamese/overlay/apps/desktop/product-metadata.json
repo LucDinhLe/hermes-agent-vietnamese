@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "displayName": "Hermes Vietnamese",
+  "productVersion": "V33",
+  "technicalVersion": "0.33.0-dev.1",
+  "releaseChannel": "development",
+  "communityMaintainer": {
+    "name": "Lê Đình Lực",
+    "handle": "LucDinhLe",
+    "displayName": "Lê Đình Lực (LucDinhLe)",
+    "publicEmail": "LucDinhLe@users.noreply.github.com",
+    "url": "https://github.com/LucDinhLe"
+  },
+  "upstream": {
+    "productName": "Hermes Agent",
+    "version": "0.20.6",
+    "tag": "v2026.8.27",
+    "commit": "5fc308a70719a83cccdbba4c0e39c23f5a8239d5",
+    "publisher": "Nous Research",
+    "repository": "https://github.com/NousResearch/hermes-agent"
+  },
+  "license": {
+    "spdx": "MIT",
+    "url": "https://github.com/NousResearch/hermes-agent/blob/5fc308a70719a83cccdbba4c0e39c23f5a8239d5/LICENSE"
+  },
+  "identity": {
+    "status": "reserved-not-active",
+    "appId": "vn.lucledinh.hermes-vietnamese",
+    "executableName": "HermesVietnamese",
+    "protocol": "hermes-vi"
+  },
+  "communityLinks": {
+    "repository": "https://github.com/LucDinhLe/hermes-agent-vietnamese",
+    "issues": "https://github.com/LucDinhLe/hermes-agent-vietnamese/issues",
+    "releases": "https://github.com/LucDinhLe/hermes-agent-vietnamese/releases"
+  }
+}

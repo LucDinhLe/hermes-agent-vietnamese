@@ -1,0 +1,165 @@
+name: Validate Hermes Vietnamese V33
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v33-validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-x64:
+    name: Windows x64 source and build gates
+    runs-on: windows-2025
+    timeout-minutes: 90
+
+    steps:
+      - name: Check out Vietnamese shell
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read locked upstream ref
+        id: engine
+        shell: pwsh
+        run: |
+          $lock = Get-Content -LiteralPath 'engine.lock.json' -Raw | ConvertFrom-Json
+          "tag=$($lock.source.tag)" >> $env:GITHUB_OUTPUT
+          "commit=$($lock.source.commit)" >> $env:GITHUB_OUTPUT
+
+      - name: Enable Windows long paths
+        shell: pwsh
+        run: git config --global core.longpaths true
+
+      - name: Check out locked Hermes engine
+        uses: actions/checkout@v4
+        with:
+          repository: NousResearch/hermes-agent
+          ref: ${{ steps.engine.outputs.tag }}
+          fetch-depth: 0
+          path: .work/upstream
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Verify shell contracts
+        shell: pwsh
+        run: |
+          npm ci
+          npm test
+          npm run verify
+
+      - name: Materialize exact edition tree
+        id: materialize
+        shell: pwsh
+        run: >-
+          npm run materialize --
+          --engine-dir "$env:GITHUB_WORKSPACE\.work\upstream"
+          --output "$env:GITHUB_WORKSPACE\.work\materialized"
+
+      - name: Install locked engine dependencies
+        id: install
+        working-directory: .work/materialized
+        shell: pwsh
+        run: npm ci
+
+      - name: Typecheck desktop
+        working-directory: .work/materialized
+        shell: pwsh
+        run: npm run typecheck --workspace apps/desktop
+
+      - name: Lint desktop
+        working-directory: .work/materialized
+        shell: pwsh
+        run: npm run lint --workspace apps/desktop
+
+      - name: Test Vietnamese renderer surfaces
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        working-directory: .work/materialized/apps/desktop
+        shell: pwsh
+        run: >-
+          npm exec -- vitest run --project ui
+          src/i18n/vi-community.test.ts
+          src/plugins/hermes-vietnamese/plugin.test.tsx
+          src/plugins/hermes-vietnamese/support-report.test.ts
+
+      - name: Test dormant Vietnamese identity migration
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        working-directory: .work/materialized/apps/desktop
+        shell: pwsh
+        run: >-
+          npm exec -- vitest run --project electron
+          electron/vietnamese-identity-migration.test.ts
+          --maxWorkers=1
+
+      - name: Test bundled plugins
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        working-directory: .work/materialized
+        shell: pwsh
+        run: npm run check:test:plugins --workspace apps/desktop
+
+      - name: Test renderer
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        working-directory: .work/materialized
+        shell: pwsh
+        run: npm run test:ui --workspace apps/desktop
+
+      - name: Test Electron platform code
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        working-directory: .work/materialized
+        shell: pwsh
+        run: npm run test:desktop:platforms --workspace apps/desktop
+
+      - name: Verify immutable materialized inputs before build
+        id: verify_materialized
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        shell: pwsh
+        run: >-
+          npm run verify:materialized --
+          --tree ".work/materialized"
+          --shell-commit "$env:GITHUB_SHA"
+          --require-clean-shell
+
+      - name: Build desktop once for diagnostic evidence
+        id: build
+        if: >-
+          ${{ !cancelled() &&
+              steps.materialize.outcome == 'success' &&
+              steps.install.outcome == 'success' &&
+              steps.verify_materialized.outcome == 'success' }}
+        working-directory: .work/materialized
+        shell: pwsh
+        run: |
+          Remove-Item Env:GITHUB_SHA -ErrorAction SilentlyContinue
+          Remove-Item Env:GITHUB_REF_NAME -ErrorAction SilentlyContinue
+          Remove-Item Env:GITHUB_HEAD_REF -ErrorAction SilentlyContinue
+          npm run build --workspace apps/desktop
+
+      - name: Verify build stamp against immutable receipt
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: pwsh
+        run: >-
+          npm run verify:provenance --
+          --resources ".work/materialized/apps/desktop/build"
+          --shell-commit "$env:GITHUB_SHA"
+          --require-clean-shell
+
+      - name: Upload immutable build evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v33-windows-x64-evidence-${{ github.sha }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            .work/materialized/apps/desktop/build/edition-receipt.json
+            .work/materialized/apps/desktop/build/install-stamp.json

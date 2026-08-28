@@ -1,0 +1,61 @@
+diff --git a/apps/desktop/src/i18n/catalog.ts b/apps/desktop/src/i18n/catalog.ts
+--- a/apps/desktop/src/i18n/catalog.ts
++++ b/apps/desktop/src/i18n/catalog.ts
+@@ -2,6 +2,7 @@ import { ar } from './ar'
+ import { en } from './en'
+ import { ja } from './ja'
+ import type { Locale, Translations } from './types'
++import { vi } from './vi'
+ import { zh } from './zh'
+ import { zhHant } from './zh-hant'
+ 
+@@ -11,4 +12,5 @@ export const TRANSLATIONS: Record<Locale, Translations> = {
+   'zh-hant': zhHant,
+   ja,
+-  ar
++  ar,
++  vi
+ }
+diff --git a/apps/desktop/src/i18n/languages.ts b/apps/desktop/src/i18n/languages.ts
+--- a/apps/desktop/src/i18n/languages.ts
++++ b/apps/desktop/src/i18n/languages.ts
+@@ -35,6 +35,12 @@ export const LOCALE_OPTIONS = [
+     name: 'العربية',
+     englishName: 'Arabic',
+     configValue: 'ar'
++  },
++  {
++    id: 'vi',
++    name: 'Tiếng Việt',
++    englishName: 'Vietnamese',
++    configValue: 'vi'
+   }
+ ] as const satisfies readonly { configValue: string; englishName: string; id: Locale; name: string }[]
+ 
+@@ -86,7 +92,13 @@ const LOCALE_ALIASES: Record<string, Locale> = {
+   'ar-ae': 'ar',
+   ar_ae: 'ar',
+   'ar-eg': 'ar',
+   ar_eg: 'ar',
+   arabic: 'ar',
+-  العربية: 'ar'
++  العربية: 'ar',
++  vi: 'vi',
++  'vi-vn': 'vi',
++  vi_vn: 'vi',
++  vietnamese: 'vi',
++  'tiếng việt': 'vi',
++  'tieng viet': 'vi'
+ }
+diff --git a/apps/desktop/src/i18n/types.ts b/apps/desktop/src/i18n/types.ts
+--- a/apps/desktop/src/i18n/types.ts
++++ b/apps/desktop/src/i18n/types.ts
+@@ -5,7 +5,7 @@
+ // partial locales should use `defineLocale()` so missing desktop-only strings
+ // fall back to English while new keys remain type-checked.
+ 
+-export type Locale = 'en' | 'zh' | 'zh-hant' | 'ja' | 'ar'
++export type Locale = 'en' | 'zh' | 'zh-hant' | 'ja' | 'ar' | 'vi'
+ 
+ export type ToolTitleKey =
+   | 'browser_click'

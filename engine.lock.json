@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "repository": "https://github.com/NousResearch/hermes-agent.git",
+    "tag": "v2026.8.27",
+    "tagObjectSha": "fcebd62163497e77e5de00d26d2ed86cb4ef8761",
+    "commit": "5fc308a70719a83cccdbba4c0e39c23f5a8239d5",
+    "engineVersion": "0.20.6",
+    "desktopVersion": "0.17.0",
+    "license": "MIT",
+    "tagSignature": "unsigned"
+  },
+  "observedAt": "2026-08-28",
+  "policy": {
+    "followMovingBranch": false,
+    "requireExactCommit": true,
+    "requireAnnotatedTag": true
+  }
+}

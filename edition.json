@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "id": "hermes-vietnamese",
+  "displayName": "Hermes Vietnamese",
+  "productVersion": "V33",
+  "technicalVersion": "0.33.0-dev.1",
+  "releaseChannel": "development",
+  "maintainer": {
+    "name": "Lê Đình Lực",
+    "handle": "LucDinhLe",
+    "repository": "https://github.com/LucDinhLe/hermes-agent-vietnamese"
+  },
+  "identity": {
+    "appId": "vn.lucledinh.hermes-vietnamese",
+    "executableName": "HermesVietnamese",
+    "protocol": "hermes-vi",
+    "windowsDataRoot": "hermes-vietnamese",
+    "posixDataRoot": ".hermes-vietnamese",
+    "activation": "blocked-until-migration-gate"
+  },
+  "branding": {
+    "windowTitle": "Hermes Vietnamese",
+    "description": "Hermes Vietnamese, the MIT-licensed community desktop edition of Hermes Agent.",
+    "protectedIdentity": {
+      "packageName": "hermes",
+      "packageProductName": "Hermes",
+      "buildProductName": "Hermes",
+      "appId": "com.nousresearch.hermes",
+      "executableName": "Hermes",
+      "protocol": "hermes",
+      "artifactName": "Hermes-${version}-${os}-${arch}.${ext}"
+    }
+  },
+  "overlayRoot": "edition/vietnamese/overlay",
+  "allowedPaths": [
+    "apps/desktop/build/edition-receipt.json",
+    "apps/desktop/index.html",
+    "apps/desktop/package.json",
+    "apps/desktop/product-metadata.json",
+    "apps/desktop/electron/vietnamese-identity-migration.test.ts",
+    "apps/desktop/electron/vietnamese-identity-migration.ts",
+    "apps/desktop/src/i18n/vi-community.test.ts",
+    "apps/desktop/src/i18n/vi.ts",
+    "apps/desktop/src/plugins/hermes-vietnamese/**",
+    "apps/desktop/src/i18n/catalog.ts",
+    "apps/desktop/src/i18n/languages.ts",
+    "apps/desktop/src/i18n/types.ts"
+  ],
+  "forbiddenPrefixes": [
+    "agent/",
+    "gateway/",
+    "hermes_cli/",
+    "tui_gateway/"
+  ]
+}

@@ -1,0 +1,14 @@
+diff --git a/apps/desktop/package.json b/apps/desktop/package.json
+--- a/apps/desktop/package.json
++++ b/apps/desktop/package.json
+@@ -211,6 +211,10 @@
+     "beforePack": "scripts/before-pack.mjs",
+     "afterPack": "scripts/after-pack.mjs",
+     "extraResources": [
++      {
++        "from": "build/edition-receipt.json",
++        "to": "edition-receipt.json"
++      },
+       {
+         "from": "build/install-stamp.json",
+         "to": "install-stamp.json"

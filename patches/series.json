@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "patches": [
+    {
+      "id": "core-i18n-registration",
+      "file": "core-i18n-registration.patch",
+      "state": "active",
+      "upstreamCommit": "5fc308a70719a83cccdbba4c0e39c23f5a8239d5",
+      "rationale": "Register Vietnamese as a first-class desktop locale while keeping all translated product copy outside upstream core.",
+      "paths": [
+        "apps/desktop/src/i18n/catalog.ts",
+        "apps/desktop/src/i18n/languages.ts",
+        "apps/desktop/src/i18n/types.ts"
+      ],
+      "retireWhen": "Upstream exposes a distribution-owned locale registration seam.",
+      "tests": [
+        "apps/desktop/src/i18n/languages.test.ts",
+        "apps/desktop/src/i18n/vi-community.test.ts"
+      ]
+    },
+    {
+      "id": "edition-receipt-packaging",
+      "file": "edition-receipt-packaging.patch",
+      "state": "active",
+      "upstreamCommit": "5fc308a70719a83cccdbba4c0e39c23f5a8239d5",
+      "rationale": "Ship the immutable edition receipt beside the upstream install stamp so a packaged artifact identifies both engine and Vietnamese shell inputs.",
+      "paths": [
+        "apps/desktop/package.json"
+      ],
+      "retireWhen": "Upstream exposes a distribution-owned provenance resource seam or natively packages an edition receipt.",
+      "tests": [
+        "tests/receipt-packaging.test.mjs"
+      ]
+    }
+  ]
+}
