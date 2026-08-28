@@ -17,6 +17,8 @@ test('Windows validation pins every action to an immutable commit', () => {
     assert.match(commit, /^[a-f0-9]{40}$/)
     assert.match(versionComment ?? '', /^v\d/)
   }
+
+  assert.equal(workflow.match(/persist-credentials:\s*false/g)?.length, 2)
 })
 
 test('Windows validation derives the engine ref from engine.lock', () => {
@@ -57,6 +59,7 @@ test('Windows validation runs the source and build gates without publishing', ()
   ]) {
     assert.match(workflow, new RegExp(focusedPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
+  assert.match(workflow, /support-report\.test\.ts\s+--maxWorkers=1/)
   assert.match(workflow, /electron\/vietnamese-identity-migration\.test\.ts\s+--maxWorkers=1/)
   assert.match(workflow, /Remove-Item Env:GITHUB_SHA/)
   assert.match(workflow, /npm run verify:materialized/)

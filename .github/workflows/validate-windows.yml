@@ -26,6 +26,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Read locked upstream ref
         id: engine
@@ -46,6 +47,7 @@ jobs:
           ref: ${{ steps.engine.outputs.tag }}
           fetch-depth: 0
           path: .work/upstream
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -92,6 +94,7 @@ jobs:
           src/i18n/vi-community.test.ts
           src/plugins/hermes-vietnamese/plugin.test.tsx
           src/plugins/hermes-vietnamese/support-report.test.ts
+          --maxWorkers=1
 
       - name: Test dormant Vietnamese identity migration
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
