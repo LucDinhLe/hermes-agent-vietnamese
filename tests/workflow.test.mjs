@@ -5,6 +5,8 @@ import path from 'node:path'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 const workflow = readFileSync(path.join(ROOT, '.github', 'workflows', 'validate-windows.yml'), 'utf8')
+const shellPackage = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
+const shellLock = JSON.parse(readFileSync(path.join(ROOT, 'package-lock.json'), 'utf8'))
 
 test('Windows validation pins every action to an immutable commit', () => {
   const actionUses = [...workflow.matchAll(/^\s*uses:\s*([^@\s]+)@([^\s#]+)(?:\s+#\s+(.+))?$/gm)]
@@ -22,6 +24,13 @@ test('Windows validation derives the engine ref from engine.lock', () => {
   assert.match(workflow, /\$lock\.source\.commit/)
   assert.match(workflow, /ref: \$\{\{ steps\.engine\.outputs\.tag \}\}/)
   assert.doesNotMatch(workflow, /v2026\.8\.27/)
+})
+
+test('Windows validation uses the Node major locked by upstream', () => {
+  assert.match(workflow, /node-version:\s*26/)
+  assert.doesNotMatch(workflow, /node-version:\s*(?:2[0-5]|1\d)(?:\D|$)/)
+  assert.equal(shellPackage.engines.node, '>=26.0.0')
+  assert.equal(shellLock.packages[''].engines.node, shellPackage.engines.node)
 })
 
 test('Windows validation runs the source and build gates without publishing', () => {
