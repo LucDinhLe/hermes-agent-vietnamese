@@ -123,7 +123,11 @@ export function verifyMaterializedTree(options) {
   const stagedPaths = splitLines(runGit(['diff', '--cached', '--name-only', '--diff-filter=ACDMRTUXB'], tree).stdout)
   const unstagedPaths = splitLines(runGit(['diff', '--name-only'], tree).stdout)
   const untrackedPaths = splitLines(runGit(['ls-files', '--others', '--exclude-standard'], tree).stdout)
-  const expectedPatches = contract.patches.map((patch) => ({ id: patch.id, sha256: patch.sha256 }))
+  const expectedPatches = contract.patches.map((patch) => ({
+    id: patch.id,
+    kind: patch.kind,
+    sha256: patch.sha256
+  }))
   const expectedPaths = expectedChangedPaths(contract)
 
   if (!expectedShellCommit || !/^[0-9a-f]{40}$/.test(expectedShellCommit)) {

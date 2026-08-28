@@ -113,10 +113,13 @@ cho các lỗi upstream nếu có.
 - `edition/vietnamese/overlay/`: tệp do bản Việt sở hữu, gồm locale và bundled
   desktop plugin.
 - `patches/series.json`: sổ mọi chỉnh sửa bắt buộc vào file upstream; mỗi patch
-  phải có lý do, đường dẫn, test và điều kiện gỡ bỏ.
+  phải có loại, lý do, đường dẫn, test và điều kiện gỡ bỏ. Patch `edition-seam`
+  chỉ được chạm allowlist desktop; patch P0 `engine-hotfix` chỉ được chạm từng
+  đường dẫn chính xác trong `enginePatchAllowedPaths`, không chấp nhận glob.
 - `scripts/materialize-vietnamese.mjs`: từ chối tag/SHA sai, output có sẵn,
-  mọi đường dẫn ngoài `apps/desktop/`, alias nguy hiểm trên Windows và thay đổi
-  nguồn xảy ra giữa lúc materialize.
+  mọi đường dẫn ngoài hai allowlist tách biệt, alias nguy hiểm trên Windows và
+  thay đổi nguồn xảy ra giữa lúc materialize. Overlay không bao giờ được dùng
+  allowlist hotfix để đi vào lõi.
 - `apps/desktop/build/edition-receipt.json` trong cây dựng: bằng chứng liên kết
   engine, shell, overlay và patch SHA. Receipt được đóng cùng install stamp vào
   resources; `verify:provenance` đối chiếu cả bản build và bản đã đóng gói.

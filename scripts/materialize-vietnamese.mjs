@@ -108,7 +108,11 @@ export function materialize(options) {
   let worktreeAdded = false
 
   try {
-    runGit(['-c', 'core.longpaths=true', 'worktree', 'add', '--detach', output, contract.lock.source.commit], engineDir)
+    runGit(
+      ['-c', 'core.longpaths=true', 'worktree', 'add', '--detach', output, contract.lock.source.commit],
+      engineDir,
+      { timeoutMs: 300_000 }
+    )
     worktreeAdded = true
 
     for (const patch of contract.patches) {
@@ -168,6 +172,7 @@ export function materialize(options) {
         overlayFiles: contract.overlayInventory,
         patches: contract.patches.map((patch) => ({
           id: patch.id,
+          kind: patch.kind,
           sha256: patch.sha256
         }))
       },
@@ -194,11 +199,14 @@ export function materialize(options) {
     }
 
     for (const file of changedPaths) {
-      if (!matchesAllowedPath(file, contract.edition.allowedPaths)) {
+      const isEditionPath = matchesAllowedPath(file, contract.edition.allowedPaths)
+      const isEngineHotfixPath = contract.edition.enginePatchAllowedPaths.includes(file)
+
+      if (!isEditionPath && !isEngineHotfixPath) {
         throw new Error(`Materialized path is not allowlisted: ${file}`)
       }
 
-      if (isForbiddenPath(file, contract.edition.forbiddenPrefixes)) {
+      if (isForbiddenPath(file, contract.edition.forbiddenPrefixes) && !isEngineHotfixPath) {
         throw new Error(`Materialized path enters a forbidden engine prefix: ${file}`)
       }
     }
@@ -240,7 +248,8 @@ export function materialize(options) {
     }
 
     const cleanup = runGit(['-c', 'core.longpaths=true', 'worktree', 'remove', '--force', output], engineDir, {
-      allowFailure: true
+      allowFailure: true,
+      timeoutMs: 300_000
     })
 
     if (!cleanup.ok) {

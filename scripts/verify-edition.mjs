@@ -21,8 +21,8 @@ export function verifyEdition(root = ROOT) {
   const edition = readJson(path.join(root, 'edition.json'))
   const series = readJson(path.join(root, 'patches', 'series.json'))
 
-  if (lock?.schemaVersion !== 1 || edition?.schemaVersion !== 1 || series?.schemaVersion !== 1) {
-    throw new Error('Engine lock, edition, and patch ledger must use schemaVersion 1')
+  if (lock?.schemaVersion !== 1 || edition?.schemaVersion !== 2 || series?.schemaVersion !== 2) {
+    throw new Error('Engine lock must use schemaVersion 1; edition and patch ledger must use schemaVersion 2')
   }
 
   if (normalizeRepositoryUrl(lock?.source?.repository) !== 'https://github.com/nousresearch/hermes-agent') {
@@ -58,7 +58,14 @@ export function verifyEdition(root = ROOT) {
       allowDirectoryGlob: true
     })
   )
+  const enginePatchAllowed = edition.enginePatchAllowedPaths.map((item) =>
+    assertSafeRelativePath(item, 'engine patch allowed path')
+  )
   const forbidden = edition.forbiddenPrefixes.map((item) => assertSafeRelativePath(item, 'forbidden prefix'))
+
+  if (new Set(enginePatchAllowed).size !== enginePatchAllowed.length) {
+    throw new Error('Engine patch allowlist must not contain duplicate paths')
+  }
 
   for (const entry of allowed) {
     const pathPart = entry.endsWith('/**') ? entry.slice(0, -3) : entry
@@ -150,6 +157,10 @@ export function verifyEdition(root = ROOT) {
       throw new Error(`Patch ${entry.id} is not rebased to the locked upstream commit`)
     }
 
+    if (!new Set(['edition-seam', 'engine-hotfix']).has(entry.kind)) {
+      throw new Error(`Patch ${entry.id} has an unknown kind: ${entry.kind}`)
+    }
+
     const actualPaths = pathsDeclaredByPatch(patchFile)
     const ledgerPaths = [...entry.paths].map((item) => assertSafeRelativePath(item, 'ledger path')).sort()
 
@@ -158,12 +169,18 @@ export function verifyEdition(root = ROOT) {
     }
 
     for (const file of actualPaths) {
-      if (!matchesAllowedPath(file, allowed)) {
-        throw new Error(`Patch path is not allowlisted: ${file}`)
-      }
+      if (entry.kind === 'engine-hotfix') {
+        if (!enginePatchAllowed.includes(file)) {
+          throw new Error(`Engine hotfix path is not exactly allowlisted: ${file}`)
+        }
+      } else {
+        if (!matchesAllowedPath(file, allowed)) {
+          throw new Error(`Edition seam patch path is not allowlisted: ${file}`)
+        }
 
-      if (isForbiddenPath(file, forbidden)) {
-        throw new Error(`Patch enters a forbidden engine prefix: ${file}`)
+        if (isForbiddenPath(file, forbidden)) {
+          throw new Error(`Edition seam patch enters a forbidden engine prefix: ${file}`)
+        }
       }
     }
 
@@ -173,6 +190,7 @@ export function verifyEdition(root = ROOT) {
 
     patchReceipts.push({
       id: entry.id,
+      kind: entry.kind,
       file: entry.file,
       sha256: sha256File(patchFile),
       paths: actualPaths

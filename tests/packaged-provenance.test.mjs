@@ -44,7 +44,11 @@ function fixture() {
       shellLiveRemoteRefs: ['refs/remotes/origin/main'],
       overlaySha256: contract.overlaySha256,
       overlayFiles: contract.overlayInventory,
-      patches: contract.patches.map((patch) => ({ id: patch.id, sha256: patch.sha256 }))
+      patches: contract.patches.map((patch) => ({
+        id: patch.id,
+        kind: patch.kind,
+        sha256: patch.sha256
+      }))
     },
     changedPaths,
     materializedFiles: changedPaths

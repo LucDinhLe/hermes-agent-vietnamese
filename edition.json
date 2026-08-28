@@ -1,9 +1,9 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "hermes-vietnamese",
   "displayName": "Hermes Vietnamese",
   "productVersion": "V33",
-  "technicalVersion": "0.33.0-dev.1",
+  "technicalVersion": "0.33.0-dev.2",
   "releaseChannel": "development",
   "maintainer": {
     "name": "Lê Đình Lực",
@@ -39,6 +39,9 @@
   "overlayRoot": "edition/vietnamese/overlay",
   "allowedPaths": [
     "apps/desktop/build/edition-receipt.json",
+    "apps/desktop/electron/api-transport.test.ts",
+    "apps/desktop/electron/api-transport.ts",
+    "apps/desktop/electron/main.ts",
     "apps/desktop/index.html",
     "apps/desktop/package.json",
     "apps/desktop/electron/vietnamese-identity-migration.test.ts",
@@ -49,6 +52,13 @@
     "apps/desktop/src/i18n/catalog.ts",
     "apps/desktop/src/i18n/languages.ts",
     "apps/desktop/src/i18n/types.ts"
+  ],
+  "enginePatchAllowedPaths": [
+    "agent/prompt_builder.py",
+    "tests/agent/test_prompt_builder.py",
+    "tests/test_tui_gateway_server.py",
+    "tests/tui_gateway/test_failed_turn_retention.py",
+    "tui_gateway/server.py"
   ],
   "forbiddenPrefixes": [
     "agent/",

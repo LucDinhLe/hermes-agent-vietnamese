@@ -1,0 +1,775 @@
+diff --git a/agent/prompt_builder.py b/agent/prompt_builder.py
+index 55b1f4fd8..c7449de33 100644
+--- a/agent/prompt_builder.py
++++ b/agent/prompt_builder.py
+@@ -163,9 +163,13 @@ HERMES_AGENT_HELP_GUIDANCE = (
+     "it — or when you need to understand your own features, tools, or capabilities, "
+     "the documentation at https://hermes-agent.nousresearch.com/docs is your "
+     "authoritative reference and always holds the latest, most up-to-date "
+-    "information. Load the `hermes-agent` skill with skill_view(name='hermes-agent') "
+-    "for additional guidance and proven workflows, but treat the docs as the source "
+-    "of truth when the two differ."
++    "information. For a simple usage or capability question, answer directly when "
++    "the answer is stable; when freshness matters, make one focused documentation "
++    "lookup and answer from it. Load the `hermes-agent` skill with "
++    "skill_view(name='hermes-agent') when the request needs setup, configuration, "
++    "troubleshooting, or a multi-step workflow. Do not turn a small question into "
++    "broad product research. Treat the docs as the source of truth when the skill "
++    "and docs differ."
+ )
+ 
+ # Variant injected when the skill tools are not in the session's toolset
+@@ -178,8 +182,9 @@ HERMES_AGENT_HELP_GUIDANCE_NO_SKILLS = (
+     "it — or when you need to understand your own features, tools, or capabilities, "
+     "the documentation at https://hermes-agent.nousresearch.com/docs is the "
+     "authoritative reference and always holds the latest, most up-to-date "
+-    "information. Point the user there (or read it yourself if you have a way to "
+-    "fetch web content)."
++    "information. Answer simple stable questions directly. When freshness matters, "
++    "make one focused documentation lookup if web access is available, then answer; "
++    "do not expand a small question into broad product research."
+ )
+ 
+ MEMORY_GUIDANCE = (
+@@ -497,6 +502,16 @@ PARALLEL_TOOL_CALL_GUIDANCE = (
+ # EXECUTION_GUIDANCE_MODELS substring tuple below.
+ OPENAI_MODEL_EXECUTION_GUIDANCE = (
+     "# Execution discipline\n"
++    "<proportional_effort>\n"
++    "- Match investigation depth to the user's request. A simple conversational or "
++    "stable factual question should normally be answered directly without tools.\n"
++    "- When a simple question needs live or local evidence, use the single most "
++    "authoritative tool that can resolve it, then answer. Do not broaden into repeated "
++    "searches, skill loading, or unrelated inspection after sufficient evidence exists.\n"
++    "- Reserve multi-step discovery and repeated verification for research, diagnosis, "
++    "implementation, or requests where the first evidence is incomplete or conflicting.\n"
++    "</proportional_effort>\n"
++    "\n"
+     "<tool_persistence>\n"
+     "- Use tools whenever they improve correctness, completeness, or grounding.\n"
+     "- Do not stop early when another tool call would materially improve the result.\n"
+@@ -2084,10 +2099,10 @@ def _build_skills_system_prompt_inner(
+ 
+         result = (
+             "## Skills (mandatory)\n"
+-            "Before replying, scan the skills below. If a skill matches or is even partially relevant "
+-            "to your task, you MUST load it with skill_view(name) and follow its instructions. "
+-            "Err on the side of loading — it is always better to have context you don't need "
+-            "than to miss critical steps, pitfalls, or established workflows. "
++            "Before replying, scan the skills below. If a skill directly matches the requested work "
++            "and its instructions are needed to perform that work safely or correctly, you MUST load "
++            "it with skill_view(name) and follow its instructions. Do not load a skill merely because "
++            "it is adjacent or partially related to a small factual or conversational question. "
+             "Skills contain specialized knowledge — API endpoints, tool-specific commands, "
+             "and proven workflows that outperform general-purpose approaches. Load the skill "
+             f"even if you think you could handle the task with basic tools like {_basic_tools}. "
+diff --git a/tests/agent/test_prompt_builder.py b/tests/agent/test_prompt_builder.py
+index 48d646263..91eef368d 100644
+--- a/tests/agent/test_prompt_builder.py
++++ b/tests/agent/test_prompt_builder.py
+@@ -24,6 +24,8 @@ from agent.prompt_builder import (
+     _CONTEXT_FILE_DYNAMIC_CEILING,
+     DEFAULT_AGENT_IDENTITY,
+     drain_truncation_warnings,
++    HERMES_AGENT_HELP_GUIDANCE,
++    HERMES_AGENT_HELP_GUIDANCE_NO_SKILLS,
+     TOOL_USE_ENFORCEMENT_GUIDANCE,
+     TOOL_USE_ENFORCEMENT_MODELS,
+     OPENAI_MODEL_EXECUTION_GUIDANCE,
+@@ -309,6 +311,23 @@ class TestBuildSkillsSystemPrompt:
+         # "search" should appear only once per category
+         assert result.count("- search") == 1
+ 
++    def test_skill_routing_does_not_require_partially_related_skills(
++        self, monkeypatch, tmp_path
++    ):
++        monkeypatch.setenv("HERMES_HOME", str(tmp_path))
++        skill_dir = tmp_path / "skills" / "tools" / "search"
++        skill_dir.mkdir(parents=True)
++        (skill_dir / "SKILL.md").write_text(
++            "---\nname: search\ndescription: Search reference material\n---\n",
++            encoding="utf-8",
++        )
++
++        prompt = build_skills_system_prompt()
++
++        assert "directly matches the requested work" in prompt
++        assert "Do not load a skill merely because" in prompt
++        assert "partially relevant" not in prompt
++
+ 
+     def test_compact_categories_demote_nested_and_miss_cache_separately(
+         self, monkeypatch, tmp_path
+@@ -932,6 +951,17 @@ class TestOpenAIModelExecutionGuidance:
+         assert "verification" in text or "verify" in text
+         assert "correctness" in text
+ 
++    def test_guidance_scales_tool_use_to_simple_questions(self):
++        text = OPENAI_MODEL_EXECUTION_GUIDANCE.lower()
++
++        assert "proportional_effort" in text
++        assert "single most authoritative tool" in text
++        assert "after sufficient evidence exists" in text
++        assert "simple usage or capability question" in HERMES_AGENT_HELP_GUIDANCE.lower()
++        assert "answer simple stable questions directly" in (
++            HERMES_AGENT_HELP_GUIDANCE_NO_SKILLS.lower()
++        )
++
+ 
+ 
+     def test_guidance_is_string(self):
+@@ -1008,5 +1038,3 @@ class TestParallelToolCallGuidance:
+ # =========================================================================
+ # Budget warning history stripping
+ # =========================================================================
+-
+-
+diff --git a/tests/test_tui_gateway_server.py b/tests/test_tui_gateway_server.py
+index 64d9157c1..734e99e65 100644
+--- a/tests/test_tui_gateway_server.py
++++ b/tests/test_tui_gateway_server.py
+@@ -16730,13 +16730,14 @@ def _setup_make_agent_mocks(monkeypatch, cfg):
+     monkeypatch.setattr(server, "_agent_cbs", lambda sid: {})
+ 
+ 
+-def test_make_agent_reads_nested_max_turns(monkeypatch):
+-    _setup_make_agent_mocks(monkeypatch, {"agent": {"max_turns": 200}})
++def test_make_agent_caps_large_nested_max_turns_for_foreground_chat(monkeypatch):
++    # Existing desktop profiles commonly carry this old setup value.
++    _setup_make_agent_mocks(monkeypatch, {"agent": {"max_turns": 500}})
+ 
+     with patch("run_agent.AIAgent") as mock_agent:
+         server._make_agent("sid1", "key1")
+ 
+-    assert mock_agent.call_args.kwargs["max_iterations"] == 200
++    assert mock_agent.call_args.kwargs["max_iterations"] == 30
+ 
+ 
+ def test_make_agent_waits_for_shared_mcp_discovery(monkeypatch):
+@@ -16757,7 +16758,7 @@ def test_make_agent_waits_for_shared_mcp_discovery(monkeypatch):
+     assert waited == [0.75]
+ 
+ 
+-def test_make_agent_nested_max_turns_takes_priority(monkeypatch):
++def test_make_agent_caps_nested_max_turns_even_when_it_takes_priority(monkeypatch):
+     _setup_make_agent_mocks(
+         monkeypatch, {"agent": {"max_turns": 400}, "max_turns": 100}
+     )
+@@ -16765,16 +16766,117 @@ def test_make_agent_nested_max_turns_takes_priority(monkeypatch):
+     with patch("run_agent.AIAgent") as mock_agent:
+         server._make_agent("sid1", "key1")
+ 
+-    assert mock_agent.call_args.kwargs["max_iterations"] == 400
++    assert mock_agent.call_args.kwargs["max_iterations"] == 30
+ 
+ 
+-def test_make_agent_defaults_to_500(monkeypatch):
++def test_make_agent_uses_bounded_interactive_defaults(monkeypatch):
+     _setup_make_agent_mocks(monkeypatch, {})
+ 
+     with patch("run_agent.AIAgent") as mock_agent:
+         server._make_agent("sid1", "key1")
+ 
+-    assert mock_agent.call_args.kwargs["max_iterations"] == 500
++    assert mock_agent.call_args.kwargs["max_iterations"] == 30
++
++
++def test_make_agent_preserves_smaller_explicit_foreground_limit(monkeypatch):
++    _setup_make_agent_mocks(monkeypatch, {"agent": {"max_turns": 8}})
++
++    with patch("run_agent.AIAgent") as mock_agent:
++        server._make_agent("sid1", "key1")
++
++    assert mock_agent.call_args.kwargs["max_iterations"] == 8
++
++
++def test_make_agent_preserves_dedicated_tui_operator_override(monkeypatch):
++    monkeypatch.setenv("HERMES_TUI_MAX_TURNS", "20")
++    _setup_make_agent_mocks(monkeypatch, {"agent": {"max_turns": 500}})
++
++    with patch("run_agent.AIAgent") as mock_agent:
++        server._make_agent("sid1", "key1")
++
++    assert mock_agent.call_args.kwargs["max_iterations"] == 20
++
++
++@pytest.mark.parametrize(
++    "prompt",
++    [
++        "chào em",
++        "mấy giờ rồi",
++        "Hermes có hỗ trợ Claude Max không?",
++        "hermes đang không cho dùng claude à",
++    ],
++)
++def test_interactive_turn_budget_keeps_simple_questions_short(prompt):
++    cfg = {"agent": {"max_turns": 500}}
++
++    assert server._interactive_turn_budget(cfg, prompt) == 4
++
++
++@pytest.mark.parametrize(
++    "prompt",
++    [
++        "Sửa lỗi gateway này, chạy test và dựng lại candidate cho xong",
++        "Review toàn bộ luồng cập nhật rồi triển khai bản vá an toàn",
++        "Phân tích các log sau:\n1. timeout\n2. reset\n3. retry",
++        "```python\nprint('broken')\n```\nHãy debug đoạn này",
++    ],
++)
++def test_interactive_turn_budget_expands_explicit_multistep_work(prompt):
++    cfg = {"agent": {"max_turns": 500}}
++
++    assert server._interactive_turn_budget(cfg, prompt) == 30
++
++
++def test_interactive_turn_budget_uses_standard_tier_when_request_is_ambiguous():
++    cfg = {"agent": {"max_turns": 500}}
++
++    assert server._interactive_turn_budget(
++        cfg,
++        "Giải thích sự khác nhau giữa hai cơ chế này bằng ví dụ dễ hiểu",
++    ) == 12
++
++
++def test_interactive_turn_budget_expands_active_goal_without_model_classifier():
++    cfg = {"agent": {"max_turns": 500}}
++
++    assert server._interactive_turn_budget(
++        cfg,
++        "tiếp tục",
++        goal_active=True,
++    ) == 30
++
++
++def test_interactive_turn_budget_treats_attachments_as_extended_work():
++    cfg = {"agent": {"max_turns": 500}}
++
++    assert server._interactive_turn_budget(
++        cfg,
++        "xem giúp anh",
++        image_count=1,
++    ) == 30
++
++
++def test_interactive_turn_budget_respects_smaller_user_ceiling_for_every_tier():
++    cfg = {"agent": {"max_turns": 3}}
++
++    assert server._interactive_turn_budget(cfg, "mấy giờ rồi") == 3
++    assert server._interactive_turn_budget(
++        cfg,
++        "Sửa lỗi gateway này, chạy test và dựng lại candidate cho xong",
++    ) == 3
++
++
++def test_interactive_turn_budget_uses_operator_value_as_ceiling_not_simple_target(
++    monkeypatch,
++):
++    monkeypatch.setenv("HERMES_TUI_MAX_TURNS", "20")
++    cfg = {"agent": {"max_turns": 500}}
++
++    assert server._interactive_turn_budget(cfg, "mấy giờ rồi") == 4
++    assert server._interactive_turn_budget(
++        cfg,
++        "Sửa lỗi gateway này, chạy test và dựng lại candidate cho xong",
++    ) == 20
+ 
+ 
+ def test_make_agent_uses_session_runtime_overrides(monkeypatch):
+@@ -16822,7 +16924,7 @@ def test_make_agent_handles_null_agent_config(monkeypatch):
+     with patch("run_agent.AIAgent") as mock_agent:
+         server._make_agent("sid1", "key1")
+ 
+-    assert mock_agent.call_args.kwargs["max_iterations"] == 80
++    assert mock_agent.call_args.kwargs["max_iterations"] == 30
+ 
+ 
+ class _FakeAgentForBackground:
+diff --git a/tests/tui_gateway/test_failed_turn_retention.py b/tests/tui_gateway/test_failed_turn_retention.py
+index 30987d5a9..cfc33947f 100644
+--- a/tests/tui_gateway/test_failed_turn_retention.py
++++ b/tests/tui_gateway/test_failed_turn_retention.py
+@@ -89,6 +89,8 @@ def turn_env(monkeypatch, tmp_path):
+     monkeypatch.setattr(server, "_tts_stream_begin", lambda: None)
+     monkeypatch.setattr(server, "_sync_session_key_after_compress", lambda *a, **k: None)
+     monkeypatch.setattr(server, "_get_usage", lambda agent: {})
++    monkeypatch.setattr(server, "_load_cfg", lambda: {"agent": {"max_turns": 500}})
++    monkeypatch.setattr(server, "_session_goal_is_active", lambda session: False)
+ 
+ 
+ def _events(captured, name):
+@@ -353,3 +355,115 @@ def test_next_turn_replaces_retained_error_snapshot(emits, turn_env):
+     completes = _events(emits, "message.complete")
+     assert len(completes) == 1
+     assert completes[0]["status"] == "complete"
++
++
++def test_setup_failure_before_history_snapshot_settles_and_next_turn_runs(
++    emits, turn_env, monkeypatch
++):
++    """A setup exception must not be replaced by ``history`` cleanup failure.
++
++    The first turn fails before the history snapshot exists. The same session
++    must be released so the very next prompt can run normally.
++    """
++    wire_calls = {"count": 0}
++
++    def _fail_once(_sid):
++        wire_calls["count"] += 1
++        if wire_calls["count"] == 1:
++            raise RuntimeError("callback setup failed")
++
++    monkeypatch.setattr(server, "_wire_callbacks", _fail_once)
++    agent = types.SimpleNamespace(
++        session_id="session-key",
++        run_conversation=lambda *a, **k: {"final_response": "fresh answer"},
++        clear_interrupt=lambda: None,
++    )
++    session = _session(agent=agent, running=True)
++    server._start_inflight_turn(session, "first prompt")
++
++    server._run_prompt_submit("rid-1", "sid", session, "first prompt")
++
++    assert session["running"] is False
++    first = _events(emits, "message.complete")[-1]
++    assert first["status"] == "error"
++    assert first["error"] == "callback setup failed"
++
++    # prompt.submit normally owns this transition before dispatching the
++    # helper; set it explicitly because this unit calls the helper directly.
++    session["running"] = True
++    server._run_prompt_submit("rid-2", "sid", session, "second prompt")
++
++    assert session["running"] is False
++    completes = _events(emits, "message.complete")
++    assert [item["status"] for item in completes[-2:]] == ["error", "complete"]
++    assert completes[-1]["text"] == "fresh answer"
++
++
++def test_auxiliary_cleanup_failure_cannot_leave_session_running(
++    emits, turn_env, monkeypatch
++):
++    class _BrokenTtsQueue:
++        def put(self, item):
++            if item is None:
++                raise RuntimeError("tts cleanup failed")
++
++    monkeypatch.setattr(server, "_tts_stream_begin", lambda: _BrokenTtsQueue())
++    agent = types.SimpleNamespace(
++        session_id="session-key",
++        run_conversation=lambda *a, **k: {"final_response": "done"},
++        clear_interrupt=lambda: None,
++    )
++    session = _session(agent=agent, running=True)
++    server._start_inflight_turn(session, "prompt")
++
++    server._run_prompt_submit("rid", "sid", session, "prompt")
++
++    assert session["running"] is False
++    assert _events(emits, "message.complete")[-1]["status"] == "complete"
++
++
++def test_simple_turn_temporarily_uses_small_budget_then_restores_agent(
++    emits, turn_env
++):
++    observed = []
++    agent = types.SimpleNamespace(
++        session_id="session-key",
++        max_iterations=30,
++        run_conversation=lambda *a, **k: (
++            observed.append(agent.max_iterations)
++            or {"final_response": "4 giờ 16 phút"}
++        ),
++        clear_interrupt=lambda: None,
++    )
++    session = _session(agent=agent, running=True)
++    server._start_inflight_turn(session, "mấy giờ rồi")
++
++    server._run_prompt_submit("rid", "sid", session, "mấy giờ rồi")
++
++    assert observed == [4]
++    assert agent.max_iterations == 30
++    assert _events(emits, "message.complete")[-1]["status"] == "complete"
++
++
++def test_active_goal_temporarily_uses_extended_budget_then_restores_agent(
++    emits, turn_env, monkeypatch
++):
++    monkeypatch.setattr(server, "_session_goal_is_active", lambda session: True)
++    observed = []
++    agent = types.SimpleNamespace(
++        session_id="session-key",
++        max_iterations=30,
++        run_conversation=lambda *a, **k: (
++            observed.append(agent.max_iterations)
++            or {"final_response": "đang tiếp tục"}
++        ),
++        clear_interrupt=lambda: None,
++    )
++    session = _session(agent=agent, running=True)
++    server._start_inflight_turn(session, "tiếp tục")
++
++    server._run_prompt_submit("rid", "sid", session, "tiếp tục")
++
++    assert observed == [30]
++    assert agent.max_iterations == 30
++    assert _events(emits, "message.complete")[-1]["status"] == "complete"
+diff --git a/tui_gateway/server.py b/tui_gateway/server.py
+index f110cc0d8..e07b1830b 100644
+--- a/tui_gateway/server.py
++++ b/tui_gateway/server.py
+@@ -9,6 +9,7 @@ import json
+ import logging
+ import os
+ import queue
++import re
+ import subprocess
+ import sys
+ import threading
+@@ -170,6 +171,38 @@ except (ValueError, TypeError):
+     _slash_timeout = 45.0
+ _SLASH_WORKER_TIMEOUT_S = max(5.0, _slash_timeout)
+ 
++# Foreground Desktop/TUI work uses deterministic, per-turn budgets.  Classifying
++# with another model call would spend time and money before doing any useful
++# work, so the gateway uses only request structure plus the explicit /goal
++# state.  Simple questions stay short, ordinary prompts retain the previous
++# safe ceiling, and only clear multi-step/goal work receives the larger budget.
++# ``agent.max_turns`` and HERMES_TUI_MAX_TURNS remain upper ceilings, so a user
++# may tighten every tier but a stale legacy value such as 500 cannot make a
++# foreground turn unbounded.
++_INTERACTIVE_SIMPLE_MAX_TURNS = 4
++_INTERACTIVE_STANDARD_MAX_TURNS = 12
++_INTERACTIVE_EXTENDED_MAX_TURNS = 30
++
++_INTERACTIVE_COMPLEX_WORK_RE = re.compile(
++    r"(?:\b(?:fix|debug|implement|build|deploy|migrate|refactor|audit|review|"
++    r"research|investigate|patch|test)\b|"
++    r"\b(?:sửa|vá|triển khai|xây dựng|tạo|viết|kiểm thử|gỡ lỗi|điều tra|"
++    r"nghiên cứu|rà soát|đối chiếu|nâng cấp|cập nhật|di chuyển|khắc phục)\b|"
++    r"(?:toàn bộ|nhiều bước|làm cho xong|đừng dừng|không dừng|tiếp tục cho đến))",
++    re.IGNORECASE,
++)
++_INTERACTIVE_SIMPLE_OPEN_RE = re.compile(
++    r"^(?:chào|xin chào|alo|cảm ơn|ai\b|gì\b|khi nào\b|ở đâu\b|tại sao\b|"
++    r"vì sao\b|mấy\b|bao nhiêu\b|có phải\b|có\b|làm sao\b|thế nào\b|"
++    r"what\b|when\b|where\b|who\b|why\b|how\b|is\b|are\b|can\b|"
++    r"could\b|do\b|does\b|did\b|should\b|would\b)",
++    re.IGNORECASE,
++)
++_INTERACTIVE_SIMPLE_CLOSE_RE = re.compile(
++    r"(?:à|ạ|hả|nhỉ|không|chưa|sao)\s*[.!?…]*$",
++    re.IGNORECASE,
++)
++
+ # When a WebSocket client (the dashboard's embedded-chat tab / desktop app)
+ # disconnects, ``tui_gateway.ws`` detaches the transport but intentionally
+ # leaves the session parked so a quick reconnect can reattach it (see ws.py).
+@@ -7789,6 +7822,80 @@ def _cfg_max_turns(cfg: dict, default: int) -> int:
+     return default
+ 
+ 
++def _cfg_interactive_max_turns(cfg: dict) -> int:
++    """Resolve the hard foreground ceiling without inheriting a huge job cap."""
++    configured = _cfg_max_turns(cfg, _INTERACTIVE_EXTENDED_MAX_TURNS)
++    return min(configured, _INTERACTIVE_EXTENDED_MAX_TURNS)
++
++
++def _is_simple_interactive_prompt(prompt: Any) -> bool:
++    """Return True only for high-confidence conversational/direct questions."""
++    if not isinstance(prompt, str):
++        return False
++    text = prompt.strip()
++    if not text or len(text) > 240 or text.count("\n") > 1:
++        return False
++    if "```" in text or "://" in text or _INTERACTIVE_COMPLEX_WORK_RE.search(text):
++        return False
++    try:
++        from agent.memory_provider import is_trivial_prompt
++
++        if is_trivial_prompt(text):
++            return True
++    except Exception:
++        pass
++    if "?" in text:
++        return True
++    return bool(
++        _INTERACTIVE_SIMPLE_OPEN_RE.search(text)
++        or _INTERACTIVE_SIMPLE_CLOSE_RE.search(text)
++    )
++
++
++def _is_extended_interactive_prompt(prompt: Any) -> bool:
++    if not isinstance(prompt, str):
++        return True
++    text = prompt.strip()
++    if len(text) > 600 or "```" in text or text.count("\n") >= 3:
++        return True
++    if len(re.findall(r"(?m)^\s*(?:[-*]|\d+[.)])\s+", text)) >= 2:
++        return True
++    return bool(_INTERACTIVE_COMPLEX_WORK_RE.search(text))
++
++
++def _interactive_turn_budget(
++    cfg: dict,
++    prompt: Any,
++    *,
++    image_count: int = 0,
++    goal_active: bool = False,
++    synthesized: bool = False,
++) -> int:
++    """Choose one bounded model-round budget without an auxiliary model call."""
++    hard_ceiling = _cfg_interactive_max_turns(cfg)
++    if goal_active or synthesized or image_count > 0 or _is_extended_interactive_prompt(prompt):
++        tier = _INTERACTIVE_EXTENDED_MAX_TURNS
++    elif _is_simple_interactive_prompt(prompt):
++        tier = _INTERACTIVE_SIMPLE_MAX_TURNS
++    else:
++        tier = _INTERACTIVE_STANDARD_MAX_TURNS
++    return min(hard_ceiling, tier)
++
++
++def _session_goal_is_active(session: dict) -> bool:
++    """Read the existing durable /goal state; never ask a model to classify."""
++    session_key = str(session.get("session_key") or "").strip()
++    if not session_key:
++        return False
++    try:
++        from hermes_cli.goals import GoalManager
++
++        return GoalManager(session_id=session_key).is_active()
++    except Exception:
++        logger.debug("interactive turn budget: goal-state lookup failed", exc_info=True)
++        return False
++
++
+ def _parse_tui_skills_env() -> list[str]:
+     raw = os.environ.get("HERMES_TUI_SKILLS", "")
+     skills: list[str] = []
+@@ -8313,7 +8420,7 @@ def _make_agent(
+     _pr = _load_provider_routing()
+     return AIAgent(
+         model=model,
+-        max_iterations=_cfg_max_turns(cfg, 500),
++        max_iterations=_cfg_interactive_max_turns(cfg),
+         provider=runtime.get("provider"),
+         base_url=runtime.get("base_url"),
+         api_key=runtime.get("api_key"),
+@@ -12004,6 +12111,10 @@ def _run_prompt_submit(
+         secret_token = None
+         goal_followup = None  # set by the post-turn goal hook below
+         result = None  # turn outcome; read after the finally for leftover /steer
++        # Bound before setup starts: failures in callback/config/profile sync
++        # still enter the finally block, which must not raise UnboundLocalError
++        # before it can release session["running"].
++        history = []
+         tts_queue = None  # streaming-TTS feed for this turn (voice mode)
+         thinking_started = False  # ambient thinking sound armed for this turn
+         one_turn_restore = session.pop("one_turn_model_restore", None)
+@@ -12280,6 +12391,24 @@ def _run_prompt_submit(
+             agent._on_session_title = lambda t, _src, _k=_title_key: _emit(
+                 "session.title", sid, {"session_id": _k, "title": t}
+             )
++            _turn_limit_missing = object()
++            _turn_limit_restore = getattr(
++                agent, "max_iterations", _turn_limit_missing
++            )
++            _turn_limit = _interactive_turn_budget(
++                _load_cfg(),
++                prompt,
++                image_count=len(images),
++                goal_active=_session_goal_is_active(session),
++                synthesized=bool(display_kind),
++            )
++            agent.max_iterations = _turn_limit
++            logger.info(
++                "tui prompt budget: ui_session=%s rounds=%d kind=%s",
++                sid,
++                _turn_limit,
++                display_kind or "user",
++            )
+             _usage_stop, _usage_thread = _start_usage_ticker(sid, agent)
+             try:
+                 result = agent.run_conversation(run_message, **run_kwargs)
+@@ -12293,8 +12422,17 @@ def _run_prompt_submit(
+                 # stall the message.complete emit below just the same. A
+                 # timed-out join would abandon the tick to land after
+                 # message.complete.
+-                _usage_stop.set()
+-                _usage_thread.join()
++                try:
++                    _usage_stop.set()
++                    _usage_thread.join()
++                finally:
++                    if _turn_limit_restore is _turn_limit_missing:
++                        try:
++                            delattr(agent, "max_iterations")
++                        except AttributeError:
++                            pass
++                    else:
++                        agent.max_iterations = _turn_limit_restore
+             if display_kind and isinstance(text, str):
+                 db = getattr(agent, "_session_db", None)
+                 current_session_id = getattr(agent, "session_id", None) or session.get("session_key")
+@@ -12723,62 +12861,96 @@ def _run_prompt_submit(
+                 )
+                 _emit("error", sid, {"message": str(e)})
+         finally:
+-            # Drop both local snapshots of the pre-turn history before asking
+-            # glibc to return pages. session["history"] already points at the
+-            # new/pruned result; retaining either list defeats this trim.
+-            history.clear()
+-            local_run_kwargs = locals().get("run_kwargs")
+-            if isinstance(local_run_kwargs, dict):
+-                local_run_kwargs.clear()
+-
+-            # Run while any profile-specific HERMES_HOME override is still active
+-            # so context.memory_trim is resolved from the session's own config.
+             try:
+-                from hermes_cli.mem_trim import trim_memory
++                # Drop both local snapshots of the pre-turn history before
++                # asking glibc to return pages. session["history"] already
++                # points at the new/pruned result; retaining either list
++                # defeats this trim.
++                history.clear()
++                local_run_kwargs = locals().get("run_kwargs")
++                if isinstance(local_run_kwargs, dict):
++                    local_run_kwargs.clear()
++
++                # Run while any profile-specific HERMES_HOME override is
++                # still active so context.memory_trim is resolved from the
++                # session's own config.
++                try:
++                    from hermes_cli.mem_trim import trim_memory
+ 
+-                trim_memory(reason="tui turn completion")
+-            except Exception:
+-                logger.debug("post-turn memory trim failed", exc_info=True)
++                    trim_memory(reason="tui turn completion")
++                except Exception:
++                    logger.debug("post-turn memory trim failed", exc_info=True)
+ 
+-            if thinking_started:
+-                # Kill the ambient thinking sound the moment the turn ends —
+-                # error and success paths both land here.
+-                try:
+-                    from tools.voice_mode import stop_thinking_sound
++                if thinking_started:
++                    # Kill the ambient thinking sound the moment the turn ends
++                    # — error and success paths both land here.
++                    try:
++                        from tools.voice_mode import stop_thinking_sound
+ 
+-                    stop_thinking_sound()
++                        stop_thinking_sound()
++                    except Exception:
++                        pass
++                if tts_queue is not None:
++                    try:
++                        tts_queue.put(None)
++                    except Exception:
++                        logger.debug("TUI TTS queue cleanup failed", exc_info=True)
++                if one_turn_restore:
++                    try:
++                        _restore_agent_model_runtime(agent, one_turn_restore)
++                        _restart_slash_worker(sid, session)
++                        _persist_live_session_runtime(session)
++                        _persist_live_session_system_prompt(session)
++                    except Exception:
++                        logger.debug("TUI one-turn model restore failed", exc_info=True)
++                try:
++                    if approval_token is not None:
++                        reset_current_session_key(approval_token)
+                 except Exception:
+                     pass
+-            if tts_queue is not None:
+-                tts_queue.put(None)  # end-of-text sentinel — flush + finish speaking
+-            if one_turn_restore:
++                if home_token is not None:
++                    try:
++                        reset_hermes_home_override(home_token)
++                    except Exception:
++                        logger.debug("TUI home scope cleanup failed", exc_info=True)
++                if secret_token is not None:
++                    try:
++                        reset_secret_scope(secret_token)
++                    except Exception:
++                        logger.debug("TUI secret scope cleanup failed", exc_info=True)
+                 try:
+-                    _restore_agent_model_runtime(agent, one_turn_restore)
+-                    _restart_slash_worker(sid, session)
+-                    _persist_live_session_runtime(session)
+-                    _persist_live_session_system_prompt(session)
++                    _clear_session_context(session_tokens)
+                 except Exception:
+-                    logger.debug("TUI one-turn model restore failed", exc_info=True)
+-            try:
+-                if approval_token is not None:
+-                    reset_current_session_key(approval_token)
++                    logger.debug("TUI session context cleanup failed", exc_info=True)
++                try:
++                    _current_runtime_session_record.reset(runtime_session_token)
++                except Exception:
++                    logger.debug("TUI runtime session cleanup failed", exc_info=True)
++                try:
++                    reset_transport(transport_token)
++                except Exception:
++                    logger.debug("TUI transport cleanup failed", exc_info=True)
+             except Exception:
+-                pass
+-            if home_token is not None:
+-                reset_hermes_home_override(home_token)
+-            if secret_token is not None:
+-                reset_secret_scope(secret_token)
+-            _clear_session_context(session_tokens)
+-            _current_runtime_session_record.reset(runtime_session_token)
+-            reset_transport(transport_token)
+-            # Clear the per-turn interim callback so a stale closure from
+-            # this turn can't fire during a later turn on the same agent.
+-            agent.interim_assistant_callback = None
+-            with session["history_lock"]:
+-                session["running"] = False
+-                session["last_active"] = time.time()
+-                if not turn_error_retained:
+-                    _clear_inflight_turn(session)
++                # No auxiliary cleanup is allowed to skip the settlement
++                # bookend below. Keep this outer guard even though the known
++                # cleanup calls are individually protected: plugin-provided
++                # objects can still raise from surprising protocol methods.
++                logger.exception("unexpected TUI turn cleanup failure")
++            finally:
++                # This is the non-skippable lifecycle boundary. It must run
++                # even when setup failed before history existed or any cleanup
++                # hook above raised. Otherwise the dead turn remains busy and
++                # every later prompt is queued behind a thread that no longer
++                # exists.
++                try:
++                    agent.interim_assistant_callback = None
++                except Exception:
++                    pass
++                with session["history_lock"]:
++                    session["running"] = False
++                    session["last_active"] = time.time()
++                    if not turn_error_retained:
++                        _clear_inflight_turn(session)
+             # Closing bookend of the "tui prompt accepted" record above —
+             # fires on every path (success, returned error, exception,
+             # interrupt), so one accepted prompt always produces exactly one
+@@ -12807,9 +12979,15 @@ def _run_prompt_submit(
+             )
+             # Backstop for turns that never reached a terminal frame (the
+             # frame paths retire the marker as they emit).
+-            _retire_turn_marker(session, marker_key)
++            try:
++                _retire_turn_marker(session, marker_key)
++            except Exception:
++                logger.debug("TUI turn-marker retirement failed", exc_info=True)
+             session.pop("_auto_continue_scheduled", None)
+-            _emit_settled_session_info(sid, session, agent)
++            try:
++                _emit_settled_session_info(sid, session, agent)
++            except Exception:
++                logger.debug("TUI settled session.info emit failed", exc_info=True)
+ 
+         # A user prompt that arrived mid-turn (interrupt + queue) wins over
+         # every auto follow-up below — drain it first and skip them this cycle;

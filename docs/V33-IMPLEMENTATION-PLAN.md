@@ -17,7 +17,8 @@ the V32.1 fork remains read-only evidence and a component source.
 
 1. Engine lock: tag object and exact commit resolve; moving branches are refused.
 2. Boundary: every materialized change is allowlisted; Python engine, gateway,
-   CLI, and TUI prefixes are forbidden to the edition layer.
+   CLI, and TUI prefixes are forbidden to the edition overlay. A P0 engine
+   hotfix uses a separate exact-file ledger lane with tests and retirement rule.
 3. Source: shell contracts, locale tests, plugin tests, typecheck, lint, and
    focused upstream suites pass.
 4. Build: one clean materialized tree produces the desktop artifact; receipt
@@ -39,12 +40,23 @@ the V32.1 fork remains read-only evidence and a component source.
 - Slice 5: full native build and lifecycle gates, then candidate review. Public
   promotion is a separate owner decision.
 
-## Status on 2026-08-28
+## Status on 2026-08-29
 
 - Slice 1 is implemented: immutable engine lock, one-command live-verified tag
   update, disposable materializer, typed Vietnamese locale, bundled product and
-  support plugin, two explicit core patches, embedded provenance receipt and
-  boundary tests.
+  support plugin, two edition-seam patches, one exact-path P0 engine hotfix,
+  embedded provenance receipt and boundary tests.
+- The V32.1-18 turn failure is addressed in the V33 materialization: prompt
+  guidance scales tool use to the task, while a deterministic gateway budget
+  uses 4 model rounds for high-confidence simple questions, 12 for ordinary
+  turns and up to 30 for explicit multi-step, attachment, synthesized or
+  active-goal work. No classifier model call is added. Legacy
+  `agent.max_turns: 500` cannot bypass the tiers; smaller configured/operator
+  ceilings still win, and turn settlement cannot be skipped by setup/cleanup
+  errors.
+- The locked upstream desktop transport already recovers boundedly from socket
+  resets. A narrow edition seam tags the observed 60-second timeout as
+  `ETIMEDOUT`, enabling safe GET retry without ever replaying a sent POST.
 - Slice 2 has only the dormant migration library/test accepted. Independent
   identity, installer wiring and activation remain blocked by native lease,
   reparse, SQLite, lifecycle and rollback gates.

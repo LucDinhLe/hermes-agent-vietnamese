@@ -103,7 +103,13 @@ export function verifyPackagedProvenance(options) {
   )
   assertEqual(
     stableJson(receipt.edition.patches),
-    stableJson(contract.patches.map((patch) => ({ id: patch.id, sha256: patch.sha256 }))),
+    stableJson(
+      contract.patches.map((patch) => ({
+        id: patch.id,
+        kind: patch.kind,
+        sha256: patch.sha256
+      }))
+    ),
     'Receipt patch inventory'
   )
   const expectedChangedPathInventory = expectedChangedPaths(contract)

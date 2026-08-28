@@ -1,0 +1,87 @@
+diff --git a/apps/desktop/electron/api-transport.test.ts b/apps/desktop/electron/api-transport.test.ts
+index bc622b67c..b6e5f88cb 100644
+--- a/apps/desktop/electron/api-transport.test.ts
++++ b/apps/desktop/electron/api-transport.test.ts
+@@ -17,6 +17,7 @@ import type { AddressInfo } from 'node:net'
+ import { afterAll, describe, expect, it } from 'vitest'
+ 
+ import {
++  createBackendTimeoutError,
+   destroyKeepaliveAgents,
+   downloadAgentFor,
+   isIdempotentMethod,
+@@ -53,6 +54,16 @@ describe('isTransientTransportError', () => {
+     expect(isTransientTransportError(null)).toBe(false)
+     expect(isTransientTransportError(undefined)).toBe(false)
+   })
++
++  it('tags the desktop request timeout for verb-safe retry handling', () => {
++    const timeout = createBackendTimeoutError(60_000)
++
++    expect(timeout.message).toBe('Timed out connecting to Hermes backend after 60000ms')
++    expect((timeout as NodeJS.ErrnoException).code).toBe('ETIMEDOUT')
++    expect(isTransientTransportError(timeout)).toBe(true)
++    expect(shouldRetryRequest(timeout, 'GET', { bodySent: true })).toBe(true)
++    expect(shouldRetryRequest(timeout, 'POST', { bodySent: true })).toBe(false)
++  })
+ })
+ 
+ describe('isIdempotentMethod', () => {
+diff --git a/apps/desktop/electron/api-transport.ts b/apps/desktop/electron/api-transport.ts
+index 552fa19c7..a905e2803 100644
+--- a/apps/desktop/electron/api-transport.ts
++++ b/apps/desktop/electron/api-transport.ts
+@@ -61,6 +61,17 @@ function destroyKeepaliveAgents() {
+   }
+ }
+ 
++function createBackendTimeoutError(timeoutMs: number) {
++  const error = new Error(`Timed out connecting to Hermes backend after ${timeoutMs}ms`) as NodeJS.ErrnoException
++
++  // Node's request retry policy classifies transport failures by ``code``.
++  // A plain Error with only this message bypasses the ETIMEDOUT path: safe
++  // GETs are never retried and every caller sees a raw renderer rejection.
++  error.code = 'ETIMEDOUT'
++
++  return error
++}
++
+ // Transient transport errors: retry MAY be safe (subject to verb gating).
+ const TRANSIENT_CODES = new Set([
+   'ECONNRESET',
+@@ -168,6 +179,7 @@ async function withRetry(makeAttempt, options: any = {}) {
+ }
+ 
+ export {
++  createBackendTimeoutError,
+   destroyKeepaliveAgents,
+   downloadAgentFor,
+   isIdempotentMethod,
+diff --git a/apps/desktop/electron/main.ts b/apps/desktop/electron/main.ts
+index 4b339db9b..c9262e42d 100644
+--- a/apps/desktop/electron/main.ts
++++ b/apps/desktop/electron/main.ts
+@@ -31,7 +31,13 @@ import {
+ } from 'electron'
+ 
+ import { classifyActiveRuntime } from './active-runtime-state'
+-import { destroyKeepaliveAgents, downloadAgentFor, jsonAgentFor, withRetry } from './api-transport'
++import {
++  createBackendTimeoutError,
++  destroyKeepaliveAgents,
++  downloadAgentFor,
++  jsonAgentFor,
++  withRetry
++} from './api-transport'
+ import { appIconCandidates, resolveAppIcon } from './app-icon'
+ import { stopBackendChild as stopBackendChildImpl, stopBackendTreesForUpdate } from './backend-child'
+ import {
+@@ -5089,7 +5095,7 @@ function fetchJson(url, token, options: any = {}) {
+ 
+         req.on('error', reject)
+         req.setTimeout(timeoutMs, () => {
+-          req.destroy(new Error(`Timed out connecting to Hermes backend after ${timeoutMs}ms`))
++          req.destroy(createBackendTimeoutError(timeoutMs))
+         })
+ 
+         // From here the request goes on the wire: a later transport error can no

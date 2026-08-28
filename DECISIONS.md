@@ -75,3 +75,23 @@ Vietnamese UI and dormant-migration suites run independently of the known-red
 full upstream suites after dependency installation succeeds.
 It does not publish an installer, create a tag or alter a release. Promotion
 remains a separate owner decision after every candidate gate is green.
+
+## D-010 — Engine hotfixes use an exact-path lane, never the overlay lane
+
+The Vietnamese overlay remains desktop-only. A P0 engine fix may enter V33 only
+as an `engine-hotfix` ledger entry whose every changed file is listed exactly
+in `edition.json.enginePatchAllowedPaths`; directory globs are forbidden. The
+receipt records the patch kind and digest. This lane currently carries the
+interactive-turn reliability fix prompted by the V32.1-18 incident and must be
+retired when upstream ships equivalent behavior and regression coverage.
+
+## D-011 — Foreground budgets adapt without a classifier model call
+
+V33 treats a model round as a scarce foreground resource. High-confidence
+simple questions receive at most 4 rounds, ordinary turns 12, and only explicit
+multi-step, attachment, synthesized or active-goal work receives up to 30.
+Existing `agent.max_turns` and `HERMES_TUI_MAX_TURNS` values may tighten those
+tiers but cannot expand them; background and CLI jobs keep their independent
+limits. Classification uses request structure and durable goal state only, so
+the safety mechanism never consumes an extra model call or mutates the cached
+system prompt.

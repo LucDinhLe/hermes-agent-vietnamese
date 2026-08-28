@@ -1,5 +1,46 @@
 # Progress — Hermes Vietnamese V33
 
+## 2026-08-29 — V33 dev.2 adaptive foreground budget
+
+### Implemented
+
+- Bumped the shell and Vietnamese product metadata to `0.33.0-dev.2` because
+  the engine-hotfix patch changes candidate bytes.
+- Replaced the fixed foreground ceiling with deterministic per-turn tiers:
+  high-confidence simple questions use at most 4 model rounds, ordinary turns
+  12, and explicit multi-step, attachment, synthesized or active `/goal` work
+  up to 30. No auxiliary model call is spent on classification.
+- Existing `agent.max_turns` and `HERMES_TUI_MAX_TURNS` values now act as
+  tighter ceilings only. Background/CLI jobs retain their independent limits.
+- The prior proportional-effort prompt guidance, exception-proof turn
+  settlement and verb-safe desktop timeout recovery remain in the same two
+  auditable patch-ledger entries.
+
+### Evidence
+
+- Shell contracts: 27/27 PASS; edition verification PASS with 11 overlay files
+  and four active patches.
+- Exact locked-engine materialization at `.work/candidate-dev2-r8`: 25 staged
+  allowlisted paths, 24 file digests verified, receipt SHA-256
+  `6449b28c038d2e971098bc295b31b60eedac5fe0d9f1ef16e23f8a0239f9b459`.
+- Exact materialized source tests through `scripts/run_tests.sh`: prompt builder
+  and turn settlement 84 PASS / 1 SKIP; adaptive/config/gateway selection 29
+  PASS. The high-confidence fixtures include `chào em`, `mấy giờ rồi`, and the
+  reported Hermes/Claude capability question at 4 rounds; explicit repair,
+  review, build and active-goal fixtures receive 30.
+- A full unrelated `tests/test_tui_gateway_server.py` run again stalled in the
+  Windows harness after the other two files completed, matching the previously
+  recorded local harness behavior. The selected gateway paths completed green;
+  no installed Hermes process or real profile was touched.
+- Diff whitespace and changed-file secret scans PASS.
+
+Current decision: **GO FOR CLEAN DEV.2 SOURCE CANDIDATE AND CI VALIDATION;
+NO-GO PUBLIC LATEST OR USER INSTALL UNTIL BUILD/LIFECYCLE GATES PASS**.
+
+Next smallest step: commit and push the clean V33 shell source, materialize the
+same commit in release mode, then run the Windows validation workflow. Public
+tagging/promotion remains a separate owner decision.
+
 ## 2026-08-28 — Fetchable source and first Windows CI
 
 ### Remote source

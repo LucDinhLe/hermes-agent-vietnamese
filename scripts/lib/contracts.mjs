@@ -132,14 +132,15 @@ export function pathsDeclaredByPatch(file) {
   return [...paths].sort()
 }
 
-export function runGit(args, cwd, { allowFailure = false } = {}) {
+export function runGit(args, cwd, { allowFailure = false, timeoutMs = 60_000 } = {}) {
+  const timeout = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 60_000
   const result = spawnSync('git', args, {
     cwd,
     encoding: 'utf8',
     env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
     shell: false,
     stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: 60_000
+    timeout
   })
 
   if (result.error) {
