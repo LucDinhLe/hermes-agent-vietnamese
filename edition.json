@@ -3,7 +3,7 @@
   "id": "hermes-vietnamese",
   "displayName": "Hermes Vietnamese",
   "productVersion": "V33",
-  "technicalVersion": "0.33.0-dev.5",
+  "technicalVersion": "0.33.0-dev.6",
   "releaseChannel": "development",
   "maintainer": {
     "name": "Lê Đình Lực",
@@ -42,6 +42,8 @@
     "apps/desktop/electron/api-transport.test.ts",
     "apps/desktop/electron/api-transport.ts",
     "apps/desktop/electron/main.ts",
+    "apps/desktop/electron/resident-runtime.test.ts",
+    "apps/desktop/electron/resident-runtime.ts",
     "apps/desktop/index.html",
     "apps/desktop/package.json",
     "apps/desktop/electron/vietnamese-identity-migration.test.ts",

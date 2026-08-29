@@ -133,3 +133,19 @@ Gateway/chat/tool success is insufficient if bootstrap installs bytes that do
 not match the engine hotfix hashes embedded in the candidate receipt. Runtime
 provenance is therefore a blocking gate, and its failure leaves dev.5 immutable
 and public promotion RED.
+
+## D-015 — dev.6 replaces network bootstrap with a receipt-bound resident runtime
+
+The installed dev.5 acceptance run proved that first launch cloned pristine
+upstream, omitted both V33 engine hotfixes, spent roughly 13 minutes installing
+dependencies, and then remained at 94% after the backend reported ready. dev.5
+is permanently NO-GO; its bytes and evidence remain unchanged.
+
+dev.6 packages the exact materialized engine tree, Python 3.11 dependency
+closure, Node, uv, prebuilt web/TUI surfaces, and the pinned browser helper as
+one resident payload. Electron selects it before any bootstrap path, while an
+explicit source-owned checkout remains an escape hatch. Packaging fails unless
+the payload manifest binds the candidate, locked engine commit, edition-receipt
+digest, and every receipt-listed runtime file. Public promotion remains blocked
+until the exact dev.6 installer passes isolated gateway, chat, safe-tool, restart,
+upgrade, rollback, and uninstall acceptance.

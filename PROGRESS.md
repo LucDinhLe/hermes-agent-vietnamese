@@ -335,3 +335,19 @@ waiving any gate.
 
 Current decision: **GO FOR BUILD-ONLY DEVELOPER PREVIEW; NO-GO RELEASE
 CANDIDATE OR HOST LAUNCH**.
+
+## 2026-08-29 — V33 dev.6 resident-runtime repair
+
+- dev.5 runtime acceptance is RED: the installed product bootstrapped pristine
+  upstream, both receipt-declared hotfix hashes mismatched, first-launch
+  dependency work took about 13 minutes, and the UI remained at 94% after the
+  gateway became ready.
+- dev.6 adds a fifth audited patch that launches a complete resident payload
+  before the network/bootstrap resolver. The Windows staging workflow now
+  packages and verifies the exact materialized repo, Python dependency closure,
+  Node, uv, web/TUI outputs and agent-browser helper.
+- Local shell contract is 40/40 PASS; edition verification reports 11 overlay
+  files and five active patches; a fresh materialization verifies 26 file
+  digests. Desktop typecheck, focused lint and resident tests (3/3) pass.
+- No public tag, release or Latest pointer has changed. dev.6 remains a staging
+  candidate until exact installed-runtime acceptance is green.

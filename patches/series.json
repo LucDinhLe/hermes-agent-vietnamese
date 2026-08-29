@@ -71,6 +71,25 @@
       "tests": [
         "apps/desktop/electron/api-transport.test.ts"
       ]
+    },
+    {
+      "id": "resident-runtime-packaging",
+      "kind": "edition-seam",
+      "file": "resident-runtime-packaging.patch",
+      "state": "active",
+      "upstreamCommit": "5fc308a70719a83cccdbba4c0e39c23f5a8239d5",
+      "rationale": "Package the exact receipt-bound engine, Python dependency closure, Node, uv, and browser helper inside the installer so first launch cannot clone pristine upstream, omit V33 hotfixes, spend minutes downloading dependencies, or stall at the bootstrap finalization boundary.",
+      "paths": [
+        "apps/desktop/electron/main.ts",
+        "apps/desktop/electron/resident-runtime.test.ts",
+        "apps/desktop/electron/resident-runtime.ts",
+        "apps/desktop/package.json"
+      ],
+      "retireWhen": "Upstream ships a complete, provenance-bound resident desktop runtime with no first-launch dependency installation and an equivalent fail-closed payload gate.",
+      "tests": [
+        "apps/desktop/electron/resident-runtime.test.ts",
+        "tests/resident-staging.test.mjs"
+      ]
     }
   ]
 }

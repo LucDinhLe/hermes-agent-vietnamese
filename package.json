@@ -1,6 +1,6 @@
 {
   "name": "hermes-vietnamese-shell",
-  "version": "0.33.0-dev.5",
+  "version": "0.33.0-dev.6",
   "private": true,
   "type": "module",
   "description": "Vietnamese edition overlay for the upstream Hermes Agent desktop.",
