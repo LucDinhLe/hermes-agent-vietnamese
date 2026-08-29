@@ -1,5 +1,38 @@
 # Progress — Hermes Vietnamese V33
 
+## 2026-08-29 — V33 dev.3 Windows x64 staging lane
+
+### Implemented
+
+- Advanced the edition to `0.33.0-dev.3`; electron-builder now receives that
+  edition version instead of the unrelated upstream desktop version `0.17.0`.
+  This prevents Windows from classifying V33 as older than V32.1-18.
+- Added a manual-only Windows x64 staging workflow. It materializes from a
+  clean remote-reachable shell commit in release mode, builds once, packages
+  one unsigned NSIS candidate without rebuilding, hashes it once, and never
+  creates a tag, release, update feed, or Latest promotion.
+- Added a disposable GitHub-hosted Windows lifecycle for the exact installer:
+  fresh install, real installed renderer launch, same-profile restart,
+  V32.1-18 in-place update, protected-profile rollback to V32.1-18, and final
+  uninstall/registry cleanup. Product binaries are denied Internet and local
+  subnet egress during the lifecycle.
+- The staging receipt explicitly retains three missing public-release gates:
+  real gateway bootstrap, a real chat session, and a safe tool call. The
+  current workflow can therefore produce staging evidence but cannot silently
+  declare the candidate eligible for Latest.
+
+### Evidence before remote validation
+
+- Shell contracts: 39/39 PASS; edition verification PASS with 11 overlay files
+  and four active patches.
+- Installed-smoke JavaScript and lifecycle PowerShell parse successfully;
+  whitespace validation passes.
+- Public V32.1-18 Windows x64 transition fixture is pinned to SHA-256
+  `565e1313162505999238b9c3b4f1422ec37256a1da153bae5149b5795c83c5ac`.
+
+Current decision: **GO FOR REMOTE STAGING BUILD AND INSTALLER LIFECYCLE; NO-GO
+PUBLIC LATEST UNTIL THE THREE REAL RUNTIME GATES ARE IMPLEMENTED AND PASS**.
+
 ## 2026-08-29 — Same-runner Electron baseline gate
 
 ### Implemented

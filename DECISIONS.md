@@ -107,3 +107,14 @@ dirty upstream tree or a broken upstream comparison fails closed. All raw logs
 and the machine-readable comparison are retained with the immutable build
 evidence. This classification can clear an edition-regression gate; it does
 not prove installer, lifecycle, signing or release readiness.
+
+## D-013 — Staging bytes are immutable but not automatically releasable
+
+The edition technical version is the electron-builder/NSIS package version;
+the upstream desktop package version is never allowed to leak into a Vietnamese
+installer. A manual staging workflow may create and retain one unsigned Windows
+x64 candidate from one clean remote-reachable commit, then exercise that exact
+byte stream only in a disposable hosted VM. Staging remains non-public and
+must list every unproved release gate. A green installer lifecycle does not
+waive real gateway bootstrap, real session, safe-tool, signing, or owner
+promotion gates.

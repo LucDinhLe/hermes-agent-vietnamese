@@ -1,0 +1,156 @@
+name: Stage Hermes Vietnamese V33 Windows x64
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v33-stage-windows-x64-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  stage:
+    name: Build once and run isolated installer lifecycle
+    runs-on: windows-2025
+    timeout-minutes: 120
+
+    steps:
+      - name: Check out exact Vietnamese shell commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Read locked upstream ref
+        id: engine
+        shell: pwsh
+        run: |
+          $lock = Get-Content -LiteralPath 'engine.lock.json' -Raw | ConvertFrom-Json
+          "tag=$($lock.source.tag)" >> $env:GITHUB_OUTPUT
+          "commit=$($lock.source.commit)" >> $env:GITHUB_OUTPUT
+
+      - name: Enable Windows long paths
+        shell: pwsh
+        run: git config --global core.longpaths true
+
+      - name: Check out locked Hermes engine
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: NousResearch/hermes-agent
+          ref: ${{ steps.engine.outputs.tag }}
+          fetch-depth: 0
+          path: .work/upstream
+          persist-credentials: false
+
+      - name: Set up Node.js 26 x64
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 26
+          architecture: x64
+
+      - name: Verify shell and materialize release-mode tree
+        shell: pwsh
+        run: |
+          npm ci
+          npm test
+          npm run verify
+          npm run materialize -- --engine-dir "$env:GITHUB_WORKSPACE\.work\upstream" --output "$env:GITHUB_WORKSPACE\.work\materialized" --release
+
+      - name: Install locked engine dependencies
+        working-directory: .work/materialized
+        shell: pwsh
+        run: npm ci
+
+      - name: Verify exact materialized inputs
+        id: materialized
+        shell: pwsh
+        run: |
+          npm run verify:materialized -- --tree ".work/materialized" --shell-commit "$env:GITHUB_SHA" --require-clean-shell
+          $receiptSha = (Get-FileHash '.work/materialized/apps/desktop/build/edition-receipt.json' -Algorithm SHA256).Hash.ToLowerInvariant()
+          "receipt_sha=$receiptSha" >> $env:GITHUB_OUTPUT
+
+      - name: Build renderer and Electron payload exactly once
+        working-directory: .work/materialized
+        shell: pwsh
+        run: |
+          $env:GITHUB_SHA = '${{ steps.engine.outputs.commit }}'
+          $env:GITHUB_REF_NAME = '${{ steps.engine.outputs.tag }}'
+          Remove-Item Env:GITHUB_HEAD_REF -ErrorAction SilentlyContinue
+          npm run build --workspace apps/desktop
+
+      - name: Package one unsigned Windows x64 NSIS candidate without rebuilding
+        working-directory: .work/materialized
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run builder --workspace apps/desktop -- --win nsis --x64 --publish never
+
+      - name: Verify packaged payload and provenance
+        shell: pwsh
+        env:
+          HERMES_DESKTOP_SKIP_BUILD: '1'
+        run: |
+          npm run --prefix .work/materialized/apps/desktop test:desktop:all
+          npm run verify:provenance -- --resources ".work/materialized/apps/desktop/release/win-unpacked/resources" --shell-commit "$env:GITHUB_SHA" --receipt-sha256 "${{ steps.materialized.outputs.receipt_sha }}" --require-clean-shell --require-release
+
+      - name: Lock candidate bytes and download exact V32.1-18 transition fixture
+        id: candidate
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $expectedName = 'Hermes-0.33.0-dev.3-win-x64.exe'
+          $candidate = Join-Path $env:GITHUB_WORKSPACE ".work\materialized\apps\desktop\release\$expectedName"
+          if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { throw "Missing exact candidate $expectedName" }
+          $candidateSha = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant()
+          New-Item -ItemType Directory -Path '.work\previous' -Force | Out-Null
+          gh release download vi-v0.32.1-18 --repo LucDinhLe/hermes-agent-vietnamese --pattern 'Hermes-Vietnamese-Windows-x64-Setup.exe' --dir '.work\previous'
+          $previous = (Resolve-Path '.work\previous\Hermes-Vietnamese-Windows-x64-Setup.exe').Path
+          $previousSha = (Get-FileHash -LiteralPath $previous -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($previousSha -ne '565e1313162505999238b9c3b4f1422ec37256a1da153bae5149b5795c83c5ac') { throw 'V32.1-18 fixture SHA-256 mismatch' }
+          "path=$candidate" >> $env:GITHUB_OUTPUT
+          "sha256=$candidateSha" >> $env:GITHUB_OUTPUT
+          "previous=$previous" >> $env:GITHUB_OUTPUT
+
+      - name: Run exact install, restart, update, rollback, and uninstall lifecycle
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path 'C:\HermesEvidence' -Force | Out-Null
+          Copy-Item -LiteralPath 'scripts\windows-installed-smoke.mjs' -Destination '.work\materialized\apps\desktop\scripts\v33-installed-smoke.mjs'
+          & 'scripts\windows-staging-lifecycle.ps1' `
+            -Candidate '${{ steps.candidate.outputs.path }}' `
+            -CandidateSha256 '${{ steps.candidate.outputs.sha256 }}' `
+            -CandidateCommit "$env:GITHUB_SHA" `
+            -Previous '${{ steps.candidate.outputs.previous }}' `
+            -PreviousSha256 '565e1313162505999238b9c3b4f1422ec37256a1da153bae5149b5795c83c5ac' `
+            -SmokeScript "$env:GITHUB_WORKSPACE\.work\materialized\apps\desktop\scripts\v33-installed-smoke.mjs" `
+            -EvidenceRoot "C:\HermesEvidence\v33-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+
+      - name: Assemble immutable staging artifact
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path '.work\staging' -Force | Out-Null
+          $candidate = '${{ steps.candidate.outputs.path }}'
+          if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            Copy-Item -LiteralPath $candidate -Destination '.work\staging\Hermes-Vietnamese-V33-dev.3-Windows-x64-Setup.exe'
+            $hash = (Get-FileHash '.work\staging\Hermes-Vietnamese-V33-dev.3-Windows-x64-Setup.exe' -Algorithm SHA256).Hash.ToLowerInvariant()
+            [System.IO.File]::WriteAllText("$env:GITHUB_WORKSPACE\.work\staging\SHA256SUMS.txt", "$hash  Hermes-Vietnamese-V33-dev.3-Windows-x64-Setup.exe`n")
+          }
+          Copy-Item -LiteralPath '.work\materialized\apps\desktop\build\edition-receipt.json' -Destination '.work\staging\edition-receipt.json' -ErrorAction SilentlyContinue
+          Copy-Item -LiteralPath '.work\materialized\apps\desktop\build\install-stamp.json' -Destination '.work\staging\install-stamp.json' -ErrorAction SilentlyContinue
+          if (Test-Path -LiteralPath 'C:\HermesEvidence') {
+            Copy-Item -LiteralPath 'C:\HermesEvidence' -Destination '.work\staging\lifecycle-evidence' -Recurse
+          }
+          [System.IO.File]::WriteAllText("$env:GITHUB_WORKSPACE\.work\staging\STAGING-ONLY.txt", "unsigned=true`npublic_release=false`nmissing_release_gates=realGatewayBootstrap,realChatSession,safeToolCall`n")
+
+      - name: Upload exact staging bytes and lifecycle evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: v33-dev3-windows-x64-staging-${{ github.sha }}
+          path: .work/staging/**
+          if-no-files-found: error
+          retention-days: 14
