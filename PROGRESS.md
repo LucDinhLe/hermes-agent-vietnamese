@@ -4,13 +4,14 @@
 
 ### Implemented
 
-- Replaced the single known-red Electron step with two captured runs on the
-  same `windows-2025` job and Node 26: the materialized V33 tree and the
-  untouched locked upstream tree.
+- Replaced the single known-red Electron step with three captured runs on the
+  same `windows-2025` job and Node 26: untouched locked upstream before V33,
+  the materialized V33 tree, and untouched upstream again after V33.
 - Added a fail-closed comparator. V33 passes this regression gate only when its
   Electron suite is green or every parsed V33 failure is reproduced by the
-  complete pristine-upstream result. Candidate-only tests, missing summaries,
-  unparseable failures and broken upstream evidence remain RED.
+  union of both complete pristine-upstream controls. Candidate-only tests,
+  missing summaries, unparseable failures, upstream drift and broken evidence
+  remain RED.
 - The workflow retains both raw logs and a machine-readable comparison beside
   the immutable edition receipt and install stamp. It still builds diagnostic
   evidence and never publishes.
@@ -25,6 +26,13 @@
   1,926 tests passed; nine files and 38 tests failed. Typecheck, lint, focused
   Vietnamese tests, migration, plugins, full renderer, immutable verification,
   diagnostic build, provenance and evidence upload all passed.
+- The first exact comparator run `33229829315` correctly failed closed. V33
+  reported 41 failures while the single upstream control reported 38; the
+  three additional timing-sensitive tests were the same two `backend-claim`
+  cases and one `update-handoff-marker` case already observed in the older
+  upstream-baseline run and absent in the immediately preceding dev.2 run.
+  Two bracketing controls are now required to capture that demonstrated
+  temporal variance without introducing a static allowlist.
 
 Current decision: **GO FOR SAME-RUNNER CI VALIDATION; NO-GO PUBLIC RELEASE OR
 USER INSTALL**.

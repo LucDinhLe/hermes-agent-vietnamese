@@ -98,12 +98,12 @@ system prompt.
 
 ## D-012 — An upstream baseline is an exact comparator, not a blanket waiver
 
-Windows CI runs the full Electron suite in both the materialized Vietnamese
-tree and the untouched locked upstream tree using the same runner and Node
-major. A failing V33 suite is accepted only when every parsed failing test is
-also present in the complete pristine-upstream result. A candidate-only test,
-an incomplete log, an unparseable failure, or a broken upstream comparison
-fails closed. Both raw logs and the machine-readable comparison are retained
-with the immutable build evidence. This classification can clear an
-edition-regression gate; it does not prove installer, lifecycle, signing or
-release readiness.
+Windows CI runs the full Electron suite in the materialized Vietnamese tree
+between two control runs of the untouched locked upstream tree, using the same
+runner and Node major. A failing V33 suite is accepted only when every parsed
+failing test is present in the union of the two complete pristine-upstream
+controls. A candidate-only test, an incomplete log, an unparseable failure, a
+dirty upstream tree or a broken upstream comparison fails closed. All raw logs
+and the machine-readable comparison are retained with the immutable build
+evidence. This classification can clear an edition-regression gate; it does
+not prove installer, lifecycle, signing or release readiness.

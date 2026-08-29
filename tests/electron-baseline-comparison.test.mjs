@@ -4,6 +4,7 @@ import { test } from 'node:test'
 import {
   compareElectronBaseline,
   hasCompleteVitestSummary,
+  parseCli,
   parseVitestFailures
 } from '../scripts/compare-electron-baseline.mjs'
 
@@ -34,9 +35,8 @@ test('failure parser normalizes ANSI, separators and duplicate Vitest summaries'
 test('candidate passes without needing a green upstream baseline', () => {
   const result = compareElectronBaseline({
     candidateLog: ' Test Files  3 passed (3)\n      Tests  10 passed (10)',
-    upstreamLog: 'checkout failed',
     candidateExit: 0,
-    upstreamExit: 1
+    upstreamRuns: [{ log: 'checkout failed', exitCode: 1 }]
   })
 
   assert.equal(result.allowed, true)
@@ -47,13 +47,15 @@ test('known candidate failures are allowed only when pristine upstream reproduce
   const shared = 'electron/hardening.test.ts > permissions > keeps owner only'
   const result = compareElectronBaseline({
     candidateLog: logWithFailures([shared]),
-    upstreamLog: logWithFailures([shared, 'electron/ssh-config.test.ts > parse > keeps hosts']),
     candidateExit: 1,
-    upstreamExit: 1
+    upstreamRuns: [
+      { log: logWithFailures([shared, 'electron/ssh-config.test.ts > parse > keeps hosts']), exitCode: 1 },
+      { log: logWithFailures([shared]), exitCode: 1 }
+    ]
   })
 
   assert.equal(result.allowed, true)
-  assert.equal(result.reason, 'candidate-failures-contained-by-pristine-upstream-baseline')
+  assert.equal(result.reason, 'candidate-failures-contained-by-pristine-upstream-controls')
   assert.deepEqual(result.additionalFailures, [])
 })
 
@@ -62,9 +64,11 @@ test('a candidate-only failure blocks the gate', () => {
   const added = 'electron/api-transport.test.ts > timeout > never replays POST'
   const result = compareElectronBaseline({
     candidateLog: logWithFailures([shared, added]),
-    upstreamLog: logWithFailures([shared]),
     candidateExit: 1,
-    upstreamExit: 1
+    upstreamRuns: [
+      { log: logWithFailures([shared]), exitCode: 1 },
+      { log: logWithFailures([shared]), exitCode: 1 }
+    ]
   })
 
   assert.equal(result.allowed, false)
@@ -75,9 +79,11 @@ test('a candidate-only failure blocks the gate', () => {
 test('candidate failure is blocked when pristine upstream passes', () => {
   const result = compareElectronBaseline({
     candidateLog: logWithFailures(['electron/api-transport.test.ts > timeout > marks ETIMEDOUT']),
-    upstreamLog: ' Test Files  3 passed (3)\n      Tests  10 passed (10)',
     candidateExit: 1,
-    upstreamExit: 0
+    upstreamRuns: [
+      { log: ' Test Files  3 passed (3)\n      Tests  10 passed (10)', exitCode: 0 },
+      { log: ' Test Files  3 passed (3)\n      Tests  10 passed (10)', exitCode: 0 }
+    ]
   })
 
   assert.equal(result.allowed, false)
@@ -87,19 +93,56 @@ test('candidate failure is blocked when pristine upstream passes', () => {
 test('incomplete or unparseable logs fail closed', () => {
   const incompleteCandidate = compareElectronBaseline({
     candidateLog: 'process terminated',
-    upstreamLog: logWithFailures(['electron/hardening.test.ts > permissions > keeps owner only']),
     candidateExit: 1,
-    upstreamExit: 1
+    upstreamRuns: [{
+      log: logWithFailures(['electron/hardening.test.ts > permissions > keeps owner only']),
+      exitCode: 1
+    }]
   })
   assert.equal(incompleteCandidate.allowed, false)
   assert.equal(incompleteCandidate.reason, 'candidate-log-incomplete')
 
   const incompleteUpstream = compareElectronBaseline({
     candidateLog: logWithFailures(['electron/hardening.test.ts > permissions > keeps owner only']),
-    upstreamLog: 'npm failed before Vitest summary',
     candidateExit: 1,
-    upstreamExit: 1
+    upstreamRuns: [
+      { log: logWithFailures(['electron/hardening.test.ts > permissions > keeps owner only']), exitCode: 1 },
+      { log: 'npm failed before Vitest summary', exitCode: 1 }
+    ]
   })
   assert.equal(incompleteUpstream.allowed, false)
   assert.equal(incompleteUpstream.reason, 'upstream-log-incomplete')
+})
+
+test('the union of bracketing upstream controls absorbs temporal baseline noise', () => {
+  const stable = 'electron/hardening.test.ts > permissions > keeps owner only'
+  const temporal = 'electron/backend-claim.test.ts > processStartMarker resolves a real marker'
+  const result = compareElectronBaseline({
+    candidateLog: logWithFailures([stable, temporal]),
+    candidateExit: 1,
+    upstreamRuns: [
+      { log: logWithFailures([stable]), exitCode: 1 },
+      { log: logWithFailures([stable, temporal]), exitCode: 1 }
+    ]
+  })
+
+  assert.equal(result.allowed, true)
+  assert.deepEqual(result.upstream.failures, [temporal, stable])
+})
+
+test('CLI pairs repeated upstream controls in declaration order', () => {
+  const options = parseCli([
+    '--candidate-log', 'candidate.log',
+    '--candidate-exit', '1',
+    '--upstream-log', 'before.log',
+    '--upstream-exit', '1',
+    '--upstream-log', 'after.log',
+    '--upstream-exit', '0',
+    '--output', 'comparison.json'
+  ])
+
+  assert.deepEqual(options.upstreamRuns, [
+    { logPath: 'before.log', exitCode: 1 },
+    { logPath: 'after.log', exitCode: 0 }
+  ])
 })
