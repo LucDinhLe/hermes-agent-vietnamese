@@ -32,6 +32,14 @@ export function brandPackageManifest(input, edition) {
 
   assertProtectedIdentity(manifest, edition.branding.protectedIdentity)
 
+  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(edition.technicalVersion ?? '')) {
+    throw new Error(`Edition technicalVersion is not a packageable SemVer: ${edition.technicalVersion}`)
+  }
+
+  // electron-builder derives both the NSIS upgrade version and the artifact
+  // name from package.json. Leaving the upstream desktop version here can make
+  // a newer Vietnamese edition look older than the currently installed one.
+  manifest.version = edition.technicalVersion
   manifest.description = edition.branding.description
   manifest.build.protocols[0].name = `${displayName} Protocol`
   manifest.build.dmg.title = `Install ${displayName}`

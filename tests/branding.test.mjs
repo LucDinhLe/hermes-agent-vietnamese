@@ -16,6 +16,7 @@ const protectedIdentity = {
 
 const edition = {
   displayName: 'Hermes Vietnamese',
+  technicalVersion: '0.33.0-dev.3',
   branding: {
     description: 'Vietnamese edition',
     protectedIdentity
@@ -26,6 +27,7 @@ function manifest() {
   return {
     name: 'hermes',
     productName: 'Hermes',
+    version: '0.17.0',
     description: 'Upstream',
     build: {
       appId: 'com.nousresearch.hermes',
@@ -46,6 +48,7 @@ test('presentation branding preserves every installer identity field', () => {
   const branded = brandPackageManifest(manifest(), edition)
 
   assert.equal(branded.description, 'Vietnamese edition')
+  assert.equal(branded.version, '0.33.0-dev.3')
   assert.equal(branded.build.dmg.title, 'Install Hermes Vietnamese')
   assert.equal(branded.build.nsis.shortcutName, 'Hermes Vietnamese')
   assert.equal(branded.productName, 'Hermes')
@@ -54,6 +57,13 @@ test('presentation branding preserves every installer identity field', () => {
   assert.equal(branded.build.executableName, 'Hermes')
   assert.deepEqual(branded.build.protocols[0].schemes, ['hermes'])
   assert.equal(branded.build.artifactName, 'Hermes-${version}-${os}-${arch}.${ext}')
+})
+
+test('branding refuses a technical version that electron-builder cannot package', () => {
+  assert.throws(
+    () => brandPackageManifest(manifest(), { ...edition, technicalVersion: 'V33 dev 2' }),
+    /not a packageable SemVer/
+  )
 })
 
 test('branding refuses an upstream identity drift', () => {

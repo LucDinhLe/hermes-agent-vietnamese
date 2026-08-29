@@ -140,8 +140,6 @@ export function verifyPackagedProvenance(options) {
   assertEqual(receipt.edition.shellCommit, expectedShellCommit, 'Receipt shell commit')
   assertEqual(stamp.schemaVersion, 1, 'Install stamp schema')
   assertEqual(stamp.commit, contract.lock.source.commit, 'Install stamp engine commit')
-  assertEqual(stamp.source, 'local', 'Install stamp source')
-  assertEqual(stamp.dirty, true, 'Install stamp composite-tree dirty flag')
 
   if (options.requireCleanShell) {
     assertEqual(shell.commit, expectedShellCommit, 'Current shell commit')
@@ -150,6 +148,9 @@ export function verifyPackagedProvenance(options) {
   }
 
   if (options.requireRelease) {
+    assertEqual(stamp.source, 'ci', 'Release install stamp source')
+    assertEqual(stamp.dirty, false, 'Release install stamp dirty flag')
+    assertEqual(stamp.branch, contract.lock.source.tag, 'Release install stamp ref')
     assertEqual(shell.commit, expectedShellCommit, 'Current shell commit')
     assertEqual(shell.dirty, false, 'Current shell dirty flag')
     assertEqual(receipt.releaseMode, true, 'Receipt release mode')
@@ -159,6 +160,8 @@ export function verifyPackagedProvenance(options) {
       throw new Error('Release receipt has no live maintainer remote evidence')
     }
   } else {
+    assertEqual(stamp.source, 'local', 'Diagnostic install stamp source')
+    assertEqual(stamp.dirty, true, 'Diagnostic install stamp composite-tree dirty flag')
     assertEqual(receipt.releaseMode, false, 'Diagnostic receipt release mode')
   }
 

@@ -58,10 +58,10 @@ function fixture() {
   const stamp = {
     schemaVersion: 1,
     commit: contract.lock.source.commit,
-    branch: null,
+    branch: contract.lock.source.tag,
     builtAt: new Date(0).toISOString(),
-    dirty: true,
-    source: 'local'
+    dirty: false,
+    source: 'ci'
   }
 
   writeJson(path.join(resourcesDir, 'edition-receipt.json'), receipt)
@@ -109,7 +109,11 @@ test('diagnostic CI provenance rejects a dirty shell receipt', () => {
   sample.receipt.releaseMode = false
   sample.receipt.edition.shellDirty = true
   sample.receipt.edition.shellLiveRemoteRefs = []
+  sample.stamp.branch = null
+  sample.stamp.dirty = true
+  sample.stamp.source = 'local'
   writeJson(path.join(sample.resourcesDir, 'edition-receipt.json'), sample.receipt)
+  writeJson(path.join(sample.resourcesDir, 'install-stamp.json'), sample.stamp)
 
   assert.throws(
     () =>
