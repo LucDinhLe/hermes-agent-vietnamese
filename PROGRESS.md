@@ -376,5 +376,14 @@ CANDIDATE OR HOST LAUNCH**.
   `e8a8655cfeb8e6dcd462927ce9597cca9678cb034d6f24c93b8194bf6c13f192`;
   staging artifact `9712631866` has digest
   `sha256:53c9d2f83b884452f1cb3c84fcbea372866dcb42f8cae2839ac9e1a31338819b`.
-- Promotion remains blocked until a separate controller reuses those exact
-  bytes and passes Gateway, one-request simple chat, safe tool and persistence.
+- Separate controller commit `55cf7a6ca3446d9326812cb688edeb68ccc9221d`
+  reused those exact bytes in runtime run `33245496266`; immutable evidence
+  artifact `9712771994` is GREEN. Installed dev.7 bootstrapped the locked
+  resident Gateway, answered `Chào em` with exactly one provider request, kept
+  five provider rounds available for the safe `todo` fixture, preserved 12
+  messages across relaunch, matched all four materialized runtime hotfix hashes,
+  and uninstalled cleanly.
+- dev.7 is therefore an accepted unsigned V33 candidate for internal/manual
+  testing. Public tag, GitHub Release and Latest remain intentionally unchanged;
+  signing and explicit promotion authorization are still required for a public
+  release.
