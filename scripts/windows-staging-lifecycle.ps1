@@ -163,12 +163,12 @@ try {
   Add-Gate 'exactBytes' @{ candidateSha256 = $CandidateSha256; previousSha256 = $PreviousSha256 }
 
   $candidateState = Install-Exact $Candidate 'fresh-candidate-install'
-  Assert-True ($candidateState.DisplayVersion -eq '0.33.0-dev.4') "candidate registered version is $($candidateState.DisplayVersion), expected 0.33.0-dev.4"
+  Assert-True ($candidateState.DisplayVersion -eq '0.33.0-dev.5') "candidate registered version is $($candidateState.DisplayVersion), expected 0.33.0-dev.5"
   $resources = Join-Path $candidateState.InstallDir 'resources'
   $editionReceipt = Get-Content -LiteralPath (Join-Path $resources 'edition-receipt.json') -Raw | ConvertFrom-Json
   $installStamp = Get-Content -LiteralPath (Join-Path $resources 'install-stamp.json') -Raw | ConvertFrom-Json
   Assert-True ($editionReceipt.releaseMode -eq $true) 'installed edition receipt is not release-mode'
-  Assert-True ([string]$editionReceipt.edition.version -eq '0.33.0-dev.4') 'installed edition version mismatch'
+  Assert-True ([string]$editionReceipt.edition.version -eq '0.33.0-dev.5') 'installed edition version mismatch'
   Assert-True ([string]$editionReceipt.edition.shellCommit -eq $CandidateCommit) 'installed shell commit mismatch'
   Assert-True ([string]$installStamp.commit -match '^[0-9a-f]{40}$') 'installed engine stamp is malformed'
   Add-Gate 'installedProvenance' @{ engineCommit = [string]$installStamp.commit; shellCommit = [string]$editionReceipt.edition.shellCommit }
@@ -191,7 +191,7 @@ try {
   Assert-SameInstall $previousState $candidateState 'V32.1-18 to V33 update'
   Assert-Sentinel $upgradeHome $upgradeUserData 'v321-to-v33' 'V32.1-18 to V33 update'
   Invoke-Smoke $candidateState 'update-relaunch' $upgradeHome $upgradeUserData
-  Add-Gate 'v321ToV33Update' @{ from = 'vi-v0.32.1-18'; sameInstallDir = $true; to = '0.33.0-dev.4' }
+  Add-Gate 'v321ToV33Update' @{ from = 'vi-v0.32.1-18'; sameInstallDir = $true; to = '0.33.0-dev.5' }
   Uninstall-Exact $candidateState 'update-uninstall'
 
   $protectedHome = "$StateRoot\rollback\v33-home"

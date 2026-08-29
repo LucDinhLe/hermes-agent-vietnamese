@@ -1,10 +1,10 @@
 # Progress — Hermes Vietnamese V33
 
-## 2026-08-29 — V33 dev.3/dev.4 Windows x64 staging lane
+## 2026-08-29 — V33 dev.3–dev.5 Windows x64 staging lane
 
 ### Implemented
 
-- Advanced the edition through `0.33.0-dev.4`; electron-builder now receives that
+- Advanced the edition through `0.33.0-dev.5`; electron-builder now receives that
   edition version instead of the unrelated upstream desktop version `0.17.0`.
   This prevents Windows from classifying V33 as older than V32.1-18.
 - Added a V33-branch-scoped Windows x64 staging workflow. It materializes from a
@@ -25,6 +25,10 @@
   Installer build, payload, provenance and checksum had already passed. The
   harness now uses `$HermesHome`, has a regression assertion forbidding the
   reserved name, and the replacement byte stream advances to dev.4.
+- Dev.4 then proved exact install, registered version, engine/shell provenance,
+  checksum and product network isolation before its smoke timed out on a
+  brittle English-word scan. Dev.5 waits for a visible interactive control
+  instead and always writes a diagnostic screenshot/result if that gate fails.
 
 ### Evidence before remote validation
 

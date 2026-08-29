@@ -106,20 +106,18 @@ async function main() {
     })
   })
 
+  let page = null
+
   try {
-    const page = await app.firstWindow()
+    page = await app.firstWindow()
     await page.waitForSelector('#root', { state: 'attached', timeout: 60_000 })
     await page.waitForFunction(() => (document.querySelector('#root')?.children.length ?? 0) > 0, undefined, {
       timeout: 60_000
     })
-    await page.waitForFunction(
-      () => {
-        const text = document.body.textContent?.toLowerCase() ?? ''
-        return !['starting', 'resolving', 'spawning', 'waiting', 'installing'].some((word) => text.includes(word))
-      },
-      undefined,
-      { timeout: 90_000 }
-    )
+    await page
+      .locator('#root button:visible, #root textarea:visible, #root [contenteditable="true"]:visible')
+      .first()
+      .waitFor({ state: 'visible', timeout: 90_000 })
 
     const title = await page.title()
     if (!title.includes('Hermes Vietnamese')) {
@@ -146,6 +144,18 @@ async function main() {
       )}\n`,
       'utf8'
     )
+  } catch (error) {
+    if (page) {
+      await page.screenshot({ path: screenshot, fullPage: true }).catch(() => undefined)
+      const diagnostic = {
+        error: error instanceof Error ? error.message : String(error),
+        phase: args.phase,
+        title: await page.title().catch(() => ''),
+        visibleText: (await page.locator('body').innerText().catch(() => '')).slice(0, 2000)
+      }
+      fs.writeFileSync(result, `${JSON.stringify(diagnostic, null, 2)}\n`, 'utf8')
+    }
+    throw error
   } finally {
     await app.close().catch(() => undefined)
   }
