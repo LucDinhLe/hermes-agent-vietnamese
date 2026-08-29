@@ -368,3 +368,13 @@ CANDIDATE OR HOST LAUNCH**.
 - No tag, GitHub Release or Latest pointer changed. dev.7 still requires clean
   materialization, native Windows staging/lifecycle and exact installed-runtime
   acceptance before any promotion decision.
+- Product commit `55d706680ade55452cad7465c2797a3d2e2e1310` passed Windows
+  validation run `33244326889` and staging/lifecycle run `33244326881`.
+  Fresh install/restart, V32.1-18 update, rollback, uninstall, network
+  isolation and installed provenance are GREEN. The immutable unsigned
+  installer is 450,358,079 bytes with SHA-256
+  `e8a8655cfeb8e6dcd462927ce9597cca9678cb034d6f24c93b8194bf6c13f192`;
+  staging artifact `9712631866` has digest
+  `sha256:53c9d2f83b884452f1cb3c84fcbea372866dcb42f8cae2839ac9e1a31338819b`.
+- Promotion remains blocked until a separate controller reuses those exact
+  bytes and passes Gateway, one-request simple chat, safe tool and persistence.

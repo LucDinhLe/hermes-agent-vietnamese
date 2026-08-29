@@ -1,5 +1,5 @@
 /**
- * Runtime acceptance for the immutable V33 dev.6 Windows candidate.
+ * Runtime acceptance for the immutable V33 dev.7 Windows candidate.
  *
  * The installed application owns Electron, resident startup, the Python gateway,
  * session storage and tool execution. The harness supplies only an isolated
@@ -24,7 +24,12 @@ import { _electron, expect, installErrorBannerGuard, type ElectronApplication, t
 
 const TOOL_TRIGGER = 'Thực hiện kiểm thử nhiều bước E2E_INTERIM_TRIGGER và hoàn tất toàn bộ'
 const SIMPLE_PROMPT = 'Chào em'
-const HOTFIX_RUNTIME_PATHS = ['agent/prompt_builder.py', 'tui_gateway/server.py'] as const
+const HOTFIX_RUNTIME_PATHS = [
+  'agent/prompt_builder.py',
+  'agent/title_generator.py',
+  'agent/turn_context.py',
+  'tui_gateway/server.py'
+] as const
 
 test.use({ screenshot: 'off', trace: 'off' })
 test.describe.configure({ mode: 'serial', retries: 0, timeout: 1_200_000 })
