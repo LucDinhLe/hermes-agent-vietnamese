@@ -1,14 +1,13 @@
 /**
- * Runtime acceptance for the immutable V33 dev.5 Windows candidate.
+ * Runtime acceptance for the immutable V33 dev.6 Windows candidate.
  *
- * The installed application owns Electron, bootstrap, the Python gateway,
+ * The installed application owns Electron, resident startup, the Python gateway,
  * session storage and tool execution. The harness supplies only an isolated
  * HERMES_HOME and a loopback OpenAI-compatible model endpoint. No host
  * credentials or real Hermes profile are visible to the product.
  */
 
 import { createHash } from 'node:crypto'
-import { spawnSync } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -104,7 +103,7 @@ function buildInstalledEnvironment(hermesHome: string, userDataDir: string): Rec
     no_proxy: '127.0.0.1,localhost'
   })
 
-  // The installed candidate must resolve or bootstrap its own managed runtime.
+  // The installed candidate must resolve its own packaged resident runtime.
   // The checked-out harness is never a product runtime fallback.
   delete env.HERMES_DESKTOP_DEV_SERVER
   delete env.HERMES_DESKTOP_HERMES
@@ -134,7 +133,7 @@ async function launch(binary: string, env: Record<string, string>): Promise<{ ap
   return { app, page }
 }
 
-async function completeFirstRunBootstrap(
+async function completeInstalledStartup(
   active: { app: ElectronApplication; page: Page },
   timeoutMs: number,
   transitions: Array<{ active: boolean; error: string | null; setupChoice: boolean }>
@@ -163,6 +162,10 @@ async function completeFirstRunBootstrap(
           await window.hermesDesktop?.continueBootstrapLocal?.()
         })
       }
+      if (!snapshot.active && !snapshot.setupChoice && !localInstallStarted) {
+        await waitForAppReady(active as Parameters<typeof waitForAppReady>[0], 300_000)
+        return
+      }
       if (!snapshot.active && !snapshot.setupChoice && localInstallStarted) {
         await waitForAppReady(active as Parameters<typeof waitForAppReady>[0], 300_000)
         return
@@ -174,9 +177,13 @@ async function completeFirstRunBootstrap(
   throw new Error(`bootstrap did not complete within ${timeoutMs}ms`)
 }
 
-function runtimeProvenance(hermesHome: string, receipt: any) {
-  const runtimeRoot = path.win32.join(hermesHome, 'hermes-agent')
-  const markerPath = path.win32.join(runtimeRoot, '.hermes-bootstrap-complete')
+function runtimeProvenance(resources: string, receipt: any) {
+  const payloadRoot = path.win32.join(resources, 'agent-payload')
+  const runtimeRoot = path.win32.join(payloadRoot, 'repo')
+  const manifestPath = path.win32.join(payloadRoot, 'manifest.json')
+  const manifest = fs.statSync(manifestPath, { throwIfNoEntry: false })?.isFile()
+    ? JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+    : null
   const expectedFiles = new Map<string, string>(
     (receipt.materializedFiles ?? []).map((entry: any) => [String(entry.path), String(entry.sha256).toLowerCase()])
   )
@@ -191,12 +198,15 @@ function runtimeProvenance(hermesHome: string, receipt: any) {
       matches: expectedSha256 !== null && actualSha256 === expectedSha256
     }
   })
-  const git = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: runtimeRoot, encoding: 'utf8', windowsHide: true })
+  const payloadComplete =
+    manifest?.schemaVersion === 2 &&
+    ['repo', 'uv', 'python', 'site-packages', 'node'].every(item => manifest.items?.[item]?.status === 'staged')
+
   return {
     runtimeRoot,
-    markerPresent: fs.statSync(markerPath, { throwIfNoEntry: false })?.isFile() === true,
-    markerSha256: fs.statSync(markerPath, { throwIfNoEntry: false })?.isFile() ? sha256(markerPath) : null,
-    checkoutCommit: git.status === 0 ? git.stdout.trim() : null,
+    payloadComplete,
+    payloadManifestSha256: manifest ? sha256(manifestPath) : null,
+    checkoutCommit: manifest?.engineCommit ?? null,
     files,
     matchesMaterializedHotfix: files.every(entry => entry.matches)
   }
@@ -247,12 +257,12 @@ test('boots the installed gateway, answers simply, executes a safe tool, and per
 
   try {
     active = await launch(binary, env)
-    await completeFirstRunBootstrap(active, 900_000, bootstrapTransitions)
+    await completeInstalledStartup(active, 300_000, bootstrapTransitions)
     await expect(active.page).toHaveTitle(/Hermes Vietnamese/)
-    runtime = runtimeProvenance(hermesHome, receipt)
+    runtime = runtimeProvenance(resources, receipt)
     gates.realGatewayBootstrap = {
-      status: runtime.markerPresent ? 'passed' : 'failed',
-      detail: { checkoutCommit: runtime.checkoutCommit, markerPresent: runtime.markerPresent }
+      status: runtime.payloadComplete ? 'passed' : 'failed',
+      detail: { engineCommit: runtime.checkoutCommit, payloadComplete: runtime.payloadComplete }
     }
 
     simpleModelCalls = await sendAndWait(active.page, mock, SIMPLE_PROMPT, MOCK_REPLY)
@@ -292,7 +302,7 @@ test('boots the installed gateway, answers simply, executes a safe tool, and per
     await mock.close()
   }
 
-  runtime ??= runtimeProvenance(hermesHome, receipt)
+  runtime ??= runtimeProvenance(resources, receipt)
   gates.runtimeProvenance = {
     status: runtime.matchesMaterializedHotfix ? 'passed' : 'failed',
     detail: runtime.files

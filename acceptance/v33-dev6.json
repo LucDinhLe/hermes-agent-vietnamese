@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "candidate": {
+    "version": "0.33.0-dev.6",
+    "commit": "50124e549197e2e144acd5ef715688d2618890ac",
+    "runId": 33241573750,
+    "artifactId": 9711823945,
+    "artifactName": "v33-dev6-windows-x64-staging-50124e549197e2e144acd5ef715688d2618890ac",
+    "artifactDigest": "sha256:da7682bd22185fcc1c14634f68a77c77cfacc3f3d028419858c8213198b1a423",
+    "installerName": "Hermes-Vietnamese-V33-dev.6-Windows-x64-Setup.exe",
+    "installerSize": 450356827,
+    "installerSha256": "71b12127a95fc63cfa29f0b3825d5c51a4f9eb8daa92197fa1979f9e37ab9103"
+  },
+  "engine": {
+    "tag": "v2026.8.27",
+    "commit": "5fc308a70719a83cccdbba4c0e39c23f5a8239d5"
+  },
+  "rollback": {
+    "tag": "vi-v0.32.1-18",
+    "installerSha256": "565e1313162505999238b9c3b4f1422ec37256a1da153bae5149b5795c83c5ac"
+  }
+}
