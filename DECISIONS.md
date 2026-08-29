@@ -184,3 +184,17 @@ kind is not `edition-seam`, and rejects any materialized path under `agent/`,
 `gateway/`, `hermes_cli/`, or `tui_gateway/`. Dev.6 and dev.7 artifacts remain
 historical evidence but are permanently NO-GO because they violated this
 ownership boundary even though their technical gates passed.
+
+## D-018 — Distribution does not invent a runtime mode missing from upstream
+
+The locked upstream V33 commit ships a thin Desktop installer and performs its
+own first-run bootstrap. It does not contain the resident-payload builder or
+runtime selector previously developed in the Vietnamese V32 fork. Therefore
+V33 does not import, recreate, or enable that downstream mechanism.
+
+The Vietnamese edition may package and test the exact upstream Desktop flow,
+but it must describe the first-run network/bootstrap dependency honestly. A
+self-contained installer can return only after upstream itself exposes that
+mode, or after the owner explicitly changes the architectural boundary. This
+decision keeps UI/UX and installer presentation downstream while all runtime
+selection and bootstrap behavior remain upstream.

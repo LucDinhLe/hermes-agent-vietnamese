@@ -1,5 +1,27 @@
 # Progress — Hermes Vietnamese V33
 
+## 2026-08-29 — Dev.8 upstream-pure Windows package
+
+- The owner approved packaging while retaining the hard boundary: V33 owns
+  UI/UX and distribution; Hermes runtime behavior remains upstream.
+- Audit corrected an important assumption before source changed: the complete
+  resident payload builder exists in the Vietnamese V32 fork, not in locked
+  upstream commit `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`. Importing it would
+  reintroduce the downstream runtime behavior prohibited by D-017.
+- No candidate 9 source or artifact was retained. Dev.8 remains the exact
+  upstream-pure product candidate.
+- Windows run `33246486251` completed GREEN at clean remote commit
+  `4900ba42fc017fd83f4a3d661609197bbe085d7e`: build, package provenance,
+  fresh install, restart, V32.1-18 update, rollback and uninstall all passed on
+  the exact unsigned NSIS bytes. Product network was blocked during this UI
+  lifecycle, which deliberately did not claim Gateway readiness.
+- The locked upstream Desktop uses a thin installer and its own network
+  bootstrap on a genuinely fresh runtime. `realGatewayBootstrap`,
+  `realChatSession` and `safeToolCall` remain explicit missing release gates.
+
+Current decision: **DEV.8 IS AN INTERNAL STAGING CANDIDATE; PUBLIC RELEASE
+REMAINS NO-GO UNTIL UPSTREAM FIRST-RUN RUNTIME GATES ARE PROVEN**.
+
 ## 2026-08-29 — Dev.5 exact runtime acceptance controller
 
 ### Implemented; remote runtime attempt 1 classified as controller RED

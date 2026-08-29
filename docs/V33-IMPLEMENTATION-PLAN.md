@@ -58,6 +58,7 @@ the V32.1 fork remains read-only evidence and a component source.
   external-process seam. No fake Claude option is exposed.
 - Slice 4 notify-only/VNĐ/distribution work is pending; VNĐ is explicitly
   deferred to V33.1.
-- Slice 5 has partial source evidence. Full UI and Electron suites are not green
-  on this Windows host, so any successful local build is diagnostic only and
-  must not be promoted.
+- Slice 5 has a clean remote Windows x64 dev.8 package and green isolated
+  install/update/rollback/uninstall UI lifecycle. The locked upstream commit
+  still uses its own thin first-run bootstrap, so real Gateway bootstrap, chat
+  and safe-tool evidence remain blocking before any promotion decision.
