@@ -159,6 +159,7 @@ jobs:
             -Candidate '${{ steps.candidate.outputs.path }}' `
             -CandidateSha256 '${{ steps.candidate.outputs.sha256 }}' `
             -CandidateCommit "$env:GITHUB_SHA" `
+            -CandidateVersion '0.33.0-dev.6' `
             -Previous '${{ steps.candidate.outputs.previous }}' `
             -PreviousSha256 '565e1313162505999238b9c3b4f1422ec37256a1da153bae5149b5795c83c5ac' `
             -SmokeScript "$env:GITHUB_WORKSPACE\.work\materialized\apps\desktop\scripts\v33-installed-smoke.mjs" `
