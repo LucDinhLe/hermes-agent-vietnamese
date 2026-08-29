@@ -89,7 +89,9 @@ jobs:
       - name: Run exact installed runtime acceptance
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Path 'C:\HermesRuntimeEvidence' -Force | Out-Null
+          $evidenceRoot = "$env:GITHUB_WORKSPACE\.work\runtime-evidence\v33-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
+          Copy-Item -LiteralPath 'acceptance\v33-dev5.json' -Destination (Join-Path $evidenceRoot 'candidate-contract.json')
           & 'acceptance\run-windows-runtime-acceptance.ps1' `
             -Candidate "$env:GITHUB_WORKSPACE\.work\candidate\${{ steps.candidate.outputs.installer_name }}" `
             -CandidateSha256 '${{ steps.candidate.outputs.installer_sha }}' `
@@ -97,15 +99,13 @@ jobs:
             -CandidateVersion '${{ steps.candidate.outputs.version }}' `
             -EngineCommit '${{ steps.candidate.outputs.engine_commit }}' `
             -HarnessRoot "$env:GITHUB_WORKSPACE\.work\harness" `
-            -EvidenceRoot "C:\HermesRuntimeEvidence\v33-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+            -EvidenceRoot $evidenceRoot
 
       - name: Upload immutable runtime evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: v33-dev5-runtime-acceptance-${{ github.sha }}
-          path: |
-            C:\HermesRuntimeEvidence\**
-            acceptance\v33-dev5.json
+          path: .work/runtime-evidence/**
           if-no-files-found: error
           retention-days: 14

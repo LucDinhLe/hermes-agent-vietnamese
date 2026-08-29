@@ -128,6 +128,46 @@ async function launch(binary: string, env: Record<string, string>): Promise<{ ap
   return { app, page }
 }
 
+async function completeFirstRunBootstrap(
+  active: { app: ElectronApplication; page: Page },
+  timeoutMs: number
+): Promise<Array<{ active: boolean; error: string | null; setupChoice: boolean }>> {
+  const deadline = Date.now() + timeoutMs
+  const transitions: Array<{ active: boolean; error: string | null; setupChoice: boolean }> = []
+  let localInstallStarted = false
+  let previous = ''
+
+  while (Date.now() < deadline) {
+    const state = await active.page.evaluate(() => window.hermesDesktop?.getBootstrapState?.())
+    if (state) {
+      const snapshot = {
+        active: Boolean(state.active),
+        error: state.error ? String(state.error) : null,
+        setupChoice: Boolean(state.setupChoice)
+      }
+      const serialized = JSON.stringify(snapshot)
+      if (serialized !== previous) {
+        transitions.push(snapshot)
+        previous = serialized
+      }
+      if (snapshot.error) throw new Error(`bootstrap failed: ${snapshot.error}`)
+      if (snapshot.setupChoice && !localInstallStarted) {
+        localInstallStarted = true
+        await active.page.evaluate(async () => {
+          await window.hermesDesktop?.continueBootstrapLocal?.()
+        })
+      }
+      if (!snapshot.active && !snapshot.setupChoice && localInstallStarted) {
+        await waitForAppReady(active as Parameters<typeof waitForAppReady>[0], 300_000)
+        return transitions
+      }
+    }
+    await active.page.waitForTimeout(1_000)
+  }
+
+  throw new Error(`bootstrap did not complete within ${timeoutMs}ms`)
+}
+
 function runtimeProvenance(hermesHome: string, receipt: any) {
   const runtimeRoot = path.win32.join(hermesHome, 'hermes-agent')
   const markerPath = path.win32.join(runtimeRoot, '.hermes-bootstrap-complete')
@@ -190,6 +230,7 @@ test('boots the installed gateway, answers simply, executes a safe tool, and per
   let simpleModelCalls = 0
   let safeToolModelCalls = 0
   let runtime: ReturnType<typeof runtimeProvenance> | null = null
+  let bootstrapTransitions: Array<{ active: boolean; error: string | null; setupChoice: boolean }> = []
 
   fs.mkdirSync(hermesHome, { recursive: true })
   fs.mkdirSync(userDataDir, { recursive: true })
@@ -200,7 +241,7 @@ test('boots the installed gateway, answers simply, executes a safe tool, and per
 
   try {
     active = await launch(binary, env)
-    await waitForAppReady(active as Parameters<typeof waitForAppReady>[0], 900_000)
+    bootstrapTransitions = await completeFirstRunBootstrap(active, 900_000)
     await expect(active.page).toHaveTitle(/Hermes Vietnamese/)
     runtime = runtimeProvenance(hermesHome, receipt)
     gates.realGatewayBootstrap = {
@@ -271,6 +312,7 @@ test('boots the installed gateway, answers simply, executes a safe tool, and per
       hostCredentialsStripped: true
     },
     gates,
+    bootstrapTransitions,
     runtime,
     state: stateCounts(hermesHome)
   })

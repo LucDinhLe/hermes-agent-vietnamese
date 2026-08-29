@@ -131,12 +131,14 @@ try {
   }
 
   New-Item -ItemType Directory -Path $EvidenceRoot -Force | Out-Null
-  $bootstrapLogs = Get-ChildItem -LiteralPath "$StateRoot\home\logs" -Filter 'bootstrap-*.log' -File -ErrorAction SilentlyContinue
-  foreach ($log in $bootstrapLogs) {
+  $runtimeLogs = Get-ChildItem -LiteralPath "$StateRoot\home\logs" -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like 'bootstrap-*.log' -or $_.Name -eq 'desktop.log' }
+  foreach ($log in $runtimeLogs) {
     $content = Get-Content -LiteralPath $log.FullName -Raw
-    if ($content -notmatch '(?i)e2e-mock-key|api[_-]?key\s*[:=]\s*\S+|authorization\s*[:=]') {
-      [System.IO.File]::WriteAllText((Join-Path $EvidenceRoot $log.Name), $content, $Utf8NoBom)
-    }
+    $content = $content -replace 'e2e-mock-key', '[REDACTED-MOCK-KEY]'
+    $content = $content -replace '(?im)(api[_-]?key\s*[:=]\s*)\S+', '$1[REDACTED]'
+    $content = $content -replace '(?im)(authorization\s*[:=]\s*)\S+', '$1[REDACTED]'
+    [System.IO.File]::WriteAllText((Join-Path $EvidenceRoot $log.Name), $content, $Utf8NoBom)
   }
   Write-Json (Join-Path $EvidenceRoot 'orchestration-result.json') ([ordered]@{
     candidate = [ordered]@{

@@ -2,7 +2,7 @@
 
 ## 2026-08-29 — Dev.5 exact runtime acceptance controller
 
-### Implemented locally, awaiting remote evidence
+### Implemented; remote runtime attempt 1 classified as controller RED
 
 - Added an immutable contract for the already-built dev.5 staging artifact;
   candidate commit, run/artifact identity, byte size and SHA-256 are fixed.
@@ -20,12 +20,24 @@
 - The controller always attempts uninstall and uploads screenshots, sanitized
   bootstrap logs and machine-readable receipts. It cannot tag, publish, alter
   Latest or rebuild the candidate.
+- Runtime run `33237876862` verified and installed the exact dev.5 bytes, then
+  waited at the product's explicit first-run local/remote setup choice. The
+  original controller did not choose local installation, so this is not product
+  runtime evidence. Its evidence upload also mixed two Windows drive roots and
+  was rejected by the upload action.
+- The controller now performs the same explicit local-install choice a user
+  makes, fails early on a reported bootstrap error, records bootstrap state
+  transitions, redacts runtime logs and keeps every evidence file under one
+  workspace root. Candidate dev.5 remains byte-for-byte unchanged.
 
 ### Local controller evidence
 
 - Shell contracts: 39/39 PASS; edition verification PASS.
 - Acceptance PowerShell parse PASS; TypeScript syntax transpilation PASS;
   whitespace and changed-file secret scans PASS.
+- Controller repair: shell contracts 39/39 PASS, edition verification PASS,
+  PowerShell parse PASS, TypeScript syntax transpilation PASS and diff check
+  PASS.
 
 Current decision: **GO TO RUN EXACT DEV.5 RUNTIME ACCEPTANCE; NO-GO PUBLIC
 PROMOTION UNTIL ALL RUNTIME AND PROVENANCE GATES PASS**.
