@@ -5,12 +5,12 @@ import { buildSupportReport } from './support-report'
 const BASE = {
   architecture: 'x64',
   displayName: 'Hermes Vietnamese',
-  engineCommit: '5fc308a70719a83cccdbba4c0e39c23f5a8239d5',
-  engineVersion: '0.20.6',
+  engineCommit: 'fcbd1076a93841fa88855acce810e342a5b78101',
+  engineVersion: '0.20.5',
   locale: 'vi',
   platform: 'win32',
   productVersion: 'V33',
-  technicalVersion: '0.33.0-dev.8'
+  technicalVersion: '0.33.0-dev.9'
 }
 
 describe('Vietnamese edition support report', () => {
@@ -18,7 +18,7 @@ describe('Vietnamese edition support report', () => {
     const report = buildSupportReport(BASE, new Date('2026-08-28T00:00:00.000Z'))
 
     expect(report).toContain('Hermes Vietnamese V33')
-    expect(report).toContain('Hermes Agent 0.20.6 (5fc308a70719)')
+    expect(report).toContain('Hermes Agent 0.20.5 (fcbd1076a938)')
     expect(report).toContain('OS: Windows · Architecture: x64')
     expect(report).toContain('UI language: vi')
   })

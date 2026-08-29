@@ -26,8 +26,8 @@ const metadata = JSON.parse(
   )
 )
 
-test('V33 dev.8 version is one immutable edition fact', () => {
-  assert.equal(shellPackage.version, '0.33.0-dev.8')
+test('V33 dev.9 version is one immutable edition fact', () => {
+  assert.equal(shellPackage.version, '0.33.0-dev.9')
   assert.equal(edition.technicalVersion, shellPackage.version)
   assert.equal(metadata.technicalVersion, shellPackage.version)
 })
@@ -60,12 +60,12 @@ test('Windows staging builds once and tests exact transition bytes', () => {
   assert.match(workflow, /--win nsis --x64 --publish never/)
   assert.match(workflow, /--release/)
   assert.match(workflow, /--require-release/)
-  assert.match(workflow, /Hermes-0\.33\.0-dev\.8-win-x64\.exe/)
+  assert.match(workflow, /Hermes-0\.33\.0-dev\.9-win-x64\.exe/)
   assert.doesNotMatch(workflow, /resident-runtime|agent-payload|stage-resident-runtime|verify-resident-payload/i)
   assert.match(workflow, /vi-v0\.32\.1-18/)
   assert.match(workflow, /565e1313162505999238b9c3b4f1422ec37256a1da153bae5149b5795c83c5ac/)
   assert.match(workflow, /windows-staging-lifecycle\.ps1/)
-  assert.match(workflow, /-CandidateVersion '0\.33\.0-dev\.8'/)
+  assert.match(workflow, /-CandidateVersion '0\.33\.0-dev\.9'/)
   assert.doesNotMatch(lifecycle, /0\.33\.0-dev\.\d+/)
   assert.match(lifecycle, /fresh-first-launch/)
   assert.match(lifecycle, /v321ToV33Update/)

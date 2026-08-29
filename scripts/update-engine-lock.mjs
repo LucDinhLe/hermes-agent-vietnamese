@@ -197,7 +197,9 @@ function proveActivePatches(engineDir, commit, ledger) {
   let cleanupError
 
   try {
-    runGit(['-c', 'core.longpaths=true', 'worktree', 'add', '--detach', worktree, commit], engineDir)
+    runGit(['-c', 'core.longpaths=true', 'worktree', 'add', '--detach', worktree, commit], engineDir, {
+      timeoutMs: 180_000
+    })
     added = true
 
     for (const patch of ledger.patches.filter((entry) => entry.state === 'active')) {
@@ -208,7 +210,8 @@ function proveActivePatches(engineDir, commit, ledger) {
   } finally {
     if (added) {
       const cleanup = runGit(['-c', 'core.longpaths=true', 'worktree', 'remove', '--force', worktree], engineDir, {
-        allowFailure: true
+        allowFailure: true,
+        timeoutMs: 180_000
       })
 
       if (!cleanup.ok) {

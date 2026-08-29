@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "displayName": "Hermes Vietnamese",
   "productVersion": "V33",
-  "technicalVersion": "0.33.0-dev.8",
+  "technicalVersion": "0.33.0-dev.9",
   "releaseChannel": "development",
   "communityMaintainer": {
     "name": "Lê Đình Lực",
@@ -13,15 +13,15 @@
   },
   "upstream": {
     "productName": "Hermes Agent",
-    "version": "0.20.6",
-    "tag": "v2026.8.27",
-    "commit": "5fc308a70719a83cccdbba4c0e39c23f5a8239d5",
+    "version": "0.20.5",
+    "tag": "v2026.8.19",
+    "commit": "fcbd1076a93841fa88855acce810e342a5b78101",
     "publisher": "Nous Research",
     "repository": "https://github.com/NousResearch/hermes-agent"
   },
   "license": {
     "spdx": "MIT",
-    "url": "https://github.com/NousResearch/hermes-agent/blob/5fc308a70719a83cccdbba4c0e39c23f5a8239d5/LICENSE"
+    "url": "https://github.com/NousResearch/hermes-agent/blob/fcbd1076a93841fa88855acce810e342a5b78101/LICENSE"
   },
   "identity": {
     "status": "reserved-not-active",

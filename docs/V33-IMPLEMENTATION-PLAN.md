@@ -59,6 +59,9 @@ the V32.1 fork remains read-only evidence and a component source.
 - Slice 4 notify-only/VNĐ/distribution work is pending; VNĐ is explicitly
   deferred to V33.1.
 - Slice 5 has a clean remote Windows x64 dev.8 package and green isolated
-  install/update/rollback/uninstall UI lifecycle. The locked upstream commit
-  still uses its own thin first-run bootstrap, so real Gateway bootstrap, chat
-  and safe-tool evidence remain blocking before any promotion decision.
+  install/update/rollback/uninstall UI lifecycle. Exact runtime run
+  `33248898045` then proved the `v2026.8.27` upstream checkout and backend were
+  healthy but its renderer remained at 94% after a 45-second wait expired
+  during the 13-minute first-run bootstrap. Dev.8 is NO-GO. Dev.9 rolls only
+  the immutable upstream lock back to official tag `v2026.8.19`; it must repeat
+  source, lifecycle, bootstrap, chat and safe-tool gates before promotion.

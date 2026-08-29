@@ -428,3 +428,19 @@ CANDIDATE OR HOST LAUNCH**.
 - Technical version advances to `0.33.0-dev.8` because candidate bytes change.
   No installer, tag, GitHub Release, or Latest pointer has been created or
   changed. Dev.8 must restart source/build/lifecycle acceptance from zero.
+
+## 2026-08-29 — Dev.8 clean-machine upstream failure and dev.9 lock rollback
+
+- Exact dev.8 installer SHA-256
+  `eef693acd664b08f581a107e38cbe30dd141319971053760636da5218e7afffc` ran on a
+  disposable Windows VM with Internet in runtime run `33248898045`.
+- Upstream bootstrap completed in about 13 minutes 25 seconds. Checkout HEAD,
+  marker and Python import all matched
+  `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`; the backend listened successfully.
+- The upstream renderer had already exhausted its new 45-second initial
+  connection wait and stayed at 94% “Finalizing desktop startup”. Chat and safe
+  tool gates were therefore unreachable. Dev.8 is NO-GO.
+- No core file was patched. Dev.9 changes only the immutable engine lock to the
+  prior official annotated tag `v2026.8.19` at
+  `fcbd1076a93841fa88855acce810e342a5b78101`, whose source predates that timeout.
+  Source/build/lifecycle/runtime evidence must be regenerated from zero.

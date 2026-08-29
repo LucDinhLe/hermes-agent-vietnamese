@@ -16,7 +16,7 @@ const protectedIdentity = {
 
 const edition = {
   displayName: 'Hermes Vietnamese',
-  technicalVersion: '0.33.0-dev.8',
+  technicalVersion: '0.33.0-dev.9',
   branding: {
     description: 'Vietnamese edition',
     protectedIdentity
@@ -48,7 +48,7 @@ test('presentation branding preserves every installer identity field', () => {
   const branded = brandPackageManifest(manifest(), edition)
 
   assert.equal(branded.description, 'Vietnamese edition')
-  assert.equal(branded.version, '0.33.0-dev.8')
+  assert.equal(branded.version, '0.33.0-dev.9')
   assert.equal(branded.build.dmg.title, 'Install Hermes Vietnamese')
   assert.equal(branded.build.nsis.shortcutName, 'Hermes Vietnamese')
   assert.equal(branded.productName, 'Hermes')

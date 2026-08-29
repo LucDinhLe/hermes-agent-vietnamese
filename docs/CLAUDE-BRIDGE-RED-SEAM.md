@@ -2,8 +2,8 @@
 
 ## Decision
 
-The Claude Pro/Max bridge is **RED** for engine `v2026.8.27`, exact commit
-`5fc308a70719a83cccdbba4c0e39c23f5a8239d5`. Do not materialize the bridge
+The Claude Pro/Max bridge remains **RED** for the current engine `v2026.8.19`,
+exact commit `fcbd1076a93841fa88855acce810e342a5b78101`. Do not materialize the bridge
 from the Fable bundle and do not simulate it with a model-provider plugin or a
 runtime monkeypatch. The Vietnamese edition may expose this capability only
 after the generic upstream seam below exists and the fail-closed contract has

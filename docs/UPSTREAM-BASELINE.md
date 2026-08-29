@@ -6,13 +6,21 @@ This record separates edition regressions from behavior already present in the
 locked Hermes engine. It is evidence for triage, not a waiver that turns a
 failed gate green.
 
-- Engine tag: `v2026.8.27`
-- Engine commit: `5fc308a70719a83cccdbba4c0e39c23f5a8239d5`
+- Engine tag: `v2026.8.19`
+- Engine commit: `fcbd1076a93841fa88855acce810e342a5b78101`
 - Host: Windows, default `Intl` locale `vi-VN`
 - Node.js: `v24.18.0`
 - npm: `11.17.0`
 
 ## Results observed on 2026-08-28
+
+The detailed source-suite observations below were collected against the former
+`v2026.8.27` lock. That lock was retired after clean-machine runtime run
+`33248898045` reproduced an upstream first-run lifecycle defect: bootstrap and
+backend startup completed, but the renderer had already exhausted its new
+45-second connection wait and remained at 94%. The current `v2026.8.19` lock
+removes that regressed timeout without carrying a downstream core patch and
+must establish a new source/build/runtime evidence set.
 
 - Desktop typecheck: PASS.
 - Desktop ESLint: PASS with zero errors and 123 warnings in locked-upstream

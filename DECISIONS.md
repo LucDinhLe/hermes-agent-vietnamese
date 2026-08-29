@@ -198,3 +198,18 @@ self-contained installer can return only after upstream itself exposes that
 mode, or after the owner explicitly changes the architectural boundary. This
 decision keeps UI/UX and installer presentation downstream while all runtime
 selection and bootstrap behavior remain upstream.
+
+## D-019 — An upstream lifecycle regression is handled by changing the lock
+
+Exact dev.8 clean-machine run `33248898045` installed candidate SHA-256
+`eef693acd664b08f581a107e38cbe30dd141319971053760636da5218e7afffc` and
+completed upstream bootstrap at commit
+`5fc308a70719a83cccdbba4c0e39c23f5a8239d5`. The checkout, bootstrap marker and
+Python import all matched, and the backend became ready, but the renderer had
+already timed out its initial connection wait after 45 seconds and remained at
+94%. No chat or tool gate could run.
+
+Dev.8 is therefore NO-GO. The edition will not patch that renderer timeout or
+replace the bootstrap. Dev.9 instead locks the prior official annotated tag
+`v2026.8.19` at commit `fcbd1076a93841fa88855acce810e342a5b78101`, where the
+regressed timeout is absent, and restarts every candidate gate with new bytes.

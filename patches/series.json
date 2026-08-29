@@ -6,7 +6,7 @@
       "kind": "edition-seam",
       "file": "core-i18n-registration.patch",
       "state": "active",
-      "upstreamCommit": "5fc308a70719a83cccdbba4c0e39c23f5a8239d5",
+      "upstreamCommit": "fcbd1076a93841fa88855acce810e342a5b78101",
       "rationale": "Register Vietnamese as a first-class desktop locale while keeping all translated product copy outside upstream core.",
       "paths": [
         "apps/desktop/src/i18n/catalog.ts",
@@ -24,7 +24,7 @@
       "kind": "edition-seam",
       "file": "edition-receipt-packaging.patch",
       "state": "active",
-      "upstreamCommit": "5fc308a70719a83cccdbba4c0e39c23f5a8239d5",
+      "upstreamCommit": "fcbd1076a93841fa88855acce810e342a5b78101",
       "rationale": "Ship the immutable edition receipt beside the upstream install stamp so a packaged artifact identifies both engine and Vietnamese shell inputs.",
       "paths": [
         "apps/desktop/package.json"
