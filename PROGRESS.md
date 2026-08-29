@@ -29,6 +29,12 @@
   makes, fails early on a reported bootstrap error, records bootstrap state
   transitions, redacts runtime logs and keeps every evidence file under one
   workspace root. Candidate dev.5 remains byte-for-byte unchanged.
+- Runtime run `33238865357` proved that evidence collection and the explicit
+  local-install choice work. Bootstrap then stopped at `uv` because Windows
+  PowerShell 5.1 inherited GitHub runner's PowerShell 7 `PSModulePath`, making
+  `Microsoft.PowerShell.Security` unloadable. The controller now removes that
+  runner-only variable to reproduce a normal Explorer/Start Menu launch; no
+  product byte or credential policy changed.
 
 ### Local controller evidence
 

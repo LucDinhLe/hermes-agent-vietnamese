@@ -114,6 +114,12 @@ function buildInstalledEnvironment(hermesHome: string, userDataDir: string): Rec
   delete env.HERMES_DESKTOP_BOOT_FAKE_STEP_MS
   delete env.HERMES_PACKAGED_BINARY_PATH
 
+  // GitHub's pwsh step exports a PowerShell 7 module path. The installed app
+  // launches Windows PowerShell 5.1 for install.ps1, as it would from Explorer;
+  // inheriting pwsh's module path makes the 5.1 Security module unloadable.
+  // Explorer does not inject this runner-only variable, so remove it here.
+  delete env.PSModulePath
+
   return env
 }
 
@@ -130,10 +136,10 @@ async function launch(binary: string, env: Record<string, string>): Promise<{ ap
 
 async function completeFirstRunBootstrap(
   active: { app: ElectronApplication; page: Page },
-  timeoutMs: number
-): Promise<Array<{ active: boolean; error: string | null; setupChoice: boolean }>> {
+  timeoutMs: number,
+  transitions: Array<{ active: boolean; error: string | null; setupChoice: boolean }>
+): Promise<void> {
   const deadline = Date.now() + timeoutMs
-  const transitions: Array<{ active: boolean; error: string | null; setupChoice: boolean }> = []
   let localInstallStarted = false
   let previous = ''
 
@@ -159,7 +165,7 @@ async function completeFirstRunBootstrap(
       }
       if (!snapshot.active && !snapshot.setupChoice && localInstallStarted) {
         await waitForAppReady(active as Parameters<typeof waitForAppReady>[0], 300_000)
-        return transitions
+        return
       }
     }
     await active.page.waitForTimeout(1_000)
@@ -241,7 +247,7 @@ test('boots the installed gateway, answers simply, executes a safe tool, and per
 
   try {
     active = await launch(binary, env)
-    bootstrapTransitions = await completeFirstRunBootstrap(active, 900_000)
+    await completeFirstRunBootstrap(active, 900_000, bootstrapTransitions)
     await expect(active.page).toHaveTitle(/Hermes Vietnamese/)
     runtime = runtimeProvenance(hermesHome, receipt)
     gates.realGatewayBootstrap = {
@@ -309,7 +315,8 @@ test('boots the installed gateway, answers simply, executes a safe tool, and per
       mechanism: 'github-hosted-ephemeral-vm',
       hermesHome,
       provider: 'loopback-mock',
-      hostCredentialsStripped: true
+      hostCredentialsStripped: true,
+      runnerPowerShellModulePathNeutralized: true
     },
     gates,
     bootstrapTransitions,
