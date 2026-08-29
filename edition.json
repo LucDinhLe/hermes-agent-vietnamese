@@ -3,12 +3,19 @@
   "id": "hermes-vietnamese",
   "displayName": "Hermes Vietnamese",
   "productVersion": "V33",
-  "technicalVersion": "0.33.0-dev.9",
+  "technicalVersion": "0.33.0-dev.10",
   "releaseChannel": "development",
   "maintainer": {
     "name": "Lê Đình Lực",
     "handle": "LucDinhLe",
     "repository": "https://github.com/LucDinhLe/hermes-agent-vietnamese"
+  },
+  "updates": {
+    "mode": "manual-installer",
+    "provider": "github",
+    "owner": "LucDinhLe",
+    "repository": "hermes-agent-vietnamese",
+    "releasesUrl": "https://github.com/LucDinhLe/hermes-agent-vietnamese/releases"
   },
   "identity": {
     "appId": "vn.lucledinh.hermes-vietnamese",
@@ -43,6 +50,10 @@
     "apps/desktop/package.json",
     "apps/desktop/electron/vietnamese-identity-migration.test.ts",
     "apps/desktop/electron/vietnamese-identity-migration.ts",
+    "apps/desktop/src/app/settings/about-settings.tsx",
+    "apps/desktop/src/app/chat/pane-mirror.ts",
+    "apps/desktop/src/app/chat/preview-tile.tsx",
+    "apps/desktop/src/store/updates.ts",
     "apps/desktop/src/i18n/vi-community.test.ts",
     "apps/desktop/src/i18n/vi.ts",
     "apps/desktop/src/plugins/hermes-vietnamese/**",

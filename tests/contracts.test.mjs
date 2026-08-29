@@ -31,6 +31,13 @@ test('repository contract verifies and pins the expected engine', () => {
   )
   assert.equal(receipt.edition.schemaVersion, 2)
   assert.deepEqual(receipt.edition.enginePatchAllowedPaths, [])
+  assert.deepEqual(receipt.edition.updates, {
+    mode: 'manual-installer',
+    provider: 'github',
+    owner: 'LucDinhLe',
+    repository: 'hermes-agent-vietnamese',
+    releasesUrl: 'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases'
+  })
   assert.equal(receipt.patches.every((patch) => patch.kind === 'edition-seam'), true)
   assert.equal(
     receipt.patches

@@ -177,8 +177,9 @@ resident-runtime override. It does not modify model budgets, prompt guidance,
 turn settlement, title generation, Gateway behavior, transport recovery,
 bootstrap selection, or runtime resolution.
 
-Only two exact Desktop/distribution seams remain: registering the Vietnamese
-locale and packaging the immutable edition receipt. The boundary verifier
+At dev.8, only two exact Desktop/distribution seams remained: registering the
+Vietnamese locale and packaging the immutable edition receipt. D-021 later adds
+one UI/distribution seam without entering engine-owned paths. The boundary verifier
 requires an empty `enginePatchAllowedPaths`, rejects every active patch whose
 kind is not `edition-seam`, and rejects any materialized path under `agent/`,
 `gateway/`, `hermes_cli/`, or `tui_gateway/`. Dev.6 and dev.7 artifacts remain
@@ -227,3 +228,30 @@ behavior of the locked upstream release. V33 records this as an upstream cost
 and does not patch title generation, turn budgets or request policy. Dev.9 is
 eligible for internal manual testing as an unsigned candidate; public tag,
 release and Latest promotion remain a separate owner decision.
+
+## D-021 — Product updates belong to the Vietnamese installer channel
+
+Real-profile testing of dev.9 proved three shell regressions that the clean VM
+gate did not cover: Browser opened beside Files instead of sharing its right
+rail, About presented the runtime engine version as the product version and
+omitted the Vietnamese maintainer, and the upstream Update action attempted
+`hermes update --yes --gateway --force --branch main` against an immutable
+detached-tag checkout. The command failed because that checkout has no local or
+remote `main` branch. Dev.9 remains immutable evidence but is NO-GO for further
+distribution.
+
+Dev.10 adds one recorded Desktop/distribution seam without changing Hermes
+engine behavior. Browser URL tiles are enforced as tabs in the Files rail;
+closing the final Browser tab returns to Files. About identifies Hermes
+Vietnamese V33, Lê Đình Lực as the product developer/maintainer, and the exact
+NousResearch engine separately. Production update entry points fail closed and
+direct users to the maintainer-owned Hermes Vietnamese installer channel. The
+package repository and generated update provider also point to
+`LucDinhLe/hermes-agent-vietnamese`, never `NousResearch/hermes-agent`.
+
+A reused profile whose running engine differs from the release lock is reported
+as a mismatch. The shell does not mutate that checkout: recovery uses the
+existing uninstall option that removes GUI + agent while retaining data, then
+runs the new installer so upstream bootstrap can install the locked official
+tag. Clean install, real-profile transition, rollback and uninstall remain
+required gates for dev.10 bytes.

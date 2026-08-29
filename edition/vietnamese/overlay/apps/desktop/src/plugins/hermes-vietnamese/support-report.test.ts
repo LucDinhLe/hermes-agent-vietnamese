@@ -10,7 +10,7 @@ const BASE = {
   locale: 'vi',
   platform: 'win32',
   productVersion: 'V33',
-  technicalVersion: '0.33.0-dev.9'
+  technicalVersion: '0.33.0-dev.10'
 }
 
 describe('Vietnamese edition support report', () => {

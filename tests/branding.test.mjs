@@ -16,7 +16,18 @@ const protectedIdentity = {
 
 const edition = {
   displayName: 'Hermes Vietnamese',
-  technicalVersion: '0.33.0-dev.9',
+  technicalVersion: '0.33.0-dev.10',
+  maintainer: {
+    name: 'Lê Đình Lực',
+    handle: 'LucDinhLe',
+    repository: 'https://github.com/LucDinhLe/hermes-agent-vietnamese'
+  },
+  updates: {
+    provider: 'github',
+    owner: 'LucDinhLe',
+    repository: 'hermes-agent-vietnamese',
+    releasesUrl: 'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases'
+  },
   branding: {
     description: 'Vietnamese edition',
     protectedIdentity
@@ -48,7 +59,15 @@ test('presentation branding preserves every installer identity field', () => {
   const branded = brandPackageManifest(manifest(), edition)
 
   assert.equal(branded.description, 'Vietnamese edition')
-  assert.equal(branded.version, '0.33.0-dev.9')
+  assert.equal(branded.version, '0.33.0-dev.10')
+  assert.equal(branded.author.name, 'Lê Đình Lực')
+  assert.equal(branded.repository.url, 'https://github.com/LucDinhLe/hermes-agent-vietnamese.git')
+  assert.equal(branded.homepage, 'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases')
+  assert.deepEqual(branded.build.publish, {
+    provider: 'github',
+    owner: 'LucDinhLe',
+    repo: 'hermes-agent-vietnamese'
+  })
   assert.equal(branded.build.dmg.title, 'Install Hermes Vietnamese')
   assert.equal(branded.build.nsis.shortcutName, 'Hermes Vietnamese')
   assert.equal(branded.productName, 'Hermes')

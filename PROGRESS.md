@@ -473,3 +473,30 @@ CANDIDATE OR HOST LAUNCH**.
 
 Current decision: **GO FOR UNSIGNED INTERNAL/MANUAL TESTING; NO-GO PUBLIC TAG,
 GITHUB RELEASE OR LATEST PROMOTION WITHOUT A SEPARATE OWNER DECISION**.
+
+## 2026-08-29 — Dev.10 repairs panel, identity and update ownership
+
+- Real-profile dev.9 evidence showed the installed runtime still at detached
+  commit `48fb23a881d2d5eb1fbbcb7e16866cabc1244ff3` (Hermes Agent 0.20.0), while
+  the dev.9 release receipt locks upstream 0.20.5 at tag `v2026.8.19`.
+- `desktop-update-handoff.log` proves the upstream Update action ran
+  `hermes update --yes --gateway --force --branch main` twice and failed because
+  neither local nor origin has a `main` branch. This is classified as a
+  Vietnamese distribution integration defect, not an engine defect.
+- Dev.10 keeps Browser and Files in one right-rail tab group, restores explicit
+  Lê Đình Lực product attribution, separates shell and engine versions, reports
+  reused-profile engine mismatch, and disables all production core-update
+  entry points in favor of the Vietnamese installer channel.
+- Package author, repository, homepage and generated GitHub update provider now
+  resolve to `LucDinhLe/hermes-agent-vietnamese`. The upstream license and exact
+  engine provenance remain visible separately.
+- Local shell contracts are 46/46 PASS; focused materialized UI tests are 67/67
+  PASS; Desktop typecheck is PASS; focused ESLint is clean. Final materialized
+  inventory verifies 20 file digests on engine commit
+  `fcbd1076a93841fa88855acce810e342a5b78101`.
+- No installer, tag, GitHub Release or Latest pointer has been created or
+  changed. Dev.10 still needs clean CI staging, upgrade-profile lifecycle and
+  exact installed-runtime acceptance.
+
+Current decision: **DEV.10 SOURCE READY; NO-GO INSTALLER OR PUBLIC PROMOTION
+UNTIL CLEAN CI AND REAL-PROFILE TRANSITION GATES PASS**.

@@ -41,11 +41,26 @@ export function brandPackageManifest(input, edition) {
   // a newer Vietnamese edition look older than the currently installed one.
   manifest.version = edition.technicalVersion
   manifest.description = edition.branding.description
+  manifest.author = {
+    name: edition.maintainer.name,
+    url: `https://github.com/${edition.maintainer.handle}`
+  }
+  manifest.repository = {
+    type: 'git',
+    url: `${edition.maintainer.repository}.git`
+  }
+  manifest.homepage = edition.updates.releasesUrl
+  manifest.build.publish = {
+    provider: edition.updates.provider,
+    owner: edition.updates.owner,
+    repo: edition.updates.repository
+  }
   manifest.build.protocols[0].name = `${displayName} Protocol`
   manifest.build.dmg.title = `Install ${displayName}`
   manifest.build.mac.extendInfo.CFBundleDisplayName = displayName
   manifest.build.win.legalTrademarks = displayName
   manifest.build.linux.synopsis = `${displayName}, the MIT community desktop edition of Hermes Agent.`
+  manifest.build.linux.maintainer = `${edition.maintainer.name} <${edition.maintainer.handle}@users.noreply.github.com>`
   manifest.build.linux.desktop = {
     ...(manifest.build.linux.desktop ?? {}),
     entry: {

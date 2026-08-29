@@ -33,6 +33,23 @@
       "tests": [
         "tests/receipt-packaging.test.mjs"
       ]
+    },
+    {
+      "id": "vietnamese-distribution-ui",
+      "kind": "edition-seam",
+      "file": "vietnamese-distribution-ui.patch",
+      "state": "active",
+      "upstreamCommit": "fcbd1076a93841fa88855acce810e342a5b78101",
+      "rationale": "Keep Browser and Files mutually exclusive in the Vietnamese right rail and prevent the Vietnamese production package from mutating its immutable upstream checkout through the upstream moving-branch updater.",
+      "paths": [
+        "apps/desktop/src/app/chat/pane-mirror.ts",
+        "apps/desktop/src/app/chat/preview-tile.tsx",
+        "apps/desktop/src/store/updates.ts"
+      ],
+      "retireWhen": "Upstream exposes distribution-owned pane placement and installer-channel update policy seams.",
+      "tests": [
+        "tests/vietnamese-distribution-ui.test.mjs"
+      ]
     }
   ]
 }

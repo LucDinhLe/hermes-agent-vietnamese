@@ -133,6 +133,16 @@ export function verifyEdition(root = ROOT) {
     throw new Error('Independent installer identity must remain fail-closed until the migration gate')
   }
 
+  if (
+    edition.updates?.mode !== 'manual-installer' ||
+    edition.updates?.provider !== 'github' ||
+    edition.updates?.owner !== edition.maintainer?.handle ||
+    edition.updates?.repository !== 'hermes-agent-vietnamese' ||
+    edition.updates?.releasesUrl !== `${edition.maintainer?.repository}/releases`
+  ) {
+    throw new Error('Vietnamese updates must remain on the maintainer-owned manual installer channel')
+  }
+
   for (const file of overlayFiles) {
     if (!matchesAllowedPath(file, allowed)) {
       throw new Error(`Overlay path is not allowlisted: ${file}`)

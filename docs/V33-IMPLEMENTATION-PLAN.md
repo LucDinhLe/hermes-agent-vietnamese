@@ -56,8 +56,9 @@ the V32.1 fork remains read-only evidence and a component source.
   reparse, SQLite, lifecycle and rollback gates.
 - Slice 3 is RED because the locked upstream engine lacks a provider-neutral
   external-process seam. No fake Claude option is exposed.
-- Slice 4 notify-only/VNĐ/distribution work is pending; VNĐ is explicitly
-  deferred to V33.1.
+- Slice 4 now owns the manual Hermes Vietnamese installer channel, product/core
+  identity split, and the Files/Browser shared right rail. VNĐ remains
+  explicitly deferred to V33.1.
 - Slice 5 has a clean remote Windows x64 dev.8 package and green isolated
   install/update/rollback/uninstall UI lifecycle. Exact runtime run
   `33248898045` then proved the `v2026.8.27` upstream checkout and backend were
@@ -65,3 +66,6 @@ the V32.1 fork remains read-only evidence and a component source.
   during the 13-minute first-run bootstrap. Dev.8 is NO-GO. Dev.9 rolls only
   the immutable upstream lock back to official tag `v2026.8.19`; it must repeat
   source, lifecycle, bootstrap, chat and safe-tool gates before promotion.
+  Real-profile testing subsequently made dev.9 NO-GO for distribution; dev.10
+  repairs only Desktop/distribution surfaces and must repeat clean CI plus the
+  reused-profile transition gate.

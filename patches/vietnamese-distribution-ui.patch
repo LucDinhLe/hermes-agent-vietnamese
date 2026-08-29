@@ -1,0 +1,160 @@
+diff --git a/apps/desktop/src/app/chat/pane-mirror.ts b/apps/desktop/src/app/chat/pane-mirror.ts
+index 916b64500..56a0168dd 100644
+--- a/apps/desktop/src/app/chat/pane-mirror.ts
++++ b/apps/desktop/src/app/chat/pane-mirror.ts
+@@ -27,6 +27,8 @@ export interface PaneMirror<T> {
+   dir?: (tile: T) => TileDock | undefined
+   /** Pane to dock against (default `workspace`) — a drop's target zone. */
+   anchor?: (tile: T) => string | undefined
++  /** Re-assert this dock once per boot for edition-owned standing layout invariants. */
++  enforce?: (tile: T) => boolean | undefined
+   /** Center docks: the strip slot (stack before this pane id). */
+   before?: (tile: T) => null | string | undefined
+   minWidth: string
+@@ -84,6 +86,7 @@ export function paneMirror<T>(cfg: PaneMirror<T>): () => void {
+           dock: {
+             before: cfg.before?.(tile),
+             pane: cfg.anchor?.(tile) ?? 'workspace',
++            enforce: cfg.enforce?.(tile),
+             pos: cfg.dir?.(tile) ?? 'right'
+           },
+           minWidth: cfg.minWidth,
+diff --git a/apps/desktop/src/app/chat/preview-tile.tsx b/apps/desktop/src/app/chat/preview-tile.tsx
+index 7051fbe80..722a92ca0 100644
+--- a/apps/desktop/src/app/chat/preview-tile.tsx
++++ b/apps/desktop/src/app/chat/preview-tile.tsx
+@@ -124,11 +124,12 @@ const watchPreviewTileMirror = paneMirror<{ id: string }>({
+   source: $previewTabs,
+   key: tab => tab.id,
+   prefix: PREVIEW_TILE_PREFIX,
+-  // Identical to route (page) tiles: its own zone docked beside main, sized by
+-  // the split weights. NOT anchored to the file tree — the old rail was a
+-  // files-adjacent strip, and carrying that over welded preview into the file
+-  // browser's zone, so ⌘J (toggle file browser) took the preview with it.
+-  dir: () => 'right',
++  // Vietnamese product contract: Browser and Files share one right-rail tab
++  // group. File and artifact previews retain upstream's adjacent-tile behavior.
++  // Enforcing only URL tiles also repairs layouts persisted by dev.9.
++  anchor: tab => (targetFor(tab.id)?.kind === 'url' ? 'files' : 'workspace'),
++  dir: tab => (targetFor(tab.id)?.kind === 'url' ? 'center' : 'right'),
++  enforce: tab => targetFor(tab.id)?.kind === 'url',
+   minWidth: '22rem',
+   title: previewTitle,
+   tabLead: tabId => <PreviewTabLead tabId={tabId} />,
+diff --git a/apps/desktop/src/store/updates.ts b/apps/desktop/src/store/updates.ts
+index 476354e1b..7405506a3 100644
+--- a/apps/desktop/src/store/updates.ts
++++ b/apps/desktop/src/store/updates.ts
+@@ -81,6 +81,20 @@ const UPDATE_TOAST_ID = 'desktop-update-available'
+ const UPDATE_TOAST_SNOOZE_KEY = 'hermes:update-toast-snooze-until'
+ const UPDATE_TOAST_COOLDOWN_MS = 24 * 60 * 60 * 1000
+ 
++// The Vietnamese distribution is released as an immutable shell + locked
++// official upstream tag. Production builds must never turn an installed,
++// detached tag checkout into a moving `main` checkout. Tests stay on the
++// upstream path so its updater contract remains covered unchanged.
++const DISTRIBUTION_UPDATES_MANUAL = import.meta.env.PROD
++
++const DISTRIBUTION_UPDATE_MESSAGE =
++  'Hermes Vietnamese được cập nhật bằng bộ cài mới; bản này không cập nhật trực tiếp checkout lõi Hermes.'
++
++function manualDistributionStatus(): DesktopUpdateStatus {
++
++  return { supported: false, message: DISTRIBUTION_UPDATE_MESSAGE, fetchedAt: Date.now() }
++}
++
+ function snoozeUpdateToast(): void {
+   persistString(UPDATE_TOAST_SNOOZE_KEY, String(Date.now() + UPDATE_TOAST_COOLDOWN_MS))
+ }
+@@ -264,6 +277,12 @@ export function openUpdatesWindow(): void {
+  * updating the backend forever while the GUI itself went stale.
+  */
+ export function startActiveUpdate(): void {
++  if (DISTRIBUTION_UPDATES_MANUAL) {
++    notify({ kind: 'info', message: DISTRIBUTION_UPDATE_MESSAGE })
++
++    return
++  }
++
+   if (hasMultipleUpdateTargets()) {
+     $updateOverlayOpen.set(true)
+     void applyEverythingUpdate()
+@@ -286,6 +305,12 @@ export function startActiveUpdate(): void {
+  * triggers the everything-flow.
+  */
+ export function requestActiveUpdate(): void {
++  if (DISTRIBUTION_UPDATES_MANUAL) {
++    notify({ kind: 'info', message: DISTRIBUTION_UPDATE_MESSAGE })
++
++    return
++  }
++
+   if (hasMultipleUpdateTargets()) {
+     const clientStatus = $updateStatus.get()
+     const backendStatus = $backendUpdateStatus.get()
+@@ -363,6 +388,13 @@ function mapBackendCheck(res: BackendUpdateCheckResponse): DesktopUpdateStatus {
+ }
+ 
+ export async function checkBackendUpdates(): Promise<DesktopUpdateStatus | null> {
++  if (DISTRIBUTION_UPDATES_MANUAL) {
++    const status = manualDistributionStatus()
++    $backendUpdateStatus.set(status)
++
++    return status
++  }
++
+   if (!isRemoteMode() || $backendUpdateChecking.get()) {
+     return $backendUpdateStatus.get()
+   }
+@@ -392,6 +424,14 @@ export async function checkBackendUpdates(): Promise<DesktopUpdateStatus | null>
+ }
+ 
+ export async function checkUpdates(): Promise<DesktopUpdateStatus | null> {
++  if (DISTRIBUTION_UPDATES_MANUAL) {
++    const status = manualDistributionStatus()
++    $updateStatus.set(status)
++    void refreshDesktopVersion()
++
++    return status
++  }
++
+   const bridge = window.hermesDesktop?.updates
+ 
+   if (!bridge || $updateChecking.get()) {
+@@ -427,6 +467,10 @@ export async function checkUpdates(): Promise<DesktopUpdateStatus | null> {
+ }
+ 
+ export async function applyUpdates(opts: DesktopUpdateApplyOptions = {}): Promise<DesktopUpdateApplyResult> {
++  if (DISTRIBUTION_UPDATES_MANUAL) {
++    return { ok: false, error: 'distribution-managed', message: DISTRIBUTION_UPDATE_MESSAGE }
++  }
++
+   const bridge = window.hermesDesktop?.updates
+ 
+   if (!bridge) {
+@@ -727,6 +771,12 @@ async function runBackendUpdate(): Promise<DesktopUpdateApplyResult> {
+ }
+ 
+ export function applyBackendUpdate(): Promise<DesktopUpdateApplyResult> {
++  if (DISTRIBUTION_UPDATES_MANUAL) {
++    notify({ kind: 'info', message: DISTRIBUTION_UPDATE_MESSAGE })
++
++    return Promise.resolve({ ok: false, error: 'distribution-managed', message: DISTRIBUTION_UPDATE_MESSAGE })
++  }
++
+   if (backendUpdateInFlight) {
+     return backendUpdateInFlight
+   }
+@@ -802,6 +852,12 @@ export function hasMultipleUpdateTargets(): boolean {
+ let updateEverythingInFlight: Promise<void> | null = null
+ 
+ export function applyEverythingUpdate(): Promise<void> {
++  if (DISTRIBUTION_UPDATES_MANUAL) {
++    notify({ kind: 'info', message: DISTRIBUTION_UPDATE_MESSAGE })
++
++    return Promise.resolve()
++  }
++
+   if (updateEverythingInFlight) {
+     return updateEverythingInFlight
+   }
