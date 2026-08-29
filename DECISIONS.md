@@ -149,3 +149,18 @@ the payload manifest binds the candidate, locked engine commit, edition-receipt
 digest, and every receipt-listed runtime file. Public promotion remains blocked
 until the exact dev.6 installer passes isolated gateway, chat, safe-tool, restart,
 upgrade, rollback, and uninstall acceptance.
+
+## D-016 — Desktop session titles are local and spend no provider request
+
+The exact dev.6 installed-runtime acceptance proved the resident Gateway,
+safe-tool path and persistence, but the simple `Chào em` turn made two provider
+requests. The second request was the cosmetic background LLM title upgrade,
+not another foreground reasoning round. A simple Desktop answer must still be
+one provider request end to end, so dev.6 is permanently NO-GO.
+
+Starting with dev.7, Desktop persists the existing deterministic title derived
+from the opening prompt and skips the LLM title-upgrade worker. Duplicate local
+titles are suffixed through the state store without a model. CLI, messaging and
+ACP retain upstream title-upgrade behavior. The installed acceptance gate keeps
+counting every request that carries the opening prompt and requires exactly one,
+so either a foreground loop or a reintroduced auxiliary title call fails closed.

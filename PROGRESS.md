@@ -351,3 +351,20 @@ CANDIDATE OR HOST LAUNCH**.
   digests. Desktop typecheck, focused lint and resident tests (3/3) pass.
 - No public tag, release or Latest pointer has changed. dev.6 remains a staging
   candidate until exact installed-runtime acceptance is green.
+
+## 2026-08-29 — dev.6 runtime gate and dev.7 local-title repair
+
+- Exact dev.6 runtime acceptance run `33242952969` passed resident Gateway
+  bootstrap, the five-round safe `todo` tool fixture, exact hotfix provenance,
+  restart persistence and uninstall. The simple `Chào em` gate failed because
+  the provider received two requests: one foreground answer plus one background
+  LLM session-title upgrade. Evidence artifact `9711992669` remains immutable.
+- dev.6 is NO-GO. The escaped auxiliary request became a sixth exact-path
+  engine hotfix and an installed-runtime assertion, rather than being waived as
+  harmless cosmetic work.
+- dev.7 keeps Desktop session titles local, dedupes repeated openings without a
+  model and leaves non-Desktop surfaces unchanged. Focused title/turn-context
+  regression is 62/62 PASS before materialization.
+- No tag, GitHub Release or Latest pointer changed. dev.7 still requires clean
+  materialization, native Windows staging/lifecycle and exact installed-runtime
+  acceptance before any promotion decision.

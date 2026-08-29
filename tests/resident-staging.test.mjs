@@ -10,14 +10,14 @@ import {
 
 test('resident payload manifest binds one candidate, engine, receipt, and every required item', () => {
   const manifest = buildManifest({
-    candidate: 'V33-dev.6',
+    candidate: 'V33-dev.7',
     engineCommit: '5fc308a70719a83cccdbba4c0e39c23f5a8239d5',
     receiptSha256: 'a'.repeat(64),
     builtAt: '2026-08-29T00:00:00.000Z'
   })
 
   assert.equal(manifest.schemaVersion, 2)
-  assert.equal(manifest.candidate, 'V33-dev.6')
+  assert.equal(manifest.candidate, 'V33-dev.7')
   assert.equal(manifest.engineCommit, '5fc308a70719a83cccdbba4c0e39c23f5a8239d5')
   assert.equal(manifest.editionReceiptSha256, 'a'.repeat(64))
   assert.deepEqual(Object.keys(manifest.items), PAYLOAD_ITEMS)

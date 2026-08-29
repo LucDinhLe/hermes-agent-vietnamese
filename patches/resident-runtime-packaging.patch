@@ -130,7 +130,7 @@ index 000000000..b00ee21eb
 +
 +const completeManifest = JSON.stringify({
 +  schemaVersion: 2,
-+  candidate: 'V33-dev.6',
++  candidate: 'V33-dev.7',
 +  engineCommit: '5fc308a70719a83cccdbba4c0e39c23f5a8239d5',
 +  items: Object.fromEntries(['repo', 'uv', 'python', 'site-packages', 'node'].map(item => [item, { status: 'staged' }]))
 +})
@@ -138,7 +138,7 @@ index 000000000..b00ee21eb
 +test('complete schema-2 payload resolves and runs resident', () => {
 +  const payload = resolveResidentPayload('C:\\resources', () => completeManifest)
 +
-+  assert.equal(payload?.candidate, 'V33-dev.6')
++  assert.equal(payload?.candidate, 'V33-dev.7')
 +  assert.deepEqual(
 +    shouldUseResidentPayload({ payload, checkoutExists: false, checkoutManifest: null, markerSaysDesktop: false }),
 +    { resident: true, reason: 'complete resident payload' }

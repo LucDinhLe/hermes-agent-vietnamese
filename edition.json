@@ -3,7 +3,7 @@
   "id": "hermes-vietnamese",
   "displayName": "Hermes Vietnamese",
   "productVersion": "V33",
-  "technicalVersion": "0.33.0-dev.6",
+  "technicalVersion": "0.33.0-dev.7",
   "releaseChannel": "development",
   "maintainer": {
     "name": "Lê Đình Lực",
@@ -57,7 +57,11 @@
   ],
   "enginePatchAllowedPaths": [
     "agent/prompt_builder.py",
+    "agent/title_generator.py",
+    "agent/turn_context.py",
     "tests/agent/test_prompt_builder.py",
+    "tests/agent/test_title_generator.py",
+    "tests/agent/test_turn_context.py",
     "tests/test_tui_gateway_server.py",
     "tests/tui_gateway/test_failed_turn_retention.py",
     "tui_gateway/server.py"

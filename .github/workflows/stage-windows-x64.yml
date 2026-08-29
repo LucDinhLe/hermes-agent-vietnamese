@@ -111,7 +111,7 @@ jobs:
           node scripts/stage-resident-runtime.mjs `
             --source="$env:GITHUB_WORKSPACE\.work\materialized" `
             --output="$env:GITHUB_WORKSPACE\.work\materialized\apps\desktop\build\agent-payload" `
-            --candidate="V33-dev.6" `
+            --candidate="V33-dev.7" `
             --engine-commit="${{ steps.engine.outputs.commit }}" `
             --receipt-sha256="${{ steps.materialized.outputs.receipt_sha }}"
 
@@ -129,7 +129,7 @@ jobs:
         run: |
           npm run --prefix .work/materialized/apps/desktop test:desktop:all
           npm run verify:provenance -- --resources ".work/materialized/apps/desktop/release/win-unpacked/resources" --shell-commit "$env:GITHUB_SHA" --receipt-sha256 "${{ steps.materialized.outputs.receipt_sha }}" --require-clean-shell --require-release
-          node scripts/verify-resident-payload.mjs --resources=".work/materialized/apps/desktop/release/win-unpacked/resources" --candidate="V33-dev.6" --engine-commit="${{ steps.engine.outputs.commit }}" --receipt-sha256="${{ steps.materialized.outputs.receipt_sha }}"
+          node scripts/verify-resident-payload.mjs --resources=".work/materialized/apps/desktop/release/win-unpacked/resources" --candidate="V33-dev.7" --engine-commit="${{ steps.engine.outputs.commit }}" --receipt-sha256="${{ steps.materialized.outputs.receipt_sha }}"
 
       - name: Lock candidate bytes and download exact V32.1-18 transition fixture
         id: candidate
@@ -137,7 +137,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $expectedName = 'Hermes-0.33.0-dev.6-win-x64.exe'
+          $expectedName = 'Hermes-0.33.0-dev.7-win-x64.exe'
           $candidate = Join-Path $env:GITHUB_WORKSPACE ".work\materialized\apps\desktop\release\$expectedName"
           if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { throw "Missing exact candidate $expectedName" }
           $candidateSha = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -159,7 +159,7 @@ jobs:
             -Candidate '${{ steps.candidate.outputs.path }}' `
             -CandidateSha256 '${{ steps.candidate.outputs.sha256 }}' `
             -CandidateCommit "$env:GITHUB_SHA" `
-            -CandidateVersion '0.33.0-dev.6' `
+            -CandidateVersion '0.33.0-dev.7' `
             -Previous '${{ steps.candidate.outputs.previous }}' `
             -PreviousSha256 '565e1313162505999238b9c3b4f1422ec37256a1da153bae5149b5795c83c5ac' `
             -SmokeScript "$env:GITHUB_WORKSPACE\.work\materialized\apps\desktop\scripts\v33-installed-smoke.mjs" `
@@ -172,9 +172,9 @@ jobs:
           New-Item -ItemType Directory -Path '.work\staging' -Force | Out-Null
           $candidate = '${{ steps.candidate.outputs.path }}'
           if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-            Copy-Item -LiteralPath $candidate -Destination '.work\staging\Hermes-Vietnamese-V33-dev.6-Windows-x64-Setup.exe'
-            $hash = (Get-FileHash '.work\staging\Hermes-Vietnamese-V33-dev.6-Windows-x64-Setup.exe' -Algorithm SHA256).Hash.ToLowerInvariant()
-            [System.IO.File]::WriteAllText("$env:GITHUB_WORKSPACE\.work\staging\SHA256SUMS.txt", "$hash  Hermes-Vietnamese-V33-dev.6-Windows-x64-Setup.exe`n")
+            Copy-Item -LiteralPath $candidate -Destination '.work\staging\Hermes-Vietnamese-V33-dev.7-Windows-x64-Setup.exe'
+            $hash = (Get-FileHash '.work\staging\Hermes-Vietnamese-V33-dev.7-Windows-x64-Setup.exe' -Algorithm SHA256).Hash.ToLowerInvariant()
+            [System.IO.File]::WriteAllText("$env:GITHUB_WORKSPACE\.work\staging\SHA256SUMS.txt", "$hash  Hermes-Vietnamese-V33-dev.7-Windows-x64-Setup.exe`n")
           }
           Copy-Item -LiteralPath '.work\materialized\apps\desktop\build\edition-receipt.json' -Destination '.work\staging\edition-receipt.json' -ErrorAction SilentlyContinue
           Copy-Item -LiteralPath '.work\materialized\apps\desktop\build\install-stamp.json' -Destination '.work\staging\install-stamp.json' -ErrorAction SilentlyContinue
@@ -187,7 +187,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: v33-dev6-windows-x64-staging-${{ github.sha }}
+          name: v33-dev7-windows-x64-staging-${{ github.sha }}
           path: .work/staging/**
           if-no-files-found: error
           retention-days: 14

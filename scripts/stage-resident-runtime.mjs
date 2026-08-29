@@ -312,7 +312,7 @@ function stagePython(sourceRoot, payloadRoot) {
 }
 
 export function stageResidentRuntime({ sourceRoot, outputRoot, candidate, engineCommit, receiptSha256 }) {
-  if (process.platform !== 'win32' || process.arch !== 'x64') fail('dev.6 resident staging currently supports Windows x64 only')
+  if (process.platform !== 'win32' || process.arch !== 'x64') fail('dev.7 resident staging currently supports Windows x64 only')
   if (!/^[0-9a-f]{40}$/.test(engineCommit)) fail('engine commit must be a full lowercase SHA-1')
   if (!/^[0-9a-f]{64}$/.test(receiptSha256)) fail('receipt SHA-256 must be lowercase hex')
 

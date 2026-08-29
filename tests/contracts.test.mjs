@@ -36,9 +36,11 @@ test('repository contract verifies and pins the expected engine', () => {
     ),
     true
   )
-  const hotfix = receipt.patches.find((patch) => patch.id === 'interactive-turn-reliability')
-  assert.equal(hotfix.kind, 'engine-hotfix')
-  assert.deepEqual(hotfix.paths, [...receipt.edition.enginePatchAllowedPaths].sort())
+  const hotfixes = receipt.patches.filter((patch) => patch.kind === 'engine-hotfix')
+  assert.deepEqual(
+    [...new Set(hotfixes.flatMap((patch) => patch.paths))].sort(),
+    [...receipt.edition.enginePatchAllowedPaths].sort()
+  )
   assert.equal(receipt.overlayInventory.length, receipt.overlayFiles.length)
   assert.equal(
     receipt.overlayInventory.every((entry) => /^[0-9a-f]{64}$/.test(entry.sha256)),

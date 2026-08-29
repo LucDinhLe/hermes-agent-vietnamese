@@ -73,6 +73,26 @@
       ]
     },
     {
+      "id": "desktop-local-session-titles",
+      "kind": "engine-hotfix",
+      "file": "desktop-local-session-titles.patch",
+      "state": "active",
+      "upstreamCommit": "5fc308a70719a83cccdbba4c0e39c23f5a8239d5",
+      "rationale": "Keep a one-round Desktop answer at one provider request by using the already-persisted deterministic opening prompt as the session title. The cosmetic LLM title upgrade remains available to non-Desktop surfaces; duplicate Desktop titles are resolved locally without another model request.",
+      "paths": [
+        "agent/title_generator.py",
+        "agent/turn_context.py",
+        "tests/agent/test_title_generator.py",
+        "tests/agent/test_turn_context.py"
+      ],
+      "retireWhen": "Upstream exposes a surface-aware local-only title mode, or otherwise proves Desktop session naming never adds a provider request to a simple foreground turn.",
+      "tests": [
+        "tests/agent/test_title_generator.py",
+        "tests/agent/test_turn_context.py",
+        "acceptance/v33-runtime-acceptance.spec.ts"
+      ]
+    },
+    {
       "id": "resident-runtime-packaging",
       "kind": "edition-seam",
       "file": "resident-runtime-packaging.patch",
