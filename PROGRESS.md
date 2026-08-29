@@ -7,7 +7,7 @@
 - Advanced the edition to `0.33.0-dev.3`; electron-builder now receives that
   edition version instead of the unrelated upstream desktop version `0.17.0`.
   This prevents Windows from classifying V33 as older than V32.1-18.
-- Added a manual-only Windows x64 staging workflow. It materializes from a
+- Added a V33-branch-scoped Windows x64 staging workflow. It materializes from a
   clean remote-reachable shell commit in release mode, builds once, packages
   one unsigned NSIS candidate without rebuilding, hashes it once, and never
   creates a tag, release, update feed, or Latest promotion.

@@ -32,9 +32,10 @@ test('V33 dev.3 version is one immutable edition fact', () => {
   assert.equal(metadata.technicalVersion, shellPackage.version)
 })
 
-test('Windows staging is manual, pinned, unsigned, and never publishes', () => {
+test('Windows staging is branch-scoped, pinned, unsigned, and never publishes', () => {
   assert.match(workflow, /on:\s*\n\s*workflow_dispatch:/)
-  assert.doesNotMatch(workflow, /\n\s*(?:push|pull_request|schedule):/)
+  assert.match(workflow, /push:\s*\n\s*branches:\s*\n\s*- v33\/composite-shell/)
+  assert.doesNotMatch(workflow, /\n\s*(?:pull_request|schedule):/)
   assert.match(workflow, /permissions:\s*\n\s*contents:\s*read/)
 
   const actionUses = [...workflow.matchAll(/^\s*uses:\s*([^@\s]+)@([^\s#]+)(?:\s+#\s+(.+))?$/gm)]

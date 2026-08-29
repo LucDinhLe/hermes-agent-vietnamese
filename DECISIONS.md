@@ -112,7 +112,7 @@ not prove installer, lifecycle, signing or release readiness.
 
 The edition technical version is the electron-builder/NSIS package version;
 the upstream desktop package version is never allowed to leak into a Vietnamese
-installer. A manual staging workflow may create and retain one unsigned Windows
+installer. A branch-scoped staging workflow may create and retain one unsigned Windows
 x64 candidate from one clean remote-reachable commit, then exercise that exact
 byte stream only in a disposable hosted VM. Staging remains non-public and
 must list every unproved release gate. A green installer lifecycle does not

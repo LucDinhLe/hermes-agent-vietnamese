@@ -2,6 +2,18 @@ name: Stage Hermes Vietnamese V33 Windows x64
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - v33/composite-shell
+    paths:
+      - '.github/workflows/stage-windows-x64.yml'
+      - 'edition.json'
+      - 'edition/**'
+      - 'engine.lock.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'patches/**'
+      - 'scripts/**'
 
 permissions:
   contents: read
