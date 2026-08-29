@@ -66,3 +66,11 @@ Do not edit upstream production code or weaken tests merely to hide this
 baseline. Edition-owned gates must remain green. A distributable candidate
 still requires either a clean full source gate on a supported deterministic
 test locale or an upstream fix with its own evidence.
+
+The canonical Windows workflow now performs a same-runner comparison rather
+than relying on this historical host observation. It records complete raw logs
+for the materialized V33 tree and the pristine locked upstream tree, parses
+individual failing test identities, and rejects any V33-only failure. Missing
+summaries and unparseable failures are blocking. This comparison is a narrow
+regression classifier, not permission to ignore upstream defects or advance a
+diagnostic build to release status.

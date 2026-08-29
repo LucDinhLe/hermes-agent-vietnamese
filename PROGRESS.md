@@ -1,5 +1,37 @@
 # Progress — Hermes Vietnamese V33
 
+## 2026-08-29 — Same-runner Electron baseline gate
+
+### Implemented
+
+- Replaced the single known-red Electron step with two captured runs on the
+  same `windows-2025` job and Node 26: the materialized V33 tree and the
+  untouched locked upstream tree.
+- Added a fail-closed comparator. V33 passes this regression gate only when its
+  Electron suite is green or every parsed V33 failure is reproduced by the
+  complete pristine-upstream result. Candidate-only tests, missing summaries,
+  unparseable failures and broken upstream evidence remain RED.
+- The workflow retains both raw logs and a machine-readable comparison beside
+  the immutable edition receipt and install stamp. It still builds diagnostic
+  evidence and never publishes.
+
+### Evidence before remote validation
+
+- Shell contracts including six comparator regression cases: 33/33 PASS.
+- Edition verification: PASS with 11 overlay files and four active patches.
+- PowerShell preserves the native exit code through the CI log-capture
+  pipeline (`cmd /c exit 7` observed as `7`).
+- Prior dev.2 run `33201386174` remained RED only at Electron: 126 files and
+  1,926 tests passed; nine files and 38 tests failed. Typecheck, lint, focused
+  Vietnamese tests, migration, plugins, full renderer, immutable verification,
+  diagnostic build, provenance and evidence upload all passed.
+
+Current decision: **GO FOR SAME-RUNNER CI VALIDATION; NO-GO PUBLIC RELEASE OR
+USER INSTALL**.
+
+Next smallest step: push this clean CI-only checkpoint, require the comparator
+to finish on the exact remote commit, then inspect its retained JSON evidence.
+
 ## 2026-08-29 — V33 dev.2 adaptive foreground budget
 
 ### Implemented

@@ -117,11 +117,55 @@ jobs:
         shell: pwsh
         run: npm run test:ui --workspace apps/desktop
 
-      - name: Test Electron platform code
+      - name: Install pristine upstream dependencies
+        id: upstream_install
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        working-directory: .work/upstream
+        shell: pwsh
+        run: npm ci
+
+      - name: Test Electron platform code in V33
+        id: electron_candidate
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        continue-on-error: true
         working-directory: .work/materialized
         shell: pwsh
-        run: npm run test:desktop:platforms --workspace apps/desktop
+        run: |
+          New-Item -ItemType Directory -Force "$env:GITHUB_WORKSPACE\.work\evidence" | Out-Null
+          $env:NO_COLOR = '1'
+          npm run test:desktop:platforms --workspace apps/desktop 2>&1 |
+            Tee-Object -FilePath "$env:GITHUB_WORKSPACE\.work\evidence\v33-electron.log"
+          $exitCode = $LASTEXITCODE
+          "exit_code=$exitCode" >> $env:GITHUB_OUTPUT
+          exit $exitCode
+
+      - name: Test Electron platform code in pristine upstream
+        id: electron_upstream
+        if: ${{ !cancelled() && steps.upstream_install.outcome == 'success' }}
+        continue-on-error: true
+        working-directory: .work/upstream
+        shell: pwsh
+        run: |
+          $env:NO_COLOR = '1'
+          npm run test:desktop:platforms --workspace apps/desktop 2>&1 |
+            Tee-Object -FilePath "$env:GITHUB_WORKSPACE\.work\evidence\upstream-electron.log"
+          $exitCode = $LASTEXITCODE
+          "exit_code=$exitCode" >> $env:GITHUB_OUTPUT
+          exit $exitCode
+
+      - name: Compare Electron failures against pristine upstream
+        if: >-
+          ${{ !cancelled() &&
+              steps.install.outcome == 'success' &&
+              steps.upstream_install.outcome == 'success' }}
+        shell: pwsh
+        run: >-
+          node scripts/compare-electron-baseline.mjs
+          --candidate-log ".work/evidence/v33-electron.log"
+          --candidate-exit "${{ steps.electron_candidate.outputs.exit_code }}"
+          --upstream-log ".work/evidence/upstream-electron.log"
+          --upstream-exit "${{ steps.electron_upstream.outputs.exit_code }}"
+          --output ".work/evidence/electron-baseline-comparison.json"
 
       - name: Verify immutable materialized inputs before build
         id: verify_materialized
@@ -167,3 +211,6 @@ jobs:
           path: |
             .work/materialized/apps/desktop/build/edition-receipt.json
             .work/materialized/apps/desktop/build/install-stamp.json
+            .work/evidence/v33-electron.log
+            .work/evidence/upstream-electron.log
+            .work/evidence/electron-baseline-comparison.json

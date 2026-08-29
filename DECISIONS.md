@@ -95,3 +95,15 @@ tiers but cannot expand them; background and CLI jobs keep their independent
 limits. Classification uses request structure and durable goal state only, so
 the safety mechanism never consumes an extra model call or mutates the cached
 system prompt.
+
+## D-012 — An upstream baseline is an exact comparator, not a blanket waiver
+
+Windows CI runs the full Electron suite in both the materialized Vietnamese
+tree and the untouched locked upstream tree using the same runner and Node
+major. A failing V33 suite is accepted only when every parsed failing test is
+also present in the complete pristine-upstream result. A candidate-only test,
+an incomplete log, an unparseable failure, or a broken upstream comparison
+fails closed. Both raw logs and the machine-readable comparison are retained
+with the immutable build evidence. This classification can clear an
+edition-regression gate; it does not prove installer, lifecycle, signing or
+release readiness.
