@@ -2935,8 +2935,14 @@ export const vi = defineLocale({
   },
 
   zones: {
-    showTabStrip: 'Hiển thị dải tab',
-    hideTabStrip: 'Ẩn dải tab',
+    showHeader: 'Hiển thị tiêu đề',
+    hideHeader: 'Ẩn tiêu đề',
+    showStripTab: title => `Hiển thị ${title}`,
+    hideStripTab: title => `Ẩn ${title}`,
+    lastTabKeptTitle: 'Giữ lại tab cuối cùng',
+    lastTabKeptBody:
+      'Khu vực này cần ít nhất một tab hiển thị. Hãy hiện một tab khác trước hoặc thu gọn toàn bộ thanh bên.',
+    toggleStripTab: title => `Bật hoặc tắt tab ${title}`,
     minimize: 'Thu nhỏ',
     restore: 'Khôi phục',
     closeRunningTitle: 'Đóng tab đang chạy?',
