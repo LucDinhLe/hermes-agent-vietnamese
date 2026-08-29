@@ -86,10 +86,10 @@ profile dùng một lần; builder thành công không đồng nghĩa được p
 ## Nâng lõi về tag upstream mới
 
 Sau khi fetch tag upstream vào checkout động cơ, một lệnh sẽ xác minh tag chú
-thích, đọc đúng version, thử áp tuần tự toàn bộ core patch, rồi cập nhật cả lock
-và provenance của patch. Metadata mà người dùng nhìn thấy cũng được lấy từ cùng
-một kết quả đã xác minh, nên trang hỗ trợ không thể âm thầm báo phiên bản lõi
-cũ:
+thích, đọc đúng version, thử áp tuần tự hai seam thuộc lớp Desktop/phân phối,
+rồi cập nhật cả lock và provenance của patch. Metadata mà người dùng nhìn thấy
+cũng được lấy từ cùng một kết quả đã xác minh, nên trang hỗ trợ không thể âm
+thầm báo phiên bản lõi cũ:
 
 ```powershell
 npm run engine:update -- --engine-dir "C:\duong-dan\hermes-upstream" --tag vYYYY.M.D
@@ -112,14 +112,13 @@ cho các lỗi upstream nếu có.
 
 - `edition/vietnamese/overlay/`: tệp do bản Việt sở hữu, gồm locale và bundled
   desktop plugin.
-- `patches/series.json`: sổ mọi chỉnh sửa bắt buộc vào file upstream; mỗi patch
-  phải có loại, lý do, đường dẫn, test và điều kiện gỡ bỏ. Patch `edition-seam`
-  chỉ được chạm allowlist desktop; patch P0 `engine-hotfix` chỉ được chạm từng
-  đường dẫn chính xác trong `enginePatchAllowedPaths`, không chấp nhận glob.
+- `patches/series.json`: chỉ chứa seam tối thiểu để đăng ký locale Việt và đóng
+  receipt phân phối. Mọi patch phải ở `apps/desktop/`, có lý do, đường dẫn, test
+  và điều kiện gỡ bỏ. Không tồn tại ngoại lệ engine-hotfix.
 - `scripts/materialize-vietnamese.mjs`: từ chối tag/SHA sai, output có sẵn,
-  mọi đường dẫn ngoài hai allowlist tách biệt, alias nguy hiểm trên Windows và
-  thay đổi nguồn xảy ra giữa lúc materialize. Overlay không bao giờ được dùng
-  allowlist hotfix để đi vào lõi.
+  mọi đường dẫn ngoài allowlist Desktop, alias nguy hiểm trên Windows và thay
+  đổi nguồn xảy ra giữa lúc materialize. Bất kỳ thay đổi nào vào engine,
+  gateway, CLI hoặc TUI đều bị từ chối.
 - `apps/desktop/build/edition-receipt.json` trong cây dựng: bằng chứng liên kết
   engine, shell, overlay và patch SHA. Receipt được đóng cùng install stamp vào
   resources; `verify:provenance` đối chiếu cả bản build và bản đã đóng gói.

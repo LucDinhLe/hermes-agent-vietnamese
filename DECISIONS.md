@@ -38,7 +38,7 @@ stale progress claims are rewritten or rejected according to
 
 `npm run engine:update` is the maintenance entry point. It verifies an
 annotated tag object and its commit, reads the engine/desktop versions from the
-exact tree, proves every active core patch still applies, and only then updates
+exact tree, proves every active Desktop/distribution seam still applies, and only then updates
 the lock and patch provenance. It also verifies that the official NousResearch
 remote currently advertises the same tag object and peeled commit. A fork-only,
 local-only or moved tag is rejected. A failed verification leaves the current
@@ -78,6 +78,8 @@ remains a separate owner decision after every candidate gate is green.
 
 ## D-010 — Engine hotfixes use an exact-path lane, never the overlay lane
 
+**Superseded by D-017.** No engine-hotfix lane remains active.
+
 The Vietnamese overlay remains desktop-only. A P0 engine fix may enter V33 only
 as an `engine-hotfix` ledger entry whose every changed file is listed exactly
 in `edition.json.enginePatchAllowedPaths`; directory globs are forbidden. The
@@ -86,6 +88,8 @@ interactive-turn reliability fix prompted by the V32.1-18 incident and must be
 retired when upstream ships equivalent behavior and regression coverage.
 
 ## D-011 — Foreground budgets adapt without a classifier model call
+
+**Superseded by D-017.** V33 does not alter upstream turn budgets.
 
 V33 treats a model round as a scarce foreground resource. High-confidence
 simple questions receive at most 4 rounds, ordinary turns 12, and only explicit
@@ -164,3 +168,19 @@ titles are suffixed through the state store without a model. CLI, messaging and
 ACP retain upstream title-upgrade behavior. The installed acceptance gate keeps
 counting every request that carries the opening prompt and requires exactly one,
 so either a foreground loop or a reintroduced auxiliary title call fails closed.
+
+## D-017 — Upstream behavior is immutable; V33 owns only the shell
+
+The owner has reaffirmed that Hermes itself must run exactly as upstream ships.
+Starting with dev.8, the Vietnamese shell has no engine-hotfix exception and no
+resident-runtime override. It does not modify model budgets, prompt guidance,
+turn settlement, title generation, Gateway behavior, transport recovery,
+bootstrap selection, or runtime resolution.
+
+Only two exact Desktop/distribution seams remain: registering the Vietnamese
+locale and packaging the immutable edition receipt. The boundary verifier
+requires an empty `enginePatchAllowedPaths`, rejects every active patch whose
+kind is not `edition-seam`, and rejects any materialized path under `agent/`,
+`gateway/`, `hermes_cli/`, or `tui_gateway/`. Dev.6 and dev.7 artifacts remain
+historical evidence but are permanently NO-GO because they violated this
+ownership boundary even though their technical gates passed.

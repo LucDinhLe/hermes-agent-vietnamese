@@ -30,16 +30,13 @@ test('repository contract verifies and pins the expected engine', () => {
     true
   )
   assert.equal(receipt.edition.schemaVersion, 2)
+  assert.deepEqual(receipt.edition.enginePatchAllowedPaths, [])
+  assert.equal(receipt.patches.every((patch) => patch.kind === 'edition-seam'), true)
   assert.equal(
-    receipt.edition.enginePatchAllowedPaths.every(
-      (entry) => !entry.includes('*') && !entry.startsWith('apps/desktop/')
-    ),
+    receipt.patches
+      .flatMap((patch) => patch.paths)
+      .every((entry) => entry.startsWith('apps/desktop/') && !isForbiddenPath(entry, receipt.edition.forbiddenPrefixes)),
     true
-  )
-  const hotfixes = receipt.patches.filter((patch) => patch.kind === 'engine-hotfix')
-  assert.deepEqual(
-    [...new Set(hotfixes.flatMap((patch) => patch.paths))].sort(),
-    [...receipt.edition.enginePatchAllowedPaths].sort()
   )
   assert.equal(receipt.overlayInventory.length, receipt.overlayFiles.length)
   assert.equal(

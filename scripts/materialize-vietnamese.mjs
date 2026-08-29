@@ -200,13 +200,12 @@ export function materialize(options) {
 
     for (const file of changedPaths) {
       const isEditionPath = matchesAllowedPath(file, contract.edition.allowedPaths)
-      const isEngineHotfixPath = contract.edition.enginePatchAllowedPaths.includes(file)
 
-      if (!isEditionPath && !isEngineHotfixPath) {
+      if (!isEditionPath) {
         throw new Error(`Materialized path is not allowlisted: ${file}`)
       }
 
-      if (isForbiddenPath(file, contract.edition.forbiddenPrefixes) && !isEngineHotfixPath) {
+      if (isForbiddenPath(file, contract.edition.forbiddenPrefixes)) {
         throw new Error(`Materialized path enters a forbidden engine prefix: ${file}`)
       }
     }

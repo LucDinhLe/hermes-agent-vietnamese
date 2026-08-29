@@ -387,3 +387,22 @@ CANDIDATE OR HOST LAUNCH**.
   testing. Public tag, GitHub Release and Latest remain intentionally unchanged;
   signing and explicit promotion authorization are still required for a public
   release.
+
+## 2026-08-29 — Dev.8 restores the upstream-pure engine boundary
+
+- The owner reaffirmed the architectural rule: Hermes core behavior is fully
+  owned by upstream and the Vietnamese edition must not tune or repair it.
+- Dev.7 internal acceptance is revoked despite its green technical evidence.
+  Dev.6/dev.7 remain immutable historical artifacts and are permanently NO-GO
+  because they patched engine/runtime behavior.
+- Removed four active behavior patches: adaptive turn reliability, local-only
+  Desktop titles, transport timeout recovery, and resident-runtime selection.
+  Removed the resident staging/verification code and the dev.7-only runtime
+  acceptance controller so it cannot be mistaken for a current promotion gate.
+- The edition now has exactly two active seams, both under `apps/desktop/`:
+  Vietnamese locale registration and edition-receipt packaging. The engine
+  patch allowlist is empty, and verification rejects any non-edition seam or
+  materialized path under engine, Gateway, CLI, or TUI prefixes.
+- Technical version advances to `0.33.0-dev.8` because candidate bytes change.
+  No installer, tag, GitHub Release, or Latest pointer has been created or
+  changed. Dev.8 must restart source/build/lifecycle acceptance from zero.

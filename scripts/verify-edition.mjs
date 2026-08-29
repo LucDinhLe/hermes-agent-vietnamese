@@ -67,6 +67,10 @@ export function verifyEdition(root = ROOT) {
     throw new Error('Engine patch allowlist must not contain duplicate paths')
   }
 
+  if (enginePatchAllowed.length !== 0) {
+    throw new Error('Vietnamese shell must not allow patches to Hermes engine-owned paths')
+  }
+
   for (const entry of allowed) {
     const pathPart = entry.endsWith('/**') ? entry.slice(0, -3) : entry
 
@@ -157,8 +161,8 @@ export function verifyEdition(root = ROOT) {
       throw new Error(`Patch ${entry.id} is not rebased to the locked upstream commit`)
     }
 
-    if (!new Set(['edition-seam', 'engine-hotfix']).has(entry.kind)) {
-      throw new Error(`Patch ${entry.id} has an unknown kind: ${entry.kind}`)
+    if (entry.kind !== 'edition-seam') {
+      throw new Error(`Patch ${entry.id} changes upstream behavior; only edition-seam patches are allowed`)
     }
 
     const actualPaths = pathsDeclaredByPatch(patchFile)
@@ -169,18 +173,12 @@ export function verifyEdition(root = ROOT) {
     }
 
     for (const file of actualPaths) {
-      if (entry.kind === 'engine-hotfix') {
-        if (!enginePatchAllowed.includes(file)) {
-          throw new Error(`Engine hotfix path is not exactly allowlisted: ${file}`)
-        }
-      } else {
-        if (!matchesAllowedPath(file, allowed)) {
-          throw new Error(`Edition seam patch path is not allowlisted: ${file}`)
-        }
+      if (!matchesAllowedPath(file, allowed)) {
+        throw new Error(`Edition seam patch path is not allowlisted: ${file}`)
+      }
 
-        if (isForbiddenPath(file, forbidden)) {
-          throw new Error(`Edition seam patch enters a forbidden engine prefix: ${file}`)
-        }
+      if (isForbiddenPath(file, forbidden)) {
+        throw new Error(`Edition seam patch enters a forbidden engine prefix: ${file}`)
       }
     }
 
