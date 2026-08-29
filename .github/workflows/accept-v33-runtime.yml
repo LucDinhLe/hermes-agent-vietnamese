@@ -1,0 +1,111 @@
+name: Accept Hermes Vietnamese V33 Upstream Runtime
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - v33/composite-shell
+    paths:
+      - '.github/workflows/accept-v33-runtime.yml'
+      - 'acceptance/**'
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: v33-runtime-acceptance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-x64-runtime:
+    name: Exact dev.8 upstream bootstrap, chat, safe tool, and persistence
+    runs-on: windows-2025
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out acceptance controller
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Read immutable candidate contract
+        id: candidate
+        shell: pwsh
+        run: |
+          $contract = Get-Content -LiteralPath 'acceptance\v33-dev8.json' -Raw | ConvertFrom-Json
+          "version=$($contract.candidate.version)" >> $env:GITHUB_OUTPUT
+          "commit=$($contract.candidate.commit)" >> $env:GITHUB_OUTPUT
+          "run_id=$($contract.candidate.runId)" >> $env:GITHUB_OUTPUT
+          "artifact_name=$($contract.candidate.artifactName)" >> $env:GITHUB_OUTPUT
+          "installer_name=$($contract.candidate.installerName)" >> $env:GITHUB_OUTPUT
+          "installer_size=$($contract.candidate.installerSize)" >> $env:GITHUB_OUTPUT
+          "installer_sha=$($contract.candidate.installerSha256)" >> $env:GITHUB_OUTPUT
+          "engine_tag=$($contract.engine.tag)" >> $env:GITHUB_OUTPUT
+          "engine_commit=$($contract.engine.commit)" >> $env:GITHUB_OUTPUT
+
+      - name: Enable Windows long paths
+        shell: pwsh
+        run: git config --global core.longpaths true
+
+      - name: Check out exact upstream acceptance harness
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: NousResearch/hermes-agent
+          ref: ${{ steps.candidate.outputs.engine_tag }}
+          fetch-depth: 1
+          path: .work/harness
+          persist-credentials: false
+
+      - name: Set up Node.js 26 x64
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 26
+          architecture: x64
+
+      - name: Install locked harness dependencies
+        working-directory: .work/harness
+        shell: pwsh
+        run: npm ci
+
+      - name: Download and verify exact dev.8 staging bytes
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Path '.work\candidate' -Force | Out-Null
+          gh run download '${{ steps.candidate.outputs.run_id }}' --repo LucDinhLe/hermes-agent-vietnamese --name '${{ steps.candidate.outputs.artifact_name }}' --dir '.work\candidate'
+          $candidate = Resolve-Path ".work\candidate\${{ steps.candidate.outputs.installer_name }}"
+          $item = Get-Item -LiteralPath $candidate
+          if ($item.Length -ne [int64]'${{ steps.candidate.outputs.installer_size }}') { throw 'candidate byte size mismatch' }
+          $sha = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($sha -ne '${{ steps.candidate.outputs.installer_sha }}') { throw 'candidate SHA-256 mismatch' }
+
+      - name: Install acceptance spec into the locked harness
+        shell: pwsh
+        run: Copy-Item -LiteralPath 'acceptance\v33-upstream-runtime-acceptance.spec.ts' -Destination '.work\harness\apps\desktop\e2e\v33-upstream-runtime-acceptance.spec.ts'
+
+      - name: Run exact installed upstream runtime acceptance
+        shell: pwsh
+        run: |
+          $evidenceRoot = "$env:GITHUB_WORKSPACE\.work\runtime-evidence\v33-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
+          Copy-Item -LiteralPath 'acceptance\v33-dev8.json' -Destination (Join-Path $evidenceRoot 'candidate-contract.json')
+          & 'acceptance\run-windows-upstream-runtime-acceptance.ps1' `
+            -Candidate "$env:GITHUB_WORKSPACE\.work\candidate\${{ steps.candidate.outputs.installer_name }}" `
+            -CandidateSha256 '${{ steps.candidate.outputs.installer_sha }}' `
+            -CandidateCommit '${{ steps.candidate.outputs.commit }}' `
+            -CandidateVersion '${{ steps.candidate.outputs.version }}' `
+            -EngineCommit '${{ steps.candidate.outputs.engine_commit }}' `
+            -HarnessRoot "$env:GITHUB_WORKSPACE\.work\harness" `
+            -EvidenceRoot $evidenceRoot
+
+      - name: Upload immutable runtime evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: v33-dev8-upstream-runtime-acceptance-${{ github.sha }}
+          path: .work/runtime-evidence/**
+          if-no-files-found: error
+          retention-days: 14
