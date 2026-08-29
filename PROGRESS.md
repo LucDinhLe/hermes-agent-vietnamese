@@ -444,3 +444,32 @@ CANDIDATE OR HOST LAUNCH**.
   prior official annotated tag `v2026.8.19` at
   `fcbd1076a93841fa88855acce810e342a5b78101`, whose source predates that timeout.
   Source/build/lifecycle/runtime evidence must be regenerated from zero.
+
+## 2026-08-29 — Dev.9 clean-machine runtime accepted
+
+- Product commit `b6c2d20a83aad16e89b6cb97b6b82e3d8e87aff0` passed Windows
+  validation run `33251231495` and staging/lifecycle run `33251231572`.
+  The same product sources also passed validation run `33251986316` after the
+  acceptance-only controller commit.
+- Exact unsigned installer:
+  `Hermes-Vietnamese-V33-dev.9-Windows-x64-Setup.exe`, 118,585,393 bytes,
+  SHA-256
+  `60ea28c1c68041658304c60b6e464d9ef01867cba30bb0808ef02f848fe42fcf`.
+  Staging artifact `9714580345` has digest
+  `sha256:8b5fc562d7532f8fe5a885354539edee8201d415e8484847fbd829fd90184125`.
+- Controller commit `533b139ce7326c2238e22553b412272efe6928c1` reused those
+  exact bytes in clean-machine runtime run `33251986333`. Network bootstrap
+  completed in 794.5 seconds at upstream commit
+  `fcbd1076a93841fa88855acce810e342a5b78101`; checkout, marker and Python
+  import provenance all matched.
+- `Chào em` completed through the real installed chat path with two upstream
+  model requests. The safe `todo` fixture completed in five model requests and
+  used two tools. Relaunch retained one session and 12 messages; uninstall
+  passed. Runtime evidence artifact `9714842988` has digest
+  `sha256:a04a2ecb4345761553f0d9372370b4acf9038435fea8163ace1f19b7e0598270`.
+- No engine, Gateway, bootstrap, timeout, title or turn-budget patch was added.
+  The two requests for a simple chat are recorded as locked-upstream behavior,
+  not hidden or repaired downstream.
+
+Current decision: **GO FOR UNSIGNED INTERNAL/MANUAL TESTING; NO-GO PUBLIC TAG,
+GITHUB RELEASE OR LATEST PROMOTION WITHOUT A SEPARATE OWNER DECISION**.

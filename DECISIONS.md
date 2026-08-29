@@ -213,3 +213,17 @@ Dev.8 is therefore NO-GO. The edition will not patch that renderer timeout or
 replace the bootstrap. Dev.9 instead locks the prior official annotated tag
 `v2026.8.19` at commit `fcbd1076a93841fa88855acce810e342a5b78101`, where the
 regressed timeout is absent, and restarts every candidate gate with new bytes.
+
+## D-020 — Dev.9 accepts upstream behavior without downstream tuning
+
+Exact dev.9 runtime run `33251986333` installed the immutable candidate from
+staging run `33251231572` on a disposable Windows VM with Internet. Upstream
+bootstrap completed at the locked `v2026.8.19` commit, chat and the safe `todo`
+tool completed, session state survived relaunch, and uninstall passed. No
+resident runtime, bootstrap replacement or engine behavior patch was present.
+
+The simple `Chào em` session used two mock-provider requests because that is the
+behavior of the locked upstream release. V33 records this as an upstream cost
+and does not patch title generation, turn budgets or request policy. Dev.9 is
+eligible for internal manual testing as an unsigned candidate; public tag,
+release and Latest promotion remain a separate owner decision.
