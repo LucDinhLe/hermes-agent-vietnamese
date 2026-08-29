@@ -118,3 +118,18 @@ byte stream only in a disposable hosted VM. Staging remains non-public and
 must list every unproved release gate. A green installer lifecycle does not
 waive real gateway bootstrap, real session, safe-tool, signing, or owner
 promotion gates.
+
+## D-014 — Runtime acceptance reuses dev.5 bytes with a separate controller
+
+The final Windows runtime gates download the immutable dev.5 artifact from
+staging run `33235757988`; they never materialize, rebuild or repackage the
+candidate. The controller runs on a disposable GitHub-hosted Windows VM with a
+new `HERMES_HOME`, strips host credentials and supplies only a loopback mock
+model endpoint. Electron, first-run bootstrap, the Python gateway, session
+storage and the side-effect-free `todo` tool remain the installed product's real
+code paths. The receipt records candidate and controller commits separately.
+
+Gateway/chat/tool success is insufficient if bootstrap installs bytes that do
+not match the engine hotfix hashes embedded in the candidate receipt. Runtime
+provenance is therefore a blocking gate, and its failure leaves dev.5 immutable
+and public promotion RED.

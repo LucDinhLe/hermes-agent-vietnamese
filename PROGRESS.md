@@ -1,5 +1,35 @@
 # Progress — Hermes Vietnamese V33
 
+## 2026-08-29 — Dev.5 exact runtime acceptance controller
+
+### Implemented locally, awaiting remote evidence
+
+- Added an immutable contract for the already-built dev.5 staging artifact;
+  candidate commit, run/artifact identity, byte size and SHA-256 are fixed.
+- Added a separate Windows controller that downloads those exact bytes, installs
+  them on a disposable hosted VM and launches with fresh `HERMES_HOME` and
+  Electron user data. No real profile or host credential is visible.
+- The installed app must bootstrap its own managed runtime, start the real
+  Python gateway, answer `Chào em` in exactly one model request through a
+  loopback mock provider, execute the real side-effect-free `todo` tool loop,
+  then relaunch with the same persisted session.
+- Runtime files `agent/prompt_builder.py` and `tui_gateway/server.py` must match
+  the exact materialized hashes carried inside the installed edition receipt.
+  This gate detects a thin installer that bootstraps pristine upstream and
+  silently omits the V33 engine hotfix.
+- The controller always attempts uninstall and uploads screenshots, sanitized
+  bootstrap logs and machine-readable receipts. It cannot tag, publish, alter
+  Latest or rebuild the candidate.
+
+### Local controller evidence
+
+- Shell contracts: 39/39 PASS; edition verification PASS.
+- Acceptance PowerShell parse PASS; TypeScript syntax transpilation PASS;
+  whitespace and changed-file secret scans PASS.
+
+Current decision: **GO TO RUN EXACT DEV.5 RUNTIME ACCEPTANCE; NO-GO PUBLIC
+PROMOTION UNTIL ALL RUNTIME AND PROVENANCE GATES PASS**.
+
 ## 2026-08-29 — V33 dev.3–dev.5 Windows x64 staging lane
 
 ### Implemented
