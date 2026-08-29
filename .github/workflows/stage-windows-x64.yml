@@ -113,7 +113,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $expectedName = 'Hermes-0.33.0-dev.3-win-x64.exe'
+          $expectedName = 'Hermes-0.33.0-dev.4-win-x64.exe'
           $candidate = Join-Path $env:GITHUB_WORKSPACE ".work\materialized\apps\desktop\release\$expectedName"
           if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { throw "Missing exact candidate $expectedName" }
           $candidateSha = (Get-FileHash -LiteralPath $candidate -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -147,9 +147,9 @@ jobs:
           New-Item -ItemType Directory -Path '.work\staging' -Force | Out-Null
           $candidate = '${{ steps.candidate.outputs.path }}'
           if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-            Copy-Item -LiteralPath $candidate -Destination '.work\staging\Hermes-Vietnamese-V33-dev.3-Windows-x64-Setup.exe'
-            $hash = (Get-FileHash '.work\staging\Hermes-Vietnamese-V33-dev.3-Windows-x64-Setup.exe' -Algorithm SHA256).Hash.ToLowerInvariant()
-            [System.IO.File]::WriteAllText("$env:GITHUB_WORKSPACE\.work\staging\SHA256SUMS.txt", "$hash  Hermes-Vietnamese-V33-dev.3-Windows-x64-Setup.exe`n")
+            Copy-Item -LiteralPath $candidate -Destination '.work\staging\Hermes-Vietnamese-V33-dev.4-Windows-x64-Setup.exe'
+            $hash = (Get-FileHash '.work\staging\Hermes-Vietnamese-V33-dev.4-Windows-x64-Setup.exe' -Algorithm SHA256).Hash.ToLowerInvariant()
+            [System.IO.File]::WriteAllText("$env:GITHUB_WORKSPACE\.work\staging\SHA256SUMS.txt", "$hash  Hermes-Vietnamese-V33-dev.4-Windows-x64-Setup.exe`n")
           }
           Copy-Item -LiteralPath '.work\materialized\apps\desktop\build\edition-receipt.json' -Destination '.work\staging\edition-receipt.json' -ErrorAction SilentlyContinue
           Copy-Item -LiteralPath '.work\materialized\apps\desktop\build\install-stamp.json' -Destination '.work\staging\install-stamp.json' -ErrorAction SilentlyContinue
@@ -162,7 +162,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: v33-dev3-windows-x64-staging-${{ github.sha }}
+          name: v33-dev4-windows-x64-staging-${{ github.sha }}
           path: .work/staging/**
           if-no-files-found: error
           retention-days: 14

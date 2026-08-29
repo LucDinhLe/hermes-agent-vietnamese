@@ -124,23 +124,23 @@ function Assert-SameInstall([object]$Before, [object]$After, [string]$Stage) {
   Assert-True ([string]::Equals($Before.InstallDir, $After.InstallDir, [StringComparison]::OrdinalIgnoreCase)) "$Stage installed side-by-side"
 }
 
-function Invoke-Smoke([object]$State, [string]$Phase, [string]$Home, [string]$UserData) {
+function Invoke-Smoke([object]$State, [string]$Phase, [string]$HermesHome, [string]$UserData) {
   $screenshot = Join-Path $EvidenceRoot "$Phase.png"
   $result = Join-Path $EvidenceRoot "$Phase.json"
-  & node $SmokeScript --binary $State.Binary --home $Home --user-data $UserData --screenshot $screenshot --result $result --phase $Phase
+  & node $SmokeScript --binary $State.Binary --home $HermesHome --user-data $UserData --screenshot $screenshot --result $result --phase $Phase
   Assert-True ($LASTEXITCODE -eq 0) "$Phase installed UI smoke failed"
   Assert-True (Test-Path -LiteralPath $screenshot -PathType Leaf) "$Phase screenshot is missing"
   Assert-True (Test-Path -LiteralPath $result -PathType Leaf) "$Phase result is missing"
 }
 
-function Write-Sentinel([string]$Home, [string]$UserData, [string]$Value) {
-  New-Item -ItemType Directory -Path $Home, $UserData -Force | Out-Null
-  [System.IO.File]::WriteAllText((Join-Path $Home 'v33-lifecycle-sentinel.txt'), $Value, $Utf8NoBom)
+function Write-Sentinel([string]$HermesHome, [string]$UserData, [string]$Value) {
+  New-Item -ItemType Directory -Path $HermesHome, $UserData -Force | Out-Null
+  [System.IO.File]::WriteAllText((Join-Path $HermesHome 'v33-lifecycle-sentinel.txt'), $Value, $Utf8NoBom)
   [System.IO.File]::WriteAllText((Join-Path $UserData 'v33-lifecycle-sentinel.txt'), $Value, $Utf8NoBom)
 }
 
-function Assert-Sentinel([string]$Home, [string]$UserData, [string]$Value, [string]$Stage) {
-  Assert-True ((Get-Content -LiteralPath (Join-Path $Home 'v33-lifecycle-sentinel.txt') -Raw) -eq $Value) "$Stage changed HERMES_HOME sentinel"
+function Assert-Sentinel([string]$HermesHome, [string]$UserData, [string]$Value, [string]$Stage) {
+  Assert-True ((Get-Content -LiteralPath (Join-Path $HermesHome 'v33-lifecycle-sentinel.txt') -Raw) -eq $Value) "$Stage changed HERMES_HOME sentinel"
   Assert-True ((Get-Content -LiteralPath (Join-Path $UserData 'v33-lifecycle-sentinel.txt') -Raw) -eq $Value) "$Stage changed userData sentinel"
 }
 
@@ -163,12 +163,12 @@ try {
   Add-Gate 'exactBytes' @{ candidateSha256 = $CandidateSha256; previousSha256 = $PreviousSha256 }
 
   $candidateState = Install-Exact $Candidate 'fresh-candidate-install'
-  Assert-True ($candidateState.DisplayVersion -eq '0.33.0-dev.3') "candidate registered version is $($candidateState.DisplayVersion), expected 0.33.0-dev.3"
+  Assert-True ($candidateState.DisplayVersion -eq '0.33.0-dev.4') "candidate registered version is $($candidateState.DisplayVersion), expected 0.33.0-dev.4"
   $resources = Join-Path $candidateState.InstallDir 'resources'
   $editionReceipt = Get-Content -LiteralPath (Join-Path $resources 'edition-receipt.json') -Raw | ConvertFrom-Json
   $installStamp = Get-Content -LiteralPath (Join-Path $resources 'install-stamp.json') -Raw | ConvertFrom-Json
   Assert-True ($editionReceipt.releaseMode -eq $true) 'installed edition receipt is not release-mode'
-  Assert-True ([string]$editionReceipt.edition.version -eq '0.33.0-dev.3') 'installed edition version mismatch'
+  Assert-True ([string]$editionReceipt.edition.version -eq '0.33.0-dev.4') 'installed edition version mismatch'
   Assert-True ([string]$editionReceipt.edition.shellCommit -eq $CandidateCommit) 'installed shell commit mismatch'
   Assert-True ([string]$installStamp.commit -match '^[0-9a-f]{40}$') 'installed engine stamp is malformed'
   Add-Gate 'installedProvenance' @{ engineCommit = [string]$installStamp.commit; shellCommit = [string]$editionReceipt.edition.shellCommit }
@@ -191,7 +191,7 @@ try {
   Assert-SameInstall $previousState $candidateState 'V32.1-18 to V33 update'
   Assert-Sentinel $upgradeHome $upgradeUserData 'v321-to-v33' 'V32.1-18 to V33 update'
   Invoke-Smoke $candidateState 'update-relaunch' $upgradeHome $upgradeUserData
-  Add-Gate 'v321ToV33Update' @{ from = 'vi-v0.32.1-18'; sameInstallDir = $true; to = '0.33.0-dev.3' }
+  Add-Gate 'v321ToV33Update' @{ from = 'vi-v0.32.1-18'; sameInstallDir = $true; to = '0.33.0-dev.4' }
   Uninstall-Exact $candidateState 'update-uninstall'
 
   $protectedHome = "$StateRoot\rollback\v33-home"

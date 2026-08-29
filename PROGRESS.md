@@ -1,10 +1,10 @@
 # Progress — Hermes Vietnamese V33
 
-## 2026-08-29 — V33 dev.3 Windows x64 staging lane
+## 2026-08-29 — V33 dev.3/dev.4 Windows x64 staging lane
 
 ### Implemented
 
-- Advanced the edition to `0.33.0-dev.3`; electron-builder now receives that
+- Advanced the edition through `0.33.0-dev.4`; electron-builder now receives that
   edition version instead of the unrelated upstream desktop version `0.17.0`.
   This prevents Windows from classifying V33 as older than V32.1-18.
 - Added a V33-branch-scoped Windows x64 staging workflow. It materializes from a
@@ -20,6 +20,11 @@
   real gateway bootstrap, a real chat session, and a safe tool call. The
   current workflow can therefore produce staging evidence but cannot silently
   declare the candidate eligible for Latest.
+- The first remote dev.3 lifecycle stopped before opening the app because the
+  harness parameter `$Home` collided with PowerShell's read-only `$HOME`.
+  Installer build, payload, provenance and checksum had already passed. The
+  harness now uses `$HermesHome`, has a regression assertion forbidding the
+  reserved name, and the replacement byte stream advances to dev.4.
 
 ### Evidence before remote validation
 
