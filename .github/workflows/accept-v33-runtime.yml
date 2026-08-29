@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   windows-x64-runtime:
-    name: Exact dev.8 upstream bootstrap, chat, safe tool, and persistence
+    name: Exact dev.9 upstream bootstrap, chat, safe tool, and persistence
     runs-on: windows-2025
     timeout-minutes: 60
 
@@ -34,7 +34,7 @@ jobs:
         id: candidate
         shell: pwsh
         run: |
-          $contract = Get-Content -LiteralPath 'acceptance\v33-dev8.json' -Raw | ConvertFrom-Json
+          $contract = Get-Content -LiteralPath 'acceptance\v33-dev9.json' -Raw | ConvertFrom-Json
           "version=$($contract.candidate.version)" >> $env:GITHUB_OUTPUT
           "commit=$($contract.candidate.commit)" >> $env:GITHUB_OUTPUT
           "run_id=$($contract.candidate.runId)" >> $env:GITHUB_OUTPUT
@@ -69,7 +69,7 @@ jobs:
         shell: pwsh
         run: npm ci
 
-      - name: Download and verify exact dev.8 staging bytes
+      - name: Download and verify exact dev.9 staging bytes
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
@@ -91,7 +91,7 @@ jobs:
         run: |
           $evidenceRoot = "$env:GITHUB_WORKSPACE\.work\runtime-evidence\v33-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
           New-Item -ItemType Directory -Path $evidenceRoot -Force | Out-Null
-          Copy-Item -LiteralPath 'acceptance\v33-dev8.json' -Destination (Join-Path $evidenceRoot 'candidate-contract.json')
+          Copy-Item -LiteralPath 'acceptance\v33-dev9.json' -Destination (Join-Path $evidenceRoot 'candidate-contract.json')
           & 'acceptance\run-windows-upstream-runtime-acceptance.ps1' `
             -Candidate "$env:GITHUB_WORKSPACE\.work\candidate\${{ steps.candidate.outputs.installer_name }}" `
             -CandidateSha256 '${{ steps.candidate.outputs.installer_sha }}' `
@@ -105,7 +105,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: v33-dev8-upstream-runtime-acceptance-${{ github.sha }}
+          name: v33-dev9-upstream-runtime-acceptance-${{ github.sha }}
           path: .work/runtime-evidence/**
           if-no-files-found: error
           retention-days: 14

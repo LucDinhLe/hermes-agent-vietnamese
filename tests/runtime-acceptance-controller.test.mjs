@@ -4,7 +4,7 @@ import path from 'node:path'
 import test from 'node:test'
 
 const root = path.resolve(import.meta.dirname, '..')
-const contract = JSON.parse(fs.readFileSync(path.join(root, 'acceptance', 'v33-dev8.json'), 'utf8'))
+const contract = JSON.parse(fs.readFileSync(path.join(root, 'acceptance', 'v33-dev9.json'), 'utf8'))
 const workflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'accept-v33-runtime.yml'), 'utf8')
 const orchestrator = fs.readFileSync(
   path.join(root, 'acceptance', 'run-windows-upstream-runtime-acceptance.ps1'),
@@ -15,18 +15,18 @@ const acceptance = fs.readFileSync(
   'utf8'
 )
 
-test('runtime controller locks the exact immutable dev.8 candidate', () => {
-  assert.equal(contract.candidate.version, '0.33.0-dev.8')
-  assert.equal(contract.candidate.commit, '4900ba42fc017fd83f4a3d661609197bbe085d7e')
-  assert.equal(contract.candidate.runId, 33246486251)
-  assert.equal(contract.candidate.artifactId, 9713159738)
-  assert.equal(contract.candidate.installerSize, 118674409)
+test('runtime controller locks the exact immutable dev.9 candidate', () => {
+  assert.equal(contract.candidate.version, '0.33.0-dev.9')
+  assert.equal(contract.candidate.commit, 'b6c2d20a83aad16e89b6cb97b6b82e3d8e87aff0')
+  assert.equal(contract.candidate.runId, 33251231572)
+  assert.equal(contract.candidate.artifactId, 9714580345)
+  assert.equal(contract.candidate.installerSize, 118585393)
   assert.equal(
     contract.candidate.installerSha256,
-    'eef693acd664b08f581a107e38cbe30dd141319971053760636da5218e7afffc'
+    '60ea28c1c68041658304c60b6e464d9ef01867cba30bb0808ef02f848fe42fcf'
   )
-  assert.equal(contract.engine.tag, 'v2026.8.27')
-  assert.equal(contract.engine.commit, '5fc308a70719a83cccdbba4c0e39c23f5a8239d5')
+  assert.equal(contract.engine.tag, 'v2026.8.19')
+  assert.equal(contract.engine.commit, 'fcbd1076a93841fa88855acce810e342a5b78101')
 })
 
 test('workflow downloads the candidate and never builds or publishes product bytes', () => {

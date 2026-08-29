@@ -1,5 +1,5 @@
 /**
- * Runtime acceptance for the immutable V33 dev.8 Windows candidate.
+ * Runtime acceptance for the immutable V33 dev.9 Windows candidate.
  *
  * The installed application owns Electron and the complete upstream first-run
  * bootstrap. The harness supplies only a fresh profile and a loopback
