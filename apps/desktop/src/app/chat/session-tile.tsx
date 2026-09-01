@@ -46,12 +46,15 @@ import {
   sessionMatchesStoredId,
   sessionPinId
 } from '@/store/session'
+import { requestForRendererRuntime } from '@/store/session-request-router'
 import {
   $sessionStates,
   $sessionTiles,
   closeSessionTile,
   discardSessionTile,
+  isProvisionalSessionTile,
   patchSessionTile,
+  recoverProvisionalSessionTile,
   type SessionTile,
   sessionTileDelegate
 } from '@/store/session-states'
@@ -116,13 +119,20 @@ const tileTranscribeAudio = async (audio: Blob) =>
 function TileChat({
   runtimeId,
   storedSessionId,
+  tile,
   view
 }: {
   runtimeId: string
   storedSessionId: string
+  tile: SessionTile
   view: SessionView
 }) {
-  const { gateway, requestGateway } = useGatewayRequest()
+  const { gateway } = useGatewayRequest()
+  const requestGateway = useCallback(
+    <T,>(method: string, params: Record<string, unknown> = {}, timeoutMs?: number, signal?: AbortSignal): Promise<T> =>
+      requestForRendererRuntime<T>(runtimeId, method, params, timeoutMs, signal),
+    [runtimeId]
+  )
   const queryClient = useQueryClient()
   const { selectModel } = useModelControls({ queryClient, requestGateway })
   const activeGatewayProfile = useStore($activeGatewayProfile)
@@ -142,7 +152,7 @@ function TileChat({
     [attachments, runtimeId, storedSessionId, view.$messages]
   )
 
-  const actions = useSessionTileActions({ runtimeId, scope, storedSessionId })
+  const actions = useSessionTileActions({ runtimeId, scope, storedSessionId, tile })
 
   // The same attach/pick/paste/drop pipeline the primary composer uses,
   // pointed at this tile's chips + session.
@@ -180,7 +190,10 @@ function TileChat({
   const onPickFolders = useCallback(() => void pickContextPaths('folder'), [pickContextPaths])
   const onPickImages = useCallback(() => void pickImages(), [pickImages])
   const onRemoveAttachment = useCallback((id: string) => void removeAttachment(id), [removeAttachment])
-  const onRetryResume = useCallback(() => patchSessionTile(storedSessionId, { error: undefined }), [storedSessionId])
+  const onRetryResume = useCallback(
+    () => patchSessionTile(storedSessionId, { error: undefined }, tile.owner),
+    [storedSessionId, tile.owner]
+  )
 
   // Per-tile model menu — rendered under this tile's SessionView so the pill
   // + switch target THIS runtime, not the primary (which may be mid-turn).
@@ -252,7 +265,7 @@ export function SessionTilePane({ storedSessionId }: { storedSessionId: string }
   useEffect(() => {
     const alreadyListed = () => $sessions.get().some(s => sessionMatchesStoredId(s, storedSessionId))
 
-    if (!runtimeId || !hasMessages || alreadyListed()) {
+    if (!runtimeId || !hasMessages || !tile || isProvisionalSessionTile(tile) || alreadyListed()) {
       return
     }
 
@@ -264,7 +277,11 @@ export function SessionTilePane({ storedSessionId }: { storedSessionId: string }
         return
       }
 
-      void resolveStoredSession(storedSessionId)
+      const resolution = tile.owner
+        ? resolveStoredSession(storedSessionId, tile.owner)
+        : resolveStoredSession(storedSessionId)
+
+      void resolution
         .then(resolved => {
           if (cancelled || resolved || remaining <= 0) {
             return
@@ -284,7 +301,7 @@ export function SessionTilePane({ storedSessionId }: { storedSessionId: string }
         window.clearTimeout(timer)
       }
     }
-  }, [hasMessages, runtimeId, storedSessionId])
+  }, [hasMessages, runtimeId, storedSessionId, tile])
 
   // Same gating as the primary's route resume (use-route-resume): never fire
   // session.resume before the gateway is OPEN. Persisted tiles mount at boot
@@ -304,25 +321,37 @@ export function SessionTilePane({ storedSessionId }: { storedSessionId: string }
 
     resumingRef.current = true
 
-    delegate
-      .resumeTile(storedSessionId)
-      .then(id => patchSessionTile(storedSessionId, { error: undefined, runtimeId: id }))
+    const resume =
+      tile && isProvisionalSessionTile(tile)
+        ? (() => {
+            const recovery = recoverProvisionalSessionTile(tile.owner, tile.draftId)
+
+            if (!recovery || !delegate.createProvisionalRuntime) {
+              return Promise.reject(new Error('Không thể tạo runtime mới cho bản nháp này.'))
+            }
+
+            return delegate.createProvisionalRuntime(recovery.tile)
+          })()
+        : delegate.resumeTile(storedSessionId)
+
+    resume
+      .then(id => patchSessionTile(storedSessionId, { error: undefined, runtimeId: id }, tile?.owner))
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)
 
-        // A gone session (404 / "Session not found") is terminal — a stale or
+        // A gone DURABLE session (404 / "Session not found") is terminal — a stale or
         // cross-profile persisted tile. Discard it instead of latching an error
         // that re-retries on every reconnect (the "Session not found" spam).
-        if (/session not found|\b404\b/i.test(message)) {
+        if (tile && !isProvisionalSessionTile(tile) && /session not found|\b404\b/i.test(message)) {
           discardSessionTile(storedSessionId)
-        } else {
-          patchSessionTile(storedSessionId, { error: message })
+        } else if (tile) {
+          patchSessionTile(storedSessionId, { error: message }, tile.owner)
         }
       })
       .finally(() => {
         resumingRef.current = false
       })
-  }, [gatewayOpen, runtimeId, storedSessionId, tile?.error])
+  }, [gatewayOpen, runtimeId, storedSessionId, tile])
 
   // The gateway (re)opening invalidates any latched error — it likely came
   // from a not-yet-open gateway or the previous connection. Clearing it
@@ -330,19 +359,25 @@ export function SessionTilePane({ storedSessionId }: { storedSessionId: string }
   // mirroring the primary path's became-open resync.
   useEffect(() => {
     if (gatewayOpen && tile?.error) {
-      patchSessionTile(storedSessionId, { error: undefined })
+      patchSessionTile(storedSessionId, { error: undefined }, tile.owner)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gatewayOpen, storedSessionId])
+  }, [gatewayOpen, storedSessionId, tile])
 
   if (tile?.error) {
     return (
       <div className="grid h-full place-items-center p-4">
         <div className="max-w-[24rem] space-y-2 text-center font-mono text-[11px]">
-          <div className="text-(--ui-danger,#f87171)">Couldn't open this session</div>
-          <div className="break-words text-(--ui-text-quaternary)">{tile.error}</div>
-          <Button onClick={() => patchSessionTile(storedSessionId, { error: undefined })} size="sm" variant="outline">
-            Retry
+          <div className="text-(--ui-danger,#f87171)">Hermes không còn giữ phiên đang chạy này</div>
+          <div className="break-words text-(--ui-text-quaternary)">
+            Cuộc trò chuyện và bản nháp vẫn được giữ. {tile.error}
+          </div>
+          <Button
+            onClick={() => patchSessionTile(storedSessionId, { error: undefined }, tile.owner)}
+            size="sm"
+            variant="outline"
+          >
+            {isProvisionalSessionTile(tile) ? 'Tạo runtime mới' : 'Thử kết nối lại'}
           </Button>
         </div>
       </div>
@@ -359,7 +394,7 @@ export function SessionTilePane({ storedSessionId }: { storedSessionId: string }
     )
   }
 
-  return <TileChat runtimeId={runtimeId} storedSessionId={storedSessionId} view={view} />
+  return tile ? <TileChat runtimeId={runtimeId} storedSessionId={storedSessionId} tile={tile} view={view} /> : null
 }
 
 // ---------------------------------------------------------------------------
@@ -472,8 +507,13 @@ export function stackSessionTilesIntoMain(): void {
  *  updates in other sessions) — for a context menu that's almost never open.
  *  Same class as the TreeGroup fix (#72245): derive narrowly, bail out unless
  *  the derived values change. */
-function useTileMenuRow(storedSessionId: string): { pinId: string; profile?: string; title: string } {
-  const cache = useRef<{ key: string; value: { pinId: string; profile?: string; title: string } } | null>(null)
+function useTileMenuRow(
+  storedSessionId: string
+): { connectionId?: null | string; pinId: string; profile?: string; title: string } {
+  const cache = useRef<{
+    key: string
+    value: { connectionId?: null | string; pinId: string; profile?: string; title: string }
+  } | null>(null)
 
   const subscribe = useCallback((onChange: () => void) => {
     const offSessions = $sessions.listen(onChange)
@@ -490,10 +530,11 @@ function useTileMenuRow(storedSessionId: string): { pinId: string; profile?: str
     const pinId = stored ? sessionPinId(stored) : storedSessionId
     const title = tileTitle(storedSessionId)
     const profile = stored?.profile
-    const key = `${pinId}\u0000${title}\u0000${profile ?? ''}`
+    const connectionId = stored ? (stored.connection_id ?? null) : undefined
+    const key = `${pinId}\u0000${title}\u0000${profile ?? ''}\u0000${connectionId ?? ''}`
 
     if (cache.current?.key !== key) {
-      cache.current = { key, value: { pinId, profile, title } }
+      cache.current = { key, value: { connectionId, pinId, profile, title } }
     }
 
     return cache.current.value
@@ -521,13 +562,14 @@ export function SessionTabMenu({
   /** Layout-tree pane id — powers the Close-others/right/all verbs. */
   tabPaneId: string
 }) {
-  const { pinId, profile, title } = useTileMenuRow(storedSessionId)
+  const { connectionId, pinId, profile, title } = useTileMenuRow(storedSessionId)
   const pinnedSessionIds = useStore($pinnedSessionIds)
   const pinned = pinnedSessionIds.includes(pinId)
 
   return (
     <span className="contents" onContextMenu={event => event.stopPropagation()}>
       <SessionContextMenu
+        connectionId={connectionId}
         onArchive={() => void sessionTileDelegate()?.archiveSession(storedSessionId)}
         onBranch={() => void sessionTileDelegate()?.branchSession(storedSessionId)}
         onClose={onClose}

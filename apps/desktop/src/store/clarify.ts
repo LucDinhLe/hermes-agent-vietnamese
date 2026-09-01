@@ -1,6 +1,6 @@
 import { atom, computed } from 'nanostores'
 
-import { $gateway } from './gateway'
+import { requestForGatewayEventSource } from './gateway-event-source'
 import { $activeSessionId } from './session'
 
 export interface ClarifyQuestion {
@@ -200,7 +200,10 @@ export async function skipClarifyRequest(sessionId: string | null | undefined): 
   clearClarifyRequest(request.requestId, request.sessionId)
 
   try {
-    await $gateway.get()?.request('clarify.respond', { request_id: request.requestId, answer: '' })
+    await requestForGatewayEventSource(request.sessionId, 'clarify.respond', {
+      request_id: request.requestId,
+      answer: ''
+    })
   } catch {
     // The tool times out on its own; a failed skip must never swallow the
     // message the user is actually sending.

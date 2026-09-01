@@ -1,4 +1,11 @@
-import { activeGatewayProfileKey, requestGatewayForProfile } from '@/store/gateway'
+import { parseRendererRuntimeKey, rawRuntimeSessionId } from '@/lib/session-runtime-key'
+import {
+  activeGatewayProfileKey,
+  gatewayEpochForAgent,
+  GatewaySocketEpochMismatchError,
+  requestGatewayForAgent,
+  requestGatewayForProfile
+} from '@/store/gateway'
 
 // ── Session-scoped RPC routing (the #89206 class) ───────────────────────────
 // A session-scoped RPC (session.resume / session.activate / session.usage)
@@ -14,6 +21,149 @@ import { activeGatewayProfileKey, requestGatewayForProfile } from '@/store/gatew
 // the routing authority.
 
 const normKey = (profile: null | string | undefined): string => (profile ?? '').trim() || 'default'
+
+export interface SessionRpcOwner {
+  connectionId: null | string
+  profile: string
+}
+
+export class UnresolvedSessionOwnerError extends Error {
+  constructor() {
+    super('The stored session owner could not be resolved.')
+    this.name = 'UnresolvedSessionOwnerError'
+  }
+}
+
+export class RendererRuntimeOwnerMismatchError extends Error {
+  constructor() {
+    super('The renderer runtime key belongs to a different backend owner.')
+    this.name = 'RendererRuntimeOwnerMismatchError'
+  }
+}
+
+export class RendererRuntimeKeyRequiredError extends Error {
+  constructor() {
+    super('A renderer runtime key is required for this session-scoped request.')
+    this.name = 'RendererRuntimeKeyRequiredError'
+  }
+}
+
+export class RendererRuntimeEpochMismatchError extends Error {
+  constructor() {
+    super('The renderer runtime key belongs to a stale gateway connection.')
+    this.name = 'RendererRuntimeEpochMismatchError'
+  }
+}
+
+export class RendererRuntimeSessionMismatchError extends Error {
+  constructor() {
+    super('The request session id does not match its renderer runtime key.')
+    this.name = 'RendererRuntimeSessionMismatchError'
+  }
+}
+
+/**
+ * Dispatch on one explicit registry backend. This is the fail-closed boundary
+ * for durable-session -> live-RPC translation: the caller must resolve the
+ * owning row first, including its connection id. A missing owner is never
+ * interpreted as permission to use whichever gateway happens to be active.
+ */
+export function requestForSessionOwner<T>(
+  owner: null | SessionRpcOwner | undefined,
+  method: string,
+  params: Record<string, unknown> = {},
+  timeoutMs?: number,
+  signal?: AbortSignal
+): Promise<T> {
+  const profile = owner?.profile?.trim()
+
+  if (!owner || !profile || (owner.connectionId !== null && !owner.connectionId.trim())) {
+    return Promise.reject(new UnresolvedSessionOwnerError())
+  }
+
+  let exactParams = params
+  let expectedGatewayEpoch: number | undefined
+
+  if (typeof params.session_id === 'string') {
+    try {
+      const encoded = parseRendererRuntimeKey(params.session_id)
+
+      if (
+        encoded &&
+        (encoded.backend.connectionId !== owner.connectionId || normKey(encoded.backend.profile) !== normKey(profile))
+      ) {
+        return Promise.reject(new RendererRuntimeOwnerMismatchError())
+      }
+
+      const currentGatewayEpoch = gatewayEpochForAgent(owner.connectionId, normKey(profile))
+
+      if (encoded && encoded.backend.gatewayEpoch !== currentGatewayEpoch) {
+        return Promise.reject(new RendererRuntimeEpochMismatchError())
+      }
+
+      expectedGatewayEpoch = encoded ? currentGatewayEpoch : undefined
+
+      exactParams = { ...params, session_id: rawRuntimeSessionId(params.session_id) }
+    } catch (error) {
+      return Promise.reject(error)
+    }
+  }
+
+  return requestGatewayForAgent<T>(
+    owner.connectionId,
+    normKey(profile),
+    method,
+    exactParams,
+    timeoutMs,
+    signal,
+    expectedGatewayEpoch
+  ).catch(error => {
+    if (error instanceof GatewaySocketEpochMismatchError) {
+      throw new RendererRuntimeEpochMismatchError()
+    }
+
+    throw error
+  })
+}
+
+/**
+ * Dispatch a live-runtime RPC using the renderer key as the sole routing
+ * authority. Unlike durable-session requests, callers here may not supply a
+ * raw backend id: it has no connection/profile/epoch scope and would make an
+ * ambient route indistinguishable from the intended owner. The encoded key
+ * remains intact until requestForSessionOwner strips it at the gateway edge.
+ */
+export function requestForRendererRuntime<T>(
+  runtimeKey: string,
+  method: string,
+  params: Record<string, unknown> = {},
+  timeoutMs?: number,
+  signal?: AbortSignal
+): Promise<T> {
+  let parsed
+
+  try {
+    parsed = parseRendererRuntimeKey(runtimeKey)
+  } catch (error) {
+    return Promise.reject(error)
+  }
+
+  if (!parsed) {
+    return Promise.reject(new RendererRuntimeKeyRequiredError())
+  }
+
+  const owner = { connectionId: parsed.backend.connectionId, profile: parsed.backend.profile }
+
+  if (parsed.backend.gatewayEpoch !== gatewayEpochForAgent(owner.connectionId, owner.profile)) {
+    return Promise.reject(new RendererRuntimeEpochMismatchError())
+  }
+
+  if (params.session_id !== undefined && params.session_id !== runtimeKey) {
+    return Promise.reject(new RendererRuntimeSessionMismatchError())
+  }
+
+  return requestForSessionOwner<T>(owner, method, { ...params, session_id: runtimeKey }, timeoutMs, signal)
+}
 
 /**
  * True when a session-scoped RPC must be pinned to `ownerProfile`'s own

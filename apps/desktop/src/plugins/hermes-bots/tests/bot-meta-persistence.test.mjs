@@ -92,7 +92,7 @@ test('a rejected configure request is unsupported, not failed', async () => {
 
 test('Edit Profile waits for persistence and reports a local-only save', () => {
   assert.match(pluginSource, /const persistence = await saveBotMeta\(bot\.name,/)
-  assert.match(pluginSource, /Saved look locally; remote persistence failed/)
+  assert.match(pluginSource, /Đã lưu giao diện cục bộ nhưng chưa đồng bộ được lên máy chủ/)
   // The toast fires only on an explicit remote failure — never on the
   // documented older-gateway fallback.
   assert.match(pluginSource, /serverOutcome === 'failed'/)

@@ -1,5 +1,6 @@
 import { $gateway } from '@/store/gateway'
 import { $activeSessionId } from '@/store/session'
+import { requestForRendererRuntime } from '@/store/session-request-router'
 
 // Shared client for one-off ("one-shot") LLM requests: a single stateless model
 // call that runs OUTSIDE the conversation. It never appends to session history,
@@ -43,16 +44,18 @@ export async function requestOneShot(req: OneShotRequest): Promise<string> {
 
   const sessionId = req.sessionId === undefined ? $activeSessionId.get() : req.sessionId
 
-  const result = await gateway.request<{ text?: string }>('llm.oneshot', {
+  const params = {
     input: req.input,
     instructions: req.instructions,
     max_tokens: req.maxTokens,
-    session_id: sessionId ?? undefined,
     task: req.task,
     temperature: req.temperature,
     template: req.template,
     variables: req.variables
-  })
+  }
+  const result = sessionId
+    ? await requestForRendererRuntime<{ text?: string }>(sessionId, 'llm.oneshot', params)
+    : await gateway.request<{ text?: string }>('llm.oneshot', params)
 
   return (result?.text ?? '').trim()
 }

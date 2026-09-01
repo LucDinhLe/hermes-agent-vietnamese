@@ -9,8 +9,11 @@ import { $activeSessionId } from '@/store/session'
 
 import { PromptOverlays } from './prompt-overlays'
 
+const requestEventSource = vi.hoisted(() => vi.fn())
+
 vi.mock('@/lib/haptics', () => ({ triggerHaptic: vi.fn() }))
 vi.mock('@/store/notifications', () => ({ notifyError: vi.fn() }))
+vi.mock('@/store/gateway-event-source', () => ({ requestForGatewayEventSource: requestEventSource }))
 
 function renderPrompts(sessionId: string | null = 's1') {
   render(
@@ -31,6 +34,7 @@ afterEach(() => {
 describe('PromptOverlays', () => {
   it('dismisses a stale sudo dialog when the gateway no longer has the password request', async () => {
     const request = vi.fn().mockRejectedValue(new Error('no pending password request'))
+    requestEventSource.mockRejectedValueOnce(new Error('no pending password request'))
 
     $activeSessionId.set('s1')
     $gateway.set({ request } as never)
@@ -43,12 +47,13 @@ describe('PromptOverlays', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
     await waitFor(() => expect($sudoRequest.get()).toBeNull())
-    expect(request).toHaveBeenCalledWith('sudo.respond', { password: '', request_id: 'sudo-1' })
+    expect(requestEventSource).toHaveBeenCalledWith('s1', 'sudo.respond', { password: '', request_id: 'sudo-1' })
     expect(notifyError).not.toHaveBeenCalled()
   })
 
   it('dismisses a stale secret dialog when the gateway no longer has the value request', async () => {
     const request = vi.fn().mockRejectedValue(new Error('no pending value request'))
+    requestEventSource.mockRejectedValueOnce(new Error('no pending value request'))
 
     $activeSessionId.set('s1')
     $gateway.set({ request } as never)
@@ -61,7 +66,7 @@ describe('PromptOverlays', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
     await waitFor(() => expect($secretRequest.get()).toBeNull())
-    expect(request).toHaveBeenCalledWith('secret.respond', { request_id: 'secret-1', value: '' })
+    expect(requestEventSource).toHaveBeenCalledWith('s1', 'secret.respond', { request_id: 'secret-1', value: '' })
     expect(notifyError).not.toHaveBeenCalled()
   })
 })

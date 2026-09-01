@@ -128,9 +128,9 @@ test('activeBots counts Bot Chat activity that last_session cannot see', () => {
 test('row age label and recency sort key off botActivitySession, not last_session', () => {
   // The "6d ago" regression: the timestamp/sort sites must not read
   // bot.last_session directly anymore.
-  assert.match(source, /relativeTime\(rowAgeTs \* 1000\)/)
+  assert.match(source, /relativeTimeVi\(rowAgeTs \* 1000\)/)
   assert.match(source, /const lastMsg = \(botActivitySession\(bot\)\?\.last_active \|\| 0\) \* 1000/)
-  assert.doesNotMatch(source, /relativeTime\(last\.last_active \* 1000\)/)
+  assert.doesNotMatch(source, /relativeTimeVi\(last\.last_active \* 1000\)/)
 })
 
 // ── worker liveness: kanban/tool workers count as activity (#90268) ─────────
@@ -163,8 +163,8 @@ test('activeBots ignores a finished worker outside the liveness window', () => {
 
 test('ActiveNowStrip renders above the roster, is a live region, and is click-accessible', () => {
   // Strip is placed between the pane header and the search field.
-  const headerEnd = source.indexOf("children: 'Bots'")
-  const searchField = source.indexOf("placeholder: 'Search bots…'")
+  const headerEnd = source.indexOf("children: 'Tác nhân'")
+  const searchField = source.indexOf("placeholder: 'Tìm tác nhân…'")
   assert.ok(headerEnd >= 0 && searchField > headerEnd)
 
   const stripStart = source.indexOf('jsx(ActiveNowStrip')
@@ -174,7 +174,7 @@ test('ActiveNowStrip renders above the roster, is a live region, and is click-ac
   assert.match(source, /'aria-live': 'polite'/)
   // Chips are real buttons (keyboard/click accessible), reuse BotFace, and
   // open the canonical chat via the same path as roster rows.
-  assert.match(source, /jsx\('button', \{\s*type: 'button',\s*title: `Open \$\{label\}'s chat`/)
+  assert.match(source, /jsx\('button', \{\s*type: 'button',\s*title: `Mở cuộc trò chuyện của \$\{label\}`/)
   // The key rides as jsx()'s third argument — the ONLY form React treats as
   // a list key; a `key:` prop leaves chips unkeyed (index identity).
   assert.match(source, /\}, botRosterKey\(bot\)\)\s*\}\)\s*\]\s*\}\)\s*\}\s*\/\*\* Assign a bot to a group/s)

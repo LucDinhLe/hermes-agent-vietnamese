@@ -46,6 +46,20 @@ def test_verification_flags_registered_as_ephemeral(tmp_path, monkeypatch):
     assert not ra._is_ephemeral_scaffolding({"role": "assistant", "content": "premature done"})
 
 
+def test_advisor_rewrite_scaffolding_is_never_durable(tmp_path, monkeypatch):
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path / ".hermes"))
+    ra = _fresh_run_agent(tmp_path)
+
+    assert "_review_revision_candidate" in ra._EPHEMERAL_SCAFFOLDING_FLAGS
+    assert "_review_revision_synthetic" in ra._EPHEMERAL_SCAFFOLDING_FLAGS
+    assert ra._is_ephemeral_scaffolding(
+        {"role": "assistant", "content": "rejected answer", "_review_revision_candidate": True}
+    )
+    assert ra._is_ephemeral_scaffolding(
+        {"role": "user", "content": "private rewrite instruction", "_review_revision_synthetic": True}
+    )
+
+
 def _make_agent(ra, session_id, tmp_path):
     agent = ra.AIAgent(
         session_id=session_id,

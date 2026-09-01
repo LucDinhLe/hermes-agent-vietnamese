@@ -30,6 +30,12 @@ import { $projects } from '@/store/projects'
 import { $pullRequestsByBranch, sessionPrKey } from '@/store/pull-requests'
 import { $sessionDotStateById, hasLiveTurn, showsRunningArc } from '@/store/session-dot-state'
 import { $sessionListDensity } from '@/store/session-list-density'
+import { rememberSessionPinOwner } from '@/store/session-pin-sync'
+import {
+  explicitSessionRouteOwner,
+  recordSessionRouteOwner,
+  stageSessionRouteOwner
+} from '@/store/session-route-owner'
 import { $openStoredSessionIds } from '@/store/session-states'
 import { sessionCostUsd } from '@/store/sidebar-archive'
 import { $todoProgressBySession } from '@/store/todos'
@@ -147,6 +153,35 @@ function SidebarSessionRowImpl({
   const title = sessionTitle(session)
   const density = useStore($sessionListDensity)
   const fmt = t.sidebar
+  const routeOwner = explicitSessionRouteOwner(session)
+
+  const rememberActionOwner = () => {
+    if (routeOwner) {
+      recordSessionRouteOwner(session.id, routeOwner)
+    }
+  }
+
+  const archiveOwnedSession = () => {
+    rememberActionOwner()
+    onArchive()
+  }
+
+  const branchOwnedSession = onBranch
+    ? () => {
+        rememberActionOwner()
+        onBranch()
+      }
+    : undefined
+
+  const deleteOwnedSession = () => {
+    rememberActionOwner()
+    onDelete()
+  }
+
+  const toggleOwnedSessionUnread = () => {
+    rememberActionOwner()
+    onToggleUnread()
+  }
 
   const details = sessionRowDetails(session, {
     messageCount: fmt.messageCount,
@@ -307,11 +342,15 @@ function SidebarSessionRowImpl({
         </span>
       ))}
       <SessionActionsMenu
-        onArchive={onArchive}
-        onBranch={onBranch}
-        onDelete={onDelete}
-        onPin={onPin}
-        onToggleUnread={onToggleUnread}
+        connectionId={session.connection_id ?? null}
+        onArchive={archiveOwnedSession}
+        onBranch={branchOwnedSession}
+        onDelete={deleteOwnedSession}
+        onPin={() => {
+          rememberSessionPinOwner(session)
+          onPin()
+        }}
+        onToggleUnread={toggleOwnedSessionUnread}
         pinned={isPinned}
         profile={session.profile}
         sessionId={session.id}
@@ -336,11 +375,15 @@ function SidebarSessionRowImpl({
 
   return (
     <SessionContextMenu
-      onArchive={onArchive}
-      onBranch={onBranch}
-      onDelete={onDelete}
-      onPin={onPin}
-      onToggleUnread={onToggleUnread}
+      connectionId={session.connection_id ?? null}
+      onArchive={archiveOwnedSession}
+      onBranch={branchOwnedSession}
+      onDelete={deleteOwnedSession}
+      onPin={() => {
+        rememberSessionPinOwner(session)
+        onPin()
+      }}
+      onToggleUnread={toggleOwnedSessionUnread}
       pinned={isPinned}
       profile={session.profile}
       sessionId={session.id}
@@ -421,7 +464,7 @@ function SidebarSessionRowImpl({
           // Middle-click = open in a new tab (browser muscle memory).
           {...middleClickHandlers(() => {
             triggerHaptic('selection')
-            openSession(session.id, () => undefined, 'tab')
+            openSession(session.id, () => undefined, 'tab', routeOwner)
           })}
           onClick={event => {
             // Modifier-click gestures on a row (see `resolveSessionRowClick`):
@@ -437,6 +480,10 @@ function SidebarSessionRowImpl({
             const action = resolveSessionRowClick(event, { canOpenWindow: true })
 
             if (action === 'resume') {
+              if (routeOwner) {
+                stageSessionRouteOwner(session.id, routeOwner)
+              }
+
               onResume()
 
               return
@@ -447,13 +494,14 @@ function SidebarSessionRowImpl({
             triggerHaptic('selection')
 
             if (action === 'archive') {
-              onArchive()
+              archiveOwnedSession()
             } else if (action === 'pin') {
+              rememberSessionPinOwner(session)
               onPin()
             } else if (action === 'newTab') {
-              openSession(session.id, () => undefined, 'tab')
+              openSession(session.id, () => undefined, 'tab', routeOwner)
             } else {
-              openSession(session.id, () => undefined, 'window')
+              openSession(session.id, () => undefined, 'window', routeOwner)
             }
           }}
         >

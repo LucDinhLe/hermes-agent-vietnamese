@@ -17,6 +17,7 @@ import type {
 import { checkHermesUpdate, getActionStatus, updateHermes } from '@/hermes'
 import { translateNow } from '@/i18n'
 import { persistString, storedString } from '@/lib/storage'
+import { adaptVietnameseDesktopVersion } from '@/plugins/hermes-vietnamese/desktop-version'
 import { $connectionsRegistry, refreshConnectionsRegistry } from '@/store/connections'
 import { dismissNotification, notify } from '@/store/notifications'
 import { $connection } from '@/store/session'
@@ -80,6 +81,19 @@ const UPDATE_TOAST_ID = 'desktop-update-available'
 // (re)starts whenever the user closes it.
 const UPDATE_TOAST_SNOOZE_KEY = 'hermes:update-toast-snooze-until'
 const UPDATE_TOAST_COOLDOWN_MS = 24 * 60 * 60 * 1000
+
+// The Vietnamese distribution is released as an immutable shell + locked
+// official upstream tag. Production builds must never turn an installed,
+// detached tag checkout into a moving `main` checkout. Tests stay on the
+// upstream path so its updater contract remains covered unchanged.
+const DISTRIBUTION_UPDATES_MANUAL = import.meta.env.PROD
+
+const DISTRIBUTION_UPDATE_MESSAGE =
+  'Hermes Vietnamese được cập nhật bằng bộ cài mới; bản này không cập nhật trực tiếp checkout lõi Hermes.'
+
+function manualDistributionStatus(): DesktopUpdateStatus {
+  return { supported: false, message: DISTRIBUTION_UPDATE_MESSAGE, fetchedAt: Date.now() }
+}
 
 function snoozeUpdateToast(): void {
   persistString(UPDATE_TOAST_SNOOZE_KEY, String(Date.now() + UPDATE_TOAST_COOLDOWN_MS))
@@ -264,6 +278,12 @@ export function openUpdatesWindow(): void {
  * updating the backend forever while the GUI itself went stale.
  */
 export function startActiveUpdate(): void {
+  if (DISTRIBUTION_UPDATES_MANUAL) {
+    notify({ kind: 'info', message: DISTRIBUTION_UPDATE_MESSAGE })
+
+    return
+  }
+
   if (hasMultipleUpdateTargets()) {
     $updateOverlayOpen.set(true)
     void applyEverythingUpdate()
@@ -286,6 +306,12 @@ export function startActiveUpdate(): void {
  * triggers the everything-flow.
  */
 export function requestActiveUpdate(): void {
+  if (DISTRIBUTION_UPDATES_MANUAL) {
+    notify({ kind: 'info', message: DISTRIBUTION_UPDATE_MESSAGE })
+
+    return
+  }
+
   if (hasMultipleUpdateTargets()) {
     const clientStatus = $updateStatus.get()
     const backendStatus = $backendUpdateStatus.get()
@@ -331,13 +357,14 @@ export async function refreshDesktopVersion(): Promise<DesktopVersionInfo | null
   // mid-reload, or the bridge not yet ready on first paint) would surface
   // as an unhandled promise rejection in the renderer. Swallow it.
   try {
-    const next = await window.hermesDesktop?.getVersion?.()
+    const raw = await window.hermesDesktop?.getVersion?.()
+    const next = raw ? adaptVietnameseDesktopVersion(raw) : null
 
     if (next) {
       $desktopVersion.set(next)
     }
 
-    return next ?? null
+    return next
   } catch {
     return null
   }
@@ -363,6 +390,13 @@ function mapBackendCheck(res: BackendUpdateCheckResponse): DesktopUpdateStatus {
 }
 
 export async function checkBackendUpdates(): Promise<DesktopUpdateStatus | null> {
+  if (DISTRIBUTION_UPDATES_MANUAL) {
+    const status = manualDistributionStatus()
+    $backendUpdateStatus.set(status)
+
+    return status
+  }
+
   if (!isRemoteMode() || $backendUpdateChecking.get()) {
     return $backendUpdateStatus.get()
   }
@@ -392,6 +426,14 @@ export async function checkBackendUpdates(): Promise<DesktopUpdateStatus | null>
 }
 
 export async function checkUpdates(): Promise<DesktopUpdateStatus | null> {
+  if (DISTRIBUTION_UPDATES_MANUAL) {
+    const status = manualDistributionStatus()
+    $updateStatus.set(status)
+    void refreshDesktopVersion()
+
+    return status
+  }
+
   const bridge = window.hermesDesktop?.updates
 
   if (!bridge || $updateChecking.get()) {
@@ -427,6 +469,10 @@ export async function checkUpdates(): Promise<DesktopUpdateStatus | null> {
 }
 
 export async function applyUpdates(opts: DesktopUpdateApplyOptions = {}): Promise<DesktopUpdateApplyResult> {
+  if (DISTRIBUTION_UPDATES_MANUAL) {
+    return { ok: false, error: 'distribution-managed', message: DISTRIBUTION_UPDATE_MESSAGE }
+  }
+
   const bridge = window.hermesDesktop?.updates
 
   if (!bridge) {
@@ -727,6 +773,12 @@ async function runBackendUpdate(): Promise<DesktopUpdateApplyResult> {
 }
 
 export function applyBackendUpdate(): Promise<DesktopUpdateApplyResult> {
+  if (DISTRIBUTION_UPDATES_MANUAL) {
+    notify({ kind: 'info', message: DISTRIBUTION_UPDATE_MESSAGE })
+
+    return Promise.resolve({ ok: false, error: 'distribution-managed', message: DISTRIBUTION_UPDATE_MESSAGE })
+  }
+
   if (backendUpdateInFlight) {
     return backendUpdateInFlight
   }
@@ -802,6 +854,12 @@ export function hasMultipleUpdateTargets(): boolean {
 let updateEverythingInFlight: Promise<void> | null = null
 
 export function applyEverythingUpdate(): Promise<void> {
+  if (DISTRIBUTION_UPDATES_MANUAL) {
+    notify({ kind: 'info', message: DISTRIBUTION_UPDATE_MESSAGE })
+
+    return Promise.resolve()
+  }
+
   if (updateEverythingInFlight) {
     return updateEverythingInFlight
   }

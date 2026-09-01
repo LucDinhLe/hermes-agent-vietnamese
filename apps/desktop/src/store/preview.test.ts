@@ -11,10 +11,14 @@ import {
   closePreviewMatching,
   closeRightRail,
   closeRightRailTab,
+  decodePreviewTabs,
+  openNewBrowserTab,
   openPreview,
   previewTabId,
+  previewTabLiveUrl,
   type PreviewTarget,
-  progressPreviewServerRestart
+  progressPreviewServerRestart,
+  rememberPreviewTabLiveUrl
 } from './preview'
 
 function fileTarget(source: string): PreviewTarget {
@@ -69,18 +73,36 @@ describe('preview store', () => {
     expect($previewTabs.get().map(tab => tab.target.kind)).toEqual(['file', 'url', 'artifact'])
   })
 
-  // The Browser is a SINGLETON: the tab names the surface, not the page, so a
-  // second URL navigates the browser it already has instead of stacking a
-  // second Browser tab beside the first.
-  it('keeps one Browser tab — a second url swaps its target instead of adding a tab', () => {
+  it('navigates the selected Browser tab while preserving its neighbours', () => {
     openPreview(urlTarget('https://news.ycombinator.com'), 'tool-result')
+    openNewBrowserTab()
     openPreview(urlTarget('https://www.reddit.com'), 'tool-result')
 
     const urlTabs = $previewTabs.get().filter(tab => tab.target.kind === 'url')
 
-    expect(urlTabs).toHaveLength(1)
-    expect(urlTabs[0].target.url).toBe('https://www.reddit.com')
-    expect($rightRailActiveTabId.get()).toBe(urlTabs[0].id)
+    expect(urlTabs).toHaveLength(2)
+    expect(urlTabs[0].target.url).toBe('https://news.ycombinator.com')
+    expect(urlTabs[1].target.url).toBe('https://www.reddit.com')
+    expect($rightRailActiveTabId.get()).toBe(urlTabs[1].id)
+  })
+
+  it('keeps a Browser tab on its live address until that tab closes', () => {
+    openPreview(urlTarget('https://example.com'), 'manual')
+    const tabId = $rightRailActiveTabId.get()!
+
+    rememberPreviewTabLiveUrl(tabId, 'https://example.com/next')
+    expect(previewTabLiveUrl(tabId, 'https://example.com')).toBe('https://example.com/next')
+
+    closeRightRailTab(tabId)
+    expect(previewTabLiveUrl(tabId, 'https://example.com')).toBe('https://example.com')
+  })
+
+  it('rekeys the dev.10 Browser pane into the V32 shared rail', () => {
+    const browser = urlTarget('https://www.google.com/')
+    const restored = decodePreviewTabs(JSON.stringify([{ id: 'url:browser', target: browser }]))
+
+    expect(restored).toHaveLength(1)
+    expect(restored[0].id).toBe(previewTabId(browser))
   })
 
   it('re-fronts an existing tab instead of duplicating it, refreshing its target', () => {

@@ -62,7 +62,7 @@ test('opt-in: enabling the pref restores per-activity toasts', () => {
   t.trackInboundActivity(rosterAt(100))
   t.trackInboundActivity(rosterAt(200))
   assert.equal(t.notifications.length, 1)
-  assert.match(t.notifications[0].title, /New message for researcher/)
+  assert.match(t.notifications[0].title, /Tin nhắn mới cho researcher/)
 })
 
 test('pref defaults OFF and persists via ctx.storage under activity-toasts', () => {

@@ -1,3 +1,4 @@
+import type { HermesApiRequest } from '@/global'
 import { isMissingRestEndpoint } from '@/lib/gateway-rpc'
 import { recordTranscriptTail } from '@/store/transcript-tail'
 import type {
@@ -8,9 +9,53 @@ import type {
   SessionSearchResponse
 } from '@/types/hermes'
 
-import { hermesApi } from './client'
+import { capabilityScoped, hermesApi } from './client'
 
 const SESSION_LIST_REQUEST_TIMEOUT_MS = 60_000
+
+export interface SessionApiOwner {
+  connectionId: null | string
+  profile: string
+}
+
+function normalizeSessionApiOwner(owner: SessionApiOwner): SessionApiOwner {
+  return {
+    connectionId: owner.connectionId?.trim() || null,
+    profile: owner.profile?.trim() || 'default'
+  }
+}
+
+/** Exact REST owner carried by a unified-list session row. An absent
+ * `connection_id` is an explicit local owner, not permission to inherit the
+ * renderer's ambient remote connection. */
+export function sessionApiOwner(session: Pick<SessionInfo, 'connection_id' | 'profile'>): SessionApiOwner {
+  return normalizeSessionApiOwner({
+    connectionId: session.connection_id ?? null,
+    profile: session.profile ?? 'default'
+  })
+}
+
+function requestSessionForOwner<T>(
+  id: string,
+  owner: SessionApiOwner,
+  request: Omit<HermesApiRequest, 'connectionId' | 'path' | 'profile'> = {},
+  childPath = '',
+  query: URLSearchParams = new URLSearchParams()
+): Promise<T> {
+  const exactOwner = normalizeSessionApiOwner(owner)
+  const exactQuery = new URLSearchParams(query)
+
+  exactQuery.set('profile', exactOwner.profile)
+
+  // Bypass hermesApi: its ambient connection spread cannot distinguish an
+  // explicitly local owner from a missing override. The preload request owns
+  // the complete route, so local drops ambient B while remote A stays pinned.
+  return window.hermesDesktop.api<T>({
+    ...capabilityScoped(exactOwner),
+    ...request,
+    path: `/api/sessions/${encodeURIComponent(id)}${childPath}?${exactQuery.toString().replaceAll('+', '%20')}`
+  })
+}
 
 /**
  * Trim a page to its window WITHOUT discarding pinned rows.
@@ -263,6 +308,14 @@ export function setSessionArchived(id: string, archived: boolean, profile?: stri
   })
 }
 
+export function setSessionArchivedForOwner(
+  id: string,
+  archived: boolean,
+  owner: SessionApiOwner
+): Promise<{ ok: boolean }> {
+  return requestSessionForOwner(id, owner, { body: { archived }, method: 'PATCH' })
+}
+
 // Mirror a sidebar pin to the backend "keep" flag so the sessions.auto_archive
 // sweep (which runs backend-side, blind to Desktop localStorage) never hides a
 // pinned chat. Best-effort: the sidebar stays localStorage-driven for its own
@@ -276,6 +329,14 @@ export function setSessionPinnedRemote(id: string, pinned: boolean, profile?: st
   })
 }
 
+export function setSessionPinnedRemoteForOwner(
+  id: string,
+  pinned: boolean,
+  owner: SessionApiOwner
+): Promise<{ ok: boolean }> {
+  return requestSessionForOwner(id, owner, { body: { pinned }, method: 'PATCH' })
+}
+
 // Mirror a sidebar unread toggle to the backend read-state watermark
 // (sessions.last_read_at via SessionDB.set_session_read). Same profile
 // routing as the other session mutations: a remote session's row lives only
@@ -287,6 +348,14 @@ export function setSessionUnreadRemote(id: string, unread: boolean, profile?: st
     method: 'PATCH',
     body: { unread }
   })
+}
+
+export function setSessionUnreadRemoteForOwner(
+  id: string,
+  unread: boolean,
+  owner: SessionApiOwner
+): Promise<{ ok: boolean }> {
+  return requestSessionForOwner(id, owner, { body: { unread }, method: 'PATCH' })
 }
 
 export function searchSessions(query: string): Promise<SessionSearchResponse> {
@@ -306,6 +375,17 @@ export function getSession(id: string, profile?: string | null): Promise<Session
     ...(profile ? { profile } : {}),
     path: `/api/sessions/${encodeURIComponent(id)}${suffix}`
   })
+}
+
+// Owner-qualified lookup for a row that already carries its source identity.
+// This deliberately uses the preload bridge directly: capabilityScoped maps a
+// `local` owner to an absent connectionId, which must replace — not inherit —
+// any ambient remote connection currently active in the renderer.
+export function getSessionForOwner(
+  id: string,
+  owner: SessionApiOwner
+): Promise<SessionInfo> {
+  return requestSessionForOwner(id, owner)
 }
 
 // Reads another profile's transcript. For a remote profile Electron reroutes
@@ -347,6 +427,32 @@ export function getSessionMessages(
   })
 }
 
+export function getSessionMessagesForOwner(
+  id: string,
+  owner: SessionApiOwner,
+  page: { limit?: number; offset?: number; order?: 'latest' | 'oldest'; includeCompacted?: boolean } = {}
+): Promise<SessionMessagesResponse> {
+  const query = new URLSearchParams()
+
+  if (page.limit !== undefined) {
+    query.set('limit', String(page.limit))
+  }
+
+  if (page.offset !== undefined) {
+    query.set('offset', String(page.offset))
+  }
+
+  if (page.order) {
+    query.set('order', page.order)
+  }
+
+  if (page.includeCompacted !== undefined) {
+    query.set('include_compacted', String(page.includeCompacted))
+  }
+
+  return requestSessionForOwner(id, owner, {}, '/messages', query)
+}
+
 /**
  * The initial hydration page: enough tail to fill the transcript window a few
  * times over, small enough that opening a long session doesn't ship (and
@@ -379,6 +485,27 @@ export function getLatestSessionMessages(id: string, profile?: string | null): P
   })
 }
 
+export function getLatestSessionMessagesForOwner(
+  id: string,
+  owner: SessionApiOwner
+): Promise<SessionMessagesResponse> {
+  const exactOwner = normalizeSessionApiOwner(owner)
+
+  return getSessionMessagesForOwner(id, exactOwner, {
+    limit: LATEST_SESSION_MESSAGES_LIMIT,
+    order: 'latest',
+    includeCompacted: true
+  }).then(page => {
+    recordTranscriptTail(id, page, exactOwner)
+
+    if (page.session_id && page.session_id !== id) {
+      recordTranscriptTail(page.session_id, page, exactOwner)
+    }
+
+    return page
+  })
+}
+
 /**
  * One page of messages OLDER than the `offset` newest rows.
  *
@@ -401,10 +528,19 @@ export function getOlderSessionMessages(
   return getSessionMessages(id, profile, { includeCompacted: true, limit, offset, order: 'latest' })
 }
 
-export async function getAllSessionMessages(
+export function getOlderSessionMessagesForOwner(
   id: string,
-  profile?: string | null,
-  options: { maxJsonChars?: number } = {}
+  owner: SessionApiOwner,
+  offset: number,
+  limit: number = LATEST_SESSION_MESSAGES_LIMIT
+): Promise<SessionMessagesResponse> {
+  return getSessionMessagesForOwner(id, owner, { includeCompacted: true, limit, offset, order: 'latest' })
+}
+
+async function collectAllSessionMessages(
+  id: string,
+  readPage: (offset: number, limit: number) => Promise<SessionMessagesResponse>,
+  options: { maxJsonChars?: number }
 ): Promise<SessionMessagesResponse> {
   const messages: SessionMessage[] = []
   const pageSize = 500
@@ -414,12 +550,7 @@ export async function getAllSessionMessages(
   let resolvedSessionId = id
 
   while (true) {
-    const page = await getSessionMessages(id, profile, {
-      limit: pageSize,
-      offset,
-      order: 'oldest',
-      includeCompacted: true
-    })
+    const page = await readPage(offset, pageSize)
 
     resolvedSessionId = page.session_id
     jsonChars += (JSON.stringify(page.messages) ?? '').length
@@ -443,12 +574,42 @@ export async function getAllSessionMessages(
   return { session_id: resolvedSessionId, messages }
 }
 
+export async function getAllSessionMessages(
+  id: string,
+  profile?: string | null,
+  options: { maxJsonChars?: number } = {}
+): Promise<SessionMessagesResponse> {
+  return collectAllSessionMessages(
+    id,
+    (offset, limit) =>
+      getSessionMessages(id, profile, { includeCompacted: true, limit, offset, order: 'oldest' }),
+    options
+  )
+}
+
+export function getAllSessionMessagesForOwner(
+  id: string,
+  owner: SessionApiOwner,
+  options: { maxJsonChars?: number } = {}
+): Promise<SessionMessagesResponse> {
+  return collectAllSessionMessages(
+    id,
+    (offset, limit) =>
+      getSessionMessagesForOwner(id, owner, { includeCompacted: true, limit, offset, order: 'oldest' }),
+    options
+  )
+}
+
 export function deleteSession(id: string, profile?: string | null): Promise<{ ok: boolean }> {
   return hermesApi<{ ok: boolean }>({
     ...(profile ? { profile } : {}),
     path: `/api/sessions/${encodeURIComponent(id)}`,
     method: 'DELETE'
   })
+}
+
+export function deleteSessionForOwner(id: string, owner: SessionApiOwner): Promise<{ ok: boolean }> {
+  return requestSessionForOwner(id, owner, { method: 'DELETE' })
 }
 
 export function renameSession(
@@ -462,4 +623,12 @@ export function renameSession(
     method: 'PATCH',
     body: { title, ...(profile ? { profile } : {}) }
   })
+}
+
+export function renameSessionForOwner(
+  id: string,
+  title: string,
+  owner: SessionApiOwner
+): Promise<{ ok: boolean; title: string }> {
+  return requestSessionForOwner(id, owner, { body: { title }, method: 'PATCH' })
 }

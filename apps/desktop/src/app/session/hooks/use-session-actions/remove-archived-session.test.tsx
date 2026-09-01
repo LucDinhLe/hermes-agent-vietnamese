@@ -9,7 +9,7 @@ import type { MutableRefObject } from 'react'
 import { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { deleteSession, type SessionInfo } from '@/hermes'
+import { deleteSessionForOwner as deleteSession, type SessionInfo } from '@/hermes'
 import { setSessions } from '@/store/session'
 import { $archivedSessions } from '@/store/sidebar-archive'
 
@@ -19,7 +19,7 @@ import { useSessionActions } from './index'
 
 vi.mock('@/hermes', async importOriginal => ({
   ...(await importOriginal<Record<string, unknown>>()),
-  deleteSession: vi.fn(),
+  deleteSessionForOwner: vi.fn(),
   getSession: vi.fn(),
   getAllSessionMessages: vi.fn(),
   getLatestSessionMessages: vi.fn(),
@@ -45,6 +45,7 @@ function archivedSession(overrides: Partial<SessionInfo> = {}): SessionInfo {
     model: null,
     output_tokens: 0,
     preview: null,
+    profile: 'default',
     source: 'desktop',
     started_at: 1,
     title: 'archived ghost',
@@ -113,7 +114,10 @@ describe('removeSession × archived view store', () => {
 
     await act(() => handle.removeSession('arch-1'))
 
-    expect(vi.mocked(deleteSession)).toHaveBeenCalledWith('arch-1', undefined)
+    expect(vi.mocked(deleteSession)).toHaveBeenCalledWith('arch-1', {
+      connectionId: null,
+      profile: 'default'
+    })
     expect($archivedSessions.get().map(session => session.id)).toEqual(['arch-2'])
   })
 
@@ -136,6 +140,9 @@ describe('removeSession × archived view store', () => {
 
     await act(() => handle.removeSession('arch-1'))
 
-    expect(vi.mocked(deleteSession)).toHaveBeenCalledWith('arch-1', 'sage')
+    expect(vi.mocked(deleteSession)).toHaveBeenCalledWith('arch-1', {
+      connectionId: null,
+      profile: 'sage'
+    })
   })
 })

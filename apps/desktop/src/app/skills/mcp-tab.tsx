@@ -45,6 +45,7 @@ import { cn } from '@/lib/utils'
 import { notify, notifyError } from '@/store/notifications'
 import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
 import { $activeSessionId } from '@/store/session'
+import { requestForRendererRuntime } from '@/store/session-request-router'
 
 import { hermesConfigCacheWriter, useHermesConfigRecord } from '../hooks/use-config-record'
 import { useOnProfileSwitch } from '../hooks/use-on-profile-switch'
@@ -722,7 +723,11 @@ export function McpTab({ gateway, profile }: { gateway: HermesGateway | null; pr
     }
 
     try {
-      await gateway.request('reload.mcp', { confirm: true, session_id: activeSessionId ?? undefined })
+      if (activeSessionId) {
+        await requestForRendererRuntime(activeSessionId, 'reload.mcp', { confirm: true })
+      } else {
+        await gateway.request('reload.mcp', { confirm: true })
+      }
     } catch (err) {
       notifyError(err, m.reloadFailed)
     }

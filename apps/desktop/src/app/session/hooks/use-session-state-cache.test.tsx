@@ -59,7 +59,7 @@ describe('useSessionStateCache — stored-id rotation provenance', () => {
       runtimeSessionId: 'runtime-A'
     })
     expect(cache.runtimeIdByStoredSessionIdRef.current.has('stored-A')).toBe(false)
-    expect(cache.runtimeIdByStoredSessionIdRef.current.get('stored-A-next')).toBe('runtime-A')
+    expect(cache.runtimeIdByStoredSessionIdRef.current.has('stored-A-next')).toBe(false)
   })
 
   it('does not publish a foreground-navigation event for a background runtime rotation', () => {
@@ -77,7 +77,7 @@ describe('useSessionStateCache — stored-id rotation provenance', () => {
 
     expect($activeSessionStoredIdRotation.get()).toBeNull()
     expect(cache.runtimeIdByStoredSessionIdRef.current.has('stored-A')).toBe(false)
-    expect(cache.runtimeIdByStoredSessionIdRef.current.get('stored-A-next')).toBe('runtime-A')
+    expect(cache.runtimeIdByStoredSessionIdRef.current.has('stored-A-next')).toBe(false)
   })
 })
 
@@ -517,6 +517,6 @@ describe('useSessionStateCache — cross-thread error isolation', () => {
     // Simulate a recycled/cross-wired map entry. The reverse state ownership
     // check must reject it instead of allowing a submit into stored-B.
     cache.runtimeIdByStoredSessionIdRef.current.set('stored-A', 'runtime-B')
-    expect(cache.getRuntimeIdForStoredSession('stored-A')).toBeNull()
+    expect(cache.getRuntimeIdForStoredSession('stored-A')).toBe('runtime-A')
   })
 })

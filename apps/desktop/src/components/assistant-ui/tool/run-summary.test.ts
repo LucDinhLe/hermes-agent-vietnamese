@@ -18,43 +18,43 @@ const running = (tools: ToolCallLike[]) => summarizeToolRun(tools, true)
 // no "Edited …" clause to test here — that work shows as its own diff card.
 describe('summarizeToolRun', () => {
   it('names a lone target and counts the rest', () => {
-    expect(settled([searched('toolRuns'), read('a.ts'), read('b.ts'), read('c.ts')])).toBe('Explored 4 files')
+    expect(settled([searched('toolRuns'), read('a.ts'), read('b.ts'), read('c.ts')])).toBe('Đã xem 4 tệp')
   })
 
   it('orders clauses explore then run regardless of call order', () => {
     expect(settled([ran('ls'), read('a.ts'), read('b.ts'), ran('pwd'), ran('id')])).toBe(
-      'Explored 2 files, ran 3 commands'
+      'Đã xem 2 tệp, đã chạy 3 lệnh'
     )
   })
 
   it('counts commands rather than naming them once they have run', () => {
-    expect(settled([ran('git status')])).toBe('Ran 1 command')
+    expect(settled([ran('git status')])).toBe('Đã chạy 1 lệnh')
     expect(settled([read('status.ts'), ran('a'), ran('b'), ran('c'), ran('d'), ran('e')])).toBe(
-      'Explored status.ts, ran 5 commands'
+      'Đã xem status.ts, đã chạy 5 lệnh'
     )
   })
 
   it('puts the running category in the present tense and leaves the rest past', () => {
     expect(running([read('a.ts'), tool('read_file', { path: 'b.ts' }), ran('x'), ran('y')])).toBe(
-      'Exploring 2 files, ran 2 commands'
+      'Đang xem 2 tệp, đã chạy 2 lệnh'
     )
   })
 
   it('names the command that is still running', () => {
-    expect(running([tool('terminal', { command: 'npm run typecheck' })])).toMatch(/^Running /)
+    expect(running([tool('terminal', { command: 'npm run typecheck' })])).toMatch(/^Đang chạy /)
   })
 
   // Sequential calls leave a gap where the run is still going but nothing is
   // pending. Falling back to past tense there contradicted the ticker still
   // scrolling underneath, so the most recent call carries the present tense.
   it('stays in the present tense between two sequential calls', () => {
-    expect(running([read('a.ts'), ran('x'), ran('y')])).toBe('Explored a.ts, running 2 commands')
+    expect(running([read('a.ts'), ran('x'), ran('y')])).toBe('Đã xem a.ts, đang chạy 2 lệnh')
   })
 
   // A turn can end — or the agent can simply move on — with a call that never
   // got a result. The run is history at that point and has to read as history,
   // or it narrates work that stopped happening and never offers its toggle.
   it('reads a run the turn left unresolved as finished', () => {
-    expect(settled([read('a.ts'), tool('search_files', { query: 'toolRuns' })])).toBe('Explored 2 files')
+    expect(settled([read('a.ts'), tool('search_files', { query: 'toolRuns' })])).toBe('Đã xem 2 tệp')
   })
 })

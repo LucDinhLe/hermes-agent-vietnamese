@@ -21,7 +21,10 @@ const electronNative: TestProjectConfiguration = {
     name: 'electron',
     environment: 'node',
     include: ['electron/**/*.test.ts', 'scripts/**.test.{ts,mjs}'],
-    exclude: ['scripts/run-short-session-hang-repro.test.mjs']
+    // Node's built-in test runner owns these script suites. Loading them in
+    // Vitest produces a false "no test suite found" failure before their
+    // package-script gate can run them with the intended runner.
+    exclude: ['scripts/advisor-runtime-sync.test.mjs', 'scripts/run-short-session-hang-repro.test.mjs']
   }
 }
 

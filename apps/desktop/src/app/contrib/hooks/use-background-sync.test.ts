@@ -23,10 +23,10 @@ import {
 
 vi.mock('@/hermes', async importOriginal => ({
   ...(await importOriginal()),
-  getLatestSessionMessages: vi.fn()
+  getLatestSessionMessagesForOwner: vi.fn()
 }))
 
-const { getLatestSessionMessages } = await import('@/hermes')
+const { getLatestSessionMessagesForOwner } = await import('@/hermes')
 
 const ACTIVE_RUNTIME_ID = 'runtime-active'
 const ACTIVE_STORED_ID = 'stored-active'
@@ -137,7 +137,7 @@ afterEach(() => {
 
 describe('active transcript refresh', () => {
   beforeEach(() => {
-    vi.mocked(getLatestSessionMessages).mockResolvedValue(transcript('answer') as never)
+    vi.mocked(getLatestSessionMessagesForOwner).mockResolvedValue(transcript('answer') as never)
   })
 
   it('refreshes a local/Desktop session when sessions.changed ticks', async () => {
@@ -146,7 +146,7 @@ describe('active transcript refresh', () => {
     $selectedStoredSessionId.set(ACTIVE_STORED_ID)
     setSessions([{ id: ACTIVE_STORED_ID, profile: 'desktop-profile', source: 'desktop' } as never])
     const fixture = makeRefresh(resolveActiveTranscriptSession)
-    vi.mocked(getLatestSessionMessages).mockResolvedValue(transcript('external answer') as never)
+    vi.mocked(getLatestSessionMessagesForOwner).mockResolvedValue(transcript('external answer') as never)
 
     renderSync(fixture.refresh)
 
@@ -238,14 +238,32 @@ describe('active transcript refresh', () => {
 })
 
 describe('reconcileActiveTranscript', () => {
-  it('resolves and hydrates a messaging session from the messaging sessions store', async () => {
-    setMessagingSessions([{ id: ACTIVE_STORED_ID, profile: 'messaging-profile', source: 'telegram' } as never])
+  it('hydrates the exact source row when A and B share the same profile and session id', async () => {
+    const ownerA = { connection_id: 'source-a', id: ACTIVE_STORED_ID, profile: 'mbc', source: 'desktop' }
+    const ownerB = { connection_id: 'source-b', id: ACTIVE_STORED_ID, profile: 'mbc', source: 'desktop' }
+    setSessions([ownerA, ownerB] as never)
     const fixture = makeRefresh(resolveActiveTranscriptSession)
-    vi.mocked(getLatestSessionMessages).mockResolvedValue(transcript('telegram answer') as never)
+    vi.mocked(getLatestSessionMessagesForOwner).mockResolvedValue(transcript('source A answer') as never)
 
     await fixture.refresh()
 
-    expect(getLatestSessionMessages).toHaveBeenCalledWith(ACTIVE_STORED_ID, 'messaging-profile')
+    expect(getLatestSessionMessagesForOwner).toHaveBeenCalledWith(ACTIVE_STORED_ID, {
+      connectionId: 'source-a',
+      profile: 'mbc'
+    })
+  })
+
+  it('resolves and hydrates a messaging session from the messaging sessions store', async () => {
+    setMessagingSessions([{ id: ACTIVE_STORED_ID, profile: 'messaging-profile', source: 'telegram' } as never])
+    const fixture = makeRefresh(resolveActiveTranscriptSession)
+    vi.mocked(getLatestSessionMessagesForOwner).mockResolvedValue(transcript('telegram answer') as never)
+
+    await fixture.refresh()
+
+    expect(getLatestSessionMessagesForOwner).toHaveBeenCalledWith(ACTIVE_STORED_ID, {
+      connectionId: null,
+      profile: 'messaging-profile'
+    })
     expect(fixture.states.get(ACTIVE_RUNTIME_ID)?.messages.at(-1)?.parts[0]).toMatchObject({
       text: 'telegram answer'
     })
@@ -253,7 +271,7 @@ describe('reconcileActiveTranscript', () => {
 
   it('publishes changed authoritative messages once without duplicates', async () => {
     const fixture = makeRefresh()
-    vi.mocked(getLatestSessionMessages).mockResolvedValue(transcript('new answer') as never)
+    vi.mocked(getLatestSessionMessagesForOwner).mockResolvedValue(transcript('new answer') as never)
 
     await fixture.refresh()
 
@@ -273,7 +291,7 @@ describe('reconcileActiveTranscript', () => {
       { id: '1-0-user', parts: [{ text: 'question', type: 'text' }], role: 'user' },
       { error: 'local failure', id: 'assistant-error', parts: [], role: 'assistant' }
     ]
-    vi.mocked(getLatestSessionMessages).mockResolvedValue({
+    vi.mocked(getLatestSessionMessagesForOwner).mockResolvedValue({
       messages: [{ content: 'question', role: 'user', timestamp: 1 }],
       session_id: ACTIVE_STORED_ID
     } as never)
@@ -291,14 +309,14 @@ describe('reconcileActiveTranscript', () => {
 
     await fixture.refresh()
 
-    expect(getLatestSessionMessages).not.toHaveBeenCalled()
+    expect(getLatestSessionMessagesForOwner).not.toHaveBeenCalled()
     expect(fixture.updateSessionState).not.toHaveBeenCalled()
   })
 
   it('discards a response when the active session changes in flight', async () => {
     const fixture = makeRefresh()
     let resolve: ((value: unknown) => void) | undefined
-    vi.mocked(getLatestSessionMessages).mockReturnValueOnce(
+    vi.mocked(getLatestSessionMessagesForOwner).mockReturnValueOnce(
       new Promise(currentResolve => {
         resolve = currentResolve
       }) as never

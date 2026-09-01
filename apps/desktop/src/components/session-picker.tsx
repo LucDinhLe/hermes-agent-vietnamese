@@ -8,6 +8,7 @@ import { useI18n } from '@/i18n'
 import { sessionTitle } from '@/lib/chat-runtime'
 import { Check, MessageCircle } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+import { explicitSessionRouteOwner, stageSessionRouteOwner } from '@/store/session-route-owner'
 
 interface SessionPickerDialogProps {
   /** Stored id of the session currently open, so it can be flagged in the list. */
@@ -62,12 +63,17 @@ export function SessionPickerDialog({ activeStoredSessionId, onOpenChange, onRes
                 {sessions.map(session => {
                   const title = sessionTitle(session)
                   const preview = session.preview?.trim()
+                  const owner = explicitSessionRouteOwner(session)
 
                   return (
                     <CommandItem
                       className="gap-2.5"
-                      key={session.id}
+                      key={`${owner?.connectionId ?? 'local'}\u0000${owner?.profile ?? ''}\u0000${session.id}`}
                       onSelect={() => {
+                        if (owner) {
+                          stageSessionRouteOwner(session.id, owner)
+                        }
+
                         onResume(session.id)
                         onOpenChange(false)
                       }}

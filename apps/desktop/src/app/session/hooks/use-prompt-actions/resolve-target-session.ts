@@ -1,6 +1,6 @@
-import { resolveSessionProfile } from '../use-session-actions/utils'
+import { sessionRouteOwner } from '@/store/session-route-owner'
 
-import type { GatewayRequest } from './utils'
+import { resolveSessionProfile } from '../use-session-actions/utils'
 
 /**
  * Resolve the runtime session a submit or slash command must target.
@@ -43,10 +43,16 @@ import type { GatewayRequest } from './utils'
  */
 export interface ResolveTargetSessionDeps {
   activeRuntimeId: null | string
+  bindSessionRuntime: (storedSessionId: string, runtimeSessionId: string) => null | string
   createSession: () => Promise<null | string>
   explicitRuntimeId?: null | string
   getRuntimeIdForStoredSession: (storedSessionId: string) => null | string
-  requestGateway: GatewayRequest
+  requestStoredSession: <T>(
+    storedSessionId: string,
+    method: string,
+    params?: Record<string, unknown>
+  ) => Promise<T>
+  resolveStoredSessionProfile?: (storedSessionId: string) => Promise<string | undefined>
   routedStoredSessionId: null | string
   selectedStoredSessionId: null | string
 }
@@ -54,10 +60,12 @@ export interface ResolveTargetSessionDeps {
 export async function resolveTargetSessionId(deps: ResolveTargetSessionDeps): Promise<null | string> {
   const {
     activeRuntimeId,
+    bindSessionRuntime,
     createSession,
     explicitRuntimeId,
     getRuntimeIdForStoredSession,
-    requestGateway,
+    requestStoredSession,
+    resolveStoredSessionProfile,
     routedStoredSessionId,
     selectedStoredSessionId
   } = deps
@@ -89,15 +97,21 @@ export async function resolveTargetSessionId(deps: ResolveTargetSessionDeps): Pr
 
   if (storedTarget) {
     try {
-      const profile = await resolveSessionProfile(storedTarget)
+      const profile = resolveStoredSessionProfile
+        ? await resolveStoredSessionProfile(storedTarget)
+        : await resolveSessionProfile(storedTarget, sessionRouteOwner(storedTarget))
 
-      const resumed = await requestGateway<{ session_id?: string }>('session.resume', {
+      if (!profile) {
+        return null
+      }
+
+      const resumed = await requestStoredSession<{ session_id?: string }>(storedTarget, 'session.resume', {
         session_id: storedTarget,
         source: 'desktop',
-        ...(profile ? { profile } : {})
+        profile
       })
 
-      return resumed?.session_id || null
+      return resumed?.session_id ? bindSessionRuntime(storedTarget, resumed.session_id) : null
     } catch {
       // A targeted durable conversation whose runtime cannot be rebound must
       // NOT fall through to createSession() — that is precisely the fork this

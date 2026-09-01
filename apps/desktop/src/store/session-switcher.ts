@@ -3,6 +3,7 @@ import { atom } from 'nanostores'
 import type { SessionInfo } from '@/types/hermes'
 
 import { $selectedStoredSessionId, $sessions } from './session'
+import { explicitSessionRouteOwner, stageSessionRouteOwner } from './session-route-owner'
 
 // Mac-style session switcher (^Tab). Quick tap jumps on keydown; the HUD opens
 // only when Tab is held past REVEAL_MS or tapped again while Ctrl is down.
@@ -14,6 +15,20 @@ export const $switcherSessions = atom<SessionInfo[]>([])
 export const $switcherIndex = atom(0)
 
 const wrap = (index: number, length: number): number => ((index % length) + length) % length
+
+function idWithStagedOwner(session: SessionInfo | undefined): null | string {
+  if (!session) {
+    return null
+  }
+
+  const owner = explicitSessionRouteOwner(session)
+
+  if (owner) {
+    stageSessionRouteOwner(session.id, owner)
+  }
+
+  return session.id
+}
 
 let pendingBrowse = false
 let revealTimer: ReturnType<typeof setTimeout> | null = null
@@ -92,13 +107,16 @@ export function openOrAdvanceSwitcher(direction: 1 | -1): string | null {
   pendingBrowse = true
   scheduleReveal()
 
-  return sessions[nextIndex]?.id ?? null
+  return idWithStagedOwner(sessions[nextIndex])
 }
 
-export const highlightedSessionId = (): string | null => $switcherSessions.get()[$switcherIndex.get()]?.id ?? null
+export const highlightedSessionId = (): string | null =>
+  idWithStagedOwner($switcherSessions.get()[$switcherIndex.get()])
 
 export const slotSessionId = (slot: number): string | null =>
-  ($switcherOpen.get() || pendingBrowse ? $switcherSessions.get() : $sessions.get())[slot - 1]?.id ?? null
+  idWithStagedOwner(
+    ($switcherOpen.get() || pendingBrowse ? $switcherSessions.get() : $sessions.get())[slot - 1]
+  )
 
 export function closeSwitcher(): void {
   closedAt = Date.now()

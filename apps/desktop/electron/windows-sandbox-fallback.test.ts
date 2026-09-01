@@ -22,8 +22,10 @@ import {
   shouldAttemptAclRepair,
   shouldRelaunchForGpuSandboxCrash,
   shouldRelaunchForRendererSandboxCrashLoop,
+  WINDOWS_GPU_DLL_NOT_FOUND_EXIT,
   WINDOWS_SANDBOX_BREAKPOINT_EXIT,
   WINDOWS_SANDBOX_MARKER_FILENAME,
+  windowsGpuSandboxCrashReason,
   writeSandboxMarker
 } from './windows-sandbox-fallback'
 
@@ -33,6 +35,13 @@ test('isWindowsSandboxBreakpointExit recognizes signed and unsigned STATUS_BREAK
   assert.equal(isWindowsSandboxBreakpointExit(0x80000003), true)
   assert.equal(isWindowsSandboxBreakpointExit(1), false)
   assert.equal(isWindowsSandboxBreakpointExit('nope'), false)
+})
+
+test('windowsGpuSandboxCrashReason recognizes the observed GPU loader failure', () => {
+  assert.equal(windowsGpuSandboxCrashReason(WINDOWS_SANDBOX_BREAKPOINT_EXIT), 'gpu-breakpoint')
+  assert.equal(windowsGpuSandboxCrashReason(WINDOWS_GPU_DLL_NOT_FOUND_EXIT), 'gpu-loader')
+  assert.equal(windowsGpuSandboxCrashReason(0xc0000135), 'gpu-loader')
+  assert.equal(windowsGpuSandboxCrashReason(1), null)
 })
 
 test('alreadyHasNoSandbox honors argv and ELECTRON_DISABLE_SANDBOX', () => {
@@ -255,7 +264,16 @@ test('grantAllApplicationPackagesAcl is a no-op off Windows and reports exec fai
   assert.match(String(failed.error), /access denied/)
 })
 
-test('shouldRelaunchForGpuSandboxCrash only fires once for GPU breakpoint deaths', () => {
+test('shouldRelaunchForGpuSandboxCrash only fires once for known GPU sandbox failures', () => {
+  assert.equal(
+    shouldRelaunchForGpuSandboxCrash({
+      platform: 'win32',
+      details: { type: 'GPU', exitCode: WINDOWS_GPU_DLL_NOT_FOUND_EXIT },
+      alreadyNoSandbox: false,
+      relaunchAttempted: false
+    }),
+    true
+  )
   assert.equal(
     shouldRelaunchForGpuSandboxCrash({
       platform: 'win32',

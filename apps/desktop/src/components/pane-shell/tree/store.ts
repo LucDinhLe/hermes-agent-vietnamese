@@ -31,6 +31,7 @@ import {
   movePane as movePaneOp,
   movePanes as movePanesOp,
   normalize,
+  rekeyPane,
   removePane,
   reorderPanesInGroup as reorderPanesInGroupOp,
   setActivePane as setActivePaneOp,
@@ -783,6 +784,33 @@ export function removeTreePane(paneId: string) {
   }
 }
 
+/** Rekey a pane contribution while preserving its exact layout slot. Session
+ * drafts use this when a provisional renderer id is promoted to a confirmed
+ * durable session id after the first turn reaches state.db. */
+export function canRekeyTreePane(fromPaneId: string, toPaneId: string): boolean {
+  const tree = $layoutTree.get()
+
+  return Boolean(tree && rekeyPane(tree, fromPaneId, toPaneId) !== tree)
+}
+
+export function rekeyTreePane(fromPaneId: string, toPaneId: string): boolean {
+  const tree = $layoutTree.get()
+
+  if (!tree) {
+    return false
+  }
+
+  const next = rekeyPane(tree, fromPaneId, toPaneId)
+
+  if (next === tree) {
+    return false
+  }
+
+  commit(next)
+
+  return true
+}
+
 /** The layout's root ROW — the split that contains main + the side columns.
  *  Usually the root itself (Default, Focus); in a column-root layout (Terminal
  *  deck, Quad) it's the row child that holds sessions/workspace/files. Returns
@@ -1208,6 +1236,11 @@ interface PaneDockHint {
    *  adoption lifetime (per boot), so an intra-session drag sticks until the
    *  next boot. See `enforceDockedPanes`. */
   enforce?: boolean
+  /** Live center-dock invariant: user moves may reorder the pair or move its
+   *  whole group, but may not leave this pane and its anchor in different
+   *  groups during the current boot. This is deliberately renderer-only;
+   *  closing either pane is still handled by its owner. */
+  locked?: boolean
 }
 
 // The retired one-time dock-heal ledger (`heal: '<token>'` hints). Its guards
@@ -1433,6 +1466,23 @@ function markPaneUserPlaced(paneId: string) {
   }
 }
 
+/** Whether a prospective user move keeps every live `dock.locked` center pair
+ * in one tab group. Missing panes are allowed: Close/hide lifecycles remain the
+ * owner's concern, while this guard owns only drag/move geometry. */
+function preservesLockedCenterDocks(next: LayoutNode): boolean {
+  const live = new Set(allPaneIds(next))
+
+  return registry.getArea('panes').every(pane => {
+    const dock = (pane.data as { dock?: PaneDockHint } | undefined)?.dock
+
+    if (!dock?.locked || dock.pos !== 'center' || !live.has(pane.id) || !live.has(dock.pane)) {
+      return true
+    }
+
+    return findGroupOfPane(next, pane.id)?.id === findGroupOfPane(next, dock.pane)?.id
+  })
+}
+
 /**
  * Dock `paneId` directly beside `anchorPaneId` — the "preview opens NEXT TO
  * the file tree" contract, position-aware: wherever the anchor lives (default
@@ -1484,7 +1534,7 @@ export function dockPaneBeside(paneId: string, anchorPaneId: string) {
     ? movePaneOp(tree, paneId, { groupId: anchor.id, pos })
     : insertAtGroup(tree, anchor.id, paneId, pos, undefined, true, recalledEdgeWeights(paneId))
 
-  if (next && next !== tree) {
+  if (next && next !== tree && preservesLockedCenterDocks(next)) {
     commit(next)
   }
 }
@@ -1500,7 +1550,7 @@ export function moveTreePane(paneId: string, target: { groupId: string; pos: Dro
 
   // movePane returns the SAME root for no-op drops ("stays here") — only a
   // real move customizes the preset or pins the pane as user-placed.
-  if (next !== tree) {
+  if (next !== tree && preservesLockedCenterDocks(next)) {
     commit(next)
     markActivePreset('custom')
     markPaneUserPlaced(paneId)
@@ -1559,7 +1609,7 @@ export function moveTreePanes(
 
   const next = movePanesOp(tree, paneIds, target, activeId)
 
-  if (next !== tree) {
+  if (next !== tree && preservesLockedCenterDocks(next)) {
     commit(next)
     markActivePreset('custom')
 

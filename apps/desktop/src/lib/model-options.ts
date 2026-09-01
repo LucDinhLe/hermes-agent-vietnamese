@@ -1,4 +1,5 @@
 import { getGlobalModelOptions, type HermesGateway, type ModelOptionsResponse } from '@/hermes'
+import { requestForRendererRuntime } from '@/store/session-request-router'
 import type { ModelOptionProvider } from '@/types/hermes'
 
 /**
@@ -60,21 +61,28 @@ export async function requestModelOptions({
   refresh = false,
   sessionId
 }: ModelOptionsRequest): Promise<ModelOptionsResponse> {
+  const params: Record<string, unknown> = {}
+
+  if (sessionId) {
+    params.session_id = sessionId
+  }
+
+  if (refresh) {
+    params.refresh = true
+  }
+
+  if (explicitOnly) {
+    params.explicit_only = true
+  }
+
+  // A session catalog belongs to the exact runtime owner. The qualified
+  // runtime key is sufficient routing authority even when no ambient gateway
+  // object is available; never fall through to the ambient REST profile.
+  if (sessionId) {
+    return requestForRendererRuntime<ModelOptionsResponse>(sessionId, 'model.options', params)
+  }
+
   if (gateway) {
-    const params: Record<string, unknown> = {}
-
-    if (sessionId) {
-      params.session_id = sessionId
-    }
-
-    if (refresh) {
-      params.refresh = true
-    }
-
-    if (explicitOnly) {
-      params.explicit_only = true
-    }
-
     let gatewayError: unknown
     let gatewayOptions: ModelOptionsResponse | undefined
 

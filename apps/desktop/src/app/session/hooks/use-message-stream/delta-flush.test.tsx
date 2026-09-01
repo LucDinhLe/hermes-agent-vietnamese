@@ -7,6 +7,7 @@ import type { ClientSessionState } from '@/app/types'
 import type { ChatMessage } from '@/lib/chat-messages'
 import { createClientSessionState } from '@/lib/chat-runtime'
 
+import { SessionBindingRegistry } from '../../session-binding-registry'
 import { useSessionStateCache } from '../use-session-state-cache'
 
 import { type MessageStreamHarness, renderMessageStream } from './test-harness'
@@ -247,6 +248,7 @@ describe('useMessageStream composed with the real useSessionStateCache', () => {
   function ComposedHarness() {
     const busyRef: MutableRefObject<boolean> = { current: false }
     const queryClientRef = useRef(new QueryClient())
+    const sessionBindingRegistryRef = useRef(new SessionBindingRegistry())
 
     const sessionCache = useSessionStateCache({
       activeSessionId: SID,
@@ -263,8 +265,11 @@ describe('useMessageStream composed with the real useSessionStateCache', () => {
       activeSessionIdRef: sessionCache.activeSessionIdRef,
       hydrateFromStoredSession: vi.fn(async () => undefined),
       queryClient: queryClientRef.current,
+      qualifyRuntimeIds: false,
       refreshHermesConfig: vi.fn(async () => undefined),
       refreshSessions: vi.fn(async () => undefined),
+      runtimeIdByStoredSessionIdRef: sessionCache.runtimeIdByStoredSessionIdRef,
+      sessionBindingRegistry: sessionBindingRegistryRef.current,
       sessionStateByRuntimeIdRef: sessionCache.sessionStateByRuntimeIdRef,
       updateSessionState: sessionCache.updateSessionState
     })

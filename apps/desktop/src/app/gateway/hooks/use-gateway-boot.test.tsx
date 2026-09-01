@@ -72,6 +72,10 @@ class FakeWebSocket {
     this.emit('close', {})
   }
 
+  message(frame: unknown) {
+    this.emit('message', { data: JSON.stringify(frame) })
+  }
+
   private emit(type: string, ev: unknown) {
     for (const fn of this.listeners[type] ?? []) {
       fn(ev)
@@ -132,11 +136,16 @@ function fakeDesktop() {
 
 function Harness({
   beforeConnectionSwitch = () => undefined,
+  handleGatewayEvent = () => undefined,
   refreshSessions
-}: { beforeConnectionSwitch?: () => void; refreshSessions?: () => Promise<void> } = {}) {
+}: {
+  beforeConnectionSwitch?: () => void
+  handleGatewayEvent?: (event: Parameters<Parameters<typeof useGatewayBoot>[0]['handleGatewayEvent']>[0]) => void
+  refreshSessions?: () => Promise<void>
+} = {}) {
   useGatewayBoot({
     beforeConnectionSwitch,
-    handleGatewayEvent: () => undefined,
+    handleGatewayEvent,
     onConnectionReady: () => undefined,
     onGatewayReady: () => undefined,
     refreshHermesConfig: async () => undefined,
@@ -226,6 +235,25 @@ async function advanceBackoff() {
 }
 
 describe('useGatewayBoot remote reconnect loop (real hook, fake socket)', () => {
+  it('preserves an explicit shared-primary Agent profile on inbound events', async () => {
+    const handleGatewayEvent = vi.fn()
+
+    render(<Harness handleGatewayEvent={handleGatewayEvent} />)
+    await flushAsync()
+
+    act(() => {
+      FakeWebSocket.instances[0].message({
+        jsonrpc: '2.0',
+        method: 'event',
+        params: { profile: 'mbc', session_id: 'runtime-shared', type: 'session.info' }
+      })
+    })
+
+    expect(handleGatewayEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ profile: 'mbc', session_id: 'runtime-shared' })
+    )
+  })
+
   it('INITIAL boot against a dead VPS: getConnection hangs (waitForHermes) → app sits in the connecting combo, then fails', async () => {
     // The report's actual path: a fresh launch pointed at an unreachable VPS.
     // startHermes()'s remote branch awaits waitForHermes() for 45s before it

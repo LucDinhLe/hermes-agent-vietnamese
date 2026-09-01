@@ -7,9 +7,20 @@ Handler bodies are byte-identical to their pre-split server.py form; they
 are rebound onto server.py's globals at install time — see method_ctx.py.
 """
 
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
+
 from .method_ctx import HandlerRegistry
 
 from hermes_constants import DEFAULT_INDICATOR_STYLE, INDICATOR_STYLES
+
+if TYPE_CHECKING:
+    # HandlerRegistry replaces these declarations with server.py's live globals
+    # when it installs each handler. Keep only the dynamic config/RPC surface
+    # typed here; this module must not import server.py and create a cycle.
+    _sessions: dict[str, dict[str, Any]]
+    _load_cfg: Callable[[], dict[str, Any]]
+    _ok: Callable[[Any, dict[str, Any]], dict[str, Any]]
 
 _registry = HandlerRegistry()
 method = _registry.method
@@ -172,6 +183,12 @@ def _(rid, params: dict) -> dict:
 @method("config.get")
 def _(rid, params: dict) -> dict:
     key = params.get("key", "")
+    if key == "advisor":
+        from tui_gateway.review_settings import live_review_status
+
+        session = _sessions.get(params.get("session_id", ""))
+        agent = session.get("agent") if session else None
+        return _ok(rid, {"key": key, **live_review_status(agent, _load_cfg())})
     if key == "provider":
         try:
             from hermes_cli.models import list_available_providers, normalize_provider

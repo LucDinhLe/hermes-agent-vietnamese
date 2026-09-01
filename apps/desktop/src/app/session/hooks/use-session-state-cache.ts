@@ -102,8 +102,10 @@ export function useSessionStateCache({
         // Ownership is removed with the transcript, but only if both sides still
         // describe this exact binding. A recycled runtime must not erase its
         // new owner's reverse entry.
-        if (state.storedSessionId && runtimeIdByStoredSessionIdRef.current.get(state.storedSessionId) === runtimeId) {
-          runtimeIdByStoredSessionIdRef.current.delete(state.storedSessionId)
+        for (const [durableKey, boundRuntimeId] of runtimeIdByStoredSessionIdRef.current) {
+          if (boundRuntimeId === runtimeId) {
+            runtimeIdByStoredSessionIdRef.current.delete(durableKey)
+          }
         }
 
         releaseSessionTranscript(runtimeId)
@@ -144,7 +146,11 @@ export function useSessionStateCache({
           // updater is a no-op — fire it here so the route-follow effect still
           // tracks compression without needing a dummy state write.
           if (existing.storedSessionId && existing.storedSessionId !== storedSessionId) {
-            runtimeIdByStoredSessionIdRef.current.delete(existing.storedSessionId)
+            for (const [durableKey, boundRuntimeId] of runtimeIdByStoredSessionIdRef.current) {
+              if (boundRuntimeId === sessionId) {
+                runtimeIdByStoredSessionIdRef.current.delete(durableKey)
+              }
+            }
 
             // A rotation event needs a real next id — a null/cleared stored id
             // is a detach, not a rotation the route-follow effect should chase.
@@ -157,10 +163,6 @@ export function useSessionStateCache({
             }
           }
 
-          if (storedSessionId) {
-            runtimeIdByStoredSessionIdRef.current.set(storedSessionId, sessionId)
-          }
-
           sessionStateCache.set(sessionId, updated)
         }
 
@@ -168,10 +170,6 @@ export function useSessionStateCache({
       }
 
       const created = createClientSessionState(storedSessionId ?? null)
-
-      if (storedSessionId) {
-        runtimeIdByStoredSessionIdRef.current.set(storedSessionId, sessionId)
-      }
 
       sessionStateCache.set(sessionId, created)
 
@@ -355,15 +353,9 @@ export function useSessionStateCache({
 
   const getRuntimeIdForStoredSession = useCallback(
     (storedSessionId: string): string | null => {
-      const runtimeId = runtimeIdByStoredSessionIdRef.current.get(storedSessionId)
+      const matches = [...sessionStateCache.entries()].filter(([, state]) => state.storedSessionId === storedSessionId)
 
-      if (!runtimeId) {
-        return null
-      }
-
-      const runtimeState = sessionStateCache.get(runtimeId)
-
-      return runtimeState?.storedSessionId === storedSessionId ? runtimeId : null
+      return matches.length === 1 ? matches[0][0] : null
     },
     [sessionStateCache]
   )

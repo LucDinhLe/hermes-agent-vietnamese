@@ -1,0 +1,755 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-09-01T18:43:52.000Z",
+  "releaseMode": false,
+  "engine": {
+    "repository": "https://github.com/NousResearch/hermes-agent.git",
+    "tag": "v2026.8.19",
+    "tagObjectSha": "b05e680e63d39d5a8e3ec0f5842a41d1c4209c03",
+    "commit": "fcbd1076a93841fa88855acce810e342a5b78101",
+    "version": "0.20.5"
+  },
+  "edition": {
+    "id": "hermes-vietnamese",
+    "version": "0.33.0-dev.11",
+    "shellCommit": "ca262d9893fe02cd6f72c3f9a4dda3749fa95d3f",
+    "shellDirty": false,
+    "shellLiveRemoteRefs": [],
+    "overlaySha256": "f5bf7364da492017998ae6ec567257acd5e3f934869d9980e6b325f17ec28ee8",
+    "overlayFiles": [
+      {
+        "path": "apps/desktop/e2e/v32-shell-contract-fixture.ts",
+        "sha256": "671c75f2d9e800ff9c50eb88a6ac8f9b19c791a14f446054e98533eebac5837b"
+      },
+      {
+        "path": "apps/desktop/e2e/v32-shell-geometry.spec.ts",
+        "sha256": "b8da1638e05c9adeccece1b414a3cedcab9492ef6fe5a2d0847c566bf5759ce2"
+      },
+      {
+        "path": "apps/desktop/e2e/v32-shell-geometry.spec.ts-snapshots/v32-shell-ember-light-1000x800-win32.png",
+        "sha256": "698a792cf5a6e29d5b7b6548d434242199ae6a24c5560f74d43ed1a28273d22e"
+      },
+      {
+        "path": "apps/desktop/e2e/v32-shell-geometry.spec.ts-snapshots/v32-shell-ember-light-1280x800-win32.png",
+        "sha256": "a738bec2ff18f83aa055ba60d8ac1b04bc7c0245cf3babdb37cc1a03deb23238"
+      },
+      {
+        "path": "apps/desktop/electron/vietnamese-identity-migration.test.ts",
+        "sha256": "906c13ac371a73332042b523768836378478e4988be3124456b269bdd27e26f2"
+      },
+      {
+        "path": "apps/desktop/electron/vietnamese-identity-migration.ts",
+        "sha256": "c793564e827a80112476a4619208271a2cb4fba1f091d776bcc2dd8b81e30593"
+      },
+      {
+        "path": "apps/desktop/src/app/chat/preview-tile-lock.test.ts",
+        "sha256": "39a30145268a7802fbb39b2e6b14b588423c56ecf970e747af8d0888ab7d00bf"
+      },
+      {
+        "path": "apps/desktop/src/app/chat/session-controls-slot.test.tsx",
+        "sha256": "1e1a6dd24a7dbb9e6bc2b1578dc68b32c9dad9152a43b52de8ce97cd33919f24"
+      },
+      {
+        "path": "apps/desktop/src/app/chat/session-controls-slot.tsx",
+        "sha256": "dde9aec7cfae775eef7bcd8999b70ca93c55f46dcf35548de2411b451f44d11e"
+      },
+      {
+        "path": "apps/desktop/src/app/chat/session-draft-title.test.tsx",
+        "sha256": "037833785c068bd61f8a0a5b84d9525a3656e1168e1b283849e424f15ebe068a"
+      },
+      {
+        "path": "apps/desktop/src/app/chat/sidebar/vietnamese-navigation.test.tsx",
+        "sha256": "4765b0ad7124cb1486356a84841ef75df512de05dfb7abfa30c38300c23d560e"
+      },
+      {
+        "path": "apps/desktop/src/app/session/hooks/use-prompt-actions/vietnamese-usage-summary.test.ts",
+        "sha256": "6952309a5ba5fa7fa2d0974470a61f2da5d9517d132fe5010991343aa95f9d05"
+      },
+      {
+        "path": "apps/desktop/src/app/settings/about-settings.tsx",
+        "sha256": "13ca55096e4255b49931aa342f7c2e1114d2102fd573321d902d722c2a7eb7d6"
+      },
+      {
+        "path": "apps/desktop/src/app/shell/bilingual-quick-toggle.test.tsx",
+        "sha256": "be2febca7a62c1ec80dbbc6a697557fef15a7338599227c4af7d0f82d357c71f"
+      },
+      {
+        "path": "apps/desktop/src/app/shell/bilingual-quick-toggle.tsx",
+        "sha256": "3524aa91193172d13e98eae934398646aea8c1f6bcf1edb97db006eff07ae062"
+      },
+      {
+        "path": "apps/desktop/src/components/assistant-ui/tool/fallback-model/vietnamese-truncation.test.ts",
+        "sha256": "8f48cec35622ed2252c536b7ea394a274b62b05eb14ac6e97fb1ceecf5e607be"
+      },
+      {
+        "path": "apps/desktop/src/components/chat/intro.test.tsx",
+        "sha256": "72c8f4d0f0a11c3e8de8ca1f741c51fc4ed9e7064d2e50ccd1b96fbcd96a97cd"
+      },
+      {
+        "path": "apps/desktop/src/components/chat/intro.tsx",
+        "sha256": "915c71c66466aeed93d1e3eaaf3c574de4cd7290a338d6781b80289a3df44d06"
+      },
+      {
+        "path": "apps/desktop/src/components/pane-shell/tree/dock-lock.test.ts",
+        "sha256": "f95528eda2f42bebd49fe6b18e47f04d0dc6f5f02278e7e44ba29cd5a6df59d6"
+      },
+      {
+        "path": "apps/desktop/src/i18n/fresh-profile-locale.test.tsx",
+        "sha256": "0af77fe2a7e23be589c33bde7f17acced7b197eac1b50aad37cfa7311ed78674"
+      },
+      {
+        "path": "apps/desktop/src/i18n/vi-community.test.ts",
+        "sha256": "e565ae7994aa75ea3546895aaefe2d5c3e607f11b48fbde015295193bec0c4fe"
+      },
+      {
+        "path": "apps/desktop/src/i18n/vi.ts",
+        "sha256": "28bb1ab3aaeb0d03b3d72b2af03bd1b67770ac10ae088911716613d68dd4e24b"
+      },
+      {
+        "path": "apps/desktop/src/i18n/vietnamese-locale-policy.test.ts",
+        "sha256": "6ef2ed9cb04c0fbf199f4fce0815196bfc53464814f85e71f85c0168268df979"
+      },
+      {
+        "path": "apps/desktop/src/i18n/vietnamese-locale-policy.ts",
+        "sha256": "83e348a0f8ca0cd7622ae853303d6d3878c1a32dffe33a55ed4d1455db3a72d4"
+      },
+      {
+        "path": "apps/desktop/src/plugins/hermes-vietnamese/desktop-version.test.ts",
+        "sha256": "7a4ead74a4f3765e2573f4af1bbae339e759d3002b0f9a1243698db90835e798"
+      },
+      {
+        "path": "apps/desktop/src/plugins/hermes-vietnamese/desktop-version.ts",
+        "sha256": "cdf63fba85c604324f08e8af9d3e0e40a4b79d81cd80ae6e2602cee6a08be5db"
+      },
+      {
+        "path": "apps/desktop/src/plugins/hermes-vietnamese/edition-info.ts",
+        "sha256": "b477cb683b2f34038ff35991b477f0f65c269d36947669505423152a258c16d1"
+      },
+      {
+        "path": "apps/desktop/src/plugins/hermes-vietnamese/home-intro.tsx",
+        "sha256": "3829259d95921308c718493410dfb55956d8348969941e9485e07387cd2c7efa"
+      },
+      {
+        "path": "apps/desktop/src/plugins/hermes-vietnamese/i18n.ts",
+        "sha256": "da9e519af1f235e1eb90ec4eb46e665d849fbf448a080753a917c61329968c45"
+      },
+      {
+        "path": "apps/desktop/src/plugins/hermes-vietnamese/plugin.test.tsx",
+        "sha256": "34ba2b4499cef43fec3b2a4735d35bf173af8efb64f6dfa757e6351c22b06d7d"
+      },
+      {
+        "path": "apps/desktop/src/plugins/hermes-vietnamese/plugin.tsx",
+        "sha256": "15a3460aa5bdb2398f7a4016a4a89c3e5255d47bb48e13a49d85499525e0b8f2"
+      },
+      {
+        "path": "apps/desktop/src/plugins/hermes-vietnamese/product-metadata.json",
+        "sha256": "7054c5dc4d34fc764b3dc6007f286a981e35704f3da47be28e132c963e8e8575"
+      },
+      {
+        "path": "apps/desktop/src/plugins/hermes-vietnamese/session-control-bar.test.tsx",
+        "sha256": "dffaa7bb2ae8352e7da740d9546118871d7aeb1bdeac431851b43a7ec5be8171"
+      },
+      {
+        "path": "apps/desktop/src/plugins/hermes-vietnamese/session-control-bar.tsx",
+        "sha256": "6768aa17055081fbb6106636b01efbda9842482206dd07376c964f3e548c1519"
+      },
+      {
+        "path": "apps/desktop/src/plugins/hermes-vietnamese/support-report.test.ts",
+        "sha256": "c73f0a8fff5ce1f301c7958b3be4de0ad70cbcfaafb503255c682d01c6de68ee"
+      },
+      {
+        "path": "apps/desktop/src/plugins/hermes-vietnamese/support-report.ts",
+        "sha256": "2024b825675f87f3be66a0010f0da9a06656eb15250d2994b0b7401c784f223f"
+      },
+      {
+        "path": "apps/desktop/src/store/v32-right-sidebar-default.test.ts",
+        "sha256": "e12fde147e0efbada2a2d118186b727d445fadf34c0eedc3aa41519b75819842"
+      },
+      {
+        "path": "apps/desktop/src/themes/vietnamese-v32-appearance-migration.test.ts",
+        "sha256": "ca0c6e1ec540db624b55f932222411b2caff968dc5a78a7342f53507d7784192"
+      },
+      {
+        "path": "apps/desktop/src/themes/vietnamese-v32-appearance-migration.ts",
+        "sha256": "66035d3b957221cb74e6b59f2baca82e0eb749e18fd2022e2220e35a5aa13148"
+      }
+    ],
+    "patches": [
+      {
+        "id": "core-i18n-registration",
+        "kind": "edition-seam",
+        "sha256": "ef988ba88fde23444d154a479680872e5f464720aa6cb9c4132d88775f2e7992"
+      },
+      {
+        "id": "edition-receipt-packaging",
+        "kind": "edition-seam",
+        "sha256": "ae47bd0285bbfa6f9a1728a1056a3911bd440861cce9a826500d05ff7115d19b"
+      },
+      {
+        "id": "vietnamese-distribution-ui",
+        "kind": "edition-seam",
+        "sha256": "c42b32aeb15ff39fafa027b8a51e9e4d70097d5e2de6d5f982dc15cdfcae8415"
+      },
+      {
+        "id": "v33-shell-inheritance",
+        "kind": "edition-seam",
+        "sha256": "93573df4fa1d0a67b464f8bd449da95db66328fe049b6c0b28a3185e70dc9b38"
+      },
+      {
+        "id": "v33-daily-use-qa",
+        "kind": "edition-seam",
+        "sha256": "c9627d73d4e58ce63b9a2c262b27324e37781c51ec6b5dc3fdff26cd21ae5000"
+      },
+      {
+        "id": "desktop-test-locale-portability",
+        "kind": "edition-seam",
+        "sha256": "b490a2da1a2328d461d837f9669e6c15a6d66c4506448dd97e915ae1e6961e80"
+      },
+      {
+        "id": "v32-composite-shell",
+        "kind": "edition-seam",
+        "sha256": "84abdafab30a7dff464f2dfce8b0a6b1920d17477c41f8b550fdf282eeffabf4"
+      }
+    ]
+  },
+  "changedPaths": [
+    "apps/desktop/build/edition-receipt.json",
+    "apps/desktop/e2e/v32-shell-contract-fixture.ts",
+    "apps/desktop/e2e/v32-shell-geometry.spec.ts",
+    "apps/desktop/e2e/v32-shell-geometry.spec.ts-snapshots/v32-shell-ember-light-1000x800-win32.png",
+    "apps/desktop/e2e/v32-shell-geometry.spec.ts-snapshots/v32-shell-ember-light-1280x800-win32.png",
+    "apps/desktop/electron/vietnamese-identity-migration.test.ts",
+    "apps/desktop/electron/vietnamese-identity-migration.ts",
+    "apps/desktop/index.html",
+    "apps/desktop/package.json",
+    "apps/desktop/src/app/chat/composer/hooks/use-composer-placeholder.test.tsx",
+    "apps/desktop/src/app/chat/composer/hooks/use-composer-placeholder.ts",
+    "apps/desktop/src/app/chat/index.tsx",
+    "apps/desktop/src/app/chat/pane-mirror.ts",
+    "apps/desktop/src/app/chat/preview-tile-lock.test.ts",
+    "apps/desktop/src/app/chat/preview-tile.tsx",
+    "apps/desktop/src/app/chat/right-rail/preview-browser-bar.test.tsx",
+    "apps/desktop/src/app/chat/right-rail/preview-browser-bar.tsx",
+    "apps/desktop/src/app/chat/right-rail/preview-browser-fit.test.ts",
+    "apps/desktop/src/app/chat/right-rail/preview-browser-fit.ts",
+    "apps/desktop/src/app/chat/right-rail/preview-pane.test.tsx",
+    "apps/desktop/src/app/chat/right-rail/preview-pane.tsx",
+    "apps/desktop/src/app/chat/session-controls-slot.test.tsx",
+    "apps/desktop/src/app/chat/session-controls-slot.tsx",
+    "apps/desktop/src/app/chat/session-draft-title.test.tsx",
+    "apps/desktop/src/app/chat/session-draft-title.tsx",
+    "apps/desktop/src/app/chat/sidebar/filter-menu.tsx",
+    "apps/desktop/src/app/chat/sidebar/index.tsx",
+    "apps/desktop/src/app/chat/sidebar/project-dialog.test.tsx",
+    "apps/desktop/src/app/chat/sidebar/project-dialog.tsx",
+    "apps/desktop/src/app/chat/sidebar/projects/project-menu.test.tsx",
+    "apps/desktop/src/app/chat/sidebar/projects/project-menu.tsx",
+    "apps/desktop/src/app/chat/sidebar/sessions-section.tsx",
+    "apps/desktop/src/app/chat/sidebar/vietnamese-navigation.test.tsx",
+    "apps/desktop/src/app/contrib/controller.tsx",
+    "apps/desktop/src/app/contrib/panes.tsx",
+    "apps/desktop/src/app/contrib/wiring.tsx",
+    "apps/desktop/src/app/right-sidebar/index.test.tsx",
+    "apps/desktop/src/app/right-sidebar/index.tsx",
+    "apps/desktop/src/app/session/hooks/use-prompt-actions/utils.ts",
+    "apps/desktop/src/app/session/hooks/use-prompt-actions/vietnamese-usage-summary.test.ts",
+    "apps/desktop/src/app/settings/about-settings.tsx",
+    "apps/desktop/src/app/settings/billing/index.test.tsx",
+    "apps/desktop/src/app/shell/bilingual-quick-toggle.test.tsx",
+    "apps/desktop/src/app/shell/bilingual-quick-toggle.tsx",
+    "apps/desktop/src/app/shell/hooks/use-statusbar-items.tsx",
+    "apps/desktop/src/app/shell/titlebar-controls.tsx",
+    "apps/desktop/src/app/shell/titlebar-icon.tsx",
+    "apps/desktop/src/app/shell/titlebar.test.ts",
+    "apps/desktop/src/app/shell/titlebar.ts",
+    "apps/desktop/src/app/types.ts",
+    "apps/desktop/src/components/assistant-ui/tool/fallback-model/format.ts",
+    "apps/desktop/src/components/assistant-ui/tool/fallback-model/vietnamese-truncation.test.ts",
+    "apps/desktop/src/components/chat/intro.test.tsx",
+    "apps/desktop/src/components/chat/intro.tsx",
+    "apps/desktop/src/components/onboarding/index.test.tsx",
+    "apps/desktop/src/components/onboarding/index.tsx",
+    "apps/desktop/src/components/pane-shell/tree/dock-lock.test.ts",
+    "apps/desktop/src/components/pane-shell/tree/renderer/lone-header.test.ts",
+    "apps/desktop/src/components/pane-shell/tree/renderer/lone-header.ts",
+    "apps/desktop/src/components/pane-shell/tree/renderer/tree-group.test.tsx",
+    "apps/desktop/src/components/pane-shell/tree/renderer/tree-group.tsx",
+    "apps/desktop/src/components/pane-shell/tree/store.ts",
+    "apps/desktop/src/components/ui/button.tsx",
+    "apps/desktop/src/components/ui/pane-tab.test.tsx",
+    "apps/desktop/src/components/ui/pane-tab.tsx",
+    "apps/desktop/src/global.d.ts",
+    "apps/desktop/src/i18n/ar.ts",
+    "apps/desktop/src/i18n/catalog.ts",
+    "apps/desktop/src/i18n/context.tsx",
+    "apps/desktop/src/i18n/en.ts",
+    "apps/desktop/src/i18n/fresh-profile-locale.test.tsx",
+    "apps/desktop/src/i18n/ja.ts",
+    "apps/desktop/src/i18n/languages.ts",
+    "apps/desktop/src/i18n/types.ts",
+    "apps/desktop/src/i18n/vi-community.test.ts",
+    "apps/desktop/src/i18n/vi.ts",
+    "apps/desktop/src/i18n/vietnamese-locale-policy.test.ts",
+    "apps/desktop/src/i18n/vietnamese-locale-policy.ts",
+    "apps/desktop/src/i18n/zh-hant.ts",
+    "apps/desktop/src/i18n/zh.ts",
+    "apps/desktop/src/main.tsx",
+    "apps/desktop/src/plugins/hermes-bots/plugin.js",
+    "apps/desktop/src/plugins/hermes-bots/tests/legacy-sdk-compat.test.mjs",
+    "apps/desktop/src/plugins/hermes-vietnamese/desktop-version.test.ts",
+    "apps/desktop/src/plugins/hermes-vietnamese/desktop-version.ts",
+    "apps/desktop/src/plugins/hermes-vietnamese/edition-info.ts",
+    "apps/desktop/src/plugins/hermes-vietnamese/home-intro.tsx",
+    "apps/desktop/src/plugins/hermes-vietnamese/i18n.ts",
+    "apps/desktop/src/plugins/hermes-vietnamese/plugin.test.tsx",
+    "apps/desktop/src/plugins/hermes-vietnamese/plugin.tsx",
+    "apps/desktop/src/plugins/hermes-vietnamese/product-metadata.json",
+    "apps/desktop/src/plugins/hermes-vietnamese/session-control-bar.test.tsx",
+    "apps/desktop/src/plugins/hermes-vietnamese/session-control-bar.tsx",
+    "apps/desktop/src/plugins/hermes-vietnamese/support-report.test.ts",
+    "apps/desktop/src/plugins/hermes-vietnamese/support-report.ts",
+    "apps/desktop/src/store/layout-connection-scope.test.ts",
+    "apps/desktop/src/store/layout-pinned-order.test.ts",
+    "apps/desktop/src/store/layout.ts",
+    "apps/desktop/src/store/preview-open-browser.test.ts",
+    "apps/desktop/src/store/preview.test.ts",
+    "apps/desktop/src/store/preview.ts",
+    "apps/desktop/src/store/projects.ts",
+    "apps/desktop/src/store/updates.ts",
+    "apps/desktop/src/store/v32-right-sidebar-default.test.ts",
+    "apps/desktop/src/styles.css",
+    "apps/desktop/src/themes/context.tsx",
+    "apps/desktop/src/themes/vietnamese-v32-appearance-migration.test.ts",
+    "apps/desktop/src/themes/vietnamese-v32-appearance-migration.ts"
+  ],
+  "materializedFiles": [
+    {
+      "path": "apps/desktop/e2e/v32-shell-contract-fixture.ts",
+      "sha256": "671c75f2d9e800ff9c50eb88a6ac8f9b19c791a14f446054e98533eebac5837b"
+    },
+    {
+      "path": "apps/desktop/e2e/v32-shell-geometry.spec.ts",
+      "sha256": "b8da1638e05c9adeccece1b414a3cedcab9492ef6fe5a2d0847c566bf5759ce2"
+    },
+    {
+      "path": "apps/desktop/e2e/v32-shell-geometry.spec.ts-snapshots/v32-shell-ember-light-1000x800-win32.png",
+      "sha256": "698a792cf5a6e29d5b7b6548d434242199ae6a24c5560f74d43ed1a28273d22e"
+    },
+    {
+      "path": "apps/desktop/e2e/v32-shell-geometry.spec.ts-snapshots/v32-shell-ember-light-1280x800-win32.png",
+      "sha256": "a738bec2ff18f83aa055ba60d8ac1b04bc7c0245cf3babdb37cc1a03deb23238"
+    },
+    {
+      "path": "apps/desktop/electron/vietnamese-identity-migration.test.ts",
+      "sha256": "906c13ac371a73332042b523768836378478e4988be3124456b269bdd27e26f2"
+    },
+    {
+      "path": "apps/desktop/electron/vietnamese-identity-migration.ts",
+      "sha256": "c793564e827a80112476a4619208271a2cb4fba1f091d776bcc2dd8b81e30593"
+    },
+    {
+      "path": "apps/desktop/index.html",
+      "sha256": "fb7c4e90b8742a9006f98481070b97919fd26d1b6f5dc880246fefb4b8866209"
+    },
+    {
+      "path": "apps/desktop/package.json",
+      "sha256": "7c29618fc1c12a5f8d72715160810c84cde09a70f9236f2ae3560bc116faa070"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/composer/hooks/use-composer-placeholder.test.tsx",
+      "sha256": "978c541f4c598c1786029167a3075661e3f57bf55f0bdeec9859d03062d03cee"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/composer/hooks/use-composer-placeholder.ts",
+      "sha256": "29c35328196d4b7437f981cb87c6fb5b35e5fe82af9f847f119a541a373a7e07"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/index.tsx",
+      "sha256": "29d15103ee5a07dfbefb47b9be369afe91a03e63ee9e62014fe71de53d555616"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/pane-mirror.ts",
+      "sha256": "5d4044dbbd501058630fda5c6e4d7e008303c33b0969ac0ba936df1e8600981a"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/preview-tile-lock.test.ts",
+      "sha256": "39a30145268a7802fbb39b2e6b14b588423c56ecf970e747af8d0888ab7d00bf"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/preview-tile.tsx",
+      "sha256": "a7acaea981f3001a25dbfe2c491852807390e1b8d83e1701a270b4b193e1b8ab"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/right-rail/preview-browser-bar.test.tsx",
+      "sha256": "e174924929131fac46dcdd4364bcae9b099cda037a5ba1cd2c280eaa078bfff5"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/right-rail/preview-browser-bar.tsx",
+      "sha256": "0b2bdf153854865ee26a7668819c03c1ddc242ff706cdd33eda041fa3b7c0a33"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/right-rail/preview-browser-fit.test.ts",
+      "sha256": "fd3d480f26d987b9680697be61eb5cea891946fb25149523df1176972578aa1a"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/right-rail/preview-browser-fit.ts",
+      "sha256": "9b52529c68309531e1ae0be5eea5f409fd17ba3643175936316b0406e7f0415b"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/right-rail/preview-pane.test.tsx",
+      "sha256": "5dffad8874ed264767b7deddd264a9ba5818d283ed1bfa08844d1aeeb7b37255"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/right-rail/preview-pane.tsx",
+      "sha256": "21a56da5baad3222a62f86b8ddae4fdd067a1d181b7a56a2feaf96f8225eddd3"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/session-controls-slot.test.tsx",
+      "sha256": "1e1a6dd24a7dbb9e6bc2b1578dc68b32c9dad9152a43b52de8ce97cd33919f24"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/session-controls-slot.tsx",
+      "sha256": "dde9aec7cfae775eef7bcd8999b70ca93c55f46dcf35548de2411b451f44d11e"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/session-draft-title.test.tsx",
+      "sha256": "037833785c068bd61f8a0a5b84d9525a3656e1168e1b283849e424f15ebe068a"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/session-draft-title.tsx",
+      "sha256": "6e70c59af8b918e97eb114d010a4258de5f976418269e6750a5826ce8711affd"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/sidebar/filter-menu.tsx",
+      "sha256": "e57656d9844ab7b412fdf718d32ac1050ebbbfd0e84b3628c580ea71c734973a"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/sidebar/index.tsx",
+      "sha256": "4ef6aab697dec03979d9f120904f80a5b58490996bb88428b2ac1b85a1d969b4"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/sidebar/project-dialog.test.tsx",
+      "sha256": "a81adb67215f8a6fd489796b001c6f34401a2c619fbba28e263132cf0ffcec81"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/sidebar/project-dialog.tsx",
+      "sha256": "d84f2ea1835591aec179040c68e3e47f0411020bdf666044bf2f900b46b1e895"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/sidebar/projects/project-menu.test.tsx",
+      "sha256": "e57cfc33e72a8d4a6fbc657982a003dbe5912b5018a85f8d7223e3ed14b3a595"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/sidebar/projects/project-menu.tsx",
+      "sha256": "96af8560b6fd08f9179f231ef43322c66583eb0eade19158ce97e8b81fbbc535"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/sidebar/sessions-section.tsx",
+      "sha256": "7244a6e750537faa1f3bddb43616a93b35d4e9a584c7260b7be7de151b13e326"
+    },
+    {
+      "path": "apps/desktop/src/app/chat/sidebar/vietnamese-navigation.test.tsx",
+      "sha256": "4765b0ad7124cb1486356a84841ef75df512de05dfb7abfa30c38300c23d560e"
+    },
+    {
+      "path": "apps/desktop/src/app/contrib/controller.tsx",
+      "sha256": "31c6849bd247aa01c0ce3070810f0db8359234969f6577d0c702b65b554c84df"
+    },
+    {
+      "path": "apps/desktop/src/app/contrib/panes.tsx",
+      "sha256": "a74203ea42a419e050aa72dfc6466b7edfe81162c20ccc55a1c20db3f7adde87"
+    },
+    {
+      "path": "apps/desktop/src/app/contrib/wiring.tsx",
+      "sha256": "19e4247ee990c8624e2cd68fbd27f714e3c30107c0c68a35776ce23d4bf4b764"
+    },
+    {
+      "path": "apps/desktop/src/app/right-sidebar/index.test.tsx",
+      "sha256": "7263b4027496810b7456de23fd6a13bada1c08f4842f1805982a149965851ea0"
+    },
+    {
+      "path": "apps/desktop/src/app/right-sidebar/index.tsx",
+      "sha256": "e37526c24169ef6e3fb7721f15804a609f0b446d66d48e721caa87ceac68568a"
+    },
+    {
+      "path": "apps/desktop/src/app/session/hooks/use-prompt-actions/utils.ts",
+      "sha256": "4327cc76eb78633fe02288ee88416972d49dc65c6f31cc26c1f4a3157e4ebcb7"
+    },
+    {
+      "path": "apps/desktop/src/app/session/hooks/use-prompt-actions/vietnamese-usage-summary.test.ts",
+      "sha256": "6952309a5ba5fa7fa2d0974470a61f2da5d9517d132fe5010991343aa95f9d05"
+    },
+    {
+      "path": "apps/desktop/src/app/settings/about-settings.tsx",
+      "sha256": "13ca55096e4255b49931aa342f7c2e1114d2102fd573321d902d722c2a7eb7d6"
+    },
+    {
+      "path": "apps/desktop/src/app/settings/billing/index.test.tsx",
+      "sha256": "10cff81e22d938d2ede0f9ea419002d73089473b4b6885ed3834570e794184d2"
+    },
+    {
+      "path": "apps/desktop/src/app/shell/bilingual-quick-toggle.test.tsx",
+      "sha256": "be2febca7a62c1ec80dbbc6a697557fef15a7338599227c4af7d0f82d357c71f"
+    },
+    {
+      "path": "apps/desktop/src/app/shell/bilingual-quick-toggle.tsx",
+      "sha256": "3524aa91193172d13e98eae934398646aea8c1f6bcf1edb97db006eff07ae062"
+    },
+    {
+      "path": "apps/desktop/src/app/shell/hooks/use-statusbar-items.tsx",
+      "sha256": "3b1d96e11defc32cd31f9e21adc14361bbe428546d3895cc9ccadd7ca284b2f2"
+    },
+    {
+      "path": "apps/desktop/src/app/shell/titlebar-controls.tsx",
+      "sha256": "e51c3ef16563aa7ddb9d97441c5a2f5b651b9bb514161f048af6d981ebe0dbb2"
+    },
+    {
+      "path": "apps/desktop/src/app/shell/titlebar-icon.tsx",
+      "sha256": "debc6fdc051b9029c26a077f7ea1d470893a135b0297d43b446abada1a8de990"
+    },
+    {
+      "path": "apps/desktop/src/app/shell/titlebar.test.ts",
+      "sha256": "5fba6a20d7bbf1e9b895810ccfa9e72af66ad692a583294a8e7b2c453f0d89c3"
+    },
+    {
+      "path": "apps/desktop/src/app/shell/titlebar.ts",
+      "sha256": "9477a2df94c1342c1a90d0ca42adb912d9736f06b444a43e5a77f2435b8c05f0"
+    },
+    {
+      "path": "apps/desktop/src/app/types.ts",
+      "sha256": "10cd2dab1ae6ae6d144c02eb634cc0ddef8b4944ad4b0c09bc702a7aa0fa18c4"
+    },
+    {
+      "path": "apps/desktop/src/components/assistant-ui/tool/fallback-model/format.ts",
+      "sha256": "b26b9fbe41caa45dbbdedec6e37483cede32c9f0ba16060cd9dd622f6ff01347"
+    },
+    {
+      "path": "apps/desktop/src/components/assistant-ui/tool/fallback-model/vietnamese-truncation.test.ts",
+      "sha256": "8f48cec35622ed2252c536b7ea394a274b62b05eb14ac6e97fb1ceecf5e607be"
+    },
+    {
+      "path": "apps/desktop/src/components/chat/intro.test.tsx",
+      "sha256": "72c8f4d0f0a11c3e8de8ca1f741c51fc4ed9e7064d2e50ccd1b96fbcd96a97cd"
+    },
+    {
+      "path": "apps/desktop/src/components/chat/intro.tsx",
+      "sha256": "915c71c66466aeed93d1e3eaaf3c574de4cd7290a338d6781b80289a3df44d06"
+    },
+    {
+      "path": "apps/desktop/src/components/onboarding/index.test.tsx",
+      "sha256": "e25847da18c128f5d3d8be57235489bd6ec8791dd391c4dc48a3b3759ed7aba0"
+    },
+    {
+      "path": "apps/desktop/src/components/onboarding/index.tsx",
+      "sha256": "6deab801e3b3a2f294e1d11656c0bc2d49edf6805a9b28cc949a979d158c884d"
+    },
+    {
+      "path": "apps/desktop/src/components/pane-shell/tree/dock-lock.test.ts",
+      "sha256": "f95528eda2f42bebd49fe6b18e47f04d0dc6f5f02278e7e44ba29cd5a6df59d6"
+    },
+    {
+      "path": "apps/desktop/src/components/pane-shell/tree/renderer/lone-header.test.ts",
+      "sha256": "fac8cf97afa1c0a80af6523fd43b0b460a27fe1466baec3d30c768706b8390a6"
+    },
+    {
+      "path": "apps/desktop/src/components/pane-shell/tree/renderer/lone-header.ts",
+      "sha256": "241d26b9ee726780ae8caf5447972d801d0930ca093a00d3ead383fe361bdfd7"
+    },
+    {
+      "path": "apps/desktop/src/components/pane-shell/tree/renderer/tree-group.test.tsx",
+      "sha256": "c70a1cf2d4f49db321843da76acab0956e57c64c5f8073e5c76efb1fd7af2894"
+    },
+    {
+      "path": "apps/desktop/src/components/pane-shell/tree/renderer/tree-group.tsx",
+      "sha256": "638d17fed42634bcc065422a769fc3e37fa9abdbde6ff483067d6f96e399dc5c"
+    },
+    {
+      "path": "apps/desktop/src/components/pane-shell/tree/store.ts",
+      "sha256": "4996f8c6aadf81dec1db534860ac6fbb68957220a53662ecc910a2300acf9001"
+    },
+    {
+      "path": "apps/desktop/src/components/ui/button.tsx",
+      "sha256": "ed2ce080beaee981496189f366c5bfd6c90b50a9f64a7099e04f42f072c93d9e"
+    },
+    {
+      "path": "apps/desktop/src/components/ui/pane-tab.test.tsx",
+      "sha256": "f34ba63bd003cad54331748255d6311cadaf13468c39292a19f157c1993db8ff"
+    },
+    {
+      "path": "apps/desktop/src/components/ui/pane-tab.tsx",
+      "sha256": "f5d555eee2ec08375a8c6c160396edd6e0d4919c2872d3e0e4b65ba6bcfcc465"
+    },
+    {
+      "path": "apps/desktop/src/global.d.ts",
+      "sha256": "18c9fca0f95e052eb36352571fa7a781d07506a0cf52a4774818ca581e2c1736"
+    },
+    {
+      "path": "apps/desktop/src/i18n/ar.ts",
+      "sha256": "a6e211313f04cfe105e6c6df9884f59df818d5cdad0d3bcdbe8239871c7fbd61"
+    },
+    {
+      "path": "apps/desktop/src/i18n/catalog.ts",
+      "sha256": "dc92438cc6efe34739991f68826a2bbe9cc051368355afcaa2fdd5630a1a7373"
+    },
+    {
+      "path": "apps/desktop/src/i18n/context.tsx",
+      "sha256": "ca65cfc067565c57cac0b74a166ca1868c06752c687edf16611c8ed6e1abc00f"
+    },
+    {
+      "path": "apps/desktop/src/i18n/en.ts",
+      "sha256": "d53534d4dcd6181d5b74e77673c55c1ec5429b5af5aef65dc48219885c89bd9a"
+    },
+    {
+      "path": "apps/desktop/src/i18n/fresh-profile-locale.test.tsx",
+      "sha256": "0af77fe2a7e23be589c33bde7f17acced7b197eac1b50aad37cfa7311ed78674"
+    },
+    {
+      "path": "apps/desktop/src/i18n/ja.ts",
+      "sha256": "b5d36fb41430acfc0b955d3d18125236fee274ff2294eca032e8d0b83d40de13"
+    },
+    {
+      "path": "apps/desktop/src/i18n/languages.ts",
+      "sha256": "7d88faded6ab050240579296d50a8d91c9dc947db4e4764ca07309beafc974e0"
+    },
+    {
+      "path": "apps/desktop/src/i18n/types.ts",
+      "sha256": "f6bb02fe90e05e68a77702dac2d116c28c8c59c2eafc3687be4a53d28d2e88e5"
+    },
+    {
+      "path": "apps/desktop/src/i18n/vi-community.test.ts",
+      "sha256": "e565ae7994aa75ea3546895aaefe2d5c3e607f11b48fbde015295193bec0c4fe"
+    },
+    {
+      "path": "apps/desktop/src/i18n/vi.ts",
+      "sha256": "28bb1ab3aaeb0d03b3d72b2af03bd1b67770ac10ae088911716613d68dd4e24b"
+    },
+    {
+      "path": "apps/desktop/src/i18n/vietnamese-locale-policy.test.ts",
+      "sha256": "6ef2ed9cb04c0fbf199f4fce0815196bfc53464814f85e71f85c0168268df979"
+    },
+    {
+      "path": "apps/desktop/src/i18n/vietnamese-locale-policy.ts",
+      "sha256": "83e348a0f8ca0cd7622ae853303d6d3878c1a32dffe33a55ed4d1455db3a72d4"
+    },
+    {
+      "path": "apps/desktop/src/i18n/zh-hant.ts",
+      "sha256": "a8963de4265efe5a58b2de74664c83a2d8e62cd00d2c4e84f940ab6347d436e2"
+    },
+    {
+      "path": "apps/desktop/src/i18n/zh.ts",
+      "sha256": "cadf0c5585dc0033bfdb63508e898d8dbc2dc0374796aaffd33f7f9d777497ea"
+    },
+    {
+      "path": "apps/desktop/src/main.tsx",
+      "sha256": "69abf095916c252186250f1ed03f387cac893b42179e39a41e520c07b4e755df"
+    },
+    {
+      "path": "apps/desktop/src/plugins/hermes-bots/plugin.js",
+      "sha256": "f9df4ea8ddd7b7d439fa82efc757dc2831278d2910059eee6075d136d503877c"
+    },
+    {
+      "path": "apps/desktop/src/plugins/hermes-bots/tests/legacy-sdk-compat.test.mjs",
+      "sha256": "8ac9974e43a065bc57244aa31a332acc11defe0a59878ab5dffb52be68e74ec0"
+    },
+    {
+      "path": "apps/desktop/src/plugins/hermes-vietnamese/desktop-version.test.ts",
+      "sha256": "7a4ead74a4f3765e2573f4af1bbae339e759d3002b0f9a1243698db90835e798"
+    },
+    {
+      "path": "apps/desktop/src/plugins/hermes-vietnamese/desktop-version.ts",
+      "sha256": "cdf63fba85c604324f08e8af9d3e0e40a4b79d81cd80ae6e2602cee6a08be5db"
+    },
+    {
+      "path": "apps/desktop/src/plugins/hermes-vietnamese/edition-info.ts",
+      "sha256": "b477cb683b2f34038ff35991b477f0f65c269d36947669505423152a258c16d1"
+    },
+    {
+      "path": "apps/desktop/src/plugins/hermes-vietnamese/home-intro.tsx",
+      "sha256": "3829259d95921308c718493410dfb55956d8348969941e9485e07387cd2c7efa"
+    },
+    {
+      "path": "apps/desktop/src/plugins/hermes-vietnamese/i18n.ts",
+      "sha256": "da9e519af1f235e1eb90ec4eb46e665d849fbf448a080753a917c61329968c45"
+    },
+    {
+      "path": "apps/desktop/src/plugins/hermes-vietnamese/plugin.test.tsx",
+      "sha256": "34ba2b4499cef43fec3b2a4735d35bf173af8efb64f6dfa757e6351c22b06d7d"
+    },
+    {
+      "path": "apps/desktop/src/plugins/hermes-vietnamese/plugin.tsx",
+      "sha256": "15a3460aa5bdb2398f7a4016a4a89c3e5255d47bb48e13a49d85499525e0b8f2"
+    },
+    {
+      "path": "apps/desktop/src/plugins/hermes-vietnamese/product-metadata.json",
+      "sha256": "7054c5dc4d34fc764b3dc6007f286a981e35704f3da47be28e132c963e8e8575"
+    },
+    {
+      "path": "apps/desktop/src/plugins/hermes-vietnamese/session-control-bar.test.tsx",
+      "sha256": "dffaa7bb2ae8352e7da740d9546118871d7aeb1bdeac431851b43a7ec5be8171"
+    },
+    {
+      "path": "apps/desktop/src/plugins/hermes-vietnamese/session-control-bar.tsx",
+      "sha256": "6768aa17055081fbb6106636b01efbda9842482206dd07376c964f3e548c1519"
+    },
+    {
+      "path": "apps/desktop/src/plugins/hermes-vietnamese/support-report.test.ts",
+      "sha256": "c73f0a8fff5ce1f301c7958b3be4de0ad70cbcfaafb503255c682d01c6de68ee"
+    },
+    {
+      "path": "apps/desktop/src/plugins/hermes-vietnamese/support-report.ts",
+      "sha256": "2024b825675f87f3be66a0010f0da9a06656eb15250d2994b0b7401c784f223f"
+    },
+    {
+      "path": "apps/desktop/src/store/layout-connection-scope.test.ts",
+      "sha256": "91237df5e702263f1feb08cae6f550dfb9fdba13ff068b9a3041144f0e8f9715"
+    },
+    {
+      "path": "apps/desktop/src/store/layout-pinned-order.test.ts",
+      "sha256": "a2ad9b5cb222ab2ae18880366fbd235c9b504815565ce41a6a92c343b9dbb3f8"
+    },
+    {
+      "path": "apps/desktop/src/store/layout.ts",
+      "sha256": "97ad21cdd4c8ed6f60a9fb69d8a23ed4364573be779d56282c7aa0429ffdf7e1"
+    },
+    {
+      "path": "apps/desktop/src/store/preview-open-browser.test.ts",
+      "sha256": "6b97548409ca470a48b1746212c4f9aed1016723b53c04ddc4b2e316b85329c6"
+    },
+    {
+      "path": "apps/desktop/src/store/preview.test.ts",
+      "sha256": "1ef47e4c9db3eae7cf3056d461bdec7954d4b521b8f7344f24fd5c1cf07b0260"
+    },
+    {
+      "path": "apps/desktop/src/store/preview.ts",
+      "sha256": "62bb591b30a38d2209f9a8425d31b5a33b6b1dec9c34035a7eea7e64a48ef43b"
+    },
+    {
+      "path": "apps/desktop/src/store/projects.ts",
+      "sha256": "fb301087bacf022f27cf527612f327c7f554e8275534149b52ec5b9d4132e46c"
+    },
+    {
+      "path": "apps/desktop/src/store/updates.ts",
+      "sha256": "f34e4de00f227629161cadf98cc402bf1a2519229c56cdade93eddc09a8b1058"
+    },
+    {
+      "path": "apps/desktop/src/store/v32-right-sidebar-default.test.ts",
+      "sha256": "e12fde147e0efbada2a2d118186b727d445fadf34c0eedc3aa41519b75819842"
+    },
+    {
+      "path": "apps/desktop/src/styles.css",
+      "sha256": "137d30e703f752827091f483f97664d3ac8c8f6d8b016ab9542413df943c5ae7"
+    },
+    {
+      "path": "apps/desktop/src/themes/context.tsx",
+      "sha256": "866c2224b463b95deb93649e37353795138e7d6c6e5347d480fe53bfebcaa509"
+    },
+    {
+      "path": "apps/desktop/src/themes/vietnamese-v32-appearance-migration.test.ts",
+      "sha256": "ca0c6e1ec540db624b55f932222411b2caff968dc5a78a7342f53507d7784192"
+    },
+    {
+      "path": "apps/desktop/src/themes/vietnamese-v32-appearance-migration.ts",
+      "sha256": "66035d3b957221cb74e6b59f2baca82e0eb749e18fd2022e2220e35a5aa13148"
+    }
+  ]
+}

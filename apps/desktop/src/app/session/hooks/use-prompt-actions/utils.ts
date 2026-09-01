@@ -4,7 +4,15 @@ import { translateNow, type Translations } from '@/i18n'
 import type { ChatMessage } from '@/lib/chat-messages'
 import { type CommandsCatalogLike, filterDesktopCommandsCatalog } from '@/lib/desktop-slash-commands'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
+import { parseRendererRuntimeKey } from '@/lib/session-runtime-key'
 import type { ComposerAttachment } from '@/store/composer'
+
+import {
+  classifySessionRuntimeNotFound,
+  isSessionRuntimeRecoveryFailure,
+  SESSION_RUNTIME_RECOVERY_MESSAGE,
+  SessionRuntimeRecoveryError
+} from '../../session-binding-registry'
 
 export type GatewayRequest = <T>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>
 
@@ -41,15 +49,17 @@ export function isProviderSetupError(error: unknown) {
 }
 
 export function inlineErrorMessage(error: unknown, fallback: string): string {
+  if (isSessionRuntimeRecoveryFailure(error)) {
+    return SESSION_RUNTIME_RECOVERY_MESSAGE
+  }
+
   const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : fallback
 
   return (raw.match(/Error invoking remote method '[^']+': Error: (.+)$/)?.[1] ?? raw).replace(/^Error:\s*/, '').trim()
 }
 
 export function isSessionNotFoundError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error)
-
-  return /session not found/i.test(message)
+  return Boolean(classifySessionRuntimeNotFound(error))
 }
 
 /**
@@ -88,7 +98,9 @@ export interface SessionRecoveryDeps {
    * pointing at the dead runtime and every atom-reading surface desyncs
    * (#62471).
    */
-  onRecovered?: (liveSessionId: string) => void
+  onRecovered?: (liveSessionId: string) => string
+  /** Atomically retire the dead binding before attempting a durable resume. */
+  onRuntimeInvalidated?: (runtimeSessionId: string) => void
   /**
    * Non-null reason ⇒ abort instead of retrying. Evaluated AFTER the resume
    * and BEFORE the retry, because the resume is the slow await during which a
@@ -100,8 +112,9 @@ export interface SessionRecoveryDeps {
 async function defaultResolveProfile(storedSessionId: string): Promise<string | undefined> {
   // Lazy so utils.ts has no init-time cycle with use-session-actions.
   const { resolveSessionProfile } = await import('../use-session-actions/utils')
+  const { sessionRouteOwner } = await import('@/store/session-route-owner')
 
-  return resolveSessionProfile(storedSessionId)
+  return resolveSessionProfile(storedSessionId, sessionRouteOwner(storedSessionId))
 }
 
 /**
@@ -115,6 +128,10 @@ export async function resumeStoredRuntimeSession(
 ): Promise<null | string> {
   const resolveProfile = deps.resolveProfile ?? defaultResolveProfile
   const profile = await resolveProfile(storedSessionId)
+
+  if (!profile?.trim()) {
+    throw new SessionRuntimeRecoveryError(new Error('The durable session owner is unresolved.'))
+  }
 
   const resumed = await deps.requestGateway<{ session_id: string }>('session.resume', {
     session_id: storedSessionId,
@@ -163,6 +180,8 @@ export async function withSessionNotFoundResume<T>(
       throw err
     }
 
+    deps.onRuntimeInvalidated?.(sessionId)
+
     let recoveredId: null | string
 
     try {
@@ -181,9 +200,23 @@ export async function withSessionNotFoundResume<T>(
       throw new SessionRecoveryAborted(drift, recoveredId)
     }
 
-    deps.onRecovered?.(recoveredId)
+    let rendererRuntimeId: string
 
-    return { recovered: true, result: await call(recoveredId), sessionId: recoveredId }
+    try {
+      if (!deps.onRecovered) {
+        throw new Error('Recovery has no exact runtime binding callback.')
+      }
+
+      rendererRuntimeId = deps.onRecovered(recoveredId)
+    } catch (error) {
+      throw new SessionRuntimeRecoveryError(error)
+    }
+
+    if (!parseRendererRuntimeKey(rendererRuntimeId)) {
+      throw new SessionRuntimeRecoveryError(new Error('Recovery did not produce an exact renderer runtime key.'))
+    }
+
+    return { recovered: true, result: await call(rendererRuntimeId), sessionId: rendererRuntimeId }
   }
 }
 
@@ -537,9 +570,7 @@ export function renderRpcResult(response: unknown, name: string): string {
     const output = Number(r.output ?? 0)
     const total = Number(r.total ?? 0)
 
-    const lines: string[] = [
-      `Usage: ${calls.toLocaleString()} calls · ${input.toLocaleString()} in / ${output.toLocaleString()} out · ${total.toLocaleString()} total`
-    ]
+    const lines: string[] = [translateNow('common.sessionUsageSummary', calls, input, output, total)]
 
     if (Array.isArray(r.credits_lines)) {
       for (const credit of r.credits_lines) {

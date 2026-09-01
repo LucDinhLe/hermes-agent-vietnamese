@@ -507,9 +507,9 @@
 
     --sidebar-width: 14.8125rem;
     --chat-min-width: 28rem;
-    --titlebar-control-size: 24px;
-    --titlebar-control-height: 24px;
-    --titlebar-icon-size: 13.9px;
+    --titlebar-control-size: 2rem;
+    --titlebar-control-height: 2rem;
+    --titlebar-icon-size: 16px;
     --sidebar-content-inline-padding: 1rem;
 
     --sidebar: var(--dt-sidebar-bg);
@@ -1593,14 +1593,30 @@ body.guest-pointer-lock :is(webview, iframe) {
 }
 
 [data-slot='aui_intro'] > div {
+  position: relative;
   max-width: var(--composer-width);
 }
 
-[data-slot='aui_intro'] p:last-child {
+[data-slot='aui_intro-tagline'] {
   max-width: 34rem;
   margin-inline: auto;
   color: var(--ui-text-tertiary);
   font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+/* Keep the V32 wordmark/tagline group on its original centre line while still
+   making the Vietnamese edition credit explicit. The credit is supplemental
+   identity, so it sits below the measured hero instead of moving the hero. */
+[data-slot='aui_intro-attribution'] {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  left: 0;
+  max-width: 34rem;
+  margin: 0.5rem auto 0;
+  color: var(--ui-text-tertiary);
+  font-size: 0.75rem;
   line-height: 1.45;
 }
 
@@ -1614,6 +1630,24 @@ body.guest-pointer-lock :is(webview, iframe) {
 
 .fit-text > [aria-hidden] {
   visibility: hidden;
+}
+
+/* The V32 browser rail is resizable. Keep its shared-agent affordance visible
+   as an icon at laptop widths, then reveal the exact V32 label once the rail
+   itself has room. The address field keeps priority over secondary actions. */
+.preview-browser-bar {
+  container-name: preview-browser-bar;
+  container-type: inline-size;
+}
+
+.preview-browser-shared-label {
+  display: none;
+}
+
+@container preview-browser-bar (min-width: 19rem) {
+  .preview-browser-shared-label {
+    display: inline;
+  }
 }
 
 .fit-text > :not([aria-hidden]) {

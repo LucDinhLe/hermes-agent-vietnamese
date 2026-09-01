@@ -6,7 +6,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { onComposerInsertRequest } from '@/app/chat/composer/focus'
 import { I18nProvider } from '@/i18n'
 import { clearClarifyRequest, setClarifyRequest } from '@/store/clarify'
-import { $gateway } from '@/store/gateway'
 import { $activeSessionId } from '@/store/session'
 
 import { ClarifyTool, readClarifyBatchResult, readClarifyResult } from './clarify-tool'
@@ -17,11 +16,29 @@ vi.mock('@assistant-ui/react', () => ({
   useAuiState: () => true
 }))
 
+const { eventSourceRequest, eventSourceRoute } = vi.hoisted(() => ({
+  eventSourceRequest: vi.fn(
+    async (_method: string, _params: Record<string, unknown>): Promise<Record<string, unknown>> => ({ ok: true })
+  ),
+  eventSourceRoute: vi.fn()
+}))
+
+vi.mock('@/store/gateway-event-source', () => ({
+  requestForGatewayEventSource: (
+    _sourceRuntimeId: null | string | undefined,
+    method: string,
+    params: Record<string, unknown>
+  ) => {
+    eventSourceRoute(_sourceRuntimeId, method, params)
+
+    return eventSourceRequest(method, params)
+  }
+}))
+
 afterEach(() => {
   cleanup()
   clearClarifyRequest()
   $activeSessionId.set(null)
-  $gateway.set(null)
   vi.clearAllMocks()
 })
 
@@ -72,10 +89,9 @@ function liveClarifyProps(choices = ['staging', 'production']): ToolCallMessageP
 }
 
 function renderLiveClarify({ multiSelect = false }: { multiSelect?: boolean } = {}) {
-  const request = vi.fn().mockResolvedValue({ ok: true })
+  eventSourceRequest.mockResolvedValue({ ok: true })
 
   $activeSessionId.set('session-1')
-  $gateway.set({ request } as never)
   setClarifyRequest({
     choices: ['staging', 'production'],
     multiSelect,
@@ -85,7 +101,7 @@ function renderLiveClarify({ multiSelect = false }: { multiSelect?: boolean } = 
   })
   renderClarify(<ClarifyTool {...liveClarifyProps()} />)
 
-  return request
+  return eventSourceRequest
 }
 
 describe('ClarifyTool choice selection', () => {
@@ -115,6 +131,7 @@ describe('ClarifyTool choice selection', () => {
         request_id: 'request-1'
       })
     })
+    expect(eventSourceRoute.mock.calls.at(-1)?.[0]).toBe('session-1')
   })
 
   it('keeps single-select replacement and plain-string submission', async () => {
@@ -371,10 +388,9 @@ describe('ClarifyTool keyboard navigation', () => {
 
 describe('ClarifyTool recommended option', () => {
   it('dims the (Recommended) label and answers with the choice the backend sent', async () => {
-    const request = vi.fn().mockResolvedValue({ ok: true })
+    eventSourceRequest.mockResolvedValue({ ok: true })
 
     $activeSessionId.set('session-1')
-    $gateway.set({ request } as never)
     setClarifyRequest({
       choices: ['staging (Recommended)', 'production'],
       multiSelect: false,
@@ -395,7 +411,7 @@ describe('ClarifyTool recommended option', () => {
     // The decorated string goes back verbatim; the tool strips the label before
     // the agent ever sees the answer.
     await waitFor(() => {
-      expect(request).toHaveBeenCalledWith('clarify.respond', {
+      expect(eventSourceRequest).toHaveBeenCalledWith('clarify.respond', {
         answer: 'staging (Recommended)',
         request_id: 'request-1'
       })
@@ -418,7 +434,6 @@ describe('ClarifyTool pending marker', () => {
 
   it('does not mark a free-text (no-choice) pending card', () => {
     $activeSessionId.set('session-1')
-    $gateway.set({ request: vi.fn().mockResolvedValue({ ok: true }) } as never)
     setClarifyRequest({
       choices: null,
       multiSelect: false,
@@ -476,10 +491,9 @@ function liveBatchProps(): ToolCallMessagePartProps {
 }
 
 function renderLiveBatch(lockedAnswers?: Record<string, string>) {
-  const request = vi.fn().mockResolvedValue({ ok: true, remaining: [] })
+  eventSourceRequest.mockResolvedValue({ ok: true, remaining: [] })
 
   $activeSessionId.set('session-1')
-  $gateway.set({ request } as never)
   setClarifyRequest({
     choices: null,
     lockedAnswers,
@@ -494,7 +508,7 @@ function renderLiveBatch(lockedAnswers?: Record<string, string>) {
   })
   renderClarify(<ClarifyTool {...liveBatchProps()} />)
 
-  return request
+  return eventSourceRequest
 }
 
 describe('readClarifyBatchResult', () => {
@@ -568,6 +582,7 @@ describe('ClarifyTool batch card', () => {
       question_id: 'q1',
       request_id: 'request-batch'
     })
+    expect(eventSourceRoute.mock.calls.map(call => call[0])).toEqual(['session-1', 'session-1'])
   })
 
   it('a staged answer stays editable before confirm', async () => {
@@ -607,6 +622,7 @@ describe('ClarifyTool batch card', () => {
         request_id: 'request-batch'
       })
     })
+    expect(eventSourceRoute.mock.calls.at(-1)?.[0]).toBe('session-1')
   })
 
   it('renders the settled batch with all questions and answers', () => {

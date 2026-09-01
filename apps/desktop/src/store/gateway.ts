@@ -25,6 +25,12 @@ const isOpen = (gateway: HermesGateway | null): boolean => gateway?.connectionSt
 
 interface RegistryConfig {
   onEvent: (event: GatewayEvent) => void
+  /** Socket lifecycle for one exact backend owner. Consumers use close/error
+   * to invalidate runtime capabilities minted by that physical connection. */
+  onBackendStateChanged?: (
+    backend: { connectionId: null | string; gatewayEpoch: number; profile: string },
+    state: ConnectionState
+  ) => void
   onActiveConnectionInvalidated?: (fallbackProfile: string, activationEpoch: number) => void
   onActiveConnectionChanged?: (connection: HermesConnection) => void
   /**
@@ -47,6 +53,7 @@ interface Secondary {
   connectionId: null | string
   connection: HermesConnection | null
   gateway: HermesGateway
+  socketEpoch: number
   activeRequests: number
   connectPromise: Promise<void> | null
   offEvent: () => void
@@ -91,9 +98,15 @@ interface GatewayRegistryState {
   config: RegistryConfig | null
   primaryGateway: HermesGateway | null
   primaryProfile: string
+  primarySocketEpoch: number
   activeKey: string
   activationEpoch: number
+  /** Monotonic socket generation per logical backend owner. Entries may be
+   * disposed and recreated, but an old renderer capability must never see the
+   * same epoch again for that scope. */
+  socketEpochByScope: Map<string, number>
   secondaries: Map<string, Secondary>
+  sharedPrimaryProfiles: Set<string>
   $gateway: ReturnType<typeof atom<HermesGateway | null>>
   $activeProfile: ReturnType<typeof atom<string>>
 }
@@ -105,9 +118,12 @@ function createRegistryState(): GatewayRegistryState {
     config: null,
     primaryGateway: null,
     primaryProfile: 'default',
+    primarySocketEpoch: 0,
     activeKey: 'default',
     activationEpoch: 0,
+    socketEpochByScope: new Map<string, number>(),
     secondaries: new Map<string, Secondary>(),
+    sharedPrimaryProfiles: new Set<string>(),
     // The active gateway instance, exposed for inline message-stream
     // components (inline ClarifyTool, model overlays) that call gateway
     // methods without the instance threaded down through props.
@@ -141,6 +157,32 @@ function gatewayState(): GatewayRegistryState {
 }
 
 const g = gatewayState()
+
+// Existing dev-HMR state predates shared-primary epoch tracking.
+g.sharedPrimaryProfiles ??= new Set<string>()
+g.socketEpochByScope ??= new Map<string, number>()
+
+if (g.primarySocketEpoch > 0) {
+  g.socketEpochByScope.set(
+    g.primaryProfile,
+    Math.max(g.socketEpochByScope.get(g.primaryProfile) ?? 0, g.primarySocketEpoch)
+  )
+}
+
+for (const entry of g.secondaries.values()) {
+  g.socketEpochByScope.set(entry.scope, Math.max(g.socketEpochByScope.get(entry.scope) ?? 0, entry.socketEpoch ?? 0))
+}
+
+function currentSocketEpoch(scope: string): number {
+  return g.socketEpochByScope.get(scope) ?? 0
+}
+
+function advanceSocketEpoch(scope: string): number {
+  const next = currentSocketEpoch(scope) + 1
+  g.socketEpochByScope.set(scope, next)
+
+  return next
+}
 
 // Re-exported as a stable binding: the atom instance lives in `g`, so every hot
 // reload of this module hands back the SAME atom subscribers are already wired
@@ -176,8 +218,32 @@ export function emitLocalGatewayEvent(event: GatewayEvent): void {
 }
 
 export function setPrimaryGateway(gateway: HermesGateway | null, profile = 'default'): void {
+  const nextProfile = normKey(profile)
+  const replacingPhysicalPrimary = g.primaryGateway !== gateway || g.primaryProfile !== nextProfile
+
+  if (replacingPhysicalPrimary) {
+    if (g.primaryGateway) {
+      g.config?.onBackendStateChanged?.(
+        { connectionId: null, gatewayEpoch: currentSocketEpoch(g.primaryProfile), profile: g.primaryProfile },
+        'closed'
+      )
+
+      for (const sharedProfile of g.sharedPrimaryProfiles) {
+        g.config?.onBackendStateChanged?.(
+          { connectionId: null, gatewayEpoch: currentSocketEpoch(sharedProfile), profile: sharedProfile },
+          'closed'
+        )
+      }
+    }
+
+    // Aliases describe the physical primary that was just replaced. They must
+    // be rediscovered against the new descriptor before they can route again.
+    g.sharedPrimaryProfiles.clear()
+  }
+
   g.primaryGateway = gateway
-  g.primaryProfile = normKey(profile)
+  g.primaryProfile = nextProfile
+  g.primarySocketEpoch = currentSocketEpoch(nextProfile)
 }
 
 export function isActivePrimary(): boolean {
@@ -235,7 +301,39 @@ function reportGatewayState(profile: string, state: ConnectionState): void {
 }
 
 export function reportPrimaryGatewayState(state: ConnectionState): void {
+  if (state === 'open') {
+    g.primarySocketEpoch = advanceSocketEpoch(g.primaryProfile)
+  }
+
   reportGatewayState(g.primaryProfile, state)
+  g.config?.onBackendStateChanged?.(
+    { connectionId: null, gatewayEpoch: g.primarySocketEpoch, profile: g.primaryProfile },
+    state
+  )
+
+  for (const profile of g.sharedPrimaryProfiles) {
+    const gatewayEpoch = state === 'open' ? advanceSocketEpoch(profile) : currentSocketEpoch(profile)
+
+    g.config?.onBackendStateChanged?.(
+      { connectionId: null, gatewayEpoch, profile },
+      state
+    )
+  }
+}
+
+/** Current WebSocket generation for one exact backend scope. */
+export function gatewayEpochForAgent(connectionId: null | string, profile: string): number {
+  const key = normKey(profile)
+  const scope = registryBackendScopeKey(connectionId, key)
+
+  return currentSocketEpoch(scope)
+}
+
+/** @internal Test isolation for the process-lifetime/HMR epoch ledger. */
+export function _resetGatewayEpochsForTests(): void {
+  g.socketEpochByScope.clear()
+  g.sharedPrimaryProfiles.clear()
+  g.primarySocketEpoch = 0
 }
 
 function setActive(profile: string): void {
@@ -249,7 +347,7 @@ function beginGatewayActivation(): number {
   return g.activationEpoch
 }
 
-function applyActive(profile: string, activationEpoch: number): boolean {
+function applyActive(profile: string, activationEpoch: number, logicalProfile?: string): boolean {
   if (gatewayActivationEpoch() !== activationEpoch) {
     return false
   }
@@ -271,8 +369,11 @@ function applyActive(profile: string, activationEpoch: number): boolean {
   // truth for "which profile is the active gateway on" — every eviction /
   // fallback path funnels through applyActive, so the published profile can
   // never linger on a backend that is no longer selected (#89206).
-  const routeProfile =
-    g.activeKey === g.primaryProfile ? g.primaryProfile : (g.secondaries.get(g.activeKey)?.profile ?? g.primaryProfile)
+  const routeProfile = logicalProfile
+    ? normKey(logicalProfile)
+    : g.activeKey === g.primaryProfile
+      ? g.primaryProfile
+      : (g.secondaries.get(g.activeKey)?.profile ?? g.primaryProfile)
 
   g.$activeProfile.set(routeProfile)
   g.config?.onActiveRouteChanged?.(routeProfile)
@@ -330,6 +431,7 @@ async function openSecondary(entry: Secondary): Promise<void> {
 
     const wsUrl = await resolveGatewayWsUrl(wsDeps, conn)
 
+    entry.socketEpoch = advanceSocketEpoch(entry.scope)
     await entry.gateway.connect(wsUrl)
 
     if (!entry.wantOpen) {
@@ -454,6 +556,7 @@ function createSecondary(profile: string, connectionId: null | string = null): S
     connectionId,
     connection: null,
     gateway,
+    socketEpoch: currentSocketEpoch(scope),
     activeRequests: 0,
     connectPromise: null,
     offEvent: () => {},
@@ -469,10 +572,19 @@ function createSecondary(profile: string, connectionId: null | string = null): S
   // Events keep carrying the bare profile — session routing is profile-keyed
   // everywhere. connectionId rides along for surfaces that need the source.
   entry.offEvent = gateway.onEvent(event =>
-    g.config?.onEvent({ ...event, profile, ...(connectionId ? { connectionId } : {}) })
+    g.config?.onEvent({
+      ...event,
+      gatewayEpoch: entry.socketEpoch,
+      profile,
+      ...(connectionId ? { connectionId } : {})
+    })
   )
   entry.offState = gateway.onState(state => {
     reportGatewayState(scope, state)
+    g.config?.onBackendStateChanged?.(
+      { connectionId: entry.connectionId, gatewayEpoch: entry.socketEpoch, profile: entry.profile },
+      state
+    )
 
     if (state === 'open') {
       entry.reconnectAttempt = 0
@@ -498,18 +610,72 @@ function createSecondary(profile: string, connectionId: null | string = null): S
 // open right next to it.
 async function sharedPrimaryRoute(profile: string): Promise<boolean> {
   const desktop = window.hermesDesktop
+  const key = normKey(profile)
 
   if (!desktop) {
+    if (g.sharedPrimaryProfiles.delete(key)) {
+      g.config?.onBackendStateChanged?.(
+        { connectionId: null, gatewayEpoch: currentSocketEpoch(key), profile: key },
+        'closed'
+      )
+    }
+
     return false
   }
 
   try {
     const conn = await desktop.getConnection(profile)
 
-    return Boolean(conn && typeof conn === 'object' && (conn as { sharedPrimary?: boolean }).sharedPrimary === true)
+    const shared = Boolean(
+      conn && typeof conn === 'object' && (conn as { sharedPrimary?: boolean }).sharedPrimary === true
+    )
+
+    if (shared && !g.sharedPrimaryProfiles.has(key)) {
+      g.sharedPrimaryProfiles.add(key)
+      const gatewayEpoch = isOpen(g.primaryGateway) ? advanceSocketEpoch(key) : currentSocketEpoch(key)
+
+      if (isOpen(g.primaryGateway)) {
+        g.config?.onBackendStateChanged?.({ connectionId: null, gatewayEpoch, profile: key }, 'open')
+      }
+    } else if (!shared && g.sharedPrimaryProfiles.delete(key)) {
+      g.config?.onBackendStateChanged?.(
+        { connectionId: null, gatewayEpoch: currentSocketEpoch(key), profile: key },
+        'closed'
+      )
+    }
+
+    return shared
   } catch {
+    if (g.sharedPrimaryProfiles.delete(key)) {
+      g.config?.onBackendStateChanged?.(
+        { connectionId: null, gatewayEpoch: currentSocketEpoch(key), profile: key },
+        'closed'
+      )
+    }
+
     return false
   }
+}
+
+/** A runtime capability was minted by a socket generation that changed while
+ * its request was waiting for a gateway to open. Callers translate this
+ * transport-boundary error into their surface-specific stale-runtime error. */
+export class GatewaySocketEpochMismatchError extends Error {
+  constructor() {
+    super('The gateway socket generation changed before the request was sent.')
+    this.name = 'GatewaySocketEpochMismatchError'
+  }
+}
+
+export interface GatewayRequestBackend {
+  connectionId: null | string
+  gatewayEpoch: number
+  profile: string
+}
+
+export interface RoutedGatewayResponse<T> {
+  backend: GatewayRequestBackend
+  result: T
 }
 
 // Resolve and open `profile`'s socket WITHOUT changing the active gateway.
@@ -585,13 +751,14 @@ async function gatewayForProfile(
  * Global-remote routes share the primary socket and need an explicit profile
  * param; dedicated pooled backends are already scoped by their descriptor.
  */
-export async function requestGatewayForProfile<T>(
+export async function requestGatewayForProfileWithBackend<T>(
   profile: string,
   method: string,
   params: Record<string, unknown> = {},
   timeoutMs?: number,
-  signal?: AbortSignal
-): Promise<T> {
+  signal?: AbortSignal,
+  expectedGatewayEpoch?: number
+): Promise<RoutedGatewayResponse<T>> {
   const route = await gatewayForProfile(profile, true)
 
   try {
@@ -599,17 +766,48 @@ export async function requestGatewayForProfile<T>(
       throw new Error(`Hermes gateway unavailable for profile "${route.key}"`)
     }
 
+    const gatewayEpoch = gatewayEpochForAgent(null, route.key)
+
+    if (expectedGatewayEpoch !== undefined && gatewayEpoch !== expectedGatewayEpoch) {
+      throw new GatewaySocketEpochMismatchError()
+    }
+
     const routedParams = route.scopeProfile ? { ...params, profile: route.key } : params
 
     // Same arity contract as the ambient path in session-request-router: only
     // pass the deadline args through when the caller set them, so a plain
     // profile-routed RPC keeps its two-argument call shape.
-    return await (timeoutMs === undefined && signal === undefined
+    const result = await (timeoutMs === undefined && signal === undefined
       ? route.gateway.request<T>(method, routedParams)
       : route.gateway.request<T>(method, routedParams, timeoutMs, signal))
+
+    return {
+      backend: { connectionId: null, gatewayEpoch, profile: route.key },
+      result
+    }
   } finally {
     route.release()
   }
+}
+
+export async function requestGatewayForProfile<T>(
+  profile: string,
+  method: string,
+  params: Record<string, unknown> = {},
+  timeoutMs?: number,
+  signal?: AbortSignal,
+  expectedGatewayEpoch?: number
+): Promise<T> {
+  const response = await requestGatewayForProfileWithBackend<T>(
+    profile,
+    method,
+    params,
+    timeoutMs,
+    signal,
+    expectedGatewayEpoch
+  )
+
+  return response.result
 }
 
 /**
@@ -618,17 +816,20 @@ export async function requestGatewayForProfile<T>(
  * sources from sharing a socket. Only null/empty ids retain the v1 profile
  * resolver; explicit `local` is a registry source and must use getConnectionFor.
  */
-export async function requestGatewayForAgent<T>(
+export async function requestGatewayForAgentWithBackend<T>(
   connectionId: null | string,
   profile: string,
   method: string,
-  params: Record<string, unknown> = {}
-): Promise<T> {
+  params: Record<string, unknown> = {},
+  timeoutMs?: number,
+  signal?: AbortSignal,
+  expectedGatewayEpoch?: number
+): Promise<RoutedGatewayResponse<T>> {
   const key = normKey(profile)
   const scope = registryBackendScopeKey(connectionId, key)
 
   if (scope === key) {
-    return requestGatewayForProfile<T>(key, method, params)
+    return requestGatewayForProfileWithBackend<T>(key, method, params, timeoutMs, signal, expectedGatewayEpoch)
   }
 
   if (!window.hermesDesktop?.getConnectionFor) {
@@ -654,7 +855,20 @@ export async function requestGatewayForAgent<T>(
       await openSecondary(entry)
     }
 
-    return await entry.gateway.request<T>(method, params)
+    const gatewayEpoch = entry.socketEpoch
+
+    if (expectedGatewayEpoch !== undefined && gatewayEpoch !== expectedGatewayEpoch) {
+      throw new GatewaySocketEpochMismatchError()
+    }
+
+    const result = await (timeoutMs === undefined && signal === undefined
+      ? entry.gateway.request<T>(method, params)
+      : entry.gateway.request<T>(method, params, timeoutMs, signal))
+
+    return {
+      backend: { connectionId: entry.connectionId, gatewayEpoch, profile: entry.profile },
+      result
+    }
   } finally {
     entry.activeRequests = Math.max(0, entry.activeRequests - 1)
 
@@ -666,6 +880,28 @@ export async function requestGatewayForAgent<T>(
       }
     }
   }
+}
+
+export async function requestGatewayForAgent<T>(
+  connectionId: null | string,
+  profile: string,
+  method: string,
+  params: Record<string, unknown> = {},
+  timeoutMs?: number,
+  signal?: AbortSignal,
+  expectedGatewayEpoch?: number
+): Promise<T> {
+  const response = await requestGatewayForAgentWithBackend<T>(
+    connectionId,
+    profile,
+    method,
+    params,
+    timeoutMs,
+    signal,
+    expectedGatewayEpoch
+  )
+
+  return response.result
 }
 
 // Open `profile`'s socket WITHOUT making it active — the hover-intent pre-warm
@@ -781,7 +1017,10 @@ export async function ensureGatewayForProfile(profile: string): Promise<void> {
   // descriptor — $activeGatewayProfile still moves to `key`, so request
   // scoping and profile-aware surfaces behave identically.
   if (await sharedPrimaryRoute(key)) {
-    applyActive(g.primaryProfile, activationEpoch)
+    // The selected socket remains the physical primary, while the logical
+    // profile follows the requested Agent so UI state and request scoping do
+    // not silently snap back to the launch profile.
+    applyActive(g.primaryProfile, activationEpoch, key)
 
     return
   }
@@ -888,6 +1127,13 @@ export function touchSecondaryGateways(): void {
 function disposeSecondary(entry: Secondary): void {
   entry.wantOpen = false
   clearTimer(entry)
+  // Intentional prune/edit/delete closes detach listeners before close(), so
+  // emit the exact invalidation synchronously while the owner and epoch still
+  // exist. The epoch ledger survives entry eviction and prevents reuse.
+  g.config?.onBackendStateChanged?.(
+    { connectionId: entry.connectionId, gatewayEpoch: entry.socketEpoch, profile: entry.profile },
+    'closed'
+  )
   entry.offEvent()
   entry.offState()
   entry.gateway.close()

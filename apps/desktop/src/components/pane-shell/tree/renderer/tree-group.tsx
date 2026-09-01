@@ -17,6 +17,7 @@ import { Codicon } from '@/components/ui/codicon'
 import { DecodeText } from '@/components/ui/decode-text'
 import { DROP_SHEET_BLUR_CLASS, DROP_SHEET_CLASS } from '@/components/ui/drop-affordance'
 import {
+  PANE_TAB_STRIP_HEIGHT_PX,
   PANE_TAB_STRIP_LINE_LEFT,
   PANE_TAB_STRIP_LINE_RIGHT,
   PaneStripGlyph,
@@ -263,12 +264,18 @@ export function TreeGroup({
   //    tile in its own zone is unclosable (the "3rd tile has no tab" trap);
   //  - a TOOL PANEL (terminal/logs — a collapse pane) dragged out of the main
   //    stack, else it's a dead zone with no tab to grab or ✕ to close.
-  // The uncloseable workspace and side chrome (sessions/files) keep the clean
-  // no-tab default. Double-click toggles it either way; a minimized group
+  // The uncloseable workspace and inherited Sessions rail keep their V32
+  // strips; lone Files keeps the clean no-tab default. Double-click toggles
+  // it either way; a minimized group
   // always shows its header (it IS the header).
   // Session-tile ids force the header even before chrome registers — cycling
   // onto a freshly-split tile used to land headerless ("name card missing").
-  const forceLoneHeader = forceLoneHeaderForPanes(shown, id => paneChrome(paneFor(id)), isCollapsePane)
+  const forceLoneHeader = forceLoneHeaderForPanes(
+    shown,
+    id => paneChrome(paneFor(id)),
+    isCollapsePane,
+    isSessionStripPane
+  )
 
   // A full-page view (headerVeto) suppresses the strip while it's the active
   // pane — a page is not a tab-able surface; the bar returns with the chat.
@@ -394,7 +401,7 @@ export function TreeGroup({
         <ZoneMenu {...zoneMenu}>
           <div
             className={cn(
-              'flex h-full w-7 shrink-0 cursor-pointer select-none flex-col items-stretch bg-(--ui-sidebar-surface-background)',
+              'flex h-full w-9 shrink-0 cursor-pointer select-none flex-col items-stretch bg-(--ui-sidebar-surface-background)',
               // Strip line faces the content the zone collapsed away from.
               railSide === 'right' ? PANE_TAB_STRIP_LINE_LEFT : PANE_TAB_STRIP_LINE_RIGHT
             )}
@@ -592,6 +599,7 @@ export function TreeGroup({
                 THIS strip. Hidden when unwired or the zone is minimized. */}
             {shown.some(isSessionStripPane) && newSessionTabAction && !node.minimized && (
               <span
+                data-session-tab-plus=""
                 // The action docks into the FOCUSED chat zone; clicking a
                 // background strip's "+" must make THAT zone the focused one
                 // first, or the tab opens in whichever zone was last clicked.
@@ -600,7 +608,7 @@ export function TreeGroup({
                 onPointerDownCapture={() => noteActiveTreeGroup(node.id)}
               >
                 <PaneStripGlyph
-                  icon={<Codicon name="add" size="0.8125rem" />}
+                  icon={<Codicon name="add" />}
                   label={t.zones.newSessionTab}
                   onSelect={() => newSessionTabAction()}
                 />
@@ -681,7 +689,7 @@ export function TreeGroup({
             className="absolute inset-x-0 bottom-0 z-50 flex cursor-grab items-center justify-center outline-1 -outline-offset-2 outline-dashed backdrop-blur-[2px]"
             onPointerDown={e => startPaneDrag(activeId, e, undefined, undefined, undefined, active?.title ?? activeId)}
             style={{
-              top: headerVisible ? 28 : 0,
+              top: headerVisible ? PANE_TAB_STRIP_HEIGHT_PX : 0,
               background:
                 'color-mix(in srgb, var(--ui-accent) 6%, color-mix(in srgb, var(--ui-bg-chrome) 55%, transparent))',
               outlineColor: 'color-mix(in srgb, var(--ui-accent) 55%, transparent)'

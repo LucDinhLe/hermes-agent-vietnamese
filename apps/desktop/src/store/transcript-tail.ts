@@ -18,6 +18,9 @@ import { atom } from 'nanostores'
 import type { SessionMessagesResponse } from '@/types/hermes'
 
 export interface TranscriptTailState {
+  /** Exact registry owner captured at hydration. `null` is explicitly local;
+   *  `undefined` means a legacy profile-only hydration. */
+  connectionId?: null | string
   /** Offset (back from the newest row) where the next older page starts. */
   nextOffset: number
   /** The last hydration page was exactly the page limit, so older rows
@@ -31,17 +34,27 @@ export interface TranscriptTailState {
 export const $transcriptTailBySessionId = atom<Record<string, TranscriptTailState>>({})
 
 type TailPage = Pick<SessionMessagesResponse, 'messages' | 'pagination'>
+type TailScope = null | string | { connectionId: null | string; profile: string }
 
-function tailStateFromPage(page: TailPage, profile?: null | string): TranscriptTailState {
+function tailStateFromPage(page: TailPage, scope?: TailScope): TranscriptTailState {
   const pagination = page.pagination
+  const exactOwner = scope !== null && typeof scope === 'object' ? scope : null
+  const profile: null | string | undefined = exactOwner
+    ? exactOwner.profile.trim() || 'default'
+    : typeof scope === 'string' || scope === null
+      ? scope
+      : undefined
+  const connectionId = exactOwner ? exactOwner.connectionId?.trim() || null : undefined
+  const owner = connectionId === undefined ? {} : { connectionId }
 
   // No pagination metadata is a legacy backend that ignored the paging query
   // and returned the full transcript: nothing is truncated.
   if (!pagination || pagination.limit <= 0) {
-    return { nextOffset: page.messages.length, possiblyTruncated: false, profile }
+    return { ...owner, nextOffset: page.messages.length, possiblyTruncated: false, profile }
   }
 
   return {
+    ...owner,
     nextOffset: pagination.offset + page.messages.length,
     possiblyTruncated: page.messages.length >= pagination.limit,
     profile
@@ -49,22 +62,27 @@ function tailStateFromPage(page: TailPage, profile?: null | string): TranscriptT
 }
 
 /** Record the outcome of a tail hydration (`getLatestSessionMessages`). */
-export function recordTranscriptTail(storedSessionId: string, page: TailPage, profile?: null | string): void {
+export function recordTranscriptTail(storedSessionId: string, page: TailPage, scope?: TailScope): void {
   if (!storedSessionId) {
     return
   }
 
   const current = $transcriptTailBySessionId.get()
-  $transcriptTailBySessionId.set({ ...current, [storedSessionId]: tailStateFromPage(page, profile) })
+  $transcriptTailBySessionId.set({ ...current, [storedSessionId]: tailStateFromPage(page, scope) })
 }
 
 /** Advance the bookkeeping after one older backfill page landed. */
 export function recordTranscriptBackfillPage(storedSessionId: string, page: TailPage): void {
   const current = $transcriptTailBySessionId.get()
   const previous = current[storedSessionId]
+  const scope =
+    previous?.connectionId !== undefined
+      ? { connectionId: previous.connectionId, profile: previous.profile ?? 'default' }
+      : previous?.profile
+
   $transcriptTailBySessionId.set({
     ...current,
-    [storedSessionId]: tailStateFromPage(page, previous?.profile)
+    [storedSessionId]: tailStateFromPage(page, scope)
   })
 }
 

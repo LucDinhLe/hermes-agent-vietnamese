@@ -11,8 +11,26 @@ import {
   setClarifyRequest,
   skipClarifyRequest
 } from './clarify'
-import { $gateway } from './gateway'
 import { $activeSessionId } from './session'
+
+const { eventSourceRequest, eventSourceRoute } = vi.hoisted(() => ({
+  eventSourceRequest: vi.fn(
+    async (_method: string, _params: Record<string, unknown>): Promise<Record<string, unknown>> => ({ ok: true })
+  ),
+  eventSourceRoute: vi.fn()
+}))
+
+vi.mock('./gateway-event-source', () => ({
+  requestForGatewayEventSource: (
+    _sourceRuntimeId: null | string | undefined,
+    method: string,
+    params: Record<string, unknown>
+  ) => {
+    eventSourceRoute(_sourceRuntimeId, method, params)
+
+    return eventSourceRequest(method, params)
+  }
+}))
 
 function clarify(sessionId: string | null, requestId: string): ClarifyRequest {
   return {
@@ -87,17 +105,16 @@ describe('clarify store', () => {
 })
 
 describe('skipClarifyRequest', () => {
-  const request = vi.fn(async () => ({ ok: true }))
+  const request = eventSourceRequest
 
   beforeEach(() => {
     $clarifyRequests.set({})
     request.mockClear()
-    $gateway.set({ request } as unknown as ReturnType<typeof $gateway.get>)
+    request.mockResolvedValue({ ok: true })
   })
 
   afterEach(() => {
     $clarifyRequests.set({})
-    $gateway.set(null)
   })
 
   it('answers the session\u2019s clarify with an empty answer and drops it', async () => {
@@ -107,6 +124,10 @@ describe('skipClarifyRequest', () => {
     await expect(skipClarifyRequest('session-a')).resolves.toBe(true)
 
     expect(request).toHaveBeenCalledWith('clarify.respond', { request_id: 'req-a', answer: '' })
+    expect(eventSourceRoute).toHaveBeenCalledWith('session-a', 'clarify.respond', {
+      request_id: 'req-a',
+      answer: ''
+    })
     expect(hasClarifyRequest('session-a')).toBe(false)
     // A background session's question is untouched — only the one being typed
     // over is skipped.

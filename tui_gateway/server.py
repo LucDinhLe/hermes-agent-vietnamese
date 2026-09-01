@@ -5224,6 +5224,34 @@ def _sync_agent_model_with_config(sid: str, session: dict) -> None:
         )
 
 
+def _sync_review_settings(sid: str, session: dict) -> None:
+    """Adopt profile-local Advisor settings at the safe turn boundary."""
+
+    agent = session.get("agent")
+    if agent is None:
+        return
+    from tui_gateway.review_settings import apply_review_settings, review_settings
+
+    cfg = _load_cfg()
+    settings = review_settings(cfg)
+    fingerprint = (
+        settings.enabled,
+        settings.provider,
+        settings.model,
+        settings.failure_policy,
+        settings.max_revisions,
+        settings.timeout_seconds,
+    )
+    if session.get("advisor_config_seen") == fingerprint:
+        return
+    session["advisor_config_seen"] = fingerprint
+    apply_review_settings(
+        agent,
+        cfg,
+        emit=lambda event: _emit("review.status", sid, event),
+    )
+
+
 def _apply_pending_model_switch(sid: str, session: dict) -> None:
     """Apply a model switch queued while a turn was running.
 
@@ -7160,7 +7188,7 @@ def _make_agent(
                 raise RuntimeError("Auth fallback resolved without a model")
             model = resolution.selected_model
     _pr = _load_provider_routing()
-    return AIAgent(
+    agent = AIAgent(
         model=model,
         max_iterations=_cfg_max_turns(cfg, 500),
         provider=runtime.get("provider"),
@@ -7207,6 +7235,14 @@ def _make_agent(
         fallback_model=_load_fallback_model(),
         **_agent_cbs(sid),
     )
+    from tui_gateway.review_settings import apply_review_settings
+
+    apply_review_settings(
+        agent,
+        cfg,
+        emit=lambda event: _emit("review.status", sid, event),
+    )
+    return agent
 
 
 def _init_session(
@@ -10787,6 +10823,7 @@ def _run_prompt_submit(
                 # config sync so an explicit pick wins over a config.yaml change.
                 _apply_pending_model_switch(sid, session)
                 _sync_agent_model_with_config(sid, session)
+            _sync_review_settings(sid, session)
             # Bot Chat capability sync — adopt Settings→Capabilities edits
             # (skills/toolsets/MCP/SOUL) into the eternal bot session before
             # the turn runs. No-op for every other session shape.
@@ -11937,6 +11974,70 @@ def _respond(rid, params, key, *, allow_expired=False):
 def _(rid, params: dict) -> dict:
     key, value = params.get("key", ""), params.get("value", "")
     session = _sessions.get(params.get("session_id", ""))
+
+    if key == "advisor":
+        from tui_gateway.review_settings import (
+            SUPPORTED_REVIEW_PROVIDERS,
+            apply_review_settings,
+            live_review_status,
+            review_settings,
+        )
+
+        cfg = _load_cfg()
+        current = live_review_status(session.get("agent") if session else None, cfg)
+        raw = str(value or "").strip().lower()
+        if raw == "status":
+            return _ok(rid, {"key": key, **current})
+        if raw in {"", "toggle"}:
+            enabled = not bool(current["enabled"])
+        elif raw in {"on", "true", "1"}:
+            enabled = True
+        elif raw in {"off", "false", "0"}:
+            enabled = False
+        else:
+            return _err(rid, 4002, f"unknown advisor mode: {value}")
+        if session is not None and session.get("running"):
+            return _err(rid, 4009, "advisor cannot change during an active turn")
+
+        defaults = review_settings(cfg)
+        provider = str(params.get("provider") or defaults.provider).strip().lower()
+        model = str(params.get("model") or defaults.model).strip()
+        if provider not in SUPPORTED_REVIEW_PROVIDERS:
+            return _err(rid, 4002, f"unsupported advisor provider: {provider}")
+        if not model:
+            return _err(rid, 4002, "advisor model required")
+
+        # This setting is profile-local. In the Experimental build the entire
+        # HERMES_HOME is isolated, so it cannot change the user's normal Hermes
+        # profile. A targeted live session adopts it immediately; all other
+        # sessions adopt it at their next safe turn boundary.
+        _write_config_key("advisor.enabled", enabled)
+        _write_config_key("advisor.provider", provider)
+        _write_config_key("advisor.model", model)
+        updated_cfg = dict(cfg)
+        raw_advisor_cfg = cfg.get("advisor")
+        advisor_cfg = raw_advisor_cfg if isinstance(raw_advisor_cfg, dict) else {}
+        updated_cfg["advisor"] = {
+            **advisor_cfg,
+            "enabled": enabled,
+            "provider": provider,
+            "model": model,
+        }
+        agent = session.get("agent") if session else None
+        if agent is not None:
+            apply_review_settings(
+                agent,
+                updated_cfg,
+                emit=lambda event: _emit(
+                    "review.status",
+                    str(params.get("session_id") or ""),
+                    event,
+                ),
+            )
+        if session is not None:
+            session.pop("advisor_config_seen", None)
+        status = live_review_status(agent, updated_cfg)
+        return _ok(rid, {"key": key, **status})
 
     if key == "model":
         try:

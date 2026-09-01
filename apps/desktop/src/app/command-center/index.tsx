@@ -30,6 +30,12 @@ import { cn } from '@/lib/utils'
 import { upsertDesktopActionTask } from '@/store/activity'
 import { $pinnedSessionIds, pinSession, unpinSession } from '@/store/layout'
 import { $sessions, sessionPinId } from '@/store/session'
+import { rememberSessionPinOwner } from '@/store/session-pin-sync'
+import {
+  explicitSessionRouteOwner,
+  recordSessionRouteOwner,
+  stageSessionRouteOwner
+} from '@/store/session-route-owner'
 
 import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
 import { useRouteEnumParam } from '../hooks/use-route-enum-param'
@@ -365,12 +371,22 @@ export function CommandCenterView({ initialSection, onClose, onDeleteSession, on
                   {filteredSessions.map(session => {
                     const pinId = sessionPinId(session)
                     const pinned = pinnedSessionIds.includes(pinId)
+                    const owner = explicitSessionRouteOwner(session)
 
                     return (
-                      <li className="group flex items-center gap-2 py-2" key={session.id}>
+                      <li
+                        className="group flex items-center gap-2 py-2"
+                        key={`${owner?.connectionId ?? 'local'}\u0000${owner?.profile ?? ''}\u0000${session.id}`}
+                      >
                         <button
                           className="min-w-0 flex-1 text-left"
-                          onClick={() => onOpenSession(session.id)}
+                          onClick={() => {
+                            if (owner) {
+                              stageSessionRouteOwner(session.id, owner)
+                            }
+
+                            onOpenSession(session.id)
+                          }}
                           type="button"
                         >
                           <div className="truncate text-[length:var(--conversation-text-font-size)] font-medium text-foreground">
@@ -382,7 +398,15 @@ export function CommandCenterView({ initialSection, onClose, onDeleteSession, on
                         </button>
                         <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
                           <RowIconButton
-                            onClick={() => (pinned ? unpinSession(pinId) : pinSession(pinId))}
+                            onClick={() => {
+                              rememberSessionPinOwner(session)
+
+                              if (pinned) {
+                                unpinSession(pinId)
+                              } else {
+                                pinSession(pinId)
+                              }
+                            }}
                             title={pinned ? cc.unpinSession : cc.pinSession}
                           >
                             {pinned ? <BookmarkFilled className="size-3.5" /> : <Bookmark className="size-3.5" />}
@@ -395,7 +419,13 @@ export function CommandCenterView({ initialSection, onClose, onDeleteSession, on
                           </RowIconButton>
                           <RowIconButton
                             className="hover:text-destructive"
-                            onClick={() => void onDeleteSession(session.id)}
+                            onClick={() => {
+                              if (owner) {
+                                recordSessionRouteOwner(session.id, owner)
+                              }
+
+                              void onDeleteSession(session.id)
+                            }}
                             title={cc.deleteSession}
                           >
                             <Trash2 className="size-3.5" />

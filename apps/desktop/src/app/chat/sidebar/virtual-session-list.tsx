@@ -12,6 +12,7 @@ import { sessionBucketLabel } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { sessionPinId } from '@/store/session'
 import { $sessionListDensity } from '@/store/session-list-density'
+import { sessionRouteKey } from '@/store/session-route-owner'
 
 import { SidebarDateDivider } from './chrome'
 import { SidebarSessionRow } from './session-row'
@@ -156,11 +157,11 @@ export const VirtualSessionList: FC<VirtualSessionListProps> = ({
     }
 
     return reorderable ? (
-      <div data-index={virtualItem.index} key={session.id} ref={virtualizer.measureElement} style={itemStyle}>
+      <div data-index={virtualItem.index} key={sessionRouteKey(session)} ref={virtualizer.measureElement} style={itemStyle}>
         <VirtualSortableRow rowProps={commonProps} session={session} />
       </div>
     ) : (
-      <div data-index={virtualItem.index} key={session.id} ref={virtualizer.measureElement} style={itemStyle}>
+      <div data-index={virtualItem.index} key={sessionRouteKey(session)} ref={virtualizer.measureElement} style={itemStyle}>
         <SidebarSessionRow {...commonProps} session={session} />
       </div>
     )

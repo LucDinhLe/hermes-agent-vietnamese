@@ -18,7 +18,7 @@ import { useI18n } from '@/i18n'
 import { isMissingPendingPromptRequest } from '@/lib/gateway-rpc'
 import { triggerHaptic } from '@/lib/haptics'
 import { KeyRound, Loader2, Lock } from '@/lib/icons'
-import { $gateway } from '@/store/gateway'
+import { requestForGatewayEventSource } from '@/store/gateway-event-source'
 import { notifyError } from '@/store/notifications'
 import { clearSecretRequest, clearSudoRequest, sessionSecretRequest, sessionSudoRequest } from '@/store/prompts'
 
@@ -40,7 +40,6 @@ function SudoDialog({ sessionId }: { sessionId: string | null }) {
   const copy = t.prompts
   const $request = useMemo(() => sessionSudoRequest(sessionId), [sessionId])
   const request = useStore($request)
-  const gateway = useStore($gateway)
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -55,19 +54,11 @@ function SudoDialog({ sessionId }: { sessionId: string | null }) {
         return
       }
 
-      if (!gateway) {
-        notifyError(new Error(copy.gatewayDisconnected), copy.sudoSendFailed)
-
-        return
-      }
-
       setSubmitting(true)
 
       try {
-        await gateway.request<{ status?: string }>('sudo.respond', {
-          password: value,
-          request_id: request.requestId
-        })
+        const params = { password: value, request_id: request.requestId }
+        await requestForGatewayEventSource<{ status?: string }>(request.sessionId, 'sudo.respond', params)
         triggerHaptic('submit')
         clearSudoRequest(request.sessionId, request.requestId)
       } catch (error) {
@@ -81,7 +72,7 @@ function SudoDialog({ sessionId }: { sessionId: string | null }) {
         setSubmitting(false)
       }
     },
-    [copy.gatewayDisconnected, copy.sudoSendFailed, gateway, request]
+    [copy.sudoSendFailed, request]
   )
 
   // Cancel → empty password. The backend treats an empty sudo response as a
@@ -143,7 +134,6 @@ function SecretDialog({ sessionId }: { sessionId: string | null }) {
   const copy = t.prompts
   const $request = useMemo(() => sessionSecretRequest(sessionId), [sessionId])
   const request = useStore($request)
-  const gateway = useStore($gateway)
   const [value, setValue] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -158,19 +148,12 @@ function SecretDialog({ sessionId }: { sessionId: string | null }) {
         return
       }
 
-      if (!gateway) {
-        notifyError(new Error(copy.gatewayDisconnected), copy.secretSendFailed)
-
-        return
-      }
-
       setSubmitting(true)
 
       try {
-        await gateway.request<{ status?: string }>('secret.respond', {
-          request_id: request.requestId,
-          value: secret
-        })
+        const params = { request_id: request.requestId, value: secret }
+
+        await requestForGatewayEventSource<{ status?: string }>(request.sessionId, 'secret.respond', params)
         triggerHaptic('submit')
         clearSecretRequest(request.sessionId, request.requestId)
       } catch (error) {
@@ -184,7 +167,7 @@ function SecretDialog({ sessionId }: { sessionId: string | null }) {
         setSubmitting(false)
       }
     },
-    [copy.gatewayDisconnected, copy.secretSendFailed, gateway, request]
+    [copy.secretSendFailed, request]
   )
 
   const onOpenChange = useCallback(

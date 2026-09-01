@@ -6,7 +6,7 @@ import { isPaneVisible, revealTreePane } from '@/components/pane-shell/tree/stor
 import { matchesQuery } from '@/hooks/use-media-query'
 import { connectionScopedAtom } from '@/lib/connection-scoped'
 import { type Codec, Codecs, persistentAtom } from '@/lib/persisted'
-import { arraysEqual, insertUniqueId, readKey } from '@/lib/storage'
+import { arraysEqual, insertUniqueId, readKey, writeKey } from '@/lib/storage'
 
 import { $paneStates, ensurePaneRegistered, setPaneOpen, setPaneWidthOverride, togglePane } from './panes'
 import { $showAllProfiles, setShowAllProfiles } from './profile'
@@ -15,12 +15,15 @@ import type { SessionStatusBucket } from './session-dot-state'
 
 export const SIDEBAR_DEFAULT_WIDTH = 237
 export const SIDEBAR_MAX_WIDTH = 360
-// Open at the same width as the sessions sidebar so the two rails match, but
-// allow shrinking well below that (~30% under the old 14rem floor) for users who
-// want a narrow tree.
-export const FILE_BROWSER_DEFAULT_WIDTH = `${SIDEBAR_DEFAULT_WIDTH}px`
+// The accepted V32 workspace gives Files/Browser enough room to act as a real
+// working surface. Keep that fresh-profile ratio responsive while preserving
+// every persisted sash override and the upstream min/max constraints.
+export const FILE_BROWSER_DEFAULT_WIDTH = 'clamp(15rem, 27vw, 36rem)'
 export const FILE_BROWSER_MIN_WIDTH = '10rem'
-export const FILE_BROWSER_MAX_WIDTH = '20rem'
+// V32 lets Files/Browser grow into a real working surface while the chat keeps
+// its own 22vw floor. This is required by the wide right rail in the accepted
+// Vietnamese workspace, not just by a one-off screenshot size.
+export const FILE_BROWSER_MAX_WIDTH = 'min(65vw, 90rem)'
 
 export const SIDEBAR_SESSIONS_PAGE_SIZE = 50
 // How deep the list reaches once a filter is on. A filter that only searches
@@ -29,6 +32,7 @@ export const SIDEBAR_SESSIONS_PAGE_SIZE = 50
 export const SIDEBAR_FILTERED_PAGE_SIZE = 300
 
 const SIDEBAR_PINNED_STORAGE_KEY = 'hermes.desktop.pinnedSessions'
+const SIDEBAR_PINNED_PROJECTS_STORAGE_KEY = 'hermes.desktop.pinnedProjects'
 const SIDEBAR_AGENTS_GROUPED_STORAGE_KEY = 'hermes.desktop.agentsGroupedByWorkspace'
 const SIDEBAR_CRON_OPEN_STORAGE_KEY = 'hermes.desktop.sidebarCronOpen'
 const SIDEBAR_MESSAGING_OPEN_STORAGE_KEY = 'hermes.desktop.sidebarMessagingOpen'
@@ -54,6 +58,8 @@ const SIDEBAR_DISMISSED_AUTO_PROJECTS_STORAGE_KEY = 'hermes.desktop.dismissedAut
 const SIDEBAR_DISMISSED_WORKTREES_STORAGE_KEY = 'hermes.desktop.dismissedWorktrees'
 const PANES_FLIPPED_STORAGE_KEY = 'hermes.desktop.panesFlipped'
 const RIGHT_RAIL_ACTIVE_TAB_STORAGE_KEY = 'hermes.desktop.rightRailActiveTab'
+const RIGHT_SIDEBAR_VIEW_STORAGE_KEY = 'hermes.desktop.rightSidebarView'
+const V32_RIGHT_SIDEBAR_DEFAULT_OPEN_MIGRATION_KEY = 'hermes.vietnamese.migrations.v32RightSidebarDefaultOpen.dev11'
 
 export const CHAT_SIDEBAR_PANE_ID = 'chat-sidebar'
 export const FILE_BROWSER_PANE_ID = 'file-browser'
@@ -64,9 +70,27 @@ export const FILES_PANE_ID = 'files'
 /** Every rail tab is a preview of something, namespaced by what backs it: a
  *  path on disk, a live URL, or an id into the in-memory artifact registry. */
 export type RightRailTabId = `artifact:${string}` | `file:${string}` | `url:${string}`
+export type RightSidebarView = 'browser' | 'files'
 
 ensurePaneRegistered(CHAT_SIDEBAR_PANE_ID, { open: true })
-ensurePaneRegistered(FILE_BROWSER_PANE_ID, { open: false })
+ensurePaneRegistered(FILE_BROWSER_PANE_ID, { open: true })
+
+/** Restore the V32 working shell once for profiles that inherited dev.10's
+ * closed upstream rail. After this migration, normal pane persistence keeps
+ * the user's explicit choice. */
+export function migrateV32RightSidebarDefaultOpen(): void {
+  if (readKey(V32_RIGHT_SIDEBAR_DEFAULT_OPEN_MIGRATION_KEY) !== null) {
+    return
+  }
+
+  if ($paneStates.get()[FILE_BROWSER_PANE_ID]?.open === false) {
+    setPaneOpen(FILE_BROWSER_PANE_ID, true)
+  }
+
+  writeKey(V32_RIGHT_SIDEBAR_DEFAULT_OPEN_MIGRATION_KEY, '1')
+}
+
+migrateV32RightSidebarDefaultOpen()
 
 export const $sidebarOpen: ReadableAtom<boolean> = computed(
   $paneStates,
@@ -75,7 +99,7 @@ export const $sidebarOpen: ReadableAtom<boolean> = computed(
 
 export const $fileBrowserOpen: ReadableAtom<boolean> = computed(
   $paneStates,
-  states => states[FILE_BROWSER_PANE_ID]?.open ?? false
+  states => states[FILE_BROWSER_PANE_ID]?.open ?? true
 )
 
 // Persisted so a relaunch reopens the same rail tab. Null when the rail has no
@@ -84,6 +108,17 @@ export const $rightRailActiveTabId = persistentAtom<RightRailTabId | null>(RIGHT
   decode: raw => (raw ? (raw as RightRailTabId) : null),
   encode: tabId => tabId ?? ''
 })
+
+/** Durable surface shown inside the V32 right rail. Both bodies stay mounted
+ * while switching so file expansion and authenticated browser state survive. */
+export const $rightSidebarView = persistentAtom<RightSidebarView>(RIGHT_SIDEBAR_VIEW_STORAGE_KEY, 'files', {
+  decode: raw => (raw === 'browser' ? 'browser' : 'files'),
+  encode: view => view
+})
+
+export function setRightSidebarView(view: RightSidebarView): void {
+  $rightSidebarView.set(view)
+}
 
 export const $sidebarWidth: ReadableAtom<number> = computed($paneStates, states => {
   const override = states[CHAT_SIDEBAR_PANE_ID]?.widthOverride
@@ -98,6 +133,11 @@ export const $sidebarWidth: ReadableAtom<number> = computed($paneStates, states 
 // into another window's sidebar (#77318). The local connection keeps the
 // bare legacy key; remote connections get their own namespaced keys.
 export const $pinnedSessionIds = connectionScopedAtom(SIDEBAR_PINNED_STORAGE_KEY, [] as string[], Codecs.stringArray)
+export const $pinnedProjectIds = connectionScopedAtom(
+  SIDEBAR_PINNED_PROJECTS_STORAGE_KEY,
+  [] as string[],
+  Codecs.stringArray
+)
 export const $sidebarSessionOrderIds = connectionScopedAtom(
   SIDEBAR_SESSION_ORDER_STORAGE_KEY,
   [] as string[],
@@ -201,6 +241,7 @@ export const $dismissedWorktreeIds = persistentAtom(
   Codecs.stringArray
 )
 export const $sidebarPinsOpen = atom(true)
+export const $sidebarProjectsOpen = atom(true)
 export const $sidebarRecentsOpen = atom(true)
 // Cron-job sessions live in their own section below recents, collapsed by
 // default (it only renders at all when cron sessions exist) so the
@@ -558,6 +599,10 @@ export function setSidebarPinsOpen(open: boolean) {
   $sidebarPinsOpen.set(open)
 }
 
+export function setSidebarProjectsOpen(open: boolean) {
+  $sidebarProjectsOpen.set(open)
+}
+
 export function setSidebarRecentsOpen(open: boolean) {
   $sidebarRecentsOpen.set(open)
 }
@@ -731,6 +776,19 @@ export function unpinSession(sessionId: string) {
   )
 }
 
+export function pinProject(projectId: string, index?: number) {
+  const prev = $pinnedProjectIds.get()
+
+  setOrderIds($pinnedProjectIds, insertUniqueId(prev, projectId, index ?? prev.filter(id => id !== projectId).length))
+}
+
+export function unpinProject(projectId: string) {
+  setOrderIds(
+    $pinnedProjectIds,
+    $pinnedProjectIds.get().filter(id => id !== projectId)
+  )
+}
+
 // Apply a new pinned order from a drag. The dragged list only holds the pins
 // that currently RESOLVE to a loaded row, so this is a permutation of a subset:
 // re-slot the ids it names into the positions they already occupied, leaving
@@ -757,6 +815,31 @@ export function setPinnedSessionOrder(ids: string[]) {
   })
 
   setOrderIds($pinnedSessionIds, next)
+}
+
+// Project rows can be temporarily unresolved while the backend tree warms or
+// a profile changes. Reorder only the visible subset and leave every hidden id
+// in its existing slot, matching the session-pin contract above.
+export function setPinnedProjectOrder(ids: string[]) {
+  const prev = $pinnedProjectIds.get()
+  const pinned = new Set(prev)
+  const moving = ids.filter(id => pinned.has(id))
+
+  if (!moving.length) {
+    return
+  }
+
+  const movingSet = new Set(moving)
+  const next = [...prev]
+  let cursor = 0
+
+  prev.forEach((id, index) => {
+    if (movingSet.has(id)) {
+      next[index] = moving[cursor++]
+    }
+  })
+
+  setOrderIds($pinnedProjectIds, next)
 }
 
 export function bumpSessionsLimit(step: number = SIDEBAR_SESSIONS_PAGE_SIZE) {

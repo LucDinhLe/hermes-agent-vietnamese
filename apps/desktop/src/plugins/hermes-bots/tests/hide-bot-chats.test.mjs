@@ -55,21 +55,32 @@ test('hideOwnedBotSessions sweeps canonical chats AND room member sessions', asy
   const start = source.indexOf('function hideOwnedBotSessions()')
   const end = source.indexOf('/** Fetch server-side avatars', start)
   const calls = []
+  const roster = [
+    { name: 'alpha', connectionId: 'source-a', sourceScoped: true },
+    { name: 'beta', connectionId: 'source-a', sourceScoped: true }
+  ]
   const context = {
     host: {
-      request: async (method, params) => {
-        calls.push({ method, params })
-        if (method === 'profiles.list') {
-          return {
-            profiles: [
-              { name: 'alpha', preferred_session: { id: 'chat-a', title: 'Bot Chat' } },
-              { name: 'beta', preferred_session: { id: 'chat-b', title: 'Bot Chat' } }
-            ]
-          }
-        }
-        return {}
+      request: async () => {
+        throw new Error('ambient gateway must not be used')
       }
     },
+    requestForBot: async (bot, method, params) => {
+      calls.push({ bot: bot.name, method, params })
+      if (method === 'profiles.list') {
+        const id = bot.name === 'alpha' ? 'chat-a' : 'chat-b'
+
+        return {
+          profiles: [{ name: bot.name, preferred_session: { id, title: 'Bot Chat' } }]
+        }
+      }
+      if (method === 'session.list') {
+        return { sessions: [] }
+      }
+      return {}
+    },
+    $lastRoster: { get: () => roster },
+    PROFILE_SESSION_LIST_LIMIT: 200,
     $botMeta: { get: () => ({ alpha: { chat: 'chat-a' }, beta: { chat: 'chat-b' }, gamma: {} }) },
     $groupChats: {
       get: () => ({
@@ -95,16 +106,22 @@ test('safety: a stale canonical pointer to an ordinary session is not hidden', a
   const calls = []
   const context = {
     host: {
-      request: async (method, params) => {
-        calls.push({ method, params })
-        if (method === 'profiles.list') {
-          return {
-            profiles: [{ name: 'default', preferred_session: { id: 'ordinary-1', title: '生产调度会优化' } }]
-          }
-        }
-        return {}
+      request: async () => {
+        throw new Error('ambient gateway must not be used')
       }
     },
+    requestForBot: async (bot, method, params) => {
+      calls.push({ bot: bot.name, method, params })
+      if (method === 'profiles.list') {
+        return {
+          profiles: [{ name: 'default', preferred_session: { id: 'ordinary-1', title: '生产调度会优化' } }]
+        }
+      }
+      if (method === 'session.list') return { sessions: [] }
+      return {}
+    },
+    $lastRoster: { get: () => [{ name: 'default', connectionId: 'source-a', sourceScoped: true }] },
+    PROFILE_SESSION_LIST_LIMIT: 200,
     $botMeta: { get: () => ({ default: { chat: 'ordinary-1' } }) },
     $groupChats: { get: () => ({}) }
   }
@@ -113,6 +130,48 @@ test('safety: a stale canonical pointer to an ordinary session is not hidden', a
   await context.__h.hideOwnedBotSessions()
 
   assert.equal(calls.some(c => c.method === 'session.set_hidden'), false)
+})
+
+test('same raw durable id is hidden only through each recorded A/B owner', async () => {
+  const start = source.indexOf('function hideOwnedBotSessions()')
+  const end = source.indexOf('/** Fetch server-side avatars', start)
+  const calls = []
+  const roster = [
+    { name: 'alpha', connectionId: 'source-a', sourceScoped: true },
+    { name: 'alpha', connectionId: 'source-b', sourceScoped: true, remoteSource: true }
+  ]
+  const context = {
+    host: {
+      request: async () => {
+        throw new Error('ambient raw-id dispatch is forbidden')
+      }
+    },
+    requestForBot: async (bot, method, params) => {
+      calls.push({ connectionId: bot.connectionId, method, params })
+      if (method === 'profiles.list') {
+        return { profiles: [{ name: 'alpha', preferred_session: { id: 'stored-shared', title: 'Bot Chat' } }] }
+      }
+      if (method === 'session.list') return { sessions: [] }
+      return {}
+    },
+    $lastRoster: { get: () => roster },
+    PROFILE_SESSION_LIST_LIMIT: 200,
+    $botMeta: { get: () => ({ alpha: { chat: 'stored-shared' } }) },
+    $groupChats: { get: () => ({ Core: { sessions: { 'source-b::alpha': 'stored-shared' } } }) }
+  }
+  const section = source.slice(start, end).concat('\nglobalThis.__h = { hideOwnedBotSessions };\n')
+  vm.runInNewContext(section, context, { filename: 'h-ab.js' })
+
+  await context.__h.hideOwnedBotSessions()
+
+  const hidden = calls.filter(call => call.method === 'session.set_hidden')
+  assert.deepEqual(
+    hidden.map(call => [call.connectionId, call.params.session_id]).sort(),
+    [
+      ['source-a', 'stored-shared'],
+      ['source-b', 'stored-shared']
+    ]
+  )
 })
 
 test('sweepBotProfileSessions hides Bot-Mode-titled rows per roster bot, and only those', async () => {

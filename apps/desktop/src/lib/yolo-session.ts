@@ -1,5 +1,6 @@
 import { $gateway } from '@/store/gateway'
 import { $activeSessionId, setYoloActive } from '@/store/session'
+import { requestForRendererRuntime } from '@/store/session-request-router'
 
 export type GatewayRequester = <T = unknown>(method: string, params?: Record<string, unknown>) => Promise<T>
 
@@ -66,11 +67,9 @@ export async function setYoloEnabled(enabled: boolean): Promise<boolean> {
     return enabled
   }
 
-  const gateway = $gateway.get()
-
-  if (!gateway) {
+  if (!$gateway.get()) {
     throw new Error('Hermes gateway unavailable')
   }
 
-  return setSessionYolo((method, params) => gateway.request(method, params), sessionId, enabled)
+  return setSessionYolo((method, params) => requestForRendererRuntime(sessionId, method, params), sessionId, enabled)
 }

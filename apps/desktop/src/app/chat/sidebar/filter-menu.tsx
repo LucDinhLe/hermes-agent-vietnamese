@@ -18,7 +18,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { useI18n } from '@/i18n'
+import { type PluginTranslate, useI18n, usePluginI18n } from '@/i18n'
 import { desktopGit } from '@/lib/desktop-git'
 import { cn } from '@/lib/utils'
 import {
@@ -112,6 +112,10 @@ const STATUS_FILTERS: Option<SessionStatusBucket>[] = [
   { dot: cn(sessionDotClassName('idle'), 'bg-(--ui-text-quaternary)'), id: 'idle', label: 'Idle' }
 ]
 
+function localizeOptions<T extends string>(options: Option<T>[], t: PluginTranslate): Option<T>[] {
+  return options.map(option => ({ ...option, label: t(`sidebarFilter.options.${option.id}`) }))
+}
+
 function OptionGlyph({ option }: { option: Option }) {
   if (option.dot) {
     return <span aria-hidden="true" className={cn('shrink-0', option.dot)} />
@@ -150,6 +154,7 @@ function OptionRadio({ option }: { option: Option }) {
 
 export function SidebarFilterMenu({ className }: { className?: string }) {
   const { t } = useI18n()
+  const vt = usePluginI18n('hermes-vietnamese')
   const grouping = useStore($sidebarGrouping)
   const ordering = useStore($sidebarOrdering)
   const rowMeta = useStore($sidebarRowMeta)
@@ -176,12 +181,13 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
   // been explicitly shut.
   const projectsCollapsed = projects.length > 0 && projects.every(project => nodeOpen[project.id] === false)
 
-  const groupingLabel = GROUPINGS.find(option => option.id === grouping)?.label
+  const groupings = localizeOptions(GROUPINGS, vt)
+  const groupingLabel = groupings.find(option => option.id === grouping)?.label
 
   // Two options are conditional: dragging a row is what picks manual, so it
   // only appears as a way back out once there's a hand-picked order to leave;
   // and cost is hidden until some session actually reports spend.
-  const orderings = ORDERINGS.filter(option => {
+  const orderings = localizeOptions(ORDERINGS, vt).filter(option => {
     if (option.id === 'manual') {
       return ordering === 'manual'
     }
@@ -189,7 +195,7 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
     return option.id !== 'cost' || hasCost || ordering === 'cost'
   })
 
-  const rowMetaOptions = ROW_META.filter(option => {
+  const rowMetaOptions = localizeOptions(ROW_META, vt).filter(option => {
     if (option.id === 'cost') {
       return hasCost || rowMeta.includes('cost')
     }
@@ -206,7 +212,7 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
-          aria-label="Filters"
+          aria-label={vt('sidebarFilter.filters')}
           className={cn(
             className,
             'data-[state=open]:bg-(--ui-control-active-background) data-[state=open]:text-foreground data-[state=open]:opacity-100',
@@ -227,7 +233,7 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
         <DropdownMenuGroup>
           <DropdownMenuSub>
             <DropdownMenuSubTrigger hideChevron>
-              Grouping
+              {vt('sidebarFilter.grouping')}
               <span className="ml-auto flex items-center gap-1 pl-4 text-(--ui-text-tertiary)">
                 {groupingLabel}
                 <Codicon name="chevron-right" size="1rem" />
@@ -238,7 +244,7 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
                 onValueChange={value => setSidebarGrouping(value as SidebarGrouping)}
                 value={grouping}
               >
-                {GROUPINGS.map(option => (
+                {groupings.map(option => (
                   <OptionRadio key={option.id} option={option} />
                 ))}
               </DropdownMenuRadioGroup>
@@ -246,7 +252,7 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
           </DropdownMenuSub>
 
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger>Ordering</DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger>{vt('sidebarFilter.ordering')}</DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               <DropdownMenuRadioGroup
                 onValueChange={value => setSidebarOrdering(value as SidebarOrdering)}
@@ -260,7 +266,7 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
           </DropdownMenuSub>
 
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger>Show</DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger>{vt('sidebarFilter.show')}</DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
               {rowMetaOptions.map(option => (
                 <OptionCheckbox
@@ -278,19 +284,19 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
           <OptionCheckbox
             checked={cardRows}
             onCheck={() => setSidebarCardRows(!cardRows)}
-            option={{ icon: 'inbox', id: 'card-rows', label: 'Inbox style' }}
+            option={{ icon: 'inbox', id: 'card-rows', label: vt('sidebarFilter.inboxStyle') }}
           />
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />
 
         <DropdownMenuGroup>
-          <DropdownMenuLabel>Filters</DropdownMenuLabel>
+          <DropdownMenuLabel>{vt('sidebarFilter.filters')}</DropdownMenuLabel>
 
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger>Status</DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger>{vt('sidebarFilter.status')}</DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
-              {STATUS_FILTERS.map(option => (
+              {localizeOptions(STATUS_FILTERS, vt).map(option => (
                 <OptionCheckbox
                   checked={statusFilter.includes(option.id)}
                   key={option.id}
@@ -305,9 +311,9 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
               this submenu never appears rather than filtering everything out. */}
           {prAvailable && (
             <DropdownMenuSub>
-              <DropdownMenuSubTrigger>Pull request</DropdownMenuSubTrigger>
+              <DropdownMenuSubTrigger>{vt('sidebarFilter.pullRequest')}</DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
-                {PR_FILTERS.map(option => (
+                {localizeOptions(PR_FILTERS, vt).map(option => (
                   <OptionCheckbox
                     checked={prFilter.includes(option.id)}
                     key={option.id}
@@ -320,7 +326,7 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
           )}
 
           <DropdownMenuSub>
-            <DropdownMenuSubTrigger>Profile</DropdownMenuSubTrigger>
+            <DropdownMenuSubTrigger>{vt('sidebarFilter.profile')}</DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="max-h-80 overflow-y-auto">
               {/* Scoped to one profile the rail is already the filter, so the
                   per-profile boxes only appear where they can narrow something.
@@ -347,7 +353,7 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
 
           {projects.length > 1 && (
             <DropdownMenuSub>
-              <DropdownMenuSubTrigger>Project</DropdownMenuSubTrigger>
+              <DropdownMenuSubTrigger>{vt('sidebarFilter.project')}</DropdownMenuSubTrigger>
               <DropdownMenuSubContent className="max-h-80 overflow-y-auto">
                 {projects.map(project => (
                   <OptionCheckbox
@@ -382,12 +388,14 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
           <OptionCheckbox
             checked={showArchived}
             onCheck={() => setSidebarShowArchived(!showArchived)}
-            option={{ id: 'archived', label: 'Archived' }}
+            option={{ id: 'archived', label: vt('sidebarFilter.archived') }}
           />
 
           {/* One way back rather than two near-identical ones: this drops the
               grouping and sort too, which "clear filters" left behind. */}
-          {viewCustomized && <DropdownMenuItem onSelect={resetSidebarView}>Reset to defaults</DropdownMenuItem>}
+          {viewCustomized && (
+            <DropdownMenuItem onSelect={resetSidebarView}>{vt('sidebarFilter.reset')}</DropdownMenuItem>
+          )}
         </DropdownMenuGroup>
 
         <DropdownMenuSeparator />
@@ -405,11 +413,11 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
               )
             }
           >
-            {projectsCollapsed ? 'Expand all' : 'Collapse all'}
+            {projectsCollapsed ? vt('sidebarFilter.expandAll') : vt('sidebarFilter.collapseAll')}
           </DropdownMenuItem>
         )}
         <DropdownMenuItem disabled={unreadIds.length === 0} onSelect={markAllSessionsRead}>
-          Mark all as read
+          {vt('sidebarFilter.markAllRead')}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

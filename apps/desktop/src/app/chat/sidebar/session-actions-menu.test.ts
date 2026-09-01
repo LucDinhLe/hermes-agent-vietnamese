@@ -1,7 +1,8 @@
 import { atom } from 'nanostores'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { $activeSessionId, $selectedStoredSessionId } from '@/store/session'
+import { $activeSessionId, $selectedStoredSessionId, $sessions } from '@/store/session'
+import type { SessionInfo } from '@/types/hermes'
 
 import { renameSessionPreferringRpc } from './session-actions-menu'
 
@@ -17,9 +18,9 @@ import { renameSessionPreferringRpc } from './session-actions-menu'
 // subscriber synchronously — that reaches the @/store/gateway mock's
 // activeGateway() during the transitive import on line 4, before a plain
 // module-level const would be initialized (temporal dead zone).
-const { renameSession, request, activeGateway } = vi.hoisted(() => ({
-  renameSession: vi.fn(async () => ({ ok: true, title: 'rest-title' })),
-  request: vi.fn(async () => ({ title: 'rpc-title' }) as never),
+const { renameSessionForOwner, request, activeGateway } = vi.hoisted(() => ({
+  renameSessionForOwner: vi.fn(async () => ({ ok: true, title: 'rest-title' })),
+  request: vi.fn(async (_method: string, _params?: Record<string, unknown>) => ({ title: 'rpc-title' }) as never),
   activeGateway: vi.fn<() => { request: unknown } | null>(() => ({ request: undefined }))
 }))
 
@@ -27,7 +28,7 @@ const { renameSession, request, activeGateway } = vi.hoisted(() => ({
 activeGateway.mockReturnValue({ request })
 
 vi.mock('@/hermes', () => ({
-  renameSession: (...args: unknown[]) => renameSession(...(args as [])),
+  renameSessionForOwner: (...args: unknown[]) => renameSessionForOwner(...(args as [])),
   // profile.ts calls this at import (its $activeGatewayProfile subscribe fires
   // immediately), pulled in transitively via session-states.
   setApiRequestProfile: () => {},
@@ -43,16 +44,38 @@ vi.mock('@/store/gateway', () => ({
   activeGateway: () => activeGateway()
 }))
 
+vi.mock('@/store/session-request-router', () => ({
+  requestForRendererRuntime: (runtimeId: string, method: string, params: Record<string, unknown>) => {
+    if (!activeGateway()) {
+      return Promise.reject(new Error('not connected'))
+    }
+
+    return request(method, { session_id: runtimeId, ...params })
+  }
+}))
+
 const RUNTIME_ID = 'rt-runtime-1'
 const STORED_ID = 'stored-branch-1'
+const ownerA = { connectionId: 'source-a', profile: 'work' }
+const row = (): SessionInfo =>
+  ({
+    connection_id: ownerA.connectionId,
+    id: STORED_ID,
+    message_count: 1,
+    profile: ownerA.profile,
+    source: 'cli',
+    started_at: 0,
+    title: 'Stored'
+  }) as SessionInfo
 
 afterEach(() => {
-  renameSession.mockClear()
+  renameSessionForOwner.mockClear()
   request.mockClear()
   activeGateway.mockReset()
   activeGateway.mockReturnValue({ request })
   $activeSessionId.set(null)
   $selectedStoredSessionId.set(null)
+  $sessions.set([])
 })
 
 describe('renameSessionPreferringRpc', () => {
@@ -63,50 +86,59 @@ describe('renameSessionPreferringRpc', () => {
     const result = await renameSessionPreferringRpc(STORED_ID, 'My branch')
 
     expect(request).toHaveBeenCalledWith('session.title', { session_id: RUNTIME_ID, title: 'My branch' })
-    expect(renameSession).not.toHaveBeenCalled()
+    expect(renameSessionForOwner).not.toHaveBeenCalled()
     expect(result.title).toBe('rpc-title')
   })
 
   it('falls back to REST when the RPC fails (e.g. socket mid-reconnect)', async () => {
     $selectedStoredSessionId.set(STORED_ID)
     $activeSessionId.set(RUNTIME_ID)
+    $sessions.set([row()])
     request.mockRejectedValueOnce(new Error('not connected'))
 
-    const result = await renameSessionPreferringRpc(STORED_ID, 'My branch', 'work')
+    const result = await renameSessionPreferringRpc(STORED_ID, 'My branch', ownerA)
 
     expect(request).toHaveBeenCalledOnce()
-    expect(renameSession).toHaveBeenCalledWith(STORED_ID, 'My branch', 'work')
+    expect(renameSessionForOwner).toHaveBeenCalledWith(STORED_ID, 'My branch', ownerA)
     expect(result.title).toBe('rest-title')
   })
 
   it('uses REST for a non-active row (background/persisted session)', async () => {
     $selectedStoredSessionId.set('some-other-active-session')
     $activeSessionId.set(RUNTIME_ID)
+    $sessions.set([row()])
 
-    await renameSessionPreferringRpc(STORED_ID, 'My branch', 'work')
+    await renameSessionPreferringRpc(STORED_ID, 'My branch', ownerA)
 
     expect(request).not.toHaveBeenCalled()
-    expect(renameSession).toHaveBeenCalledWith(STORED_ID, 'My branch', 'work')
+    expect(renameSessionForOwner).toHaveBeenCalledWith(STORED_ID, 'My branch', ownerA)
   })
 
   it('uses REST when clearing the title (RPC rejects empty titles)', async () => {
     $selectedStoredSessionId.set(STORED_ID)
     $activeSessionId.set(RUNTIME_ID)
+    $sessions.set([row()])
 
-    await renameSessionPreferringRpc(STORED_ID, '')
+    await renameSessionPreferringRpc(STORED_ID, '', ownerA)
 
     expect(request).not.toHaveBeenCalled()
-    expect(renameSession).toHaveBeenCalledWith(STORED_ID, '', undefined)
+    expect(renameSessionForOwner).toHaveBeenCalledWith(STORED_ID, '', ownerA)
   })
 
   it('uses REST when no gateway is connected', async () => {
     $selectedStoredSessionId.set(STORED_ID)
     $activeSessionId.set(RUNTIME_ID)
     activeGateway.mockReturnValue(null)
+    $sessions.set([row()])
 
-    await renameSessionPreferringRpc(STORED_ID, 'My branch')
+    await renameSessionPreferringRpc(STORED_ID, 'My branch', ownerA)
 
     expect(request).not.toHaveBeenCalled()
-    expect(renameSession).toHaveBeenCalledWith(STORED_ID, 'My branch', undefined)
+    expect(renameSessionForOwner).toHaveBeenCalledWith(STORED_ID, 'My branch', ownerA)
+  })
+
+  it('fails closed when a REST fallback has no exact backend owner', async () => {
+    await expect(renameSessionPreferringRpc(STORED_ID, '')).rejects.toThrow('exact backend owner')
+    expect(renameSessionForOwner).not.toHaveBeenCalled()
   })
 })

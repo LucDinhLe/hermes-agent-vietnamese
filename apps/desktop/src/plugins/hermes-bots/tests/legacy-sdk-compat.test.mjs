@@ -87,5 +87,16 @@ test('legacy SDK without optional capability exports still links Bot Mode', asyn
   const loaded = await import(pathToFileURL(pluginPath).href)
 
   assert.equal(loaded.default.id, 'hermes-bots')
+  assert.equal(loaded.default.defaultEnabled, true)
   assert.equal(typeof loaded.default.register, 'function')
+})
+
+test('opt-in posture retains the complete Bots capability surface', () => {
+  assert.match(pluginSource, /title: 'Quản lý Agents'/)
+  assert.match(pluginSource, /id: 'agents-route',[\s\S]*?render: \(\) => jsx\(BotsPane, \{\}\)/)
+  assert.match(pluginSource, /id: 'agents-nav'/)
+  assert.match(pluginSource, /const registerRoutinesPane = \(\) =>[\s\S]*?id: 'routines'/)
+  assert.match(pluginSource, /id: 'new-agent'/)
+  assert.match(pluginSource, /id: 'mention-completions'/)
+  assert.match(pluginSource, /id: 'mention-middleware'/)
 })

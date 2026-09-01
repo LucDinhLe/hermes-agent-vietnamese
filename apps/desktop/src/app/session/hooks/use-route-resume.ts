@@ -10,6 +10,7 @@ interface RouteResumeOptions {
   creatingSessionRef: MutableRefObject<boolean>
   currentView: string
   freshDraftReady: boolean
+  getRuntimeIdForStoredSession?: (storedSessionId: string) => null | string
   gatewayState: string | undefined
   locationPathname: string
   resumeSession: (sessionId: string, focus: boolean) => Promise<unknown>
@@ -26,7 +27,8 @@ interface RouteResumeOptions {
   resumeExhaustedSessionId: string | null
   sessionResumeRequest: SessionResumeRequest | null
   routedSessionId: string | null
-  runtimeIdByStoredSessionIdRef: MutableRefObject<Map<string, string>>
+  /** @deprecated Test/legacy seam; production supplies the exact resolver. */
+  runtimeIdByStoredSessionIdRef?: MutableRefObject<Map<string, string>>
   selectedStoredSessionId: string | null
   selectedStoredSessionIdRef: MutableRefObject<string | null>
   startFreshSessionDraft: (focus: boolean) => unknown
@@ -73,6 +75,7 @@ export function useRouteResume({
   creatingSessionRef,
   currentView,
   freshDraftReady,
+  getRuntimeIdForStoredSession,
   gatewayState,
   locationPathname,
   resumeSession,
@@ -124,7 +127,10 @@ export function useRouteResume({
     }
 
     if (routedSessionId) {
-      const cachedRuntime = runtimeIdByStoredSessionIdRef.current.get(routedSessionId)
+      const cachedRuntime =
+        getRuntimeIdForStoredSession?.(routedSessionId) ??
+        runtimeIdByStoredSessionIdRef?.current.get(routedSessionId) ??
+        null
 
       const alreadyActive =
         routedSessionId === selectedStoredSessionIdRef.current &&
@@ -204,6 +210,7 @@ export function useRouteResume({
     resumeSession,
     sessionResumeRequest,
     routedSessionId,
+    getRuntimeIdForStoredSession,
     runtimeIdByStoredSessionIdRef,
     selectedStoredSessionId,
     selectedStoredSessionIdRef,

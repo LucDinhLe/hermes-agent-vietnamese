@@ -5,6 +5,7 @@ import type { GatewayEventPayload } from '@/lib/chat-messages'
 import type { RpcEvent } from '@/types/hermes'
 
 import type { ClientSessionState } from '../../../../types'
+import type { SessionBindingRegistry } from '../../../session-binding-registry'
 
 export interface GatewayEventDeps {
   activeGatewayProfile: string
@@ -30,8 +31,11 @@ export interface GatewayEventDeps {
     runtimeSessionId?: string | null
   ) => Promise<void>
   queryClient: QueryClient
+  qualifyRuntimeIds: boolean
   refreshHermesConfig: () => Promise<void>
+  runtimeIdByStoredSessionIdRef: MutableRefObject<Map<string, string>>
   scheduleSessionsRefresh: () => void
+  sessionBindingRegistry: SessionBindingRegistry
   sessionInterrupted: (sessionId: string) => boolean
   sessionStateByRuntimeIdRef: MutableRefObject<Map<string, ClientSessionState>>
   updateSessionState: (
@@ -56,8 +60,19 @@ export interface GatewayEventContext {
   payload: GatewayEventPayload | undefined
   /** Routed session id (explicit, pinned unscoped stream, or active fallback). */
   sessionId: null | string
-  /** The raw `session_id` on the event ('' when unscoped). */
+  /** Backend-qualified renderer id on the event ('' when unscoped). */
   explicitSid: string
+  /**
+   * Answer a request-id-only event on the exact backend socket that emitted
+   * it. This never consults the ambient/active gateway and fails closed when
+   * the event did not carry a backend-qualified runtime identity.
+   */
+  requestEventSource: <T>(
+    method: string,
+    params?: Record<string, unknown>,
+    timeoutMs?: number,
+    signal?: AbortSignal
+  ) => Promise<T>
   /** The routed session is the one on screen. */
   isActiveEvent: boolean
   /** Event timestamp in epoch seconds (payload timestamp or receipt time). */

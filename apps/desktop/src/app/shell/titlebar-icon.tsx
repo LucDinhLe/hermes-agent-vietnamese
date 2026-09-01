@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 
 import { titlebarIconSizeCss } from './titlebar'
 
-/** Titlebar-cluster glyph — 13.9px inline (see titlebarIconSizeCss). */
+/** Titlebar-cluster glyph — 16px inline (see titlebarIconSizeCss). */
 export function TitlebarIcon({
   className,
   name,

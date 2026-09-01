@@ -52,6 +52,7 @@ import { $cronFocusJobId, $cronJobs, invalidateCronJobsRequests, setCronFocusJob
 import { $changeEventsAvailable, $cronChangeTick } from '@/store/live-sync'
 import { notify, notifyError } from '@/store/notifications'
 import { $profileScope, ALL_PROFILES } from '@/store/profile'
+import { explicitSessionRouteOwner, stageSessionRouteOwner } from '@/store/session-route-owner'
 
 import { useRefreshHotkey } from '../hooks/use-refresh-hotkey'
 import {
@@ -73,6 +74,7 @@ import {
 } from '../overlays/panel'
 import type { SetStatusbarItemGroup } from '../shell/statusbar-controls'
 
+import { localizeAutomationBlueprints } from './blueprint-localization'
 import { BlueprintSlotControl, blueprintSlotHelp, cleanBlueprintFieldError, initialBlueprintValues } from './blueprints'
 import { mutateAndRefreshCronJobs, refreshCronJobs, triggerAndRefreshCronJobs } from './cron-actions'
 import {
@@ -296,7 +298,7 @@ interface CronViewProps extends React.ComponentProps<'section'> {
 }
 
 export function CronView({ onClose, onOpenSession, setStatusbarItemGroup: _setStatusbarItemGroup }: CronViewProps) {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const c = t.cron
   // Source of truth is the shared atom (also fed by the controller poll), so the
   // sidebar and this overlay never drift — a delete here clears the sidebar row
@@ -408,11 +410,11 @@ export function CronView({ onClose, onOpenSession, setStatusbarItemGroup: _setSt
   })
 
   const visibleBlueprints = useMemo(() => {
-    const list = blueprintsQuery.data ?? []
+    const list = localizeAutomationBlueprints(blueprintsQuery.data ?? [], locale)
     const needle = query.trim().toLowerCase()
 
     return needle ? list.filter(item => `${item.title} ${item.description}`.toLowerCase().includes(needle)) : list
-  }, [blueprintsQuery.data, query])
+  }, [blueprintsQuery.data, locale, query])
 
   // Detail always reflects a concrete job: the explicitly selected one, else the
   // first visible row, so the right pane is never empty while jobs exist.
@@ -937,7 +939,15 @@ function CronJobRuns({
             <button
               className="row-hover flex items-center justify-between gap-3 rounded-md px-2 py-1 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               key={run.id}
-              onClick={() => onOpenSession?.(run.id)}
+              onClick={() => {
+                const owner = explicitSessionRouteOwner(run)
+
+                if (owner) {
+                  stageSessionRouteOwner(run.id, owner)
+                }
+
+                onOpenSession?.(run.id)
+              }}
               type="button"
             >
               <span className="truncate text-foreground/85">{run.title?.trim() || run.preview?.trim() || run.id}</span>
@@ -1025,7 +1035,7 @@ function CronEditorDialog({
   onClose: () => void
   onSave: (values: EditorValues) => Promise<void>
 }) {
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const c = t.cron
   const open = editor.mode !== 'closed'
   const isEdit = editor.mode === 'edit'
@@ -1058,7 +1068,10 @@ function CronEditorDialog({
     enabled: open && !isEdit
   })
 
-  const blueprintList = blueprintsQuery.data ?? []
+  const blueprintList = useMemo(
+    () => localizeAutomationBlueprints(blueprintsQuery.data ?? [], locale),
+    [blueprintsQuery.data, locale]
+  )
 
   const blueprint =
     templateChoice === CUSTOM_TEMPLATE ? null : (blueprintList.find(item => item.key === templateChoice) ?? null)

@@ -1,11 +1,11 @@
 import { textWithoutReferenceLines } from '@/components/assistant-ui/reference-kinds'
-import { getSession } from '@/hermes'
+import { getSessionForOwner } from '@/hermes'
 import { assistantTextPart, type ChatMessage, chatMessageText, textPart } from '@/lib/chat-messages'
 import { normalizePersonalityValue } from '@/lib/chat-runtime'
 import { embeddedImageUrls, textWithoutEmbeddedImages } from '@/lib/embedded-images'
 import { reconcileApprovalModeForProfile } from '@/store/approval-mode'
 import { requestDesktopOnboardingForCredentialWarning } from '@/store/onboarding'
-import { $activeGatewayProfile, $profiles, normalizeProfileKey } from '@/store/profile'
+import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
 import {
   $cronSessions,
   $currentCwd,
@@ -1277,12 +1277,75 @@ export function sessionShouldHaveTranscript(session: SessionInfo | undefined): b
   return (session?.message_count ?? 0) > 0
 }
 
-function upsertResolvedSession(session: SessionInfo, storedSessionId: string) {
+export interface ResolvedSessionOwner {
+  connectionId: null | string
+  profile: string
+}
+
+function normalizeResolvedSessionOwner(owner: ResolvedSessionOwner | null | undefined): ResolvedSessionOwner | null {
+  if (!owner) {
+    return null
+  }
+
+  const profile = owner.profile?.trim()
+
+  if (!profile) {
+    return null
+  }
+
+  const rawConnectionId = owner.connectionId?.trim() || ''
+
+  return {
+    connectionId: !rawConnectionId || rawConnectionId === 'local' ? null : rawConnectionId,
+    profile
+  }
+}
+
+function cachedSessionOwner(session: SessionInfo): ResolvedSessionOwner | null {
+  const profile = session.profile?.trim()
+
+  if (!profile) {
+    return null
+  }
+
+  return normalizeResolvedSessionOwner({
+    connectionId: session.connection_id?.trim() || null,
+    profile
+  })
+}
+
+function sessionOwnerKey(owner: ResolvedSessionOwner): string {
+  return JSON.stringify([owner.connectionId, owner.profile])
+}
+
+function sessionHasOwner(session: SessionInfo, owner: ResolvedSessionOwner): boolean {
+  const cachedOwner = cachedSessionOwner(session)
+
+  return cachedOwner !== null && sessionOwnerKey(cachedOwner) === sessionOwnerKey(owner)
+}
+
+function stampResolvedSessionOwner(session: SessionInfo, owner: ResolvedSessionOwner): SessionInfo {
+  const stamped = { ...session, profile: owner.profile }
+
+  if (owner.connectionId === null) {
+    delete stamped.connection_id
+  } else {
+    stamped.connection_id = owner.connectionId
+  }
+
+  return stamped
+}
+
+function upsertResolvedSession(session: SessionInfo, storedSessionId: string, owner: ResolvedSessionOwner) {
   const lineage = session._lineage_root_id ?? session.id
 
   setSessions(prev => [
     session,
     ...prev.filter(existing => {
+      if (!sessionHasOwner(existing, owner)) {
+        return true
+      }
+
       if (sessionMatchesStoredId(existing, storedSessionId)) {
         return false
       }
@@ -1292,92 +1355,86 @@ function upsertResolvedSession(session: SessionInfo, storedSessionId: string) {
   ])
 }
 
-export async function resolveStoredSession(storedSessionId: string): Promise<SessionInfo | undefined> {
-  const cached = [...$sessions.get(), ...$cronSessions.get(), ...$messagingSessions.get()].find(session =>
-    sessionMatchesStoredId(session, storedSessionId)
-  )
+export async function resolveStoredSession(
+  storedSessionId: string,
+  ownerHint?: ResolvedSessionOwner | null
+): Promise<SessionInfo | undefined> {
+  const exactOwner = normalizeResolvedSessionOwner(ownerHint)
 
-  // A row with no owning profile can't route a resume when more than one
-  // profile exists — a resume without a profile lands on whichever gateway is
-  // active (#67603 family, cross-profile open asymmetry). Treat such a hit as
-  // unresolved and fall through to the by-id lookups, which stamp ownership.
-  const multiProfile = $profiles.get().length > 1
+  if (ownerHint !== undefined) {
+    if (!exactOwner) {
+      return undefined
+    }
 
-  if (cached && (cached.profile?.trim() || !multiProfile)) {
-    return cached
-  }
-
-  // Direct by-id on the active profile — one row lookup, no list scan. Electron
-  // routes an unscoped GET to the primary backend, which may not own the
-  // active profile. A 404 there used to skip that profile in the probes below,
-  // so the session was never found.
-  const activeKey = normalizeProfileKey($activeGatewayProfile.get())
-
-  try {
-    const session = await getSession(storedSessionId, activeKey)
-
-    // Older backends can omit `profile`; this request targeted the active
-    // profile, so back-fill that rather than caching an unowned row. A present
-    // stamp is preserved for backend compatibility.
-    session.profile ||= activeKey
-
-    upsertResolvedSession(session, storedSessionId)
-
-    return session
-  } catch {
-    // Not on the active profile — fall through to the cross-profile probe.
-  }
-
-  // Multi-profile only: probe each remaining profile by id (still one cheap
-  // lookup each) rather than pulling every profile's recent sessions. The
-  // first hit carries its owning `profile`, which routes the resume to the
-  // right backend. The active profile was already tried above.
-  const otherProfiles = $profiles
-    .get()
-    .map(profile => normalizeProfileKey(profile.name))
-    .filter(key => key !== activeKey)
-
-  for (const profile of otherProfiles) {
     try {
-      const session = await getSession(storedSessionId, profile)
+      const validated = stampResolvedSessionOwner(await getSessionForOwner(storedSessionId, exactOwner), exactOwner)
 
-      // Same ownership contract: the DESKTOP profile we explicitly probed is
-      // authoritative, whatever the scoped backend stamped (older backends
-      // omit the field; a per-profile remote override strips the alias before
-      // forwarding, so that backend answers as its own "default").
-      session.profile = profile
+      if (!sessionMatchesStoredId(validated, storedSessionId)) {
+        return undefined
+      }
 
-      upsertResolvedSession(session, storedSessionId)
+      upsertResolvedSession(validated, storedSessionId, exactOwner)
 
-      return session
+      return validated
     } catch {
-      // Not on this profile; try the next.
+      return undefined
     }
   }
 
-  return undefined
+  const matches = [...$sessions.get(), ...$cronSessions.get(), ...$messagingSessions.get()].filter(session =>
+    sessionMatchesStoredId(session, storedSessionId)
+  )
+
+  const rowsByOwner = new Map<string, SessionInfo>()
+
+  for (const session of matches) {
+    const owner = cachedSessionOwner(session)
+
+    if (owner) {
+      rowsByOwner.set(sessionOwnerKey(owner), session)
+    }
+  }
+
+  return rowsByOwner.size === 1 ? rowsByOwner.values().next().value : undefined
+}
+
+/** Resolve the complete backend owner for a durable session. */
+export async function resolveSessionOwner(
+  storedSessionId: null | string,
+  ownerHint?: ResolvedSessionOwner | null
+): Promise<ResolvedSessionOwner | undefined> {
+  if (!storedSessionId) {
+    return undefined
+  }
+
+  if (ownerHint !== undefined) {
+    return normalizeResolvedSessionOwner(ownerHint) ?? undefined
+  }
+
+  const session = await resolveStoredSession(storedSessionId)
+
+  if (!session) {
+    return undefined
+  }
+
+  return cachedSessionOwner(session) ?? undefined
 }
 
 /**
- * The profile that owns a stored session, resolved through the same
- * cache → active-backend → cross-profile ladder as `resolveStoredSession`.
+ * The profile that owns a stored session, resolved from an exact owner hint or
+ * one unambiguous cached owner. Raw ids never authorize ambient profile probes.
  *
  * Recovery `session.resume` calls (stale runtime id, session-not-found, wedged
  * loop) must re-register the conversation on ITS backend, not on whichever
  * profile happens to be live. Omitting the profile lets the gateway fall back to
  * the launch-profile DB (tui_gateway/server.py), which is how a session bleeds
- * from one profile into another (#67603, second symptom). A cache-only lookup
- * misses any session outside the paginated sidebar window, so route through the
- * resolver, which probes uncached ids across profiles.
+ * from one profile into another (#67603, second symptom).
  */
-export async function resolveSessionProfile(storedSessionId: null | string): Promise<string | undefined> {
-  if (!storedSessionId) {
-    return undefined
-  }
-
-  const profile = (await resolveStoredSession(storedSessionId))?.profile?.trim()
-
-  return profile || undefined
+export async function resolveSessionProfile(
+  storedSessionId: null | string,
+  ownerHint?: ResolvedSessionOwner | null
+): Promise<string | undefined> {
+  return (await resolveSessionOwner(storedSessionId, ownerHint))?.profile
 }
 
 type SessionRuntimeStatePatch = Partial<

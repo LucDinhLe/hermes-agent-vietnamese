@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   getHermesConfigRecord,
   getMcpCatalog,
+  getSessionForOwner,
   getSkillContent,
   getSkills,
   getToolsets,
@@ -97,6 +98,34 @@ describe('capability helpers are connection-scoped', () => {
 
     expect(last().profile).toBe('coder')
     expect(last()).not.toHaveProperty('connectionId')
+  })
+
+  it.each(['local', null] as const)(
+    'reads a locally-owned session (%s) without inheriting the ambient remote connection',
+    connectionId => {
+      setApiRequestProfile('ambient-profile')
+      setApiRequestConnection('ambient-remote')
+
+      void getSessionForOwner('stored/local id', { connectionId, profile: 'coder profile' })
+
+      expect(last()).toEqual({
+        path: '/api/sessions/stored%2Flocal%20id?profile=coder%20profile',
+        profile: 'coder profile'
+      })
+    }
+  )
+
+  it('reads a remotely-owned session from its exact connection instead of the ambient one', () => {
+    setApiRequestProfile('ambient-profile')
+    setApiRequestConnection('ambient-remote')
+
+    void getSessionForOwner('stored/remote id', { connectionId: 'owner-remote', profile: 'research profile' })
+
+    expect(last()).toEqual({
+      connectionId: 'owner-remote',
+      path: '/api/sessions/stored%2Fremote%20id?profile=research%20profile',
+      profile: 'research profile'
+    })
   })
 
   it('profileScopeKey keeps legacy keys byte-identical and namespaces remote pins', () => {

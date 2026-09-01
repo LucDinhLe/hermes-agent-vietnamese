@@ -1,14 +1,17 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { getGlobalModelOptions } from '@/hermes'
+import { rendererRuntimeKey } from '@/lib/session-runtime-key'
 
 import { manualPickRemoved, modelOptionsQueryKey, requestModelOptions } from './model-options'
 
 const globalOptions = { model: 'hermes-4', provider: 'nous', providers: [] }
+const runtimeRequest = vi.hoisted(() => vi.fn())
 
 vi.mock('@/hermes', () => ({
   getGlobalModelOptions: vi.fn(() => Promise.resolve(globalOptions))
 }))
+vi.mock('@/store/session-request-router', () => ({ requestForRendererRuntime: runtimeRequest }))
 
 describe('requestModelOptions', () => {
   afterEach(() => {
@@ -25,54 +28,53 @@ describe('requestModelOptions', () => {
     const gateway = {
       request: vi.fn(() => Promise.resolve(gatewayPayload))
     }
-
     await expect(requestModelOptions({ gateway: gateway as never, sessionId: null })).resolves.toBe(gatewayPayload)
 
     expect(gateway.request).toHaveBeenCalledWith('model.options', { explicit_only: true })
     expect(getGlobalModelOptions).not.toHaveBeenCalled()
   })
 
-  it('recovers an empty gateway catalog through profile-scoped REST without replacing the session selection', async () => {
+  it('keeps an empty session catalog authoritative without falling through to ambient REST', async () => {
     const gatewayPayload = { model: 'hermes-local', provider: 'hermes-local' }
-
-    const restPayload = {
-      model: 'profile-default',
-      provider: 'openai-codex',
-      providers: [{ models: ['hermes-local'], name: 'Hermes Local vLLM', slug: 'hermes-local' }]
-    }
 
     const gateway = {
       request: vi.fn(() => Promise.resolve(gatewayPayload))
     }
+    runtimeRequest.mockResolvedValueOnce(gatewayPayload)
 
-    vi.mocked(getGlobalModelOptions).mockResolvedValueOnce(restPayload)
+    await expect(requestModelOptions({ gateway: gateway as never, sessionId: 'session-1' })).resolves.toEqual(
+      gatewayPayload
+    )
 
-    await expect(requestModelOptions({ gateway: gateway as never, sessionId: 'session-1' })).resolves.toEqual({
-      ...restPayload,
-      model: 'hermes-local',
-      provider: 'hermes-local'
-    })
-
-    expect(getGlobalModelOptions).toHaveBeenCalledWith({ explicitOnly: true })
+    expect(getGlobalModelOptions).not.toHaveBeenCalled()
   })
 
-  it('recovers through profile-scoped REST when the gateway catalog request fails', async () => {
-    const restPayload = {
-      model: 'hermes-local',
-      provider: 'hermes-local',
-      providers: [{ models: ['hermes-local'], name: 'Hermes Local vLLM', slug: 'hermes-local' }]
-    }
-
+  it('fails closed when the exact session catalog request fails', async () => {
     const gateway = {
       request: vi.fn(() => Promise.reject(new Error('gateway request unavailable')))
     }
+    runtimeRequest.mockRejectedValueOnce(new Error('gateway request unavailable'))
 
-    vi.mocked(getGlobalModelOptions).mockResolvedValueOnce(restPayload)
-
-    await expect(requestModelOptions({ gateway: gateway as never, sessionId: 'session-1' })).resolves.toEqual(
-      restPayload
+    await expect(requestModelOptions({ gateway: gateway as never, sessionId: 'session-1' })).rejects.toThrow(
+      'gateway request unavailable'
     )
-    expect(getGlobalModelOptions).toHaveBeenCalledWith({ explicitOnly: true })
+    expect(getGlobalModelOptions).not.toHaveBeenCalled()
+  })
+
+  it('routes a qualified session without an ambient gateway and never calls global REST', async () => {
+    const runtimeKey = rendererRuntimeKey(
+      { connectionId: 'agent-a', gatewayEpoch: 7, profile: 'default' },
+      'same-runtime'
+    )
+
+    runtimeRequest.mockResolvedValueOnce(globalOptions)
+
+    await expect(requestModelOptions({ gateway: undefined, sessionId: runtimeKey })).resolves.toBe(globalOptions)
+    expect(runtimeRequest).toHaveBeenCalledWith(runtimeKey, 'model.options', {
+      explicit_only: true,
+      session_id: runtimeKey
+    })
+    expect(getGlobalModelOptions).not.toHaveBeenCalled()
   })
 
   it('preserves the gateway error when its REST recovery path also fails', async () => {
@@ -101,15 +103,16 @@ describe('requestModelOptions', () => {
     const gateway = {
       request: vi.fn(() => Promise.resolve(globalOptions))
     }
+    runtimeRequest.mockResolvedValueOnce(globalOptions)
 
     await requestModelOptions({ gateway: gateway as never, refresh: true, sessionId: 'session-1' })
 
-    expect(gateway.request).toHaveBeenCalledWith('model.options', {
+    expect(runtimeRequest).toHaveBeenCalledWith('session-1', 'model.options', {
       explicit_only: true,
       refresh: true,
       session_id: 'session-1'
     })
-    expect(getGlobalModelOptions).toHaveBeenCalledWith({ explicitOnly: true, refresh: true })
+    expect(getGlobalModelOptions).not.toHaveBeenCalled()
   })
 
   it('falls back to REST when no gateway is connected', async () => {

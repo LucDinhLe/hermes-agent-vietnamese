@@ -500,6 +500,31 @@ function mapGroups(node: LayoutNode, fn: (g: GroupNode) => GroupNode): LayoutNod
   return node.type === 'group' ? fn(node) : { ...node, children: node.children.map(c => mapGroups(c, fn)) }
 }
 
+/** Replace one pane identity in place without changing its group, tab order,
+ * active state, split weights, or any other layout geometry. The operation is
+ * fail-closed when the source is absent or the destination already exists. */
+export function rekeyPane(root: LayoutNode, fromPaneId: string, toPaneId: string): LayoutNode {
+  if (!fromPaneId || !toPaneId || fromPaneId === toPaneId) {
+    return root
+  }
+
+  const paneIds = allPaneIds(root)
+
+  if (!paneIds.includes(fromPaneId) || paneIds.includes(toPaneId)) {
+    return root
+  }
+
+  return mapGroups(root, group =>
+    group.panes.includes(fromPaneId)
+      ? {
+          ...group,
+          active: group.active === fromPaneId ? toPaneId : group.active,
+          panes: group.panes.map(paneId => (paneId === fromPaneId ? toPaneId : paneId))
+        }
+      : group
+  )
+}
+
 export function setActivePane(root: LayoutNode, groupId: string, paneId: string): LayoutNode {
   return mapGroups(root, g => (g.id === groupId && g.panes.includes(paneId) ? { ...g, active: paneId } : g))
 }

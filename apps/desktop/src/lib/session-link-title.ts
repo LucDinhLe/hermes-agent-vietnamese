@@ -2,13 +2,13 @@
  * Resolves `@session:<profile>/<id>` reference values to the session's title.
  *
  * Same shape as the external-link title resolver (`external-link.tsx`): a
- * process-lifetime cache, in-flight dedupe, and subscribers so every chip for
- * the same session repaints off one lookup. The sidebar list answers most
- * lookups for free; only an unknown id costs a REST round-trip.
+ * process-lifetime cache and subscribers so every chip for the same session
+ * repaints off one lookup. Raw references carry no registry connection, so an
+ * unknown or ambiguous id deliberately performs no network request.
  */
 import { useEffect, useMemo, useState } from 'react'
 
-import { getSession } from '@/hermes'
+import type { SessionApiOwner } from '@/hermes'
 import { parseSessionRefValue, sessionRefCacheKey, sessionRefFallbackLabel } from '@/lib/session-refs'
 import { $sessions, sessionMatchesStoredId } from '@/store/session'
 import type { SessionInfo } from '@/types/hermes'
@@ -32,28 +32,42 @@ function profileMatches(sessionProfile: null | string | undefined, target?: stri
   return ((sessionProfile ?? '').trim() || 'default') === (target.trim() || 'default')
 }
 
-export function lookupLocalSessionTitle(value: string): string {
+function localSessionMatch(value: string): null | { owner: SessionApiOwner; row: SessionInfo } {
   const { profile, sessionId } = parseSessionRefValue(value)
 
   if (!sessionId) {
-    return ''
+    return null
   }
 
-  const row = $sessions
+  const matches = $sessions
     .get()
-    .find(session => sessionMatchesStoredId(session, sessionId) && profileMatches(session.profile, profile))
+    .filter(session => sessionMatchesStoredId(session, sessionId) && profileMatches(session.profile, profile))
 
-  return row ? sessionRowTitle(row) : ''
+  const byOwner = new Map<string, { owner: SessionApiOwner; row: SessionInfo }>()
+
+  for (const row of matches) {
+    const ownerProfile = row.profile?.trim()
+
+    if (!ownerProfile) {
+      continue
+    }
+
+    const owner = { connectionId: row.connection_id?.trim() || null, profile: ownerProfile }
+
+    byOwner.set(JSON.stringify([owner.connectionId, owner.profile]), { owner, row })
+  }
+
+  return byOwner.size === 1 ? (byOwner.values().next().value ?? null) : null
 }
 
-/** REST lookup that can't throw: the bridge is absent outside Electron, and a
- *  session id that isn't on this backend 404s. Both mean "no title". */
-function requestSessionRow(sessionId: string, profile?: string): Promise<null | SessionInfo> {
-  try {
-    return Promise.resolve(getSession(sessionId, profile ?? null)).catch(() => null)
-  } catch {
-    return Promise.resolve(null)
-  }
+export function lookupLocalSessionOwner(value: string): SessionApiOwner | undefined {
+  return localSessionMatch(value)?.owner
+}
+
+export function lookupLocalSessionTitle(value: string): string {
+  const match = localSessionMatch(value)
+
+  return match ? sessionRowTitle(match.row) : ''
 }
 
 export function fetchSessionLinkTitle(value: string): Promise<string> {
@@ -83,10 +97,7 @@ export function fetchSessionLinkTitle(value: string): Promise<string> {
     return Promise.resolve(local)
   }
 
-  const { profile, sessionId } = parseSessionRefValue(value)
-
-  const promise = requestSessionRow(sessionId, profile)
-    .then(row => (row ? sessionRowTitle(row) : ''))
+  const promise = Promise.resolve(local)
     .then(title => {
       titleCache.set(key, title)
       titleInflight.delete(key)

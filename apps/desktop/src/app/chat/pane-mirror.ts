@@ -27,6 +27,10 @@ export interface PaneMirror<T> {
   dir?: (tile: T) => TileDock | undefined
   /** Pane to dock against (default `workspace`) — a drop's target zone. */
   anchor?: (tile: T) => string | undefined
+  /** Re-assert this dock once per boot for edition-owned standing layout invariants. */
+  enforce?: (tile: T) => boolean | undefined
+  /** Keep a center-docked tile in its anchor's tab group during live user moves. */
+  locked?: (tile: T) => boolean | undefined
   /** Center docks: the strip slot (stack before this pane id). */
   before?: (tile: T) => null | string | undefined
   minWidth: string
@@ -84,6 +88,8 @@ export function paneMirror<T>(cfg: PaneMirror<T>): () => void {
           dock: {
             before: cfg.before?.(tile),
             pane: cfg.anchor?.(tile) ?? 'workspace',
+            enforce: cfg.enforce?.(tile),
+            locked: cfg.locked?.(tile),
             pos: cfg.dir?.(tile) ?? 'right'
           },
           minWidth: cfg.minWidth,

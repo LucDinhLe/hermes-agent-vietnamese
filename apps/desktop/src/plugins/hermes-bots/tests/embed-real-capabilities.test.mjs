@@ -29,5 +29,5 @@ test('AdvancedProfileConfig embeds the real McpTab with a live gateway + profile
 test('older-build fallback: the checkbox MCP list + inline McpSetupButton is still present', () => {
   // The graceful path for desktops without the SDK export must remain intact.
   assert.match(source, /jsx\(McpSetupButton, \{/)
-  assert.match(source, /No MCP servers configured or in the catalog\./)
+  assert.match(source, /Chưa có máy chủ MCP nào trong cấu hình hoặc danh mục\./)
 })

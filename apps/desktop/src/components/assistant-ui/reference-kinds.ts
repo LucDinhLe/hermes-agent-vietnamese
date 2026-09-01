@@ -94,7 +94,7 @@ export const REFERENCE_STYLES: Record<ReferenceKind, ReferenceStyle> = {
     paths: ['M5 9l14 0', 'M5 15l14 0', 'M11 4l-4 16', 'M17 4l-4 16'],
     label: 'Lines'
   },
-  terminal: { codicon: 'terminal', paths: TERMINAL_PATHS, label: 'Terminal' },
+  terminal: { codicon: 'terminal', paths: TERMINAL_PATHS, label: 'Dòng lệnh' },
   session: {
     codicon: 'comment-discussion',
     paths: ['M4 4h16v2.172a2 2 0 0 1 -.586 1.414l-4.414 4.414v7l-6 2v-8.5l-4.48 -4.928a2 2 0 0 1 -.52 -1.345v-2.227'],
@@ -103,7 +103,7 @@ export const REFERENCE_STYLES: Record<ReferenceKind, ReferenceStyle> = {
   git: { codicon: 'git-branch', paths: ['M7 18l0 -12', 'M7 8a2 2 0 1 0 0 -4a2 2 0 0 0 0 4'], label: 'Git' },
   diff: { codicon: 'diff', paths: ['M12 5l0 14', 'M5 12l14 0'], label: 'Changes' },
   staged: { codicon: 'diff-added', paths: ['M12 5l0 14', 'M5 12l14 0'], label: 'Staged' },
-  command: { codicon: 'terminal', paths: TERMINAL_PATHS, label: 'Commands' },
+  command: { codicon: 'terminal', paths: TERMINAL_PATHS, label: 'Lệnh' },
   skill: { codicon: 'zap', paths: ['M13 3l0 7l6 0l-8 11l0 -7l-6 0l8 -11'], label: 'Skills' },
   theme: {
     codicon: 'symbol-color',

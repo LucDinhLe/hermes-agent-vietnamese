@@ -9,6 +9,10 @@ import { $activeSessionId } from '@/store/session'
 import { PendingApprovalFallback, PendingToolApproval } from './approval'
 import type { ToolPart } from './fallback-model'
 
+const requestEventSource = vi.hoisted(() => vi.fn())
+
+vi.mock('@/store/gateway-event-source', () => ({ requestForGatewayEventSource: requestEventSource }))
+
 // Radix's DropdownMenu touches pointer-capture + scrollIntoView, which jsdom
 // doesn't implement; stub them so the menu can open in tests.
 beforeAll(() => {
@@ -36,7 +40,14 @@ function setRequest(
   extra: { choices?: string[]; smartDenied?: boolean } = {}
 ) {
   $activeSessionId.set('sess-1')
-  setApprovalRequest({ allowPermanent, command, description: 'dangerous command', sessionId: 'sess-1', ...extra })
+  setApprovalRequest({
+    allowPermanent,
+    command,
+    description: 'dangerous command',
+    requestId: 'approval-1',
+    sessionId: 'sess-1',
+    ...extra
+  })
 }
 
 function mockGateway() {
@@ -76,14 +87,18 @@ describe('PendingToolApproval', () => {
   })
 
   it('sends approval.respond {choice: "once"} and clears the request on Run', async () => {
-    const request = mockGateway()
+    mockGateway()
+    requestEventSource.mockResolvedValueOnce({ resolved: true })
     setRequest()
     render(<PendingToolApproval part={part('terminal')} />)
 
     fireEvent.click(screen.getByRole('button', { name: /Run/ }))
 
     await waitFor(() => {
-      expect(request).toHaveBeenCalledWith('approval.respond', { choice: 'once', session_id: 'sess-1' })
+      expect(requestEventSource).toHaveBeenCalledWith('sess-1', 'approval.respond', {
+        choice: 'once',
+        request_id: 'approval-1'
+      })
     })
     expect($approvalRequest.get()).toBeNull()
   })
@@ -102,14 +117,18 @@ describe('PendingToolApproval', () => {
   })
 
   it('sends choice "deny" on Reject', async () => {
-    const request = mockGateway()
+    mockGateway()
+    requestEventSource.mockResolvedValueOnce({ resolved: true })
     setRequest()
     render(<PendingToolApproval part={part('terminal')} />)
 
     fireEvent.click(screen.getByRole('button', { name: /Reject/ }))
 
     await waitFor(() => {
-      expect(request).toHaveBeenCalledWith('approval.respond', { choice: 'deny', session_id: 'sess-1' })
+      expect(requestEventSource).toHaveBeenCalledWith('sess-1', 'approval.respond', {
+        choice: 'deny',
+        request_id: 'approval-1'
+      })
     })
   })
 

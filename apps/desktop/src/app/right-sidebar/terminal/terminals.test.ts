@@ -26,7 +26,7 @@ describe('terminal store persistence', () => {
         activeTerminalId: 'term-two',
         terminals: [
           { auto: false, cwd: '/repo/one', id: 'term-one', reviveBuffer: 'last output', title: 'zsh' },
-          { auto: true, cwd: '/repo/two', id: 'term-two', title: 'Terminal' }
+          { auto: true, cwd: '/repo/two', id: 'term-two', title: 'Dòng lệnh' }
         ]
       })
     )
@@ -36,7 +36,7 @@ describe('terminal store persistence', () => {
     expect($activeTerminalId.get()).toBe('term-two')
     expect($terminals.get()).toEqual([
       { auto: false, cwd: '/repo/one', id: 'term-one', kind: 'user', reviveBuffer: 'last output', title: 'zsh' },
-      { auto: true, cwd: '/repo/two', id: 'term-two', kind: 'user', title: 'Terminal' }
+      { auto: true, cwd: '/repo/two', id: 'term-two', kind: 'user', title: 'Dòng lệnh' }
     ])
   })
 

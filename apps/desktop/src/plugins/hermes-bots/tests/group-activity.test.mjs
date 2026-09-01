@@ -243,11 +243,11 @@ test('activity is runtime-only: never persisted, never hydrated', async () => {
 
 test('labels read like a person wrote them, with settled/cancelled as room-level lines', () => {
   const gc = load()
-  assert.equal(gc.groupActivityLabel({ kind: 'queued', member: 'You' }), 'You sent a message')
-  assert.equal(gc.groupActivityLabel({ kind: 'replied', member: 'research' }), 'research replied')
-  assert.equal(gc.groupActivityLabel({ kind: 'timed-out', member: 'ops' }), 'ops took too long')
-  assert.equal(gc.groupActivityLabel({ kind: 'cancelled', member: null }), 'turn interrupted by a newer message')
-  assert.equal(gc.groupActivityLabel({ kind: 'settled', member: null }), 'turn settled')
+  assert.equal(gc.groupActivityLabel({ kind: 'queued', member: 'You' }), 'Đại ca đã gửi tin nhắn')
+  assert.equal(gc.groupActivityLabel({ kind: 'replied', member: 'research' }), 'research đã phản hồi')
+  assert.equal(gc.groupActivityLabel({ kind: 'timed-out', member: 'ops' }), 'ops mất quá nhiều thời gian')
+  assert.equal(gc.groupActivityLabel({ kind: 'cancelled', member: null }), 'bị ngắt bởi tin nhắn mới hơn')
+  assert.equal(gc.groupActivityLabel({ kind: 'settled', member: null }), 'đã hoàn tất lượt')
 })
 
 test('source contract: the workspace mounts a quiet, collapsed-by-default disclosure', () => {
@@ -261,8 +261,8 @@ test('source contract: the workspace mounts a quiet, collapsed-by-default disclo
   assert.doesNotMatch(panel, /autoFocus/)
   assert.doesNotMatch(panel, /autoScroll|scrollIntoView/)
   // Truthful event vocabulary is wired.
-  assert.match(pluginSource, /'timed-out': 'took too long'/)
-  assert.match(pluginSource, /cancelled: 'turn interrupted by a newer message'/)
+  assert.match(pluginSource, /'timed-out': 'mất quá nhiều thời gian'/)
+  assert.match(pluginSource, /cancelled: 'bị ngắt bởi tin nhắn mới hơn'/)
   // The panel sits inside the workspace between the header and the log.
   const workspace = pluginSource.slice(pluginSource.indexOf('function GroupChatWorkspace('), pluginSource.indexOf('function GroupChatMainView('))
   assert.match(workspace, /header,\s*\n\s*activityPanel,/s)

@@ -132,7 +132,7 @@ test('security: upgrade pauses persisted delegated routines before they can exec
     ['cron.manage', { action: 'list', include_disabled: true }]
   ])
   assert.match(pluginSource, /disabled: busy \|\| legacyUnsafe/)
-  assert.match(pluginSource, /Paused for security: delete and recreate this legacy cronjob/)
+  assert.match(pluginSource, /Đã tạm dừng để bảo đảm an toàn: hãy xóa rồi tạo lại tác vụ cũ/)
 
   const recreated = runtime.__routines.routinePrompt('research', title, instruction, 'default')
   assert.equal(runtime.__routines.isLegacyDelegatedRoutine({ ...persisted, prompt_preview: recreated.slice(0, 100) }), false)
@@ -176,7 +176,8 @@ test('system: the direct-file plugin still registers its panes', () => {
   const runtime = load()
   const registered = []
   runtime.plugin.register({ storage: { get: () => null }, register: entry => registered.push(entry) })
-  assert.equal(registered.some(entry => entry.id === 'pane'), true)
+  assert.equal(registered.some(entry => entry.id === 'agents-route'), true)
+  assert.equal(registered.some(entry => entry.id === 'agents-nav'), true)
   assert.equal(registered.some(entry => entry.id === 'routines'), true)
 })
 

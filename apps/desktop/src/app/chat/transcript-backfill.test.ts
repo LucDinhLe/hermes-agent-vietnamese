@@ -12,10 +12,11 @@ import {
 } from './transcript-backfill'
 
 vi.mock('@/hermes', () => ({
-  getOlderSessionMessages: vi.fn()
+  getOlderSessionMessages: vi.fn(),
+  getOlderSessionMessagesForOwner: vi.fn()
 }))
 
-const { getOlderSessionMessages } = await import('@/hermes')
+const { getOlderSessionMessages, getOlderSessionMessagesForOwner } = await import('@/hermes')
 
 const chat = (id: string, rowId?: number): ChatMessage => ({
   id,
@@ -128,6 +129,7 @@ describe('backfillOlderTranscriptPage', () => {
     $transcriptTailBySessionId.set({})
     _resetTranscriptBackfillForTests()
     vi.mocked(getOlderSessionMessages).mockReset()
+    vi.mocked(getOlderSessionMessagesForOwner).mockReset()
   })
 
   afterEach(() => {
@@ -163,6 +165,35 @@ describe('backfillOlderTranscriptPage', () => {
     expect(applyOlderPage.mock.calls[0][0].map((m: ChatMessage) => m.rowId)).toEqual([1, 2])
     // A short older page means the transcript is now fully loaded.
     expect(transcriptBackfillAvailable('stored-1')).toBe(false)
+  })
+
+  it('backfills from exact owner A when another source can share the profile and session id', async () => {
+    recordTranscriptTail(
+      'stored-1',
+      {
+        messages: Array.from({ length: 120 }, (_, index) => row(index + 120, `tail${index}`)),
+        pagination: { limit: 120, offset: 0, order: 'latest', returned: 120 }
+      },
+      { connectionId: 'source-a', profile: 'mbc' }
+    )
+    vi.mocked(getOlderSessionMessagesForOwner).mockResolvedValue({
+      messages: [row(1, 'older-1')],
+      pagination: { limit: 120, offset: 120, order: 'latest', returned: 1 },
+      session_id: 'stored-1'
+    } as never)
+
+    await backfillOlderTranscriptPage({
+      storedSessionId: 'stored-1',
+      isCurrent: () => true,
+      applyOlderPage: vi.fn()
+    })
+
+    expect(getOlderSessionMessagesForOwner).toHaveBeenCalledWith(
+      'stored-1',
+      { connectionId: 'source-a', profile: 'mbc' },
+      120
+    )
+    expect(getOlderSessionMessages).not.toHaveBeenCalled()
   })
 
   it('keeps backfill available while pages keep coming back full', async () => {

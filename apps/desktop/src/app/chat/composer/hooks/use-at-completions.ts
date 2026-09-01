@@ -6,6 +6,7 @@ import { useContributions } from '@/contrib/react/use-contributions'
 import type { HermesGateway } from '@/hermes'
 import { cachedPathCompletion, hasCachedPathCompletion } from '@/lib/slash-completion-cache'
 import { normalize } from '@/lib/text'
+import { requestForRendererRuntime } from '@/store/session-request-router'
 
 import type { ComposerAtCompletionSource } from '../contrib'
 import { COMPOSER_AREAS } from '../contrib'
@@ -190,7 +191,9 @@ export function useAtCompletions(options: {
         // `git ls-files` + rank on the backend (~40ms of the ~50ms round trip
         // measured on this repo's 8k files).
         const result = await cachedPathCompletion(cacheKey(query), () =>
-          gateway.request<{ items?: CompletionEntry[] }>('complete.path', params)
+          sessionId
+            ? requestForRendererRuntime<{ items?: CompletionEntry[] }>(sessionId, 'complete.path', params)
+            : gateway.request<{ items?: CompletionEntry[] }>('complete.path', params)
         )
 
         const items = result.items ?? []

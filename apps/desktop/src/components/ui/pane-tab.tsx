@@ -8,6 +8,8 @@ import { translateNow } from '@/i18n'
 import { isMetaClose, middleClickHandlers } from '@/lib/middle-click'
 import { cn } from '@/lib/utils'
 
+export const PANE_TAB_STRIP_HEIGHT_PX = 36
+
 /** Inset stroke for a vertical tab rail — content-facing edge. */
 export const PANE_TAB_STRIP_LINE_LEFT = 'shadow-[inset_1px_0_0_var(--ui-stroke-tertiary)]'
 export const PANE_TAB_STRIP_LINE_RIGHT = 'shadow-[inset_-1px_0_0_var(--ui-stroke-tertiary)]'
@@ -51,14 +53,15 @@ const TAB_SELECTED =
 interface PaneTabProps extends React.ComponentProps<'div'> {
   active?: boolean
   dirty?: boolean
-  /** Close verb. Horizontal tabs reveal a hover ✕ on the right (a `--tab-face`
-   *  gradient fades it over the label); middle-click and ⌘-click always work,
+  /** Close verb. Active horizontal tabs keep their V32 ✕ visible; inactive
+   *  tabs reveal it on hover (a `--tab-face` gradient fades it over the label).
+   *  Middle-click and ⌘-click always work,
    *  and stay the only gestures on vertical rails (no room for a chip ✕). */
   onClose?: () => void
   /** Part of a multi-tab selection (⌥/Ctrl-click, Shift-click) — an accent
    *  wash marks every tab that a drag would carry, Chrome-style. */
   selected?: boolean
-  /** Whether a closeable horizontal tab reveals the hover ✕. */
+  /** Whether a closeable horizontal tab reveals its ✕. */
   showCloseButton?: boolean
   /** Vertical rail form (collapsed sidebar zones). */
   vertical?: boolean
@@ -163,13 +166,21 @@ export const PaneTab = React.forwardRef<HTMLDivElement, PaneTabProps>(function P
         </span>
       )}
       {onClose && showCloseButton && !vertical && (
-        // Hover ✕, painted OVER the label's right edge as an overlay (no
+        // The active tab keeps its V32 ✕ visible; inactive tabs reveal it on
+        // hover. It is painted OVER the label's right edge (no
         // layout shift, tab width never jumps on hover). The runway is a tiny
         // transparent→`--tab-face` gradient, so the button melts into the
         // tab's effective surface instead of hard-clipping the text under it.
         // Rendered after the dirty dot: on hover the ✕ takes the dot's spot,
         // VS Code-style.
-        <span className="pointer-events-none absolute inset-y-0 right-0 flex items-stretch opacity-0 transition-opacity group-hover/tab:pointer-events-auto group-hover/tab:opacity-100">
+        <span
+          className={cn(
+            'pointer-events-none absolute inset-y-0 right-0 flex items-stretch transition-opacity',
+            active
+              ? 'pointer-events-auto opacity-100'
+              : 'opacity-0 group-hover/tab:pointer-events-auto group-hover/tab:opacity-100'
+          )}
+        >
           {/* Both pieces re-draw the active underline: they paint over the
               tab's own last-pixel row, so without it the ✕ would bite a
               notch out of the accent line on the active tab. */}
@@ -259,7 +270,7 @@ export const PaneTabStrip = React.forwardRef<HTMLDivElement, PaneTabStripProps>(
       // as one piece of chrome with the titlebar above it. No bottom rule — the
       // active tab's primary underline is the only seam.
       className={cn(
-        'group/pane-header relative flex h-7 shrink-0 select-none bg-(--ui-sidebar-surface-background) [-webkit-app-region:no-drag] [--pane-tab-active-bg:var(--ui-sidebar-surface-background)]',
+        'group/pane-header relative flex h-9 shrink-0 select-none bg-(--ui-sidebar-surface-background) [-webkit-app-region:no-drag] [--pane-tab-active-bg:var(--ui-sidebar-surface-background)]',
         className
       )}
       ref={ref}
@@ -292,8 +303,8 @@ export interface PaneStripTool {
 
 /**
  * Renders one `PaneStripTool` through the app's `Button` + `Tip` primitives, the
- * way `TitlebarToolButton` does: ghost variant, no active background — state
- * reads from the glyph's own opacity, with `aria-pressed` carrying it for a11y.
+ * way `TitlebarToolButton` does: ghost variant, with text colour and
+ * `aria-pressed` carrying state for a11y.
  *
  * Pointerdown is claimed here so a click can never also activate or drag the
  * zone behind the strip.
@@ -305,13 +316,13 @@ export function PaneStripGlyph({ active, disabled, icon, label, onSelect }: Omit
         aria-label={label}
         aria-pressed={active ?? undefined}
         className={cn(
-          'self-center bg-transparent select-none',
-          active ? 'opacity-100' : 'opacity-60 hover:opacity-100'
+          'self-center bg-transparent select-none active:scale-95 active:bg-(--chrome-action-hover)',
+          active ? 'text-(--ui-text-primary)' : 'text-(--ui-text-secondary) hover:text-(--ui-text-primary)'
         )}
         disabled={disabled}
         onClick={onSelect}
         onPointerDown={event => event.stopPropagation()}
-        size="icon-xs"
+        size="icon-pane"
         type="button"
         variant="ghost"
       >

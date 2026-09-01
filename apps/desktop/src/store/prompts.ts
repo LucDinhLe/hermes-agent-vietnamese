@@ -1,6 +1,7 @@
 import { atom, computed, type ReadableAtom } from 'nanostores'
 
 import { $clarifyRequest, $clarifyRequests } from './clarify'
+import { requestForGatewayEventSource } from './gateway-event-source'
 import { $activeSessionId } from './session'
 
 // Blocking interactive prompts the gateway raises mid-turn. Each maps to a
@@ -68,8 +69,9 @@ function keyedPromptStore<T extends KeyedPrompt>(): PromptStore<T> {
 }
 
 // Approval is session-keyed on the backend and correlated by `request_id` when
-// available (legacy ID-free responses remain FIFO-compatible). Resolved via
-// approval.respond {choice, request_id, session_id}.
+// available (legacy ID-free responses remain FIFO-compatible). The qualified
+// renderer key selects the exact event-source socket; only choice/request_id
+// cross the wire.
 export interface ApprovalRequest extends KeyedPrompt {
   // false when the backend won't honor a permanent allow (tirith warning) → hide "Always allow".
   allowPermanent?: boolean
@@ -118,22 +120,17 @@ export const clearApprovalRequest = approval.clear
 export async function receiveApprovalRequest(gateway: ApprovalGateway | null, request: ApprovalRequest): Promise<void> {
   setApprovalRequest(request)
 
-  if (gateway && request.requestId && request.sessionId) {
-    await gateway.request('approval.received', {
-      request_id: request.requestId,
-      session_id: request.sessionId
-    })
+  if (request.requestId && request.sessionId) {
+    await requestForGatewayEventSource(request.sessionId, 'approval.received', { request_id: request.requestId })
   }
 }
 
-export async function replayPendingApproval(gateway: ApprovalGateway | null, sessionId: string | null): Promise<void> {
-  if (!gateway || !sessionId) {
+export async function replayPendingApproval(_gateway: ApprovalGateway | null, sessionId: string | null): Promise<void> {
+  if (!sessionId) {
     return
   }
 
-  const rawResult = await gateway.request('approval.pending', {
-    session_id: sessionId
-  })
+  const rawResult = await requestForGatewayEventSource(sessionId, 'approval.pending')
 
   const result =
     rawResult && typeof rawResult === 'object' ? (rawResult as { approvals?: PendingApprovalPayload[] }) : {}
@@ -144,7 +141,7 @@ export async function replayPendingApproval(gateway: ApprovalGateway | null, ses
     return
   }
 
-  await receiveApprovalRequest(gateway, {
+  await receiveApprovalRequest(_gateway, {
     allowPermanent: pending.allow_permanent !== false,
     choices: Array.isArray(pending.choices) ? pending.choices.filter(choice => typeof choice === 'string') : undefined,
     command: typeof pending.command === 'string' ? pending.command : '',

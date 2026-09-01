@@ -1,6 +1,6 @@
 import { atom, computed } from 'nanostores'
 
-import { $gateway } from './gateway'
+import { requestForGatewayEventSource } from './gateway-event-source'
 
 /**
  * Pending `mcp.setup.request`s — the desktop half of the `setup_mcp` tool's
@@ -105,10 +105,12 @@ export async function skipMcpSetupRequest(sessionId: string | null | undefined):
   clearMcpSetupRequest(request.requestId, request.sessionId)
 
   try {
-    await $gateway.get()?.request('mcp.setup.respond', {
+    const params = {
       request_id: request.requestId,
       result: JSON.stringify({ server: request.server, status: 'declined' })
-    })
+    }
+
+    await requestForGatewayEventSource(request.sessionId, 'mcp.setup.respond', params)
   } catch {
     // The tool times out on its own; a failed skip must never swallow the
     // message the user is actually sending.

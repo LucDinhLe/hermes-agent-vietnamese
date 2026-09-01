@@ -308,6 +308,7 @@ export function DesktopOnboardingOverlay({
         bare && leaving ? '[transition-delay:660ms]' : '',
         leaving ? 'pointer-events-none opacity-0' : 'opacity-100'
       )}
+      data-glass-opaque
     >
       <div
         className={cn(
@@ -362,7 +363,7 @@ function ReasonNotice({ reason }: { reason: string }) {
   )
 }
 
-function Preparing({ boot }: { boot: DesktopBootState }) {
+export function Preparing({ boot }: { boot: DesktopBootState }) {
   const { t } = useI18n()
   const progress = Math.max(2, Math.min(100, Math.round(boot.progress)))
   const hasError = Boolean(boot.error)
@@ -380,7 +381,7 @@ function Preparing({ boot }: { boot: DesktopBootState }) {
         value={progress / 100}
       />
       <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-        <span className="truncate">{boot.message}</span>
+        <span className="truncate">{installing ? t.onboarding.preparingInstall : t.onboarding.starting}</span>
         <span>{progress}%</span>
       </div>
       {hasError ? <p className="text-xs text-destructive">{boot.error}</p> : null}

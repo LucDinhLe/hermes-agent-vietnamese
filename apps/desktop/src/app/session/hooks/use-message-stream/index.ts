@@ -30,6 +30,7 @@ import { upsertSubagent } from '@/store/subagents'
 import { setSessionTodos } from '@/store/todos'
 
 import type { ClientSessionState } from '../../../types'
+import type { SessionBindingRegistry } from '../../session-binding-registry'
 
 import { useGatewayEventHandler } from './gateway-event'
 import { completionErrorText, delegateTaskPayloads, MAX_STREAM_FLUSH_GAP_MS, STREAM_DELTA_FLUSH_MS } from './utils'
@@ -43,8 +44,11 @@ interface MessageStreamOptions {
     runtimeSessionId?: string | null
   ) => Promise<void>
   queryClient: QueryClient
+  qualifyRuntimeIds: boolean
   refreshHermesConfig: () => Promise<void>
   refreshSessions: () => Promise<void>
+  runtimeIdByStoredSessionIdRef: MutableRefObject<Map<string, string>>
+  sessionBindingRegistry: SessionBindingRegistry
   sessionStateByRuntimeIdRef: MutableRefObject<Map<string, ClientSessionState>>
   updateSessionState: (
     sessionId: string,
@@ -71,8 +75,11 @@ export function useMessageStream({
   activeSessionIdRef,
   hydrateFromStoredSession,
   queryClient,
+  qualifyRuntimeIds,
   refreshHermesConfig,
   refreshSessions,
+  runtimeIdByStoredSessionIdRef,
+  sessionBindingRegistry,
   sessionStateByRuntimeIdRef,
   updateSessionState
 }: MessageStreamOptions) {
@@ -851,8 +858,11 @@ export function useMessageStream({
     finalizeInterimAssistantMessage,
     hydrateFromStoredSession,
     queryClient,
+    qualifyRuntimeIds,
     refreshHermesConfig,
+    runtimeIdByStoredSessionIdRef,
     scheduleSessionsRefresh,
+    sessionBindingRegistry,
     sessionInterrupted,
     sessionStateByRuntimeIdRef,
     updateSessionState,

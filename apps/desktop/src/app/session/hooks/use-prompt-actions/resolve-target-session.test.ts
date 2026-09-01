@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
+import { rendererRuntimeKey } from '@/lib/session-runtime-key'
+
 import { resolveTargetSessionId } from './resolve-target-session'
 
 vi.mock('../use-session-actions/utils', () => ({
@@ -7,14 +9,19 @@ vi.mock('../use-session-actions/utils', () => ({
 }))
 
 const RECOVERED = 'rt-recovered'
+const BACKEND = { connectionId: 'source-a', gatewayEpoch: 4, profile: 'work' } as const
+const BOUND = rendererRuntimeKey(BACKEND, RECOVERED)
 const STORED = 'stored-goal-session'
 
 function deps(overrides: Partial<Parameters<typeof resolveTargetSessionId>[0]> = {}) {
   return {
     activeRuntimeId: null,
+    bindSessionRuntime: vi.fn((_storedSessionId: string, runtimeSessionId: string) =>
+      rendererRuntimeKey(BACKEND, runtimeSessionId)
+    ),
     createSession: vi.fn(async () => 'rt-brand-new'),
     getRuntimeIdForStoredSession: () => null,
-    requestGateway: vi.fn(async () => ({ session_id: RECOVERED })) as never,
+    requestStoredSession: vi.fn(async () => ({ session_id: RECOVERED })) as never,
     routedStoredSessionId: null,
     selectedStoredSessionId: null,
     ...overrides
@@ -27,15 +34,15 @@ describe('resolveTargetSessionId', () => {
     // runtime binding was cleared (profile swap / reconnect / orphan-reap) but
     // the durable route still names the chat carrying the goal.
     const createSession = vi.fn(async () => 'rt-brand-new-WRONG')
-    const requestGateway = vi.fn(async () => ({ session_id: RECOVERED }))
+    const requestStoredSession = vi.fn(async () => ({ session_id: RECOVERED }))
 
     const resolved = await resolveTargetSessionId(
-      deps({ createSession, requestGateway: requestGateway as never, routedStoredSessionId: STORED })
+      deps({ createSession, requestStoredSession: requestStoredSession as never, routedStoredSessionId: STORED })
     )
 
-    expect(resolved).toBe(RECOVERED)
+    expect(resolved).toBe(BOUND)
     expect(createSession).not.toHaveBeenCalled()
-    expect(requestGateway).toHaveBeenCalledWith('session.resume', {
+    expect(requestStoredSession).toHaveBeenCalledWith(STORED, 'session.resume', {
       session_id: STORED,
       source: 'desktop',
       profile: 'work'
@@ -44,21 +51,21 @@ describe('resolveTargetSessionId', () => {
 
   it('reuses the live runtime id when the cache confirms it owns the targeted stored session', async () => {
     const createSession = vi.fn(async () => 'rt-brand-new-WRONG')
-    const requestGateway = vi.fn(async () => ({ session_id: 'rt-resume-WRONG' }))
+    const requestStoredSession = vi.fn(async () => ({ session_id: 'rt-resume-WRONG' }))
 
     const resolved = await resolveTargetSessionId(
       deps({
         activeRuntimeId: RECOVERED,
         createSession,
         getRuntimeIdForStoredSession: () => RECOVERED,
-        requestGateway: requestGateway as never,
+        requestStoredSession: requestStoredSession as never,
         selectedStoredSessionId: STORED
       })
     )
 
     expect(resolved).toBe(RECOVERED)
     expect(createSession).not.toHaveBeenCalled()
-    expect(requestGateway).not.toHaveBeenCalled()
+    expect(requestStoredSession).not.toHaveBeenCalled()
   })
 
   it('rejects a stale runtime id the route does not bind to the targeted session', async () => {
@@ -74,25 +81,25 @@ describe('resolveTargetSessionId', () => {
       })
     )
 
-    expect(resolved).toBe(RECOVERED)
+    expect(resolved).toBe(BOUND)
   })
 
   it('honors an explicit runtime id above everything else', async () => {
     const createSession = vi.fn(async () => 'rt-brand-new-WRONG')
-    const requestGateway = vi.fn(async () => ({ session_id: 'rt-resume-WRONG' }))
+    const requestStoredSession = vi.fn(async () => ({ session_id: 'rt-resume-WRONG' }))
 
     const resolved = await resolveTargetSessionId(
       deps({
         createSession,
         explicitRuntimeId: 'rt-explicit',
-        requestGateway: requestGateway as never,
+        requestStoredSession: requestStoredSession as never,
         routedStoredSessionId: STORED
       })
     )
 
     expect(resolved).toBe('rt-explicit')
     expect(createSession).not.toHaveBeenCalled()
-    expect(requestGateway).not.toHaveBeenCalled()
+    expect(requestStoredSession).not.toHaveBeenCalled()
   })
 
   it('creates a session only for a genuine new-chat draft', async () => {
@@ -116,29 +123,51 @@ describe('resolveTargetSessionId', () => {
   it('returns null rather than forking when a targeted durable session cannot be rebound', async () => {
     const createSession = vi.fn(async () => 'rt-brand-new-WRONG')
 
-    const requestGateway = vi.fn(async () => {
+    const requestStoredSession = vi.fn(async () => {
       throw new Error('4007 session not found')
     })
 
     const resolved = await resolveTargetSessionId(
-      deps({ createSession, requestGateway: requestGateway as never, routedStoredSessionId: STORED })
+      deps({ createSession, requestStoredSession: requestStoredSession as never, routedStoredSessionId: STORED })
     )
 
     expect(resolved).toBeNull()
     expect(createSession).not.toHaveBeenCalled()
   })
 
+  it('fails closed before any resume when the durable owner profile is unresolved', async () => {
+    const createSession = vi.fn(async () => 'rt-brand-new-WRONG')
+    const requestStoredSession = vi.fn(async () => ({ session_id: RECOVERED }))
+
+    const resolved = await resolveTargetSessionId(
+      deps({
+        createSession,
+        requestStoredSession: requestStoredSession as never,
+        resolveStoredSessionProfile: async () => undefined,
+        routedStoredSessionId: STORED
+      })
+    )
+
+    expect(resolved).toBeNull()
+    expect(requestStoredSession).not.toHaveBeenCalled()
+    expect(createSession).not.toHaveBeenCalled()
+  })
+
   it('prefers the routed stored session over a differing selected one', async () => {
-    const requestGateway = vi.fn(async () => ({ session_id: RECOVERED }))
+    const requestStoredSession = vi.fn(async () => ({ session_id: RECOVERED }))
 
     await resolveTargetSessionId(
       deps({
-        requestGateway: requestGateway as never,
+        requestStoredSession: requestStoredSession as never,
         routedStoredSessionId: STORED,
         selectedStoredSessionId: 'stored-stale-selection'
       })
     )
 
-    expect(requestGateway).toHaveBeenCalledWith('session.resume', expect.objectContaining({ session_id: STORED }))
+    expect(requestStoredSession).toHaveBeenCalledWith(
+      STORED,
+      'session.resume',
+      expect.objectContaining({ session_id: STORED })
+    )
   })
 })

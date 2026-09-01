@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { DropdownMenu, DropdownMenuContent } from '@/components/ui/dropdown-menu'
+import { rendererRuntimeKey } from '@/lib/session-runtime-key'
 import { $collapsedProviders, toggleCollapsedProvider } from '@/store/provider-collapse'
 import { $activeSessionId, $currentModel, $currentProvider } from '@/store/session'
 
@@ -16,11 +17,13 @@ beforeAll(() => {
 })
 
 const getGlobalModelOptions = vi.fn()
+const requestForRendererRuntime = vi.hoisted(() => vi.fn())
 
 vi.mock('@/hermes', () => ({
   getGlobalModelOptions: (...args: unknown[]) => getGlobalModelOptions(...args),
   setApiRequestProfile: vi.fn()
 }))
+vi.mock('@/store/session-request-router', () => ({ requestForRendererRuntime }))
 
 // MoA presets now arrive as the catalog's virtual `moa` provider row (the same
 // payload a remote gateway's model.options returns), not the /api/model/moa
@@ -41,12 +44,18 @@ const GOOGLE_PROVIDER = {
 
 const MOCK_PROVIDERS = [DEEPSEEK_PROVIDER, GOOGLE_PROVIDER, MOA_PROVIDER]
 
+const RUNTIME_ID = rendererRuntimeKey(
+  { connectionId: null, gatewayEpoch: 1, profile: 'default' },
+  'runtime-1'
+)
+
 beforeEach(() => {
-  $activeSessionId.set('runtime-1')
+  $activeSessionId.set(RUNTIME_ID)
   $currentModel.set('')
   $currentProvider.set('')
   $collapsedProviders.set([])
   getGlobalModelOptions.mockResolvedValue({ providers: MOCK_PROVIDERS })
+  requestForRendererRuntime.mockImplementation(() => getGlobalModelOptions())
 })
 
 afterEach(() => {
@@ -81,7 +90,7 @@ describe('ModelMenuPanel MoA presets', () => {
     // #54670: must route through the persistent model-switch path
     // i.e. onSelectModel with provider 'moa' (which session-scopes live-session
     // switches), NOT a one-shot command.dispatch that reverts after a turn.
-    expect(onSelectModel).toHaveBeenCalledWith({ model: 'BeastMode', provider: 'moa', sessionId: 'runtime-1' })
+    expect(onSelectModel).toHaveBeenCalledWith({ model: 'BeastMode', provider: 'moa', sessionId: RUNTIME_ID })
   })
 
   it('shows the check on the preset that matches the current moa selection', async () => {
@@ -189,7 +198,7 @@ describe('ModelMenuPanel search', () => {
       expect(onSelectModel).toHaveBeenCalledWith({
         model: 'gemini-3.1-pro',
         provider: 'google',
-        sessionId: 'runtime-1'
+        sessionId: RUNTIME_ID
       })
     })
   })
@@ -226,7 +235,7 @@ describe('ModelMenuPanel search', () => {
       expect(onSelectModel).toHaveBeenCalledWith({
         model: 'gemini-2.5-flash',
         provider: 'google',
-        sessionId: 'runtime-1'
+        sessionId: RUNTIME_ID
       })
     })
   })
@@ -261,7 +270,7 @@ describe('ModelMenuPanel search', () => {
     fireEvent.keyDown(input, { key: 'Enter' })
 
     await vi.waitFor(() => {
-      expect(onSelectModel).toHaveBeenCalledWith({ model: 'BeastMode', provider: 'moa', sessionId: 'runtime-1' })
+      expect(onSelectModel).toHaveBeenCalledWith({ model: 'BeastMode', provider: 'moa', sessionId: RUNTIME_ID })
     })
   })
 })

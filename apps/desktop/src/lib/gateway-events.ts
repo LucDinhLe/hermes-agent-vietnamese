@@ -1,4 +1,5 @@
 import type { StatusbarMenuItem } from '@/app/shell/statusbar-controls'
+import { parseRendererRuntimeKey, rendererRuntimeKey, type RuntimeBackendIdentity } from '@/lib/session-runtime-key'
 
 const LOG_TAIL = 5
 
@@ -83,10 +84,29 @@ export interface GatewayEventSessionRoute {
 export function approvalReplaySessionId(
   eventType: string | undefined,
   activeSessionId: null | string,
-  routedSessionId: null | string
+  routedSessionId: null | string,
+  readyBackend?: RuntimeBackendIdentity | null
 ): null | string {
   if (eventType === 'gateway.ready') {
-    return activeSessionId
+    if (!activeSessionId || !readyBackend) {
+      return null
+    }
+
+    try {
+      const active = parseRendererRuntimeKey(activeSessionId)
+
+      if (
+        !active ||
+        active.backend.connectionId !== readyBackend.connectionId ||
+        active.backend.profile !== readyBackend.profile
+      ) {
+        return null
+      }
+
+      return rendererRuntimeKey(readyBackend, active.runtimeSessionId)
+    } catch {
+      return null
+    }
   }
 
   if (eventType === 'session.info') {

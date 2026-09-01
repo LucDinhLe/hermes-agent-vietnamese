@@ -188,16 +188,16 @@ test('formatGroupChatLine names attachments for user and member entries', () => 
     { from: { kind: 'user', name: 'You' }, text: 'see attached', images: [IMG] },
     'research'
   )
-  assert.equal(userLine, 'You (user): see attached [attached image: screenshot.png]')
+  assert.equal(userLine, 'Đại ca (người dùng): see attached [ảnh đính kèm: screenshot.png]')
 
   const noImages = gc.formatGroupChatLine({ from: { kind: 'user', name: 'You' }, text: 'plain' }, 'research')
-  assert.equal(noImages, 'You (user): plain')
+  assert.equal(noImages, 'Đại ca (người dùng): plain')
 
   const memberLine = gc.formatGroupChatLine(
     { from: { kind: 'member', name: 'builder' }, text: 'made this', images: [{ data: 'data:image/png;base64,x' }] },
     'research'
   )
-  assert.equal(memberLine, 'builder: made this [attached image: image]')
+  assert.equal(memberLine, 'builder: made this [ảnh đính kèm: image]')
 })
 
 test('an invalid attachment is skipped and the member turn still runs text-only', async () => {
@@ -255,6 +255,6 @@ test('formatGroupChatLine labels PDFs and files distinctly', () => {
   )
   assert.equal(
     line,
-    'You (user): here [attached PDF: spec.pdf] [attached file: notes.txt] [attached image: screenshot.png]'
+    'Đại ca (người dùng): here [PDF đính kèm: spec.pdf] [tệp đính kèm: notes.txt] [ảnh đính kèm: screenshot.png]'
   )
 })

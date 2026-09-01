@@ -89,10 +89,16 @@ const I18nContext = createContext<I18nContextValue>({
 export interface I18nProviderProps {
   children: ReactNode
   configClient?: I18nConfigClient | null
+  configLoadFallbackLocale?: unknown
   initialLocale?: unknown
 }
 
-export function I18nProvider({ children, configClient = defaultConfigClient, initialLocale }: I18nProviderProps) {
+export function I18nProvider({
+  children,
+  configClient = defaultConfigClient,
+  configLoadFallbackLocale,
+  initialLocale
+}: I18nProviderProps) {
   const [locale, setLocaleState] = useState<Locale>(() => normalizeLocale(initialLocale))
   const [isLoadingConfig, setIsLoadingConfig] = useState(false)
   const [isSavingLocale, setIsSavingLocale] = useState(false)
@@ -127,7 +133,7 @@ export function I18nProvider({ children, configClient = defaultConfigClient, ini
       .catch(error => {
         if (!cancelled) {
           setConfigLoadError(toError(error))
-          setLocaleState(DEFAULT_LOCALE)
+          setLocaleState(normalizeLocale(configLoadFallbackLocale))
         }
       })
       .finally(() => {
@@ -139,7 +145,7 @@ export function I18nProvider({ children, configClient = defaultConfigClient, ini
     return () => {
       cancelled = true
     }
-  }, [configClient, initialLocale])
+  }, [configClient, configLoadFallbackLocale, initialLocale])
 
   const setLocale = useCallback(
     async (next: Locale) => {

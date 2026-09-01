@@ -3,7 +3,7 @@ import { atom } from 'nanostores'
 import { type HermesOpenTarget, resolveHermesOpenPath } from '@/lib/hermes-open-target'
 import { persistString, storedString } from '@/lib/storage'
 
-import { $gateway } from './gateway'
+import { requestForGatewayEventSource } from './gateway-event-source'
 import { withinNativeNotifyBaseline } from './notify-baseline'
 import { clearApprovalRequest } from './prompts'
 import { $activeSessionId } from './session'
@@ -352,14 +352,8 @@ export async function respondToApprovalAction(sessionId: null | string, actionId
     return
   }
 
-  const gateway = $gateway.get()
-
-  if (!gateway) {
-    return
-  }
-
   try {
-    await gateway.request('approval.respond', { choice, session_id: sessionId ?? undefined })
+    await requestForGatewayEventSource(sessionId, 'approval.respond', { choice })
     clearApprovalRequest(sessionId)
   } catch {
     // Leave the prompt parked so the user can still resolve it in-app.

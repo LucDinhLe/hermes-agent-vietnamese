@@ -3,8 +3,10 @@ import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router'
 
+import type { SessionInfo } from '@/hermes'
 import { sessionTitle } from '@/lib/chat-runtime'
 import { cn } from '@/lib/utils'
+import { explicitSessionRouteOwner, sessionRouteKey } from '@/store/session-route-owner'
 import { $switcherIndex, $switcherOpen, $switcherSessions, closeSwitcher } from '@/store/session-switcher'
 
 import { SessionStatusDot } from './chat/session-status-dot'
@@ -29,9 +31,9 @@ export function SessionSwitcher() {
     return null
   }
 
-  const pick = (sessionId: string) => {
+  const pick = (session: SessionInfo) => {
     closeSwitcher()
-    openSession(sessionId, navigate)
+    openSession(session.id, navigate, 'in-place', explicitSessionRouteOwner(session))
   }
 
   return createPortal(
@@ -62,10 +64,10 @@ export function SessionSwitcher() {
                 HUD_TEXT,
                 selected ? 'bg-accent text-accent-foreground' : 'text-(--ui-text-secondary)'
               )}
-              key={session.id}
+              key={sessionRouteKey(session)}
               onMouseDown={e => {
                 e.preventDefault()
-                pick(session.id)
+                pick(session)
               }}
               ref={selected ? activeRef : undefined}
             >

@@ -6,7 +6,7 @@ import {
   type SidebarProjectTree
 } from '@/app/chat/sidebar/projects/workspace-groups'
 import type { HermesGitBaseBranch, HermesGitBranch } from '@/global'
-import { getHermesConfig, hermesApi, type HermesGateway } from '@/hermes'
+import { getHermesConfig, hermesApi, type HermesGateway, type SessionApiOwner, sessionApiOwner } from '@/hermes'
 import { translateNow } from '@/i18n'
 import { desktopDefaultCwd, isDesktopFsRemoteMode, selectDesktopPaths, writeDesktopFileText } from '@/lib/desktop-fs'
 import { desktopGit } from '@/lib/desktop-git'
@@ -30,6 +30,7 @@ import {
   setSessions,
   workspaceCwdForNewSession
 } from '@/store/session'
+import { requestForSessionOwner } from '@/store/session-request-router'
 import type { ProjectInfo, ProjectsPayload } from '@/types/hermes'
 
 // First-class, per-profile Projects (named, multi-folder workspaces). State is
@@ -591,7 +592,7 @@ interface WorkspaceMovePayload {
 export async function moveSessionToProject(
   sessionId: string,
   projectId: string,
-  profile?: null | string
+  owner: SessionApiOwner
 ): Promise<void> {
   const cwd = projectRootCwd($projectTree.get().find(node => node.id === projectId))
 
@@ -599,21 +600,30 @@ export async function moveSessionToProject(
     throw new Error(translateNow('sidebar.projects.moveNoFolder'))
   }
 
-  const res = await gatewayRequest<WorkspaceMovePayload>('session.workspace.move', {
+  const exactProfile = owner.profile?.trim()
+
+  if (!exactProfile) {
+    throw new Error('Cannot move session: exact backend owner is unavailable')
+  }
+
+  const exactOwner = { connectionId: owner.connectionId?.trim() || null, profile: exactProfile }
+
+  const res = await requestForSessionOwner<WorkspaceMovePayload>(exactOwner, 'session.workspace.move', {
     cwd,
     session_key: sessionId,
-    ...(profile ? { profile } : {})
+    profile: exactProfile
   })
 
   const moved = res.cwd || cwd
   setSessions(prev =>
     prev.map(s =>
-      sessionMatchesStoredId(s, sessionId)
+      sessionMatchesStoredId(s, sessionId) &&
+      sessionApiOwner(s).connectionId === exactOwner.connectionId &&
+      sessionApiOwner(s).profile === exactOwner.profile
         ? { ...s, cwd: moved, git_branch: res.branch ?? null, git_repo_root: res.git_repo_root ?? null }
         : s
     )
   )
-  void refreshProjectTree()
 }
 
 export interface RepoDiscoveryPolicy {
@@ -1005,12 +1015,12 @@ export async function updateProject(
 // write to — its id is just the repo path. So the first color/icon change ADOPTS
 // the repo as a real project (folder = repo root, name = its label) carrying the
 // chosen look; from then on it patches in place like any explicit project.
-// Returns true when an adoption happened, so an incremental picker can close
-// (the node's id changes on adopt, and a second stale write would double-create).
+// Returns the adopted project's durable id when adoption happened, so callers
+// can migrate UI-only state keyed by the auto project's former path id.
 export async function setProjectAppearance(
   project: Pick<SidebarProjectTree, 'color' | 'icon' | 'id' | 'isAuto' | 'label' | 'path'>,
   patch: { color?: null | string; icon?: null | string }
-): Promise<boolean> {
+): Promise<false | string> {
   if (!project.isAuto) {
     await updateProject(project.id, patch)
 
@@ -1021,7 +1031,7 @@ export async function setProjectAppearance(
     return false
   }
 
-  await createProject({
+  const created = await createProject({
     name: project.label,
     folders: [project.path],
     primaryPath: project.path,
@@ -1030,7 +1040,7 @@ export async function setProjectAppearance(
     icon: (patch.icon ?? project.icon) || undefined
   })
 
-  return true
+  return created?.id ?? false
 }
 
 export async function addProjectFolder(
@@ -1342,8 +1352,11 @@ export async function copyPath(path: null | string): Promise<void> {
 // Pick a project folder via the remote-aware picker: a remote gateway browses
 // the backend filesystem (seeded at its default cwd) where sessions run; local
 // mode opens the native dialog. Returns the absolute path, or null if cancelled.
-export async function pickProjectFolder(): Promise<null | string> {
+export async function pickProjectFolder(
+  title = translateNow('sidebar.projects.addFolderTitle')
+): Promise<null | string> {
   const [dir] = await selectDesktopPaths({
+    title,
     defaultPath: (await desktopDefaultCwd())?.cwd,
     directories: true,
     multiple: false

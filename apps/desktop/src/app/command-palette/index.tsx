@@ -165,9 +165,11 @@ interface PalettePage {
 }
 
 interface SessionEntry {
+  connectionId: null | string
   git_branch?: null | string
   id: string
   preview?: string
+  profile: string
   title: string
 }
 
@@ -385,9 +387,11 @@ const FOLDER_PATH_RE = /^(\/|[A-Za-z]:[/\\]).+/
 type SessionRow = Awaited<ReturnType<typeof listAllProfileSessions>>['sessions'][number]
 
 const toSessionEntry = (session: SessionRow): SessionEntry => ({
+  connectionId: session.connection_id?.trim() || null,
   git_branch: session.git_branch ?? null,
   id: session.id,
   preview: session.preview ?? undefined,
+  profile: session.profile?.trim() || '',
   title: sessionTitle(session)
 })
 
@@ -706,8 +710,15 @@ function CommandPaletteBody({ onExited }: { onExited: () => void }) {
   // ⌘/⌃-select / ⌘-Enter = force a new tab; ⇧⌘ = own window. Same door as the
   // sidebar, minus the sidebar's licence to spend main.
   const goSession = useCallback(
-    (sessionId: string) => (event?: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean }) => {
-      openSession(sessionId, navigate, openSessionIntentFromModifiers(event, 'stack'))
+    (session: SessionEntry | string) => (event?: { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean }) => {
+      const sessionId = typeof session === 'string' ? session : session.id
+
+      const owner =
+        typeof session !== 'string' && session.profile
+          ? { connectionId: session.connectionId, profile: session.profile }
+          : undefined
+
+      openSession(sessionId, navigate, openSessionIntentFromModifiers(event, 'stack'), owner)
     },
     [navigate]
   )
@@ -1169,7 +1180,7 @@ function CommandPaletteBody({ onExited }: { onExited: () => void }) {
         heading: t.commandCenter.sections.sessions,
         items: sessions.map(session => ({
           icon: MessageCircle,
-          id: `session-${session.id}`,
+          id: `session-${session.connectionId ?? 'local'}-${session.profile}-${session.id}`,
           keywords: [
             'chat',
             'session',
@@ -1177,7 +1188,7 @@ function CommandPaletteBody({ onExited }: { onExited: () => void }) {
             ...(session.git_branch ? [session.git_branch] : [])
           ],
           label: session.title,
-          runWithEvent: goSession(session.id)
+          runWithEvent: goSession(session)
         }))
       })
     }

@@ -11,7 +11,7 @@ import { extractEmbeddedImages } from '@/lib/embedded-images'
 import { openLink } from '@/lib/external-link'
 import { triggerHaptic } from '@/lib/haptics'
 import { gatewayMediaDataUrl, isRemoteGateway } from '@/lib/media'
-import { useSessionLinkTitle } from '@/lib/session-link-title'
+import { lookupLocalSessionOwner, useSessionLinkTitle } from '@/lib/session-link-title'
 import { parseSessionRefValue, sessionRefFallbackLabel } from '@/lib/session-refs'
 import { cn } from '@/lib/utils'
 
@@ -455,14 +455,17 @@ const DirectiveImage: FC<{ id: string; label: string }> = ({ id, label }) => {
  *  editor can pull this module in without booting the profile/REST stack. */
 export function openSessionRef(value: string) {
   const { sessionId } = parseSessionRefValue(value)
+  const owner = lookupLocalSessionOwner(value)
 
-  if (!sessionId) {
+  if (!sessionId || !owner) {
     return
   }
 
   triggerHaptic('selection')
   // navigate is unused for the `tab` intent (focus-or-tile only).
-  void import('@/app/open-session').then(({ openSession }) => openSession(sessionId, () => undefined, 'tab'))
+  void import('@/app/open-session').then(({ openSession }) =>
+    openSession(sessionId, () => undefined, 'tab', owner)
+  )
 }
 
 /** What activating a directive of a given kind does. The single source of truth

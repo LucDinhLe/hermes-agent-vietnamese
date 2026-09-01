@@ -1,12 +1,12 @@
 import { JsonRpcGatewayError } from '@hermes/shared'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import type { MutableRefObject } from 'react'
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { getSession } from '@/hermes'
 import { textPart } from '@/lib/chat-messages'
 import { createClientSessionState } from '@/lib/chat-runtime'
+import { rendererRuntimeKey } from '@/lib/session-runtime-key'
 import { $composerAttachments, $composerDraft, type ComposerAttachment, setComposerDraft } from '@/store/composer'
 import { $queuedPromptsBySession, getQueuedPrompts } from '@/store/composer-queue'
 import { $goalsBySession, setSessionGoal } from '@/store/goals'
@@ -21,6 +21,7 @@ import {
   $sessions,
   $terminalBackend,
   $turnStartedAt,
+  sessionMatchesStoredId,
   setCurrentUsage,
   setMessages,
   setSessions
@@ -29,13 +30,14 @@ import { dropSessionState, publishSessionState } from '@/store/session-states'
 import { $wakeWord, resetWakeWordState } from '@/store/wake-word'
 import type { SessionInfo } from '@/types/hermes'
 
+import { SESSION_RUNTIME_RECOVERY_MESSAGE } from '../../session-binding-registry'
+
 import type { SubmitTextOptions } from './utils'
 
 import { uploadComposerAttachment, usePromptActions } from '.'
 
 vi.mock('@/hermes', () => ({
   getProfiles: vi.fn(async () => ({ profiles: [] })),
-  getSession: vi.fn(),
   PROMPT_SUBMIT_REQUEST_TIMEOUT_MS: 1_800_000,
   setApiRequestProfile: vi.fn(),
   transcribeAudio: vi.fn()
@@ -47,6 +49,11 @@ vi.mock('@/hermes', () => ({
 // the stored sessions table and 404s on a runtime id. session.title accepts
 // the runtime id directly.
 const RUNTIME_SESSION_ID = 'rt-abc123'
+
+const testRendererRuntimeKey = (runtimeSessionId: string, profile = 'default') =>
+  rendererRuntimeKey({ connectionId: null, gatewayEpoch: 0, profile }, runtimeSessionId)
+
+const runtimeNotFound = (message = 'opaque gateway failure') => new JsonRpcGatewayError(message, { code: 4007 })
 
 function sessionInfo(overrides: Partial<SessionInfo> = {}): SessionInfo {
   return {
@@ -104,6 +111,7 @@ function Harness({
   openMemoryGraph,
   refreshSessions,
   requestGateway,
+  resolveStoredSessionProfile,
   resumeStoredSession,
   runtimeIdByStoredSessionIdRef: runtimeIdByStoredSessionIdRefProp,
   seedMessages,
@@ -129,6 +137,7 @@ function Harness({
   openMemoryGraph?: () => void
   refreshSessions: () => Promise<void>
   requestGateway: <T>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>
+  resolveStoredSessionProfile?: (storedSessionId: string) => Promise<string | undefined>
   resumeStoredSession?: (storedSessionId: string) => Promise<void> | void
   runtimeIdByStoredSessionIdRef?: MutableRefObject<Map<string, string>>
   seedMessages?: unknown[]
@@ -161,6 +170,28 @@ function Harness({
 
   const localBusyRef = busyRef ?? { current: false }
 
+  const resolveRuntimeId =
+    getRuntimeIdForStoredSession ?? (sessionId => runtimeIdByStoredSessionIdRef.current.get(sessionId) ?? null)
+
+  const resolvedProfilesRef = useRef(new Map<string, string>())
+
+  const resolveExactTestProfile = useCallback(
+    async (sessionId: string) => {
+      const stored = $sessions.get().find(session => sessionMatchesStoredId(session, sessionId))
+
+      const profile = resolveStoredSessionProfile
+        ? await resolveStoredSessionProfile(sessionId)
+        : stored?.profile?.trim() || 'default'
+
+      if (profile?.trim()) {
+        resolvedProfilesRef.current.set(sessionId, profile.trim())
+      }
+
+      return profile
+    },
+    [resolveStoredSessionProfile]
+  )
+
   const stateRef = useRef({
     messages: seedMessages ?? [],
     busy: false,
@@ -174,18 +205,41 @@ function Harness({
   const actions = usePromptActions({
     activeSessionId: activeSessionId === undefined ? RUNTIME_SESSION_ID : activeSessionId,
     activeSessionIdRef,
+    bindSessionRuntime: (sessionId, runtimeId) => {
+      const stored = $sessions.get().find(session => sessionMatchesStoredId(session, sessionId))
+
+      const qualifiedRuntimeId = rendererRuntimeKey(
+        {
+          connectionId: stored?.connection_id?.trim() || null,
+          gatewayEpoch: 0,
+          profile: resolvedProfilesRef.current.get(sessionId) || stored?.profile?.trim() || 'default'
+        },
+        runtimeId
+      )
+
+      runtimeIdByStoredSessionIdRef.current.set(sessionId, qualifiedRuntimeId)
+
+      return qualifiedRuntimeId
+    },
     branchCurrentSession: async () => true,
     busyRef: localBusyRef,
     createBackendSessionForSend: createBackendSessionForSend ?? (async () => RUNTIME_SESSION_ID),
     getRoutedStoredSessionId: getRoutedStoredSessionId ?? (() => null),
-    getRuntimeIdForStoredSession: getRuntimeIdForStoredSession ?? (() => null),
+    getRuntimeIdForStoredSession: resolveRuntimeId,
     getRouteToken: getRouteToken ?? (() => 'token'),
     handleSkinCommand: () => '',
+    invalidateSessionRuntimeBinding: (sessionId, runtimeId) => {
+      if (runtimeIdByStoredSessionIdRef.current.get(sessionId) === runtimeId) {
+        runtimeIdByStoredSessionIdRef.current.delete(sessionId)
+      }
+    },
     openMemoryGraph: openMemoryGraph ?? (() => undefined),
     refreshSessions,
+    requestDurableSession: (_storedSessionId, method, params, timeoutMs) =>
+      timeoutMs === undefined ? requestGateway(method, params) : requestGateway(method, params, timeoutMs),
     requestGateway,
+    resolveStoredSessionProfile: resolveExactTestProfile,
     resumeStoredSession: resumeStoredSession ?? (() => undefined),
-    runtimeIdByStoredSessionIdRef,
     selectedStoredSessionIdRef,
     startFreshSessionDraft: () => undefined,
     sttEnabled: false,
@@ -200,33 +254,43 @@ function Harness({
     }
   })
 
+  const {
+    cancelRun: actionCancelRun,
+    editMessage: actionEditMessage,
+    redirectPrompt: actionRedirectPrompt,
+    reloadFromMessage: actionReloadFromMessage,
+    restoreToMessage: actionRestoreToMessage,
+    steerPrompt: actionSteerPrompt,
+    submitText: actionSubmitText
+  } = actions
+
   useEffect(() => {
     onReady({
       activeSessionIdRef,
-      cancelRun: (...args: Parameters<typeof actions.cancelRun>) =>
-        act(async () => actions.cancelRun(...args)) as Promise<void>,
-      editMessage: (...args: Parameters<typeof actions.editMessage>) =>
-        act(async () => actions.editMessage(...args)) as Promise<void>,
-      reloadFromMessage: (...args: Parameters<typeof actions.reloadFromMessage>) =>
-        act(async () => actions.reloadFromMessage(...args)) as Promise<void>,
-      restoreToMessage: (...args: Parameters<typeof actions.restoreToMessage>) =>
-        act(async () => actions.restoreToMessage(...args)) as Promise<void>,
-      redirectPrompt: (...args: Parameters<typeof actions.redirectPrompt>) =>
-        act(async () => actions.redirectPrompt(...args)) as Promise<boolean>,
-      steerPrompt: (...args: Parameters<typeof actions.steerPrompt>) =>
-        act(async () => actions.steerPrompt(...args)) as Promise<boolean>,
-      submitTextRaw: actions.submitText,
-      submitText: (...args: Parameters<typeof actions.submitText>) =>
-        act(async () => actions.submitText(...args)) as Promise<boolean>
+      cancelRun: (...args: Parameters<typeof actionCancelRun>) =>
+        act(async () => actionCancelRun(...args)) as Promise<void>,
+      editMessage: (...args: Parameters<typeof actionEditMessage>) =>
+        act(async () => actionEditMessage(...args)) as Promise<void>,
+      reloadFromMessage: (...args: Parameters<typeof actionReloadFromMessage>) =>
+        act(async () => actionReloadFromMessage(...args)) as Promise<void>,
+      restoreToMessage: (...args: Parameters<typeof actionRestoreToMessage>) =>
+        act(async () => actionRestoreToMessage(...args)) as Promise<void>,
+      redirectPrompt: (...args: Parameters<typeof actionRedirectPrompt>) =>
+        act(async () => actionRedirectPrompt(...args)) as Promise<boolean>,
+      steerPrompt: (...args: Parameters<typeof actionSteerPrompt>) =>
+        act(async () => actionSteerPrompt(...args)) as Promise<boolean>,
+      submitTextRaw: actionSubmitText,
+      submitText: (...args: Parameters<typeof actionSubmitText>) =>
+        act(async () => actionSubmitText(...args)) as Promise<boolean>
     })
   }, [
-    actions.cancelRun,
-    actions.editMessage,
-    actions.reloadFromMessage,
-    actions.restoreToMessage,
-    actions.redirectPrompt,
-    actions.steerPrompt,
-    actions.submitText,
+    actionCancelRun,
+    actionEditMessage,
+    actionRedirectPrompt,
+    actionReloadFromMessage,
+    actionRestoreToMessage,
+    actionSteerPrompt,
+    actionSubmitText,
     activeSessionIdRef,
     onReady
   ])
@@ -454,7 +518,10 @@ describe('usePromptActions slash session targeting', () => {
     expect(calls.map(c => c.method)).toEqual(['session.resume', 'slash.exec'])
     expect(calls[0]?.params).toMatchObject({ session_id: STORED_SESSION_ID })
     // The command lands on the recovered runtime that owns the goal.
-    expect(calls[1]?.params).toEqual({ command: 'goal status', session_id: RECOVERED_SESSION_ID })
+    expect(calls[1]?.params).toEqual({
+      command: 'goal status',
+      session_id: testRendererRuntimeKey(RECOVERED_SESSION_ID)
+    })
   })
 
   it('does not fork the chat when the routed session cannot be rebound', async () => {
@@ -465,7 +532,7 @@ describe('usePromptActions slash session targeting', () => {
       calls.push(method)
 
       if (method === 'session.resume') {
-        throw new Error('4007 session not found')
+        throw runtimeNotFound()
       }
 
       return {} as never
@@ -1989,13 +2056,14 @@ describe('usePromptActions submit / queue drain semantics', () => {
     expect(requestGateway).toHaveBeenCalledWith('session.resume', {
       session_id: 'stored-session-b',
       source: 'desktop',
-      omit_messages: true
+      omit_messages: true,
+      profile: 'default'
     })
     expect(requestGateway).toHaveBeenCalledWith(
       'prompt.submit',
       {
         queued: true,
-        session_id: 'rt-session-b',
+        session_id: testRendererRuntimeKey('rt-session-b'),
         text: 'queued for B mid-switch'
       },
       1_800_000
@@ -2008,7 +2076,11 @@ describe('usePromptActions submit / queue drain semantics', () => {
       )
     ).toBe(true)
     expect(
-      updates.some(update => update.sessionId === 'rt-session-b' && update.storedSessionId === 'stored-session-b')
+      updates.some(
+        update =>
+          update.sessionId === testRendererRuntimeKey('rt-session-b') &&
+          update.storedSessionId === 'stored-session-b'
+      )
     ).toBe(true)
   })
 
@@ -2126,14 +2198,15 @@ describe('usePromptActions submit / queue drain semantics', () => {
     expect(requestGateway).toHaveBeenCalledWith('session.resume', {
       session_id: 'stored-session-a',
       source: 'desktop',
-      omit_messages: true
+      omit_messages: true,
+      profile: 'default'
     })
     // The prompt must land in the resumed session, NOT the foreground.
     expect(requestGateway).toHaveBeenCalledWith(
       'prompt.submit',
       {
         queued: true,
-        session_id: 'rt-session-a-rebound',
+        session_id: testRendererRuntimeKey('rt-session-a-rebound'),
         text: 'queued for background session'
       },
       1_800_000
@@ -2441,7 +2514,7 @@ describe('usePromptActions redirectPrompt', () => {
         redirectAttempts += 1
 
         if (redirectAttempts === 1) {
-          throw new Error('session not found')
+          throw runtimeNotFound()
         }
 
         return { status: 'redirected' } as never
@@ -2468,9 +2541,17 @@ describe('usePromptActions redirectPrompt', () => {
     expect(await handle!.redirectPrompt('reconnect nudge')).toBe(true)
     expect(calls.map(c => c.method)).toEqual(['session.redirect', 'session.resume', 'session.redirect'])
     expect(calls[0]?.params).toEqual({ session_id: RUNTIME_SESSION_ID, text: 'reconnect nudge' })
-    expect(calls[1]?.params).toEqual({ session_id: STORED_SESSION_ID, source: 'desktop', omit_messages: true })
-    expect(calls[2]?.params).toEqual({ session_id: RECOVERED_SESSION_ID, text: 'reconnect nudge' })
-    expect(handle!.activeSessionIdRef.current).toBe(RECOVERED_SESSION_ID)
+    expect(calls[1]?.params).toEqual({
+      session_id: STORED_SESSION_ID,
+      source: 'desktop',
+      omit_messages: true,
+      profile: 'default'
+    })
+    expect(calls[2]?.params).toEqual({
+      session_id: testRendererRuntimeKey(RECOVERED_SESSION_ID),
+      text: 'reconnect nudge'
+    })
+    expect(handle!.activeSessionIdRef.current).toBe(testRendererRuntimeKey(RECOVERED_SESSION_ID))
   })
 })
 
@@ -3231,7 +3312,7 @@ describe('usePromptActions sleep/wake session recovery', () => {
         submitAttempts += 1
 
         if (submitAttempts === 1) {
-          throw new Error('session not found')
+          throw runtimeNotFound()
         }
 
         return {} as never
@@ -3259,8 +3340,16 @@ describe('usePromptActions sleep/wake session recovery', () => {
     expect(ok).toBe(true)
     // First submit (stale id) → session.resume (stored id) → retry submit (fresh id).
     expect(calls.map(c => c.method)).toEqual(['prompt.submit', 'session.resume', 'prompt.submit'])
-    expect(calls[1]?.params).toEqual({ session_id: STORED_SESSION_ID, source: 'desktop', omit_messages: true })
-    expect(calls[2]?.params).toEqual({ session_id: RECOVERED_SESSION_ID, text: 'message after wake' })
+    expect(calls[1]?.params).toEqual({
+      session_id: STORED_SESSION_ID,
+      source: 'desktop',
+      omit_messages: true,
+      profile: 'default'
+    })
+    expect(calls[2]?.params).toEqual({
+      session_id: testRendererRuntimeKey(RECOVERED_SESSION_ID),
+      text: 'message after wake'
+    })
   })
 
   it('resumes the stored session and retries once when reloadFromMessage (regenerate) reports "session not found"', async () => {
@@ -3289,7 +3378,7 @@ describe('usePromptActions sleep/wake session recovery', () => {
         submitAttempts += 1
 
         if (submitAttempts === 1) {
-          throw new Error('session not found')
+          throw runtimeNotFound()
         }
 
         return {} as never
@@ -3316,9 +3405,17 @@ describe('usePromptActions sleep/wake session recovery', () => {
 
     // First submit (stale id) → session.resume (stored id) → retry submit (fresh id).
     expect(calls.map(c => c.method)).toEqual(['prompt.submit', 'session.resume', 'prompt.submit'])
-    expect(calls[1]?.params).toEqual({ session_id: STORED_SESSION_ID, source: 'desktop', omit_messages: true })
+    expect(calls[1]?.params).toEqual({
+      session_id: STORED_SESSION_ID,
+      source: 'desktop',
+      omit_messages: true,
+      profile: 'default'
+    })
     expect(calls[2]?.params).toEqual(
-      expect.objectContaining({ session_id: RECOVERED_SESSION_ID, text: 'original prompt' })
+      expect.objectContaining({
+        session_id: testRendererRuntimeKey(RECOVERED_SESSION_ID),
+        text: 'original prompt'
+      })
     )
   })
 
@@ -3338,7 +3435,7 @@ describe('usePromptActions sleep/wake session recovery', () => {
         submitAttempts += 1
 
         if (submitAttempts === 1) {
-          throw new Error('session not found')
+          throw runtimeNotFound()
         }
 
         return {} as never
@@ -3372,32 +3469,16 @@ describe('usePromptActions sleep/wake session recovery', () => {
     setSessions(() => [])
   })
 
-  // The session lives on another profile and is outside the paginated sidebar
-  // cache: resolve it by id across profiles rather than resuming profile-blind.
-  it('resolves the owning profile across profiles when the session is not cached', async () => {
-    // module-factory vi.fn is not reset by restoreAllMocks — reset explicitly in
-    // the finally below so this resolved value never leaks into sibling tests.
+  it('fails closed when the durable owner is absent instead of probing profiles or resuming ambiently', async () => {
     setSessions(() => [])
-    vi.mocked(getSession).mockResolvedValue(sessionInfo({ id: STORED_SESSION_ID, profile: 'work' }))
 
     const calls: { method: string; params?: Record<string, unknown> }[] = []
-    let submitAttempts = 0
 
     const requestGateway = vi.fn(async (method: string, params?: Record<string, unknown>) => {
       calls.push({ method, params })
 
       if (method === 'prompt.submit') {
-        submitAttempts += 1
-
-        if (submitAttempts === 1) {
-          throw new Error('session not found')
-        }
-
-        return {} as never
-      }
-
-      if (method === 'session.resume') {
-        return { session_id: RECOVERED_SESSION_ID } as never
+        throw runtimeNotFound()
       }
 
       return {} as never
@@ -3409,19 +3490,14 @@ describe('usePromptActions sleep/wake session recovery', () => {
         onReady={h => (handle = h)}
         refreshSessions={async () => undefined}
         requestGateway={requestGateway}
+        resolveStoredSessionProfile={async () => undefined}
         storedSessionId={STORED_SESSION_ID}
       />
     )
 
-    expect(await handle!.submitText('message after wake')).toBe(true)
-    expect(calls[1]?.params).toEqual({
-      session_id: STORED_SESSION_ID,
-      source: 'desktop',
-      omit_messages: true,
-      profile: 'work'
-    })
+    expect(await handle!.submitText('message after wake')).toBe(false)
+    expect(calls.map(call => call.method)).toEqual(['prompt.submit'])
 
-    vi.mocked(getSession).mockReset()
     setSessions(() => [])
   })
 
@@ -3436,7 +3512,7 @@ describe('usePromptActions sleep/wake session recovery', () => {
         submitAttempts += 1
 
         if (submitAttempts === 1) {
-          throw new Error('session not found')
+          throw runtimeNotFound()
         }
 
         return {} as never
@@ -3483,11 +3559,12 @@ describe('usePromptActions sleep/wake session recovery', () => {
     expect(calls[1]?.params).toEqual({
       session_id: STORED_SESSION_ID,
       source: 'desktop',
-      omit_messages: true
+      omit_messages: true,
+      profile: 'default'
     })
     expect(calls[2]?.params).toEqual({
       queued: true,
-      session_id: RECOVERED_SESSION_ID,
+      session_id: testRendererRuntimeKey(RECOVERED_SESSION_ID),
       text: 'queued background message after wake'
     })
     expect(handle!.activeSessionIdRef.current).toBe(RUNTIME_SESSION_ID)
@@ -3504,7 +3581,7 @@ describe('usePromptActions sleep/wake session recovery', () => {
         interruptAttempts += 1
 
         if (interruptAttempts === 1) {
-          throw new Error('session not found')
+          throw runtimeNotFound()
         }
 
         return {} as never
@@ -3535,9 +3612,10 @@ describe('usePromptActions sleep/wake session recovery', () => {
     expect(calls[1]?.params).toEqual({
       session_id: STORED_SESSION_ID,
       source: 'desktop',
-      omit_messages: true
+      omit_messages: true,
+      profile: 'default'
     })
-    expect(calls[2]?.params).toEqual({ session_id: RECOVERED_SESSION_ID })
+    expect(calls[2]?.params).toEqual({ session_id: testRendererRuntimeKey(RECOVERED_SESSION_ID) })
   })
 
   it('clears the active and cached turn clocks when stopping a turn', async () => {
@@ -3599,12 +3677,14 @@ describe('usePromptActions sleep/wake session recovery', () => {
 
   it('surfaces "session not found" (no resume) when there is no stored session id', async () => {
     const calls: string[] = []
+    const states: Record<string, unknown>[] = []
+    const rawGatewayText = 'RAW OPAQUE BACKEND FAILURE 4007'
 
     const requestGateway = vi.fn(async (method: string) => {
       calls.push(method)
 
       if (method === 'prompt.submit') {
-        throw new Error('session not found')
+        throw runtimeNotFound(rawGatewayText)
       }
 
       return {} as never
@@ -3614,6 +3694,7 @@ describe('usePromptActions sleep/wake session recovery', () => {
     await actRender(
       <Harness
         onReady={h => (handle = h)}
+        onSeedState={state => states.push(state)}
         refreshSessions={async () => undefined}
         requestGateway={requestGateway}
         storedSessionId={null}
@@ -3624,6 +3705,14 @@ describe('usePromptActions sleep/wake session recovery', () => {
     // short-circuits — no resume is attempted and the error surfaces normally.
     expect(await handle!.submitText('message')).toBe(false)
     expect(calls).not.toContain('session.resume')
+    expect(states.at(-1)).toMatchObject({
+      messages: expect.arrayContaining([expect.objectContaining({ error: SESSION_RUNTIME_RECOVERY_MESSAGE })])
+    })
+    expect($notifications.get()).toEqual([
+      expect.objectContaining({ message: SESSION_RUNTIME_RECOVERY_MESSAGE })
+    ])
+    expect(JSON.stringify({ notifications: $notifications.get(), states })).not.toContain(rawGatewayText)
+    expect(JSON.stringify({ notifications: $notifications.get(), states })).not.toContain('4007')
   })
 
   it('recovers via session.resume when prompt.submit TIMES OUT and a stored session is selected (#55578)', async () => {
@@ -3671,10 +3760,11 @@ describe('usePromptActions sleep/wake session recovery', () => {
     expect(calls[1]?.params).toEqual({
       session_id: STORED_SESSION_ID,
       source: 'desktop',
-      omit_messages: true
+      omit_messages: true,
+      profile: 'default'
     })
     expect(calls[2]?.params).toEqual({
-      session_id: RECOVERED_SESSION_ID,
+      session_id: testRendererRuntimeKey(RECOVERED_SESSION_ID),
       text: 'message during starved loop'
     })
   })
@@ -3718,9 +3808,10 @@ describe('usePromptActions sleep/wake session recovery', () => {
     expect(calls[0]?.params).toEqual({
       session_id: STORED_SESSION_ID,
       source: 'desktop',
-      omit_messages: true
+      omit_messages: true,
+      profile: 'default'
     })
-    expect(calls[1]?.params).toMatchObject({ session_id: RECOVERED_SESSION_ID })
+    expect(calls[1]?.params).toMatchObject({ session_id: testRendererRuntimeKey(RECOVERED_SESSION_ID) })
   })
 
   it('never replaces a selected stored session when its direct runtime resume fails', async () => {
@@ -3730,7 +3821,7 @@ describe('usePromptActions sleep/wake session recovery', () => {
 
     const requestGateway = vi.fn(async (method: string) => {
       if (method === 'session.resume') {
-        throw new Error('4007 session not found on the active profile')
+        throw runtimeNotFound()
       }
 
       return {} as never
@@ -4033,7 +4124,8 @@ describe('usePromptActions submit session-context isolation (#54527)', () => {
     expect(calls.find(c => c.method === 'session.resume')?.params).toEqual({
       session_id: STORED_SESSION_A,
       source: 'desktop',
-      omit_messages: true
+      omit_messages: true,
+      profile: 'default'
     })
   })
 
@@ -4647,7 +4739,7 @@ describe('usePromptActions busy-gateway churn tolerance (#64327)', () => {
 
     expect(await submitting).toBe(true)
     expect(calls.find(c => c.method === 'prompt.submit')?.params).toMatchObject({
-      session_id: RESUMED_RUNTIME_ID,
+      session_id: testRendererRuntimeKey(RESUMED_RUNTIME_ID),
       text: 'send from a second chat on a busy gateway'
     })
   })
@@ -4758,7 +4850,11 @@ describe('usePromptActions submit entry-time runtime ownership proof (#64789/#65
     })
     expect(calls.find(c => c.method === 'prompt.submit' && c.params?.session_id === RUNTIME_SESSION_A)).toBeUndefined()
     expect(
-      calls.find(c => c.method === 'prompt.submit' && c.params?.session_id === RUNTIME_SESSION_B_RESUMED)
+      calls.find(
+        c =>
+          c.method === 'prompt.submit' &&
+          c.params?.session_id === testRendererRuntimeKey(RUNTIME_SESSION_B_RESUMED)
+      )
     ).toBeDefined()
   })
 
@@ -4813,7 +4909,11 @@ describe('usePromptActions submit entry-time runtime ownership proof (#64789/#65
     })
     expect(calls.find(c => c.method === 'prompt.submit' && c.params?.session_id === RUNTIME_SESSION_A)).toBeUndefined()
     expect(
-      calls.find(c => c.method === 'prompt.submit' && c.params?.session_id === RUNTIME_SESSION_B_RESUMED)
+      calls.find(
+        c =>
+          c.method === 'prompt.submit' &&
+          c.params?.session_id === testRendererRuntimeKey(RUNTIME_SESSION_B_RESUMED)
+      )
     ).toBeDefined()
   })
 
@@ -4895,7 +4995,11 @@ describe('usePromptActions submit entry-time runtime ownership proof (#64789/#65
     })
     expect(calls.find(c => c.method === 'prompt.submit' && c.params?.session_id === RUNTIME_SESSION_A)).toBeUndefined()
     expect(
-      calls.find(c => c.method === 'prompt.submit' && c.params?.session_id === RUNTIME_SESSION_B_RESUMED)
+      calls.find(
+        c =>
+          c.method === 'prompt.submit' &&
+          c.params?.session_id === testRendererRuntimeKey(RUNTIME_SESSION_B_RESUMED)
+      )
     ).toBeDefined()
   })
 })
@@ -4948,6 +5052,74 @@ describe('usePromptActions eager attachment upload (drop-time)', () => {
     expect(chip.refText).toBe('@file:.hermes/desktop-attachments/DEVIS_signed.pdf')
     expect(chip.uploadState).toBeUndefined()
     expect(readFileDataUrl).toHaveBeenCalledWith('/Users/mahmoud/Downloads/DEVIS_signed.pdf')
+  })
+
+  it('defers eager upload until a routed Agent session is rebound, then sends the attachment', async () => {
+    const storedSessionId = '20260901_135339_40d624'
+    const staleRuntimeId = 'runtime-before-restart'
+    const freshRuntimeId = 'runtime-after-resume'
+    const activeSessionIdRef: MutableRefObject<string | null> = { current: staleRuntimeId }
+    // The route is already on the MBC conversation while React selection is
+    // still one render behind — the exact Agent-switch/relaunch race.
+    const selectedStoredSessionIdRef: MutableRefObject<string | null> = { current: null }
+    const runtimeIdByStoredSessionIdRef: MutableRefObject<Map<string, string>> = { current: new Map() }
+    const calls: Array<{ method: string; sessionId?: unknown }> = []
+
+    const requestGateway = vi.fn(async (method: string, params?: Record<string, unknown>) => {
+      calls.push({ method, sessionId: params?.session_id })
+
+      if (method === 'file.attach' && params?.session_id === freshRuntimeId) {
+        return {
+          attached: true,
+          ref_text: '@file:.hermes/desktop-attachments/quy-trinh.docx',
+          uploaded: true
+        } as never
+      }
+
+      return {} as never
+    })
+
+    const resumeStoredSession = vi.fn(async (sessionId: string) => {
+      expect(sessionId).toBe(storedSessionId)
+      selectedStoredSessionIdRef.current = storedSessionId
+      activeSessionIdRef.current = freshRuntimeId
+      runtimeIdByStoredSessionIdRef.current.set(storedSessionId, freshRuntimeId)
+    })
+
+    $composerAttachments.set([
+      { id: 'file:workflow', kind: 'file', label: '0. QUY TRÌNH LÀM VIỆC.docx', path: 'C:/Downloads/workflow.docx' }
+    ])
+
+    let handle: HarnessHandle | null = null
+    await actRender(
+      <Harness
+        activeSessionId={staleRuntimeId}
+        activeSessionIdRef={activeSessionIdRef}
+        getRoutedStoredSessionId={() => storedSessionId}
+        getRuntimeIdForStoredSession={sessionId => runtimeIdByStoredSessionIdRef.current.get(sessionId) ?? null}
+        onReady={next => (handle = next)}
+        refreshSessions={async () => undefined}
+        requestGateway={requestGateway}
+        resumeStoredSession={resumeStoredSession}
+        runtimeIdByStoredSessionIdRef={runtimeIdByStoredSessionIdRef}
+        selectedStoredSessionIdRef={selectedStoredSessionIdRef}
+        storedSessionId={storedSessionId}
+      />
+    )
+
+    await Promise.resolve()
+    expect(requestGateway).not.toHaveBeenCalledWith('file.attach', expect.objectContaining({ session_id: staleRuntimeId }))
+
+    expect(await handle!.submitText('đánh giá quy trình và đề xuất hướng cải tiến')).toBe(true)
+    expect(resumeStoredSession).toHaveBeenCalledWith(storedSessionId)
+    expect(calls).toEqual(
+      expect.arrayContaining([
+        { method: 'file.attach', sessionId: freshRuntimeId },
+        { method: 'prompt.submit', sessionId: freshRuntimeId }
+      ])
+    )
+    expect(activeSessionIdRef.current).toBe(freshRuntimeId)
+    expect(requestGateway).not.toHaveBeenCalledWith('file.attach', expect.objectContaining({ session_id: staleRuntimeId }))
   })
 
   it('flags the chip uploadState=error when the eager upload fails, keeping the path so submit can retry', async () => {
@@ -5216,10 +5388,14 @@ describe('usePromptActions stale-closure session routing', () => {
     // A redirect reaches the model mid-turn. Sent to the stale session, the
     // correction lands in a conversation the user is no longer looking at —
     // this is the observed "session suddenly working on another chat's task".
-    expect(requestGateway).toHaveBeenCalledWith('session.redirect', {
-      session_id: RUNTIME_SESSION_B,
-      text: 'actually use Postgres'
-    })
+    expect(requestGateway).toHaveBeenCalledWith(
+      'session.redirect',
+      {
+        session_id: RUNTIME_SESSION_B,
+        text: 'actually use Postgres'
+      },
+      undefined
+    )
     expect(requestGateway).not.toHaveBeenCalledWith(
       'session.redirect',
       expect.objectContaining({ session_id: RUNTIME_SESSION_ID })

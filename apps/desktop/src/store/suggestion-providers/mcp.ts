@@ -14,6 +14,7 @@ import { prettyName } from '@/lib/text'
 import { type ComposerSuggestion, registerDraftProvider } from '@/store/composer-suggestions'
 import { $gateway } from '@/store/gateway'
 import { notifyError } from '@/store/notifications'
+import { requestForRendererRuntime } from '@/store/session-request-router'
 
 /**
  * The MCP draft provider — the suggestion bus's founding member (PR #85036).
@@ -212,10 +213,12 @@ async function connect(known: SuggestibleServer, sessionId: string | null, cance
 
     // Tools reach the live session before the pill claims success — the
     // same write-through the Capabilities tab and the setup card use.
-    await $gateway
-      .get()
-      ?.request('reload.mcp', { confirm: true, session_id: sessionId ?? undefined })
-      .catch(() => {})
+    const gateway = $gateway.get()
+    const reload = sessionId
+      ? requestForRendererRuntime(sessionId, 'reload.mcp', { confirm: true })
+      : gateway?.request('reload.mcp', { confirm: true })
+
+    await reload?.catch(() => {})
 
     invalidateMcpSuggestionIndex()
   } catch (error) {

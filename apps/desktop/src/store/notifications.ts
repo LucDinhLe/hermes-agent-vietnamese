@@ -1,5 +1,9 @@
 import { atom } from 'nanostores'
 
+import {
+  isSessionRuntimeRecoveryFailure,
+  SESSION_RUNTIME_RECOVERY_MESSAGE
+} from '@/app/session/session-binding-registry'
 import { translateNow } from '@/i18n'
 
 export type NotificationKind = 'error' | 'warning' | 'info' | 'success'
@@ -145,6 +149,10 @@ function summarizeErrorMessage(message: string, fallback: string) {
 // Exported so flows that surface errors inline (e.g. ConfirmDialog's onConfirm
 // rethrow) can reuse the same IPC-unwrapping + summarizing as notifyError.
 export function readableError(error: unknown, fallback: string): { message: string; detail?: string } {
+  if (isSessionRuntimeRecoveryFailure(error)) {
+    return { message: SESSION_RUNTIME_RECOVERY_MESSAGE }
+  }
+
   const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : fallback
   const unwrapped = raw.match(/Error invoking remote method '[^']+': Error: (.+)$/)?.[1] ?? raw
   const cleaned = cleanErrorText(unwrapped)

@@ -33,6 +33,8 @@ import { installErrorBannerGuard } from './test'
 const DESKTOP_ROOT = path.resolve(import.meta.dirname, '..')
 const REPO_ROOT = path.resolve(DESKTOP_ROOT, '..', '..')
 const RELEASE_ROOT = path.join(DESKTOP_ROOT, 'release')
+const DESKTOP_PACKAGE = JSON.parse(fs.readFileSync(path.join(DESKTOP_ROOT, 'package.json'), 'utf8'))
+const WINDOWS_PACKAGED_EXECUTABLE = DESKTOP_PACKAGE.build?.executableName || DESKTOP_PACKAGE.productName || 'Hermes'
 
 // ─── Credential stripping (matches launch.spec.ts) ──────────────────────
 
@@ -509,7 +511,7 @@ providers:
  */
 function resolvePackagedBinaryPath(): string {
   if (process.platform === 'win32') {
-    return path.join(RELEASE_ROOT, 'win-unpacked', 'Hermes.exe')
+    return path.join(RELEASE_ROOT, 'win-unpacked', `${WINDOWS_PACKAGED_EXECUTABLE}.exe`)
   }
 
   if (process.platform === 'darwin') {

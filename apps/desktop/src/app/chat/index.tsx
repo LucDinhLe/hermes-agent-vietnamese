@@ -67,6 +67,7 @@ import { ProfileTag } from './profile-tag'
 import { isRouteSessionMismatch } from './route-session-state'
 import { useRuntimeMessageRepository } from './runtime-repository'
 import { ScrollToBottomButton } from './scroll-to-bottom-button'
+import { SessionControlsSlot } from './session-controls-slot'
 import { useSessionView } from './session-view'
 import { SessionActionsMenu } from './sidebar/session-actions-menu'
 import { threadLoadingState } from './thread-loading'
@@ -163,9 +164,11 @@ function ChatHeader({
         {showProfileTag && <ProfileTag className="pointer-events-auto mr-1.5" profile={activeStoredSession?.profile} />}
         <SessionActionsMenu
           align="start"
+          connectionId={activeStoredSession ? (activeStoredSession.connection_id ?? null) : undefined}
           onDelete={selectedSessionId ? onDeleteSelectedSession : undefined}
           onPin={selectedSessionId ? onToggleSelectedPin : undefined}
           pinned={selectedIsPinned}
+          profile={activeStoredSession?.profile}
           sessionId={selectedSessionId || activeSessionId || ''}
           sideOffset={8}
           title={title}
@@ -525,7 +528,7 @@ const ChatViewContent = memo(function ChatViewContent({
       },
       tools: {
         enabled: true,
-        label: 'Add context',
+        label: 'Thêm ngữ cảnh',
         suggestions: contextSuggestions
       },
       voice: {
@@ -600,6 +603,11 @@ const ChatViewContent = memo(function ChatViewContent({
           selectedSessionId={selectedSessionId}
         />
       )}
+
+      {/* Every session surface gets the same V32 control strip. The previous
+          primary-only gate made a tab created from `+` look and behave like a
+          different product from a session created in the left sidebar. */}
+      <SessionControlsSlot />
 
       {/* Mounted for the primary AND every tile, each scoped to its own session
           so a tiled/background session's blocking prompt surfaces instead of

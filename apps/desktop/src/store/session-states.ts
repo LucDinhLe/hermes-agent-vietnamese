@@ -29,6 +29,7 @@ import {
   noteActiveTreeGroup,
   revealTreePane
 } from '@/components/pane-shell/tree/store'
+import { rendererRuntimeKey } from '@/lib/session-runtime-key'
 import { stableArray } from '@/lib/stable-array'
 import { readJson, writeJson } from '@/lib/storage'
 import type { SessionInfo } from '@/types/hermes'
@@ -68,10 +69,29 @@ export const $sessionStates = atom<Record<string, ClientSessionState>>({})
 
 const sessionScopeByRuntimeId = new Map<string, string>()
 
-export function recordSessionEventScope(event: { connectionId?: string; profile?: string; session_id?: string }): void {
-  if (event.session_id && event.connectionId) {
-    sessionScopeByRuntimeId.set(event.session_id, registryBackendScopeKey(event.connectionId, event.profile))
+export function recordSessionEventScope(event: {
+  connectionId?: string
+  gatewayEpoch?: number
+  profile?: string
+  session_id?: string
+}): void {
+  const connectionId = event.connectionId?.trim()
+  const profile = event.profile?.trim()
+  const runtimeSessionId = event.session_id?.trim()
+
+  if (
+    !connectionId ||
+    !profile ||
+    !runtimeSessionId ||
+    typeof event.gatewayEpoch !== 'number' ||
+    !Number.isFinite(event.gatewayEpoch)
+  ) {
+    return
   }
+
+  const runtimeId = rendererRuntimeKey({ connectionId, gatewayEpoch: event.gatewayEpoch, profile }, runtimeSessionId)
+
+  sessionScopeByRuntimeId.set(runtimeId, registryBackendScopeKey(connectionId, profile))
 }
 
 /** Composite scopes of registry-sourced sessions that are live (busy or
@@ -519,8 +539,19 @@ export type SplitDir = 'bottom' | 'left' | 'right' | 'top'
  *  the anchor's zone as a tab (a drop on the zone's tab strip). */
 export type TileDock = 'center' | SplitDir
 
-export interface SessionTile {
-  /** Stored session id — the durable identity (runtime ids are ephemeral). */
+export interface SessionTileOwner {
+  /** Registry connection that owns the backend. Null is the local/legacy path. */
+  connectionId: null | string
+  /** Normalized backend profile name. */
+  profile: string
+}
+
+interface SessionTileBase {
+  /**
+   * Pane identity used by the existing layout/UI integration. Durable tiles use
+   * the DB id. Provisional tiles use their stable draft id and MUST be narrowed
+   * with `isDurableSessionTile` before any DB-backed resume/delete operation.
+   */
   storedSessionId: string
   /** Dock against `anchor` on adoption (default right; center = stack). */
   dir?: TileDock
@@ -537,84 +568,263 @@ export interface SessionTile {
   error?: string
 }
 
-// Tiles are persisted PER PROFILE: a session belongs to one profile, and the
-// single live gateway is scoped to one profile at a time, so a tile only makes
-// sense while its profile is active. Switching profiles swaps the visible set
-// (and drops runtime bindings so each tile re-resumes against the now-current
-// gateway — which also settles the "tile resumes against the wrong backend" and
-// "stale runtime after respawn" bugs by construction).
-const TILES_KEY = 'hermes.desktop.sessionTiles.v2'
+/** Existing callers may still construct an untagged tile in memory. Persistence
+ * normalizes every such legacy value to an explicit durable tile. */
+export interface DurableSessionTile extends SessionTileBase {
+  kind?: 'durable'
+  owner?: SessionTileOwner
+  draftId?: never
+  provisionalStoredSessionId?: never
+}
+
+/** A backend has minted a candidate key/runtime, but no durable DB row has been
+ * confirmed yet. `draftId` is renderer-owned and stable across relaunches;
+ * `provisionalStoredSessionId` is only a candidate backend key, never proof of a
+ * persisted session. */
+export interface ProvisionalSessionTile extends SessionTileBase {
+  kind: 'provisional'
+  owner: SessionTileOwner
+  draftId: string
+  provisionalStoredSessionId?: string
+}
+
+export type SessionTile = DurableSessionTile | ProvisionalSessionTile
+export type SessionTilePatch = Partial<Pick<SessionTileBase, 'anchor' | 'before' | 'dir' | 'error' | 'runtimeId'>>
+
+export interface SessionTilePromotionPlan {
+  owner: SessionTileOwner
+  draftId: string
+  provisionalStoredSessionId: null | string
+  durableSessionId: string
+  /** Existing layout integration must rekey this pane atomically with the tile. */
+  layout: { fromPaneId: string; toPaneId: string }
+  /** Composer integration must move the unsent draft between these scopes. */
+  draft: { fromScope: string; toScope: string }
+}
+
+export interface ProvisionalSessionTileRecovery {
+  action: 'create-fresh-runtime'
+  /** Stable composer scope retained across the relaunch. */
+  draft: { scope: string }
+  owner: SessionTileOwner
+  draftId: string
+  /** Relaunch recovery never exposes a previous candidate or runtime binding. */
+  tile: ProvisionalSessionTile
+}
+
+export interface RebindProvisionalSessionTileInput {
+  owner: SessionTileOwner
+  draftId: string
+  /** Fresh candidate returned by the post-relaunch session.create. */
+  provisionalStoredSessionId: string
+  /** Fresh runtime paired with the new candidate. */
+  runtimeId: string
+}
+
+export interface ProvisionalSessionTileRebind {
+  owner: SessionTileOwner
+  draftId: string
+  /** The draft remains in the same composer scope; no migration is required. */
+  draft: { scope: string }
+  provisionalStoredSessionId: string
+  runtimeId: string
+  tile: ProvisionalSessionTile
+}
+
+// Tiles are persisted PER BACKEND OWNER, not just profile. Two registry
+// connections can both expose `default`; collapsing them into one profile key
+// makes a tile from machine A resume on machine B. The owner captured at create
+// time is carried by every provisional tile and is the only scope used by its
+// mutations — no late `$activeGatewayProfile` read is allowed.
+const TILES_KEY = 'hermes.desktop.sessionTiles.v3'
+const LEGACY_PROFILE_TILES_KEY = 'hermes.desktop.sessionTiles.v2'
 const LEGACY_TILES_KEY = 'hermes.desktop.sessionTiles.v1'
 const TILE_PANE_PREFIX = 'session-tile:'
 
 /** Persisted placement — `dir` + strip slot (`before`) + dock `anchor` so a
  *  restart / profile swap re-adopts tiles in the same order, not all stacked
  *  right of workspace. */
-type StoredTile = Pick<SessionTile, 'anchor' | 'before' | 'dir' | 'storedSessionId'>
+type StoredTile =
+  | (Pick<DurableSessionTile, 'anchor' | 'before' | 'dir' | 'storedSessionId'> & {
+      kind: 'durable'
+      owner: SessionTileOwner
+    })
+  | (Pick<ProvisionalSessionTile, 'anchor' | 'before' | 'dir' | 'draftId' | 'storedSessionId'> & {
+      kind: 'provisional'
+      owner: SessionTileOwner
+    })
 
-const toStored = (t: SessionTile): StoredTile => ({
-  anchor: t.anchor,
-  before: t.before,
-  dir: t.dir,
-  storedSessionId: t.storedSessionId
-})
+export function normalizeSessionTileOwner(owner: SessionTileOwner): SessionTileOwner {
+  const connectionId = String(owner.connectionId ?? '').trim() || null
 
-function parseTileList(value: unknown): StoredTile[] {
+  return { connectionId, profile: normalizeProfileKey(owner.profile) }
+}
+
+export function sessionTileOwnerKey(owner: SessionTileOwner): string {
+  const normalized = normalizeSessionTileOwner(owner)
+
+  return registryBackendScopeKey(normalized.connectionId, normalized.profile)
+}
+
+export function isProvisionalSessionTile(tile: SessionTile): tile is ProvisionalSessionTile {
+  return tile.kind === 'provisional'
+}
+
+export function isDurableSessionTile(tile: SessionTile): tile is DurableSessionTile {
+  return tile.kind !== 'provisional'
+}
+
+const toStored = (tile: SessionTile, fallbackOwner: SessionTileOwner): StoredTile => {
+  const owner = normalizeSessionTileOwner(tile.owner ?? fallbackOwner)
+
+  if (isProvisionalSessionTile(tile)) {
+    return {
+      anchor: tile.anchor,
+      before: tile.before,
+      dir: tile.dir,
+      draftId: tile.draftId,
+      kind: 'provisional',
+      owner,
+      storedSessionId: tile.draftId
+    }
+  }
+
+  return {
+    anchor: tile.anchor,
+    before: tile.before,
+    dir: tile.dir,
+    kind: 'durable',
+    owner,
+    storedSessionId: tile.storedSessionId
+  }
+}
+
+function parseTileList(value: unknown, fallbackOwner: SessionTileOwner): StoredTile[] {
   return Array.isArray(value)
     ? value
         .filter((t): t is SessionTile => Boolean(t && typeof (t as SessionTile).storedSessionId === 'string'))
-        .map(t => {
+        .flatMap<StoredTile>(t => {
           const raw = t as SessionTile
+          const rawKind = (raw as { kind?: unknown }).kind
+          const owner = normalizeSessionTileOwner(raw.owner ?? fallbackOwner)
 
-          return {
-            anchor: typeof raw.anchor === 'string' ? raw.anchor : undefined,
-            before: typeof raw.before === 'string' || raw.before === null ? raw.before : undefined,
-            dir: raw.dir,
-            storedSessionId: raw.storedSessionId
+          if (rawKind === 'provisional') {
+            if (typeof raw.draftId !== 'string' || !raw.draftId.trim() || raw.storedSessionId !== raw.draftId) {
+              // Never reinterpret a malformed provisional record as durable.
+              return []
+            }
+
+            return [
+              {
+                anchor: typeof raw.anchor === 'string' ? raw.anchor : undefined,
+                before: typeof raw.before === 'string' || raw.before === null ? raw.before : undefined,
+                dir: raw.dir,
+                draftId: raw.draftId,
+                kind: 'provisional' as const,
+                owner,
+                storedSessionId: raw.draftId
+              }
+            ]
           }
+
+          if (rawKind !== undefined && rawKind !== 'durable') {
+            return []
+          }
+
+          return [
+            {
+              anchor: typeof raw.anchor === 'string' ? raw.anchor : undefined,
+              before: typeof raw.before === 'string' || raw.before === null ? raw.before : undefined,
+              dir: raw.dir,
+              kind: 'durable' as const,
+              owner,
+              storedSessionId: raw.storedSessionId
+            }
+          ]
         })
     : []
 }
 
-function loadTilesByProfile(): Record<string, StoredTile[]> {
-  const byProfile: Record<string, StoredTile[]> = {}
+function mergeStoredTiles(current: StoredTile[], incoming: StoredTile[]): StoredTile[] {
+  const seen = new Set(current.map(tile => tile.storedSessionId))
+
+  return [...current, ...incoming.filter(tile => !seen.has(tile.storedSessionId))]
+}
+
+function loadTilesByOwner(): Record<string, StoredTile[]> {
+  const byOwner: Record<string, StoredTile[]> = {}
+  let shouldRewriteStoredTiles = false
   const parsed = readJson<unknown>(TILES_KEY)
 
   if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-    for (const [profile, list] of Object.entries(parsed as Record<string, unknown>)) {
-      const tiles = parseTileList(list)
+    // Rewrite v3 through StoredTile so older experimental records cannot leave
+    // a candidate/runtime pair on disk even when the user takes no next action.
+    shouldRewriteStoredTiles = true
+
+    for (const [scope, list] of Object.entries(parsed as Record<string, unknown>)) {
+      const fallbackOwner = scope.startsWith('conn:')
+        ? (() => {
+            const [connectionId = '', profile = 'default'] = scope.slice(5).split('::', 2)
+
+            return normalizeSessionTileOwner({ connectionId, profile })
+          })()
+        : normalizeSessionTileOwner({ connectionId: null, profile: scope })
+
+      const tiles = parseTileList(list, fallbackOwner)
 
       if (tiles.length > 0) {
-        byProfile[normalizeProfileKey(profile)] = tiles
+        for (const tile of tiles) {
+          const ownerKey = sessionTileOwnerKey(tile.owner)
+          byOwner[ownerKey] = mergeStoredTiles(byOwner[ownerKey] ?? [], [tile])
+        }
       }
     }
   }
 
-  // Migrate a v1 flat list into the default profile, then retire the key.
-  const legacy = parseTileList(readJson<unknown>(LEGACY_TILES_KEY))
+  // v2 grouped only by profile; every entry is a confirmed durable tile on the
+  // local/legacy connection. v1 is the older flat default-profile list.
+  const legacyProfiles = readJson<unknown>(LEGACY_PROFILE_TILES_KEY)
 
-  if (legacy.length > 0) {
-    const key = normalizeProfileKey('default')
-    byProfile[key] = [...(byProfile[key] ?? []), ...legacy]
+  if (legacyProfiles && typeof legacyProfiles === 'object' && !Array.isArray(legacyProfiles)) {
+    shouldRewriteStoredTiles = true
+
+    for (const [profile, list] of Object.entries(legacyProfiles as Record<string, unknown>)) {
+      const owner = normalizeSessionTileOwner({ connectionId: null, profile })
+      const key = sessionTileOwnerKey(owner)
+
+      byOwner[key] = mergeStoredTiles(byOwner[key] ?? [], parseTileList(list, owner))
+    }
   }
 
+  const defaultOwner = normalizeSessionTileOwner({ connectionId: null, profile: 'default' })
+  const legacy = parseTileList(readJson<unknown>(LEGACY_TILES_KEY), defaultOwner)
+
+  if (legacy.length > 0) {
+    shouldRewriteStoredTiles = true
+    const key = sessionTileOwnerKey(defaultOwner)
+
+    byOwner[key] = mergeStoredTiles(byOwner[key] ?? [], legacy)
+  }
+
+  if (shouldRewriteStoredTiles) {
+    writeJson(TILES_KEY, Object.keys(byOwner).length === 0 ? null : byOwner)
+  }
+
+  writeJson(LEGACY_PROFILE_TILES_KEY, null)
   writeJson(LEGACY_TILES_KEY, null)
 
-  return byProfile
+  return byOwner
 }
 
-const tilesByProfile = loadTilesByProfile()
-// Keyed by the GATEWAY profile: the rail's profile switch is a soft swap
-// ($activeGatewayProfile moves, no reload) — $activeProfile mirrors the
-// window's primary backend and never changes on a rail switch, so keying on
-// it left the previous profile's tiles registered (phantom "Session" tabs).
-const profileKey = () => normalizeProfileKey($activeGatewayProfile.get())
+const tilesByOwner = loadTilesByOwner()
+let activeTileOwner = normalizeSessionTileOwner({ connectionId: null, profile: $activeGatewayProfile.get() })
+const activeOwnerKey = () => sessionTileOwnerKey(activeTileOwner)
 
 // Runtime ids are process-scoped — never trust a persisted one, so the live
 // atom hydrates from the stored (runtime-less) tiles for the active profile.
 // A secondary window (single-chat pop-out) shows ONLY its routed session — no
 // tiles, and no repopulation on a profile switch.
-export const $sessionTiles = atom<SessionTile[]>(isSecondaryWindow() ? [] : [...(tilesByProfile[profileKey()] ?? [])])
+export const $sessionTiles = atom<SessionTile[]>(isSecondaryWindow() ? [] : [...(tilesByOwner[activeOwnerKey()] ?? [])])
 
 function persistTiles() {
   // Shares the origin's storage; a secondary window holds no tiles, so a write
@@ -623,20 +833,381 @@ function persistTiles() {
     return
   }
 
-  writeJson(TILES_KEY, Object.keys(tilesByProfile).length === 0 ? null : tilesByProfile)
+  writeJson(TILES_KEY, Object.keys(tilesByOwner).length === 0 ? null : tilesByOwner)
 }
 
-function saveTiles(tiles: SessionTile[]) {
-  $sessionTiles.set(tiles)
-  const stored = tiles.map(toStored)
+function saveTilesForOwner(owner: SessionTileOwner, tiles: SessionTile[]) {
+  const capturedOwner = normalizeSessionTileOwner(owner)
+  const ownerKey = sessionTileOwnerKey(capturedOwner)
+  const stored = tiles.map(tile => toStored(tile, capturedOwner))
 
   if (stored.length > 0) {
-    tilesByProfile[profileKey()] = stored
+    tilesByOwner[ownerKey] = stored
   } else {
-    delete tilesByProfile[profileKey()]
+    delete tilesByOwner[ownerKey]
+  }
+
+  if (ownerKey === activeOwnerKey()) {
+    $sessionTiles.set(tiles)
   }
 
   persistTiles()
+}
+
+function saveTiles(tiles: SessionTile[]) {
+  saveTilesForOwner(activeTileOwner, tiles)
+}
+
+/** Make one exact backend owner visible. Connection switching code must call
+ * this even when the profile name does not change. Runtime ids are intentionally
+ * absent because owner records are persistence-shaped. */
+export function activateSessionTileOwner(owner: SessionTileOwner): void {
+  activeTileOwner = normalizeSessionTileOwner(owner)
+
+  if (!isSecondaryWindow()) {
+    $sessionTiles.set([...(tilesByOwner[activeOwnerKey()] ?? [])])
+  }
+}
+
+export function sessionTilesForOwner(owner: SessionTileOwner): SessionTile[] {
+  const key = sessionTileOwnerKey(owner)
+
+  return key === activeOwnerKey() ? [...$sessionTiles.get()] : [...(tilesByOwner[key] ?? [])]
+}
+
+export interface ProvisionSessionTileInput {
+  owner: SessionTileOwner
+  /** Stable renderer identity used for the pane and unsent composer draft. */
+  draftId: string
+  /** Candidate key returned by session.create; still not a confirmed DB row. */
+  provisionalStoredSessionId?: string
+  runtimeId?: string
+  anchor?: string
+  before?: null | string
+  dir?: TileDock
+}
+
+function requiredTileIdentity(value: string, label: string): string {
+  const normalized = String(value || '').trim()
+
+  if (!normalized) {
+    throw new Error(`${label} is required`)
+  }
+
+  return normalized
+}
+
+/** Build a provisional tile without mutating the store. This is useful at the
+ * async create boundary: capture the owner before awaiting, then provision/open
+ * with that same value even if the ambient profile changes meanwhile. */
+export function provisionSessionTile(input: ProvisionSessionTileInput): ProvisionalSessionTile {
+  const draftId = requiredTileIdentity(input.draftId, 'draftId')
+  const provisionalStoredSessionId = String(input.provisionalStoredSessionId ?? '').trim() || undefined
+
+  return {
+    anchor: input.anchor,
+    before: input.before,
+    dir: input.dir,
+    draftId,
+    kind: 'provisional',
+    owner: normalizeSessionTileOwner(input.owner),
+    provisionalStoredSessionId,
+    runtimeId: input.runtimeId,
+    storedSessionId: draftId
+  }
+}
+
+/** Persist/open a provisional tile under its CAPTURED owner. It never consults
+ * the ambient profile and never upgrades the candidate key to durable. */
+export function openProvisionalSessionTile(input: ProvisionSessionTileInput): ProvisionalSessionTile {
+  const tile = provisionSessionTile(input)
+  const tiles = sessionTilesForOwner(tile.owner)
+  const existing = tiles.find(item => item.storedSessionId === tile.draftId)
+
+  if (existing && isDurableSessionTile(existing)) {
+    throw new Error(`draft identity already belongs to a durable tile: ${tile.draftId}`)
+  }
+
+  saveTilesForOwner(
+    tile.owner,
+    existing ? tiles.map(item => (item.storedSessionId === tile.draftId ? tile : item)) : [...tiles, tile]
+  )
+
+  return tile
+}
+
+/** Return the relaunch recovery description for a provisional tile. No backend
+ * call is made; consumers decide when to create a fresh runtime. */
+export function recoverProvisionalSessionTile(
+  owner: SessionTileOwner,
+  draftId: string
+): null | ProvisionalSessionTileRecovery {
+  const id = requiredTileIdentity(draftId, 'draftId')
+
+  const tile = sessionTilesForOwner(owner).find(
+    (candidate): candidate is ProvisionalSessionTile => isProvisionalSessionTile(candidate) && candidate.draftId === id
+  )
+
+  if (!tile) {
+    return null
+  }
+
+  return {
+    action: 'create-fresh-runtime',
+    draft: { scope: tile.draftId },
+    draftId: tile.draftId,
+    owner: normalizeSessionTileOwner(tile.owner),
+    tile: { ...tile, error: undefined, provisionalStoredSessionId: undefined, runtimeId: undefined }
+  }
+}
+
+/** Attach a fresh post-relaunch candidate/runtime pair to an unbound
+ * provisional tile. This deliberately accepts only the exact active owner and
+ * a tile with no live binding, so a stale candidate, a second bind, or an
+ * owner/profile race fails closed. The live pair is never persisted. */
+export function rebindProvisionalSessionTile(
+  input: RebindProvisionalSessionTileInput
+): null | ProvisionalSessionTileRebind {
+  const owner = normalizeSessionTileOwner(input.owner)
+
+  const draftId = requiredTileIdentity(input.draftId, 'draftId')
+
+  const provisionalStoredSessionId = requiredTileIdentity(
+    input.provisionalStoredSessionId,
+    'provisionalStoredSessionId'
+  )
+
+  const runtimeId = requiredTileIdentity(input.runtimeId, 'runtimeId')
+
+  if (sessionTileOwnerKey(owner) !== activeOwnerKey()) {
+    return null
+  }
+
+  const tiles = $sessionTiles.get()
+
+  const index = tiles.findIndex(
+    tile =>
+      isProvisionalSessionTile(tile) &&
+      tile.draftId === draftId &&
+      sessionTileOwnerKey(tile.owner) === sessionTileOwnerKey(owner)
+  )
+
+  if (index < 0) {
+    return null
+  }
+
+  const provisional = tiles[index] as ProvisionalSessionTile
+
+  if (provisional.runtimeId || provisional.provisionalStoredSessionId) {
+    return null
+  }
+
+  const rebound: ProvisionalSessionTile = {
+    ...provisional,
+    owner,
+    provisionalStoredSessionId,
+    runtimeId
+  }
+
+  const next = [...tiles]
+
+  next[index] = rebound
+  saveTilesForOwner(owner, next)
+
+  return {
+    draft: { scope: draftId },
+    draftId,
+    owner,
+    provisionalStoredSessionId,
+    runtimeId,
+    tile: rebound
+  }
+}
+
+/** Invalidate one exact provisional runtime without deleting its stable draft
+ * tile. Used for structural 4007: the dead candidate may never be resumed, but
+ * the preserved draft can explicitly create a fresh runtime on the same owner. */
+export function invalidateProvisionalSessionTileRuntime(input: {
+  draftId: string
+  error: string
+  owner: SessionTileOwner
+  runtimeId: string
+}): boolean {
+  const owner = normalizeSessionTileOwner(input.owner)
+  const draftId = requiredTileIdentity(input.draftId, 'draftId')
+  const runtimeId = requiredTileIdentity(input.runtimeId, 'runtimeId')
+  const tiles = sessionTilesForOwner(owner)
+  const index = tiles.findIndex(
+    tile =>
+      isProvisionalSessionTile(tile) &&
+      tile.draftId === draftId &&
+      tile.runtimeId === runtimeId &&
+      sessionTileOwnerKey(tile.owner) === sessionTileOwnerKey(owner)
+  )
+
+  if (index < 0) {
+    return false
+  }
+
+  const next = [...tiles]
+  const current = tiles[index] as ProvisionalSessionTile
+
+  next[index] = {
+    ...current,
+    error: input.error,
+    provisionalStoredSessionId: undefined,
+    runtimeId: undefined
+  }
+  saveTilesForOwner(owner, next)
+
+  return true
+}
+
+/** Drop every provisional capability owned by one disconnected backend while
+ * keeping its pane, draft scope, attachments and recovery affordance intact. */
+export function invalidateProvisionalSessionTileRuntimesForOwner(
+  inputOwner: SessionTileOwner,
+  error: string
+): readonly string[] {
+  const owner = normalizeSessionTileOwner(inputOwner)
+  const tiles = sessionTilesForOwner(owner)
+  const invalidated: string[] = []
+  const next = tiles.map(tile => {
+    if (!isProvisionalSessionTile(tile) || !tile.runtimeId) {
+      return tile
+    }
+
+    invalidated.push(tile.runtimeId)
+
+    return {
+      ...tile,
+      error,
+      provisionalStoredSessionId: undefined,
+      runtimeId: undefined
+    }
+  })
+
+  if (invalidated.length > 0) {
+    saveTilesForOwner(owner, next)
+  }
+
+  return Object.freeze(invalidated)
+}
+
+export function dropProvisionalSessionTile(owner: SessionTileOwner, draftId: string): boolean {
+  const id = requiredTileIdentity(draftId, 'draftId')
+  const tiles = sessionTilesForOwner(owner)
+  const next = tiles.filter(tile => !(isProvisionalSessionTile(tile) && tile.draftId === id))
+
+  if (next.length === tiles.length) {
+    return false
+  }
+
+  saveTilesForOwner(owner, next)
+
+  return true
+}
+
+/** Confirm a provisional tile as durable in one synchronous store write. The
+ * returned pure plan is intentionally not executed here: layout and composer
+ * own their respective rekey operations outside this store. */
+export function promoteProvisionalSessionTile(input: {
+  owner: SessionTileOwner
+  draftId: string
+  durableSessionId: string
+  runtimeId?: string
+}): null | SessionTilePromotionPlan {
+  const owner = normalizeSessionTileOwner(input.owner)
+  const draftId = requiredTileIdentity(input.draftId, 'draftId')
+  const durableSessionId = requiredTileIdentity(input.durableSessionId, 'durableSessionId')
+  const tiles = sessionTilesForOwner(owner)
+  const index = tiles.findIndex(tile => isProvisionalSessionTile(tile) && tile.draftId === draftId)
+
+  if (index < 0) {
+    return null
+  }
+
+  if (tiles.some((tile, tileIndex) => tileIndex !== index && tile.storedSessionId === durableSessionId)) {
+    throw new Error(`durable session already has a tile: ${durableSessionId}`)
+  }
+
+  const provisional = tiles[index] as ProvisionalSessionTile
+
+  const durable: DurableSessionTile = {
+    anchor: provisional.anchor,
+    before: provisional.before,
+    dir: provisional.dir,
+    kind: 'durable',
+    owner,
+    runtimeId: input.runtimeId ?? provisional.runtimeId,
+    storedSessionId: durableSessionId
+  }
+
+  const next = [...tiles]
+
+  next[index] = durable
+  saveTilesForOwner(owner, next)
+
+  return {
+    draft: { fromScope: draftId, toScope: durableSessionId },
+    draftId,
+    durableSessionId,
+    layout: {
+      fromPaneId: `${TILE_PANE_PREFIX}${draftId}`,
+      toPaneId: `${TILE_PANE_PREFIX}${durableSessionId}`
+    },
+    owner,
+    provisionalStoredSessionId: provisional.provisionalStoredSessionId ?? null
+  }
+}
+
+/**
+ * Restore the exact provisional tile when a coordinated layout rekey fails
+ * after the tile-store promotion. This is deliberately narrow: it accepts
+ * only the durable row produced by the immediately preceding promotion and
+ * refuses to overwrite any newer tile state.
+ */
+export function rollbackProvisionalSessionTilePromotion(input: {
+  owner: SessionTileOwner
+  durableSessionId: string
+  provisionalTile: ProvisionalSessionTile
+}): boolean {
+  const owner = normalizeSessionTileOwner(input.owner)
+  const durableSessionId = requiredTileIdentity(input.durableSessionId, 'durableSessionId')
+  const draftId = requiredTileIdentity(input.provisionalTile.draftId, 'draftId')
+
+  if (input.provisionalTile.storedSessionId !== draftId) {
+    return false
+  }
+
+  const provisionalTile: ProvisionalSessionTile = {
+    ...input.provisionalTile,
+    draftId,
+    kind: 'provisional',
+    owner,
+    storedSessionId: draftId
+  }
+  const tiles = sessionTilesForOwner(owner)
+  const index = tiles.findIndex(
+    tile => !isProvisionalSessionTile(tile) && tile.storedSessionId === durableSessionId
+  )
+
+  if (
+    index < 0 ||
+    tiles.some(
+      (tile, tileIndex) =>
+        tileIndex !== index && isProvisionalSessionTile(tile) && tile.draftId === provisionalTile.draftId
+    )
+  ) {
+    return false
+  }
+
+  const next = [...tiles]
+
+  next[index] = provisionalTile
+  saveTilesForOwner(owner, next)
+
+  return true
 }
 
 // Profile switch: surface the new profile's tiles with runtime ids cleared so
@@ -644,13 +1215,24 @@ function saveTiles(tiles: SessionTile[]) {
 // subscribe; harmless — the init value already matches.) A secondary window
 // never carries tiles, so it stays out of this entirely.
 if (!isSecondaryWindow()) {
-  $activeGatewayProfile.subscribe(() => {
-    $sessionTiles.set([...(tilesByProfile[profileKey()] ?? [])])
+  $activeGatewayProfile.subscribe(profile => {
+    // The app wiring immediately upgrades this legacy local scope with the
+    // exact registry connection, including same-profile source switches.
+    activateSessionTileOwner({ connectionId: null, profile })
   })
 }
 
-export function patchSessionTile(storedSessionId: string, patch: Partial<SessionTile>) {
-  saveTiles($sessionTiles.get().map(t => (t.storedSessionId === storedSessionId ? { ...t, ...patch } : t)))
+export function patchSessionTile(
+  storedSessionId: string,
+  patch: SessionTilePatch,
+  owner: SessionTileOwner = activeTileOwner
+) {
+  const tiles = sessionTilesForOwner(owner)
+
+  saveTilesForOwner(
+    owner,
+    tiles.map(t => (t.storedSessionId === storedSessionId ? { ...t, ...patch } : t))
+  )
 }
 
 /** Drop live runtime bindings so every tile re-resumes — used on gateway
@@ -665,7 +1247,7 @@ export function resetTileRuntimeBindings() {
   const tiles = $sessionTiles.get()
 
   if (tiles.some(t => t.runtimeId)) {
-    $sessionTiles.set(tiles.map(toStored))
+    $sessionTiles.set(tiles.map(tile => toStored(tile, activeTileOwner)))
   }
 }
 
@@ -698,6 +1280,11 @@ export interface SessionTileDelegate {
   archiveSession(storedSessionId: string): Promise<void>
   /** Branch a stored session into a new chat (the sidebar's branch). */
   branchSession(storedSessionId: string): Promise<void>
+  /** Register a confirmed durable/runtime pair in the shell binding authority. */
+  bindSessionRuntime?(storedSessionId: string, runtimeSessionId: string): null | string
+  /** Relaunch an unsent draft by creating a fresh runtime on its captured owner;
+   * the stale provisional candidate must never be sent to session.resume. */
+  createProvisionalRuntime?(tile: ProvisionalSessionTile): Promise<string>
   /** Delete a stored session (the sidebar's delete, incl. tile cleanup). */
   deleteSession(storedSessionId: string): Promise<void>
   /** Run a slash command against a tile's session (app-level effects — e.g.
@@ -711,6 +1298,8 @@ export interface SessionTileDelegate {
    *  warm path re-binds tiles to dead runtime ids (the sleep/wake "empty
    *  right pane" bug). Bindings re-record from live post-reconnect events. */
   invalidateRuntimeBindings?(): void
+  /** Invalidate one exact durable/runtime pair after structural RPC 4007. */
+  invalidateSessionRuntimeBinding?(storedSessionId: string, runtimeSessionId: string): void
   /** Bind a live runtime id for a stored session (resume without touching
    *  the main view). Returns the runtime id, or throws. */
   resumeTile(storedSessionId: string): Promise<string>
@@ -797,6 +1386,7 @@ export function openSessionTile(
   anchor?: string,
   before?: null | string
 ) {
+  const owner = activeTileOwner
   const tiles = $sessionTiles.get()
 
   // Opening a session in a tab/tile is "reading" it — clear its unread dot
@@ -814,7 +1404,7 @@ export function openSessionTile(
   const dock = anchor ?? focusedSessionTabAnchor() ?? undefined
 
   if (!tiles.some(t => t.storedSessionId === storedSessionId)) {
-    saveTiles([...tiles, { anchor: dock, before, dir, storedSessionId }])
+    saveTilesForOwner(owner, [...tiles, { anchor: dock, before, dir, kind: 'durable', owner, storedSessionId }])
     // Adoption is async via the registry — order sync runs after the move path
     // below; a brand-new tile's strip slot is already in `before`.
 
@@ -828,7 +1418,7 @@ export function openSessionTile(
 
   if (target) {
     moveTreePane(`${TILE_PANE_PREFIX}${storedSessionId}`, { before: before ?? null, groupId: target, pos: dir })
-    patchSessionTile(storedSessionId, { anchor: dock, before: before ?? undefined, dir })
+    patchSessionTile(storedSessionId, { anchor: dock, before: before ?? undefined, dir }, owner)
     syncTileStripOrder()
   }
 }
@@ -954,17 +1544,17 @@ export function reuseBlankDraftTile(storedSessionId: string): boolean {
   return true
 }
 
-// Closed-tab stack for ⌘⇧T reopen (in-memory) — keyed PER PROFILE like the
-// tiles themselves, so ⌘⇧T after a profile switch never resurrects the other
-// profile's session. The tile's placement is remembered so it returns in place.
-const closedTilesByProfile: Record<string, SessionTile[]> = {}
-const closedStack = (): SessionTile[] => (closedTilesByProfile[profileKey()] ??= [])
+// Closed-tab stack for ⌘⇧T reopen (in-memory) — keyed PER OWNER like the
+// tiles themselves, so a source/profile switch never resurrects another
+// backend's tile. The tile's placement is remembered so it returns in place.
+const closedTilesByOwner: Record<string, SessionTile[]> = {}
+const closedStack = (): SessionTile[] => (closedTilesByOwner[activeOwnerKey()] ??= [])
 
 export function closeSessionTile(storedSessionId: string) {
   const tile = $sessionTiles.get().find(t => t.storedSessionId === storedSessionId)
 
   if (tile) {
-    closedStack().push({ anchor: tile.anchor, before: tile.before, dir: tile.dir, storedSessionId })
+    closedStack().push(toStored(tile, activeTileOwner))
   }
 
   saveTiles($sessionTiles.get().filter(t => t.storedSessionId !== storedSessionId))
@@ -1011,7 +1601,19 @@ export function reopenLastClosedTile(): void {
     }
 
     if (!$sessionTiles.get().some(t => t.storedSessionId === storedSessionId)) {
-      openSessionTile(storedSessionId, tile.dir, tile.anchor, tile.before)
+      if (isProvisionalSessionTile(tile)) {
+        openProvisionalSessionTile({
+          anchor: tile.anchor,
+          before: tile.before,
+          dir: tile.dir,
+          draftId: tile.draftId,
+          owner: tile.owner,
+          provisionalStoredSessionId: tile.provisionalStoredSessionId
+        })
+      } else {
+        openSessionTile(storedSessionId, tile.dir, tile.anchor, tile.before)
+      }
+
       focusOpenSession(storedSessionId)
 
       return

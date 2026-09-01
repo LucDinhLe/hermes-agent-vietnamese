@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { $pinnedSessionIds, setPinnedSessionOrder } from './layout'
+import { $pinnedProjectIds, $pinnedSessionIds, setPinnedProjectOrder, setPinnedSessionOrder } from './layout'
 
 beforeEach(() => {
+  $pinnedProjectIds.set([])
   $pinnedSessionIds.set([])
 })
 
@@ -45,5 +46,22 @@ describe('setPinnedSessionOrder', () => {
     setPinnedSessionOrder(['a', 'b'])
 
     expect($pinnedSessionIds.get()).toBe(before)
+  })
+})
+
+describe('setPinnedProjectOrder', () => {
+  it('reorders visible projects without discarding an unresolved pin', () => {
+    $pinnedProjectIds.set(['project-a', 'unresolved', 'project-b'])
+    setPinnedProjectOrder(['project-b', 'project-a'])
+
+    expect($pinnedProjectIds.get()).toEqual(['project-b', 'unresolved', 'project-a'])
+  })
+
+  it('keeps the same array reference when the project order is unchanged', () => {
+    const before = ['project-a', 'project-b']
+    $pinnedProjectIds.set(before)
+    setPinnedProjectOrder(['project-a', 'project-b'])
+
+    expect($pinnedProjectIds.get()).toBe(before)
   })
 })

@@ -4,11 +4,11 @@ import { translateNow } from '@/i18n'
 import { stableArray } from '@/lib/stable-array'
 import type { TodoItem, TodoStatus } from '@/lib/todos'
 
-import { $gateway } from './gateway'
 import { $goalsBySession, type GoalStatus } from './goals'
 import { dispatchNativeNotification } from './native-notifications'
 import { notifyError } from './notifications'
 import { $sessions, lineageAliases } from './session'
+import { requestForRendererRuntime } from './session-request-router'
 import { $sessionStates } from './session-states'
 import { $subagentsBySession, type SubagentProgress } from './subagents'
 import { $todosBySession } from './todos'
@@ -379,14 +379,12 @@ export function reconcileBackgroundProcesses(sid: string, procs: GatewayProcessE
 
 /** Pull the session's live process snapshot from the gateway. */
 export async function refreshBackgroundProcesses(sid: string): Promise<void> {
-  const gateway = $gateway.get()
-
-  if (!sid || !gateway) {
+  if (!sid) {
     return
   }
 
   try {
-    const result = await gateway.request<{ processes?: GatewayProcessEntry[] }>('process.list', { session_id: sid })
+    const result = await requestForRendererRuntime<{ processes?: GatewayProcessEntry[] }>(sid, 'process.list')
 
     reconcileBackgroundProcesses(sid, result?.processes ?? [])
   } catch {
@@ -416,7 +414,7 @@ export function dismissBackgroundProcess(sid: string, id: string) {
  *  stays so the user can retry / see it didn't die. */
 export async function stopBackgroundProcess(sid: string, id: string): Promise<void> {
   try {
-    await $gateway.get()?.request('process.kill', { process_id: id, session_id: sid })
+    await requestForRendererRuntime(sid, 'process.kill', { process_id: id })
     dismissBackgroundProcess(sid, id)
   } catch (err) {
     notifyError(err, 'Could not stop the process')
@@ -437,7 +435,6 @@ export function resetSessionBackground(sid: string) {
 
   cancelAllAutoDismiss(sid)
 
-  const gateway = $gateway.get()
   const list = $backgroundStatusBySession.get()[sid] ?? []
   const dismissed = dismissedBySession.get(sid) ?? new Set<string>()
 
@@ -445,7 +442,7 @@ export function resetSessionBackground(sid: string) {
     dismissed.add(item.id)
 
     if (item.state === 'running') {
-      void gateway?.request('process.kill', { process_id: item.id, session_id: sid }).catch(() => undefined)
+      void requestForRendererRuntime(sid, 'process.kill', { process_id: item.id }).catch(() => undefined)
     }
   }
 

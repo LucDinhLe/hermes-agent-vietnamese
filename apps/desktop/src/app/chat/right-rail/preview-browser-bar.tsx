@@ -16,10 +16,13 @@
 
 import { useState } from 'react'
 
+import { ActionsMenu, renderActionItem } from '@/components/ui/actions-menu'
+import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
 import { CopyButton } from '@/components/ui/copy-button'
 import { Input } from '@/components/ui/input'
 import { PaneStripGlyph } from '@/components/ui/pane-tab'
+import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 
 interface PreviewBrowserBarProps {
@@ -121,7 +124,7 @@ export function PreviewBrowserBar({
   }
 
   return (
-    <div className="flex min-h-(--titlebar-height) shrink-0 items-center gap-1 border-b border-border/60 bg-background px-1.5 py-1">
+    <div className="preview-browser-bar flex min-h-(--titlebar-height) shrink-0 items-center gap-1 border-b border-border/60 bg-background px-1.5 py-1">
       <PaneStripGlyph
         disabled={!canGoBack}
         icon={<Codicon name="arrow-left" size="0.8125rem" />}
@@ -143,7 +146,7 @@ export function PreviewBrowserBar({
           same pre-faded inline icon code blocks use, not a toolbar button.
           It copies what the field shows: on a remote gateway, that is the
           reach-resolved address. */}
-      <div className="relative min-w-0 flex-1">
+      <div className="relative min-w-16 flex-1">
         <Input
           aria-invalid={invalid || undefined}
           aria-label={copy.address}
@@ -180,23 +183,50 @@ export function PreviewBrowserBar({
           text={url}
         />
       </div>
-      <PaneStripGlyph
-        icon={<Codicon name="link-external" size="0.8125rem" />}
-        label={t.preview.openInBrowser}
-        onSelect={onOpenExternal}
-      />
-      <PaneStripGlyph
-        active={consoleOpen}
-        icon={<Codicon name="terminal" size="0.8125rem" />}
-        label={consoleOpen ? copy.hideConsole : copy.showConsole}
-        onSelect={onToggleConsole}
-      />
-      <PaneStripGlyph
-        active={devToolsOpen}
-        icon={<Codicon name="bug" size="0.8125rem" />}
-        label={devToolsOpen ? copy.hideDevTools : copy.openDevTools}
-        onSelect={onToggleDevTools}
-      />
+      <Tip label={copy.sharedWithAgentHint}>
+        <span
+          aria-label={copy.sharedWithAgent}
+          className="preview-browser-shared inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-full bg-primary/10 px-1.5 text-[0.625rem] font-medium text-primary"
+          role="status"
+        >
+          <Codicon name="robot" size="0.72rem" />
+          <span className="preview-browser-shared-label">{copy.sharedWithAgent}</span>
+        </span>
+      </Tip>
+      <ActionsMenu
+        align="end"
+        ariaLabel={copy.moreActions}
+        items={kit => (
+          <>
+            {renderActionItem(kit, {
+              icon: 'link-external',
+              label: t.preview.openInBrowser,
+              onSelect: onOpenExternal
+            })}
+            {renderActionItem(kit, {
+              iconNode: <Codicon name={consoleOpen ? 'check' : 'terminal'} size="0.8125rem" />,
+              label: consoleOpen ? copy.hideConsole : copy.showConsole,
+              onSelect: onToggleConsole
+            })}
+            {renderActionItem(kit, {
+              iconNode: <Codicon name={devToolsOpen ? 'check' : 'bug'} size="0.8125rem" />,
+              label: devToolsOpen ? copy.hideDevTools : copy.openDevTools,
+              onSelect: onToggleDevTools
+            })}
+          </>
+        )}
+      >
+        <Button
+          aria-label={copy.moreActions}
+          className="self-center bg-transparent text-(--ui-text-secondary) select-none hover:text-(--ui-text-primary) active:scale-95 active:bg-(--chrome-action-hover)"
+          onPointerDown={event => event.stopPropagation()}
+          size="icon-pane"
+          type="button"
+          variant="ghost"
+        >
+          <Codicon name="ellipsis" size="0.8125rem" />
+        </Button>
+      </ActionsMenu>
     </div>
   )
 }

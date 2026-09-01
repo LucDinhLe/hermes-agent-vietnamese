@@ -2,7 +2,7 @@ import { atom } from 'nanostores'
 
 import { keyedTimeouts } from '@/lib/keyed-timeouts'
 
-import { $gateway } from './gateway'
+import { requestForRendererRuntime } from './session-request-router'
 
 export type GoalStatus = 'active' | 'done' | 'paused' | 'waiting'
 
@@ -149,14 +149,12 @@ export function applyGoalStatusText(sid: string, text: string) {
 }
 
 export async function refreshSessionGoal(sid: string): Promise<void> {
-  const gateway = $gateway.get()
-
-  if (!sid || !gateway) {
+  if (!sid) {
     return
   }
 
   try {
-    const result = await gateway.request<{ output?: string }>('slash.exec', { command: 'goal status', session_id: sid })
+    const result = await requestForRendererRuntime<{ output?: string }>(sid, 'slash.exec', { command: 'goal status' })
     applyGoalStatusText(sid, result?.output ?? '')
   } catch {
     // Best-effort: older gateways or detached sessions simply won't hydrate it.

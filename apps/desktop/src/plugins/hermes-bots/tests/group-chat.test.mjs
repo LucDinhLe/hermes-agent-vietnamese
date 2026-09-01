@@ -1155,8 +1155,8 @@ test('source contract: active group styling suppresses bot styling', () => {
 
 test('source contract: group roster rows expose a confirmed Delete Group action', () => {
   assert.match(pluginSource, /function GroupRow\(\{ active, group, members, needsYou, onOpen, onDisband \}\)/)
-  assert.match(pluginSource, /children: 'Delete Group'/)
-  assert.match(pluginSource, /title: 'Delete group chat\?'/)
+  assert.match(pluginSource, /children: 'Xóa nhóm'/)
+  assert.match(pluginSource, /title: 'Xóa nhóm trò chuyện\?'/)
   assert.match(pluginSource, /await disbandGroupChat\(deletingGroup\.name, deletingGroup\.members\)/)
 })
 
@@ -1263,8 +1263,8 @@ test('disband: a running room leaves an epoch-bumped empty tombstone so in-fligh
 
 test('source contract: workspace header offers disband behind a ConfirmDialog', () => {
   assert.match(pluginSource, /function disbandGroupChat\(/)
-  assert.match(pluginSource, /Disband group chat\?/)
-  assert.match(pluginSource, /title: `Disband the \$\{group\} group chat`/)
+  assert.match(pluginSource, /Giải tán nhóm trò chuyện\?/)
+  assert.match(pluginSource, /title: `Giải tán nhóm trò chuyện \$\{group\}`/)
 })
 
 test('default profile speaks as Hermes in room transcripts, not @default', () => {
@@ -1275,7 +1275,7 @@ test('default profile speaks as Hermes in room transcripts, not @default', () =>
 
   // Other members keep their profile name; the (you) suffix survives.
   const you = gc.formatGroupChatLine({ from: { kind: 'member', name: 'default' }, text: 'hi' }, 'default')
-  assert.equal(you, 'Hermes (you): hi')
+  assert.equal(you, 'Hermes (bạn): hi')
   const plain = gc.formatGroupChatLine({ from: { kind: 'member', name: 'builder' }, text: 'yo' }, 'research')
   assert.equal(plain, 'builder: yo')
 })
@@ -1566,10 +1566,10 @@ test('threads: hydration assigns legacy thread ids — lull splits, follow-ups s
 })
 
 test('source contract: thread UI — folded rows, per-thread reply box, new-thread composer', () => {
-  assert.match(pluginSource, /Open this thread/)
-  assert.match(pluginSource, /Collapse thread/)
-  assert.match(pluginSource, /Reply in thread…/)
-  assert.match(pluginSource, /children: 'New Thread'/)
+  assert.match(pluginSource, /Mở luồng này/)
+  assert.match(pluginSource, /Thu gọn luồng này/)
+  assert.match(pluginSource, /Trả lời trong luồng…/)
+  assert.match(pluginSource, /children: 'Luồng mới'/)
   assert.match(pluginSource, /const markKey = `\$\{thread\}::\$\{memberKey\}`/)
 })
 
@@ -1608,7 +1608,7 @@ test('group room preview renders the bot HANDLE, not the raw profile name', () =
   // #89484: the room line read "@default: …" while the bot answers to
   // @hermes, so users concluded mention routing was broken.
   assert.match(pluginSource, /const lastHandle = botHandle\(lastFrom \|\| 'bot', members\.find\(/)
-  assert.match(pluginSource, /\? `\$\{last\.from\?\.kind === 'user' \? 'You' : `@\$\{lastHandle\}`\}/)
+  assert.match(pluginSource, /\? `\$\{last\.from\?\.kind === 'user' \? 'Đại ca' : `@\$\{lastHandle\}`\}/)
   assert.doesNotMatch(pluginSource, /`@\$\{last\.from\?\.name \|\| 'bot'\}`/)
 })
 

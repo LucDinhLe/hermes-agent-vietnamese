@@ -26,8 +26,9 @@ import { $newSessionTabAction, registerPaneCloser } from '@/components/pane-shel
 import { FloatingPet } from '@/components/pet/floating-pet'
 import { RemoteDisplayBanner } from '@/components/remote-display-banner'
 import { emitGatewayEvent } from '@/contrib/events'
-import { getLatestSessionMessages } from '@/hermes'
+import { getLatestSessionMessagesForOwner, sessionApiOwner } from '@/hermes'
 import { type ChatMessage, chatMessageText, preserveLocalAssistantErrors, toChatMessages } from '@/lib/chat-messages'
+import { parseRendererRuntimeKey, rawRuntimeSessionId, rendererDurableKey } from '@/lib/session-runtime-key'
 import { isMessagingSource } from '@/lib/session-source'
 import { latestSessionTodos } from '@/lib/todos'
 import { activateWakeIndicator } from '@/lib/wake-indicator'
@@ -37,6 +38,7 @@ import { $desktopBoot } from '@/store/boot'
 import { requestVoiceConversationStart } from '@/store/composer'
 import { $activeConnectionId } from '@/store/connections'
 import { $cronReviewRequest, setCronFocusJobId } from '@/store/cron'
+import { activeGatewayConnectionId, gatewayEpochForAgent } from '@/store/gateway'
 import { $pinnedSessionIds, pinSession, restoreWorktree, unpinSession } from '@/store/layout'
 import { $previewTarget } from '@/store/preview'
 import {
@@ -63,14 +65,23 @@ import {
   $selectedStoredSessionId,
   $sessionResumeRequest,
   $sessions,
-  rememberedSessionProfile,
   sessionMatchesStoredId,
   sessionPinId,
   setAwaitingResponse,
   setBusy,
   setMessages
 } from '@/store/session'
-import { requestForSessionProfile } from '@/store/session-request-router'
+import {
+  requestForRendererRuntime,
+  requestForSessionOwner,
+  UnresolvedSessionOwnerError
+} from '@/store/session-request-router'
+import { sessionRouteOwner } from '@/store/session-route-owner'
+import {
+  activateSessionTileOwner,
+  dropSessionState,
+  invalidateProvisionalSessionTileRuntimesForOwner
+} from '@/store/session-states'
 import { clearSessionTodos, setSessionTodos, todosForHydration } from '@/store/todos'
 import { armWakeWord, stopClientCapture } from '@/store/wake-word'
 import { isAuxiliaryWindow, isHudWindow } from '@/store/windows'
@@ -114,8 +125,16 @@ import { usePreviewRouting } from '../session/hooks/use-preview-routing'
 import { usePromptActions } from '../session/hooks/use-prompt-actions'
 import { useRouteResume } from '../session/hooks/use-route-resume'
 import { useSessionActions } from '../session/hooks/use-session-actions'
+import { resolveSessionOwner } from '../session/hooks/use-session-actions/utils'
 import { useSessionListActions } from '../session/hooks/use-session-list-actions'
 import { useSessionStateCache } from '../session/hooks/use-session-state-cache'
+import { routeNewSessionNavigation } from '../session/new-session-entry'
+import {
+  classifySessionRuntimeNotFound,
+  createBackendKey,
+  SESSION_BINDING_OBSERVATION_EVENT,
+  SessionBindingRegistry
+} from '../session/session-binding-registry'
 import { startWorkspaceSession } from '../session/workspace-session-target'
 import { PluginInstallModal } from '../settings/plugin-install-modal'
 import { useOverlayRouting } from '../shell/hooks/use-overlay-routing'
@@ -266,7 +285,6 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   const {
     activeSessionIdRef,
     ensureSessionState,
-    getRuntimeIdForStoredSession,
     resetViewSync,
     runtimeIdByStoredSessionIdRef,
     selectedStoredSessionIdRef,
@@ -282,21 +300,211 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     setMessages
   })
 
-  const { connectionRef, gateway, gatewayRef, requestGateway: ambientRequestGateway } = useGatewayRequest()
+  const sessionBindingRegistryRef = useRef<SessionBindingRegistry | null>(null)
+
+  if (!sessionBindingRegistryRef.current) {
+    sessionBindingRegistryRef.current = new SessionBindingRegistry({
+      observer: observation => {
+        window.dispatchEvent(new CustomEvent(SESSION_BINDING_OBSERVATION_EVENT, { detail: observation }))
+      }
+    })
+  }
+
+  const sessionBindingRegistry = sessionBindingRegistryRef.current
+
+  const getRuntimeIdForStoredSession = useCallback(
+    (storedSessionId: string): null | string => {
+      const stored = $sessions.get().find(session => sessionMatchesStoredId(session, storedSessionId))
+
+      if (!stored) {
+        return null
+      }
+
+      const profile = stored.profile?.trim()
+
+      if (!profile) {
+        return null
+      }
+
+      return (
+        sessionBindingRegistry.getByDurable({
+          backend: createBackendKey({
+            connectionId: stored.connection_id?.trim() || null,
+            gatewayEpoch: gatewayEpochForAgent(stored.connection_id?.trim() || null, profile),
+            profile
+          }),
+          durableSessionId: storedSessionId
+        })?.rendererRuntimeId ?? null
+      )
+    },
+    [sessionBindingRegistry]
+  )
+
+  const invalidateSessionRuntimeBinding = useCallback(
+    (storedSessionId: string, runtimeSessionId: string) => {
+      const stored = $sessions.get().find(session => sessionMatchesStoredId(session, storedSessionId))
+
+      if (!stored) {
+        return
+      }
+
+      const profile = stored.profile?.trim()
+
+      if (!profile) {
+        return
+      }
+
+      const backend = createBackendKey({
+        connectionId: stored.connection_id?.trim() || null,
+        gatewayEpoch: gatewayEpochForAgent(stored.connection_id?.trim() || null, profile),
+        profile
+      })
+
+      const binding = sessionBindingRegistry.getByDurable({ backend, durableSessionId: storedSessionId })
+
+      if (!binding || binding.rendererRuntimeId !== runtimeSessionId) {
+        return
+      }
+
+      sessionBindingRegistry.invalidateRuntime(backend, binding.runtimeSessionId, 'runtime-not-found')
+
+      const durableKey = rendererDurableKey(backend, storedSessionId)
+
+      if (runtimeIdByStoredSessionIdRef.current.get(durableKey) === runtimeSessionId) {
+        runtimeIdByStoredSessionIdRef.current.delete(durableKey)
+      }
+    },
+    [runtimeIdByStoredSessionIdRef, sessionBindingRegistry]
+  )
+
+  const bindSessionRuntime = useCallback(
+    (storedSessionId: string, runtimeSessionId: string) => {
+      const stored = $sessions.get().find(session => sessionMatchesStoredId(session, storedSessionId))
+
+      if (!stored) {
+        return null
+      }
+
+      const profile = stored.profile?.trim()
+
+      if (!profile) {
+        return null
+      }
+
+      const backend = createBackendKey({
+        connectionId: stored.connection_id?.trim() || null,
+        gatewayEpoch: gatewayEpochForAgent(stored.connection_id?.trim() || null, profile),
+        profile
+      })
+
+      const binding = sessionBindingRegistry.bind(
+        {
+          backend,
+          durableSessionId: storedSessionId
+        },
+        rawRuntimeSessionId(runtimeSessionId),
+        getRouteToken()
+      )
+
+      runtimeIdByStoredSessionIdRef.current.set(rendererDurableKey(backend, storedSessionId), binding.rendererRuntimeId)
+
+      return binding.rendererRuntimeId
+    },
+    [getRouteToken, runtimeIdByStoredSessionIdRef, sessionBindingRegistry]
+  )
+
+  const getStoredSessionIdForRuntime = useCallback(
+    (runtimeSessionId: string) =>
+      sessionBindingRegistry.getByRendererRuntime(runtimeSessionId)?.durableSessionId ?? null,
+    [sessionBindingRegistry]
+  )
+
+  const { connectionRef, gateway, gatewayRef } = useGatewayRequest()
+
+  const requestDurableSession = useCallback(
+    async <T,>(
+      storedSessionId: string,
+      method: string,
+      params: Record<string, unknown> = {},
+      timeoutMs?: number
+    ): Promise<T> => {
+      const owner = await resolveSessionOwner(storedSessionId, sessionRouteOwner(storedSessionId))
+
+      const backend = owner
+        ? createBackendKey({
+            connectionId: owner.connectionId,
+            gatewayEpoch: gatewayEpochForAgent(owner.connectionId, owner.profile),
+            profile: owner.profile
+          })
+        : null
+
+      if (backend && method === 'session.resume') {
+        sessionBindingRegistry.observe('recovery_attempt', { backend, durableSessionId: storedSessionId })
+      }
+
+      try {
+        const result = await requestForSessionOwner<T>(owner, method, params, timeoutMs)
+
+        if (backend && method === 'session.resume') {
+          sessionBindingRegistry.observe('resume_success', { backend, durableSessionId: storedSessionId })
+        } else if (backend && method === 'prompt.submit') {
+          sessionBindingRegistry.observe('first_prompt_routed', { backend, durableSessionId: storedSessionId })
+        }
+
+        return result
+      } catch (error) {
+        if (backend && classifySessionRuntimeNotFound(error)) {
+          sessionBindingRegistry.observe('runtime_not_found_4007', { backend, durableSessionId: storedSessionId })
+        }
+
+        if (backend && method === 'session.resume') {
+          sessionBindingRegistry.observe('resume_failed', { backend, durableSessionId: storedSessionId })
+        }
+
+        throw error
+      }
+    },
+    [sessionBindingRegistry]
+  )
 
   // When chrome stays on the launch backend (Bot Mode / all-profiles
   // navigation), session-owned RPCs still have to hit the session's backend.
   const requestGateway = useCallback(
-    <T,>(method: string, params?: Record<string, unknown>, timeoutMs?: number, signal?: AbortSignal) => {
-      const owner = rememberedSessionProfile(
-        $sessions.get(),
-        selectedStoredSessionIdRef.current,
-        $activeGatewayProfile.get()
-      )
+    async <T,>(method: string, params?: Record<string, unknown>, timeoutMs?: number, signal?: AbortSignal) => {
+      const storedSessionId = selectedStoredSessionIdRef.current
+      const hasSessionIdentity = Boolean(params && typeof params.session_id === 'string' && params.session_id)
 
-      return requestForSessionProfile<T>(owner, ambientRequestGateway, method, params ?? {}, timeoutMs, signal)
+      const rendererRuntime =
+        params && typeof params.session_id === 'string' ? parseRendererRuntimeKey(params.session_id) : null
+
+      // A qualified runtime is its own complete route authority. This matters
+      // for tile/background/plugin calls while the foreground selection names a
+      // different backend; consulting ambient selection first would reject or
+      // misroute the otherwise exact A/B identity.
+      if (rendererRuntime && params && typeof params.session_id === 'string') {
+        return requestForRendererRuntime<T>(params.session_id, method, params, timeoutMs, signal)
+      }
+
+      const sessionOwner = storedSessionId
+        ? await resolveSessionOwner(storedSessionId, sessionRouteOwner(storedSessionId))
+        : undefined
+
+      // A session-scoped RPC for a durable route must have an exact owner row.
+      // During a cold open resumeSession resolves that row before dispatch. If
+      // it is still absent here, fail closed instead of sending MBC's runtime to
+      // the ambient/default gateway.
+      if (hasSessionIdentity && !sessionOwner) {
+        throw new UnresolvedSessionOwnerError()
+      }
+
+      const owner = sessionOwner ?? {
+        connectionId: activeGatewayConnectionId(),
+        profile: $activeGatewayProfile.get()
+      }
+
+      return requestForSessionOwner<T>(owner, method, params ?? {}, timeoutMs, signal)
     },
-    [ambientRequestGateway]
+    [selectedStoredSessionIdRef]
   )
 
   const { loadMoreMessagingForPlatform, loadMoreSessions, refreshCronJobs, refreshMessagingSessions, refreshSessions } =
@@ -372,11 +580,17 @@ export function ContribWiring({ children }: { children: ReactNode }) {
         return
       }
 
-      const storedProfile = $sessions.get().find(session => sessionMatchesStoredId(session, storedSessionId))?.profile
+      const stored = $sessions.get().find(session => sessionMatchesStoredId(session, storedSessionId))
+
+      if (!stored) {
+        return
+      }
+
+      const owner = sessionApiOwner(stored)
 
       for (let index = 0; index < Math.max(1, attempts); index += 1) {
         try {
-          const latest = await getLatestSessionMessages(storedSessionId, storedProfile)
+          const latest = await getLatestSessionMessagesForOwner(storedSessionId, owner)
           const messages = toChatMessages(latest.messages)
           updateSessionState(
             runtimeSessionId,
@@ -434,8 +648,11 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     activeSessionIdRef,
     hydrateFromStoredSession,
     queryClient,
+    qualifyRuntimeIds: true,
     refreshHermesConfig,
     refreshSessions,
+    runtimeIdByStoredSessionIdRef,
+    sessionBindingRegistry,
     sessionStateByRuntimeIdRef,
     updateSessionState
   })
@@ -470,9 +687,13 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     archiveSession,
     branchCurrentSession,
     branchStoredSession,
+    confirmBackendSessionForSend,
     createBackendSessionForSend,
+    createProvisionalTileRuntime,
+    invalidateProvisionalMainRuntimeForOwner,
     openNewSessionTile,
     removeSession,
+    requestPendingCreatedSession,
     resumeSession,
     selectSidebarItem,
     startFreshSessionDraft
@@ -487,14 +708,56 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     navigate,
     onFreshDraftRouteIntent: clearRoutedSessionIntent,
     requestGateway,
+    requestSessionOwner: requestForSessionOwner,
     resetViewSync,
     runtimeIdByStoredSessionIdRef,
+    sessionBindingRegistry,
     selectedStoredSessionId,
     selectedStoredSessionIdRef,
     sessionStateByRuntimeIdRef,
     syncSessionStateToView,
     updateSessionState
   })
+
+  const handleGatewayBackendStateChanged = useCallback(
+    (
+      backend: { connectionId: null | string; gatewayEpoch: number; profile: string },
+      state: 'closed' | 'connecting' | 'error' | 'idle' | 'open'
+    ) => {
+      if (state !== 'closed' && state !== 'error') {
+        return
+      }
+
+      const removed = sessionBindingRegistry.invalidateBackendScope(backend, 'gateway-closed')
+
+      for (const binding of removed) {
+        const durableKey = rendererDurableKey(binding.backend, binding.durableSessionId)
+
+        if (runtimeIdByStoredSessionIdRef.current.get(durableKey) === binding.rendererRuntimeId) {
+          runtimeIdByStoredSessionIdRef.current.delete(durableKey)
+        }
+
+        sessionStateByRuntimeIdRef.current.delete(binding.rendererRuntimeId)
+        dropSessionState(binding.rendererRuntimeId)
+      }
+
+      invalidateProvisionalMainRuntimeForOwner(backend)
+
+      for (const runtimeId of invalidateProvisionalSessionTileRuntimesForOwner(
+        backend,
+        'Kết nối Agent đã ngắt. Bản nháp và tệp đính kèm vẫn được giữ.'
+      )) {
+        sessionStateByRuntimeIdRef.current.delete(runtimeId)
+        dropSessionState(runtimeId)
+      }
+    },
+    [
+      invalidateProvisionalMainRuntimeForOwner,
+      runtimeIdByStoredSessionIdRef,
+      sessionBindingRegistry,
+      sessionStateByRuntimeIdRef
+    ]
+  )
 
   // A profile switch/create drops to a fresh new-session draft so the
   // previously open session doesn't bleed across contexts. Skip initial value.
@@ -519,6 +782,8 @@ export function ContribWiring({ children }: { children: ReactNode }) {
 
   // eslint-disable-next-line no-restricted-syntax -- legitimate non-atom ref write (see eslint rule comment)
   useEffect(() => {
+    activateSessionTileOwner({ connectionId: activeConnectionId, profile: activeGatewayProfile })
+
     if (gatewayScope === lastGatewayScopeRef.current) {
       return
     }
@@ -532,7 +797,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     void refreshHermesConfig(true)
     void refreshActiveProfile()
     resetProjectTreeState()
-  }, [gatewayScope, refreshCurrentModel, refreshHermesConfig])
+  }, [activeConnectionId, activeGatewayProfile, gatewayScope, refreshCurrentModel, refreshHermesConfig])
 
   // New session anchored to a workspace. Seeds cwd + branch from the clicked
   // workspace; an explicit worktree path also drills the sidebar into that
@@ -611,18 +876,22 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   } = usePromptActions({
     activeSessionId,
     activeSessionIdRef,
+    bindSessionRuntime,
     branchCurrentSession: branchInNewChat,
     busyRef,
+    confirmBackendSessionForSend,
     createBackendSessionForSend,
     getRoutedStoredSessionId,
     getRuntimeIdForStoredSession,
     getRouteToken,
     handleSkinCommand,
+    invalidateSessionRuntimeBinding,
     openMemoryGraph: openStarmap,
     refreshSessions,
+    requestDurableSession,
     requestGateway,
+    requestPendingCreatedSession,
     resumeStoredSession: resumeSession,
-    runtimeIdByStoredSessionIdRef,
     selectedStoredSessionIdRef,
     startFreshSessionDraft,
     sttEnabled,
@@ -633,7 +902,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   // sessions continue once those sessions are idle.
   useBackgroundQueueDrain({
     enabled: gatewayState === 'open',
-    runtimeIdByStoredSessionIdRef,
+    getRuntimeIdForStoredSession,
     selectedStoredSessionId,
     submitText
   })
@@ -642,10 +911,15 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   // the tile TAB menu needs, without touching the primary view).
   useSessionTileDelegate({
     archiveSession,
+    bindSessionRuntime,
     branchStoredSession,
+    createProvisionalTileRuntime,
     executeSlashCommand,
+    getRuntimeIdForStoredSession,
+    getStoredSessionIdForRuntime,
+    invalidateSessionRuntimeBinding,
     removeSession,
-    requestGateway,
+    requestForStoredSession: requestDurableSession,
     runtimeIdByStoredSessionIdRef,
     sessionStateByRuntimeIdRef,
     updateSessionState
@@ -706,6 +980,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     creatingSessionRef,
     currentView,
     freshDraftReady,
+    getRuntimeIdForStoredSession,
     gatewayState,
     locationPathname: location.pathname,
     resumeSession,
@@ -713,7 +988,6 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     resumeExhaustedSessionId,
     sessionResumeRequest,
     routedSessionId,
-    runtimeIdByStoredSessionIdRef,
     selectedStoredSessionId,
     selectedStoredSessionIdRef,
     startFreshSessionDraft
@@ -772,6 +1046,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
       closeAllTerminals()
     },
     handleGatewayEvent: handleGatewayEventWithPlugins,
+    onBackendStateChanged: handleGatewayBackendStateChanged,
     onConnectionReady: c => {
       connectionRef.current = c
     },
@@ -863,6 +1138,12 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     void openNewSessionTile('center', { listed: false })
   }, [openNewSessionTile])
 
+  const navigateSidebarItem = useCallback(
+    (item: Parameters<typeof selectSidebarItem>[0]) =>
+      routeNewSessionNavigation(item, startFreshSessionDraft, selectSidebarItem),
+    [selectSidebarItem, startFreshSessionDraft]
+  )
+
   // Archive the selected session (rebindable `session.archive` hotkey).
   const archiveSelectedSession = useCallback(() => {
     const sessionId = $selectedStoredSessionId.get()
@@ -934,7 +1215,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
       setCronFocusJobId(jobId)
       navigate(CRON_ROUTE)
     },
-    onNavigate: selectSidebarItem,
+    onNavigate: navigateSidebarItem,
     onNewSessionInWorkspace: path => startSessionInWorkspace(path, { openTab: true }),
     onNewSessionSplit: dir => void openNewSessionTile(dir),
     onPasteClipboardImage: opts => composer.pasteClipboardImage(opts),
@@ -1037,12 +1318,12 @@ export function ContribWiring({ children }: { children: ReactNode }) {
   // Pane-registered tools (preview's monitor/devtools cluster) anchor flush
   // against the static system cluster — in the tree layout the titlebar band
   // sits ABOVE the grid, so AppShell's pane-width anchoring doesn't apply.
-  // Count every button the static cluster actually renders: four systemTools
-  // (layout, haptics, keybinds, settings) PLUS the always-present
-  // right-sidebar toggle (see titlebar-controls.tsx). A shared width that
+  // Count every button the static cluster actually renders: the bilingual
+  // quick toggle, four systemTools (layout, HUD, haptics, settings), PLUS the
+  // always-present right-sidebar toggle (see titlebar-controls.tsx). A shared width that
   // under-counts leaves the find bar, the titlebar header padding, and the
   // pane-cluster anchor overlapping the fifth button.
-  const SYSTEM_TOOL_COUNT = 5
+  const SYSTEM_TOOL_COUNT = 6
   const paneToolCount = rightTitlebarTools.filter(tool => !tool.hidden).length
   const systemToolsWidth = titlebarToolsWidthCss(SYSTEM_TOOL_COUNT)
 

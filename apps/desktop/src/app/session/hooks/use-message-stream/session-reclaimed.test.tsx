@@ -4,8 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ClientSessionState } from '@/app/types'
 import { createClientSessionState } from '@/lib/chat-runtime'
+import { rendererRuntimeKey } from '@/lib/session-runtime-key'
 import { $sessionStates, $sessionTiles, publishSessionState } from '@/store/session-states'
 import type { RpcEvent } from '@/types/hermes'
+
+import {
+  createBackendKey,
+  SessionBindingRegistry
+} from '../../session-binding-registry'
 
 import { type MessageStreamHarness, renderMessageStream } from './test-harness'
 
@@ -128,5 +134,81 @@ describe('session.reclaimed', () => {
 
     expect(wiringCache.has('live-gone')).toBe(false)
     expect(wiringCache.has('live-kept')).toBe(true)
+  })
+
+  it('invalidates only the exact backend when two connections reuse one profile and runtime id', () => {
+    const registry = new SessionBindingRegistry()
+
+    const left = createBackendKey({
+      connectionId: 'connection-left',
+      gatewayEpoch: 1,
+      profile: ACTIVE_PROFILE
+    })
+
+    const right = createBackendKey({
+      connectionId: 'connection-right',
+      gatewayEpoch: 1,
+      profile: ACTIVE_PROFILE
+    })
+
+    const leftTarget = { backend: left, durableSessionId: 'stored-left' }
+    const rightTarget = { backend: right, durableSessionId: 'stored-right' }
+
+    const leftRuntime = rendererRuntimeKey(left, 'runtime-shared')
+    const rightRuntime = rendererRuntimeKey(right, 'runtime-shared')
+
+    const states = new Map([
+      [leftRuntime, createClientSessionState('stored-left')],
+      [rightRuntime, createClientSessionState('stored-right')]
+    ])
+
+    registry.bind(leftTarget, 'runtime-shared', 'route-left')
+    registry.bind(rightTarget, 'runtime-shared', 'route-right')
+    $sessionStates.set(Object.fromEntries(states))
+    $sessionTiles.set([
+      { runtimeId: leftRuntime, storedSessionId: 'stored-left' },
+      { runtimeId: rightRuntime, storedSessionId: 'stored-right' }
+    ])
+    stream = renderMessageStream(ACTIVE_SID, {
+      activeGatewayProfile: ACTIVE_PROFILE,
+      queryClient,
+      qualifyRuntimeIds: true,
+      sessionBindingRegistry: registry,
+      states
+    })
+
+    act(() =>
+      stream.handleEvent({
+        connectionId: 'connection-left',
+        gatewayEpoch: 1,
+        payload: { running: true, stored_session_id: 'stored-left' },
+        profile: ACTIVE_PROFILE,
+        session_id: 'runtime-shared',
+        type: 'session.info'
+      } as RpcEvent)
+    )
+
+    expect(stream.states.get(leftRuntime)?.busy).toBe(true)
+    expect(stream.states.get(rightRuntime)?.busy).toBe(false)
+
+    act(() =>
+      stream.handleEvent({
+        connectionId: 'connection-left',
+        gatewayEpoch: 1,
+        payload: { reason: 'ws_orphan_reap', session_id: 'runtime-shared', stored_session_id: 'stored-left' },
+        profile: ACTIVE_PROFILE,
+        session_id: '',
+        type: 'session.reclaimed'
+      } as RpcEvent)
+    )
+
+    expect(registry.getByDurable(leftTarget)).toBeNull()
+    expect(registry.getByDurable(rightTarget)?.runtimeSessionId).toBe('runtime-shared')
+    expect(stream.states.has(leftRuntime)).toBe(false)
+    expect(stream.states.has(rightRuntime)).toBe(true)
+    expect($sessionStates.get()[leftRuntime]).toBeUndefined()
+    expect($sessionStates.get()[rightRuntime]).toBeDefined()
+    expect($sessionTiles.get().find(tile => tile.storedSessionId === 'stored-left')?.runtimeId).toBeUndefined()
+    expect($sessionTiles.get().find(tile => tile.storedSessionId === 'stored-right')?.runtimeId).toBe(rightRuntime)
   })
 })

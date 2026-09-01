@@ -22,6 +22,7 @@ import {
   enterProject,
   exitProjectScope,
   fetchProjectSessions,
+  moveSessionToProject,
   openProjectCreate,
   pickProjectFolder,
   projectIdForCwd,
@@ -34,6 +35,8 @@ import {
   startWorkInRepo,
   tombstoneSessions
 } from './projects'
+
+const requestForSessionOwnerMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/i18n', () => ({
   translateNow: (key: string) => key
@@ -56,6 +59,10 @@ vi.mock('@/store/gateway', () => ({
   ensureActiveGatewayOpen: vi.fn()
 }))
 
+vi.mock('@/store/session-request-router', () => ({
+  requestForSessionOwner: (...args: unknown[]) => requestForSessionOwnerMock(...args)
+}))
+
 vi.mock('@/lib/desktop-git', async importOriginal => ({
   ...((await importOriginal()) as Record<string, unknown>),
   desktopGit: vi.fn()
@@ -65,6 +72,10 @@ vi.mock('@/hermes', () => ({
   getHermesConfig: vi.fn(),
   getProfiles: vi.fn(),
   hermesApi: vi.fn(),
+  sessionApiOwner: (session: { connection_id?: null | string; profile?: null | string }) => ({
+    connectionId: session.connection_id?.trim() || null,
+    profile: session.profile?.trim() || 'default'
+  }),
   setApiRequestProfile: vi.fn(),
   STARTUP_REQUEST_TIMEOUT_MS: 1000
 }))
@@ -372,7 +383,12 @@ describe('pickProjectFolder', () => {
     selectDesktopPaths.mockResolvedValue(['/local/repo'])
 
     await expect(pickProjectFolder()).resolves.toBe('/local/repo')
-    expect(selectDesktopPaths).toHaveBeenCalledWith({ defaultPath: undefined, directories: true, multiple: false })
+    expect(selectDesktopPaths).toHaveBeenCalledWith({
+      defaultPath: undefined,
+      directories: true,
+      multiple: false,
+      title: 'sidebar.projects.addFolderTitle'
+    })
   })
 
   it('seeds the picker with the backend cwd on a remote gateway', async () => {
@@ -384,7 +400,8 @@ describe('pickProjectFolder', () => {
     expect(selectDesktopPaths).toHaveBeenCalledWith({
       defaultPath: '/backend/work',
       directories: true,
-      multiple: false
+      multiple: false,
+      title: 'sidebar.projects.addFolderTitle'
     })
   })
 
@@ -717,6 +734,55 @@ describe('repository discovery policy', () => {
     })
     expect(request).not.toHaveBeenCalledWith('projects.record_repos', expect.objectContaining({ profile: 'coder' }))
     expect($projectTree.get()).toEqual([])
+  })
+})
+
+describe('moveSessionToProject exact owner routing', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    requestForSessionOwnerMock.mockResolvedValue({ cwd: '/target/repo' })
+    $projectTree.set([
+      { id: 'target', label: 'Target', path: '/target/repo', repos: [], sessionCount: 0 }
+    ])
+    $sessions.set([
+      {
+        connection_id: 'source-b',
+        cwd: '/source-b',
+        id: 'same-id',
+        profile: 'mbc'
+      } as never,
+      {
+        connection_id: 'source-a',
+        cwd: '/source-a',
+        id: 'same-id',
+        profile: 'mbc'
+      } as never
+    ])
+  })
+
+  afterEach(() => {
+    $projectTree.set([])
+    $sessions.set([])
+  })
+
+  it('sends the raw durable id only to owner A while ambient B shares its profile and id', async () => {
+    const ambientBRequest = vi.fn()
+    const ambientB = { connectionState: 'open', request: ambientBRequest }
+
+    activeGateway.mockReturnValue(ambientB as never)
+    gatewayAtom.set(ambientB as never)
+    $activeGatewayProfile.set('mbc')
+
+    await moveSessionToProject('same-id', 'target', { connectionId: 'source-a', profile: 'mbc' })
+
+    expect(requestForSessionOwnerMock).toHaveBeenCalledWith(
+      { connectionId: 'source-a', profile: 'mbc' },
+      'session.workspace.move',
+      { cwd: '/target/repo', profile: 'mbc', session_key: 'same-id' }
+    )
+    expect(ambientBRequest).not.toHaveBeenCalled()
+    expect($sessions.get().find(session => session.connection_id === 'source-a')?.cwd).toBe('/target/repo')
+    expect($sessions.get().find(session => session.connection_id === 'source-b')?.cwd).toBe('/source-b')
   })
 })
 

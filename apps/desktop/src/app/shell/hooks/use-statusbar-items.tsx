@@ -36,6 +36,7 @@ import {
   idsShareLineage,
   sessionMatchesStoredId
 } from '@/store/session'
+import { requestForRendererRuntime } from '@/store/session-request-router'
 import { $focusedRuntimeId, $focusedSessionState, $focusedStoredSessionId } from '@/store/session-states'
 import { $statusbarHiddenIds } from '@/store/statusbar-prefs'
 import { $subagentsBySession, activeSubagentCount, failedSubagentCount } from '@/store/subagents'
@@ -236,11 +237,19 @@ export function useStatusbarItems({
   // screen. Gated on the gauge being shown — the bar itself is unmounted while
   // toggled off, so this covers the rest.
   const contextItemHidden = useStore($statusbarHiddenIds).includes('context-usage')
+  const requestFocusedRuntime = useMemo(
+    () =>
+      <T,>(method: string, params: Record<string, unknown> = {}): Promise<T> =>
+        activeSessionId
+          ? requestForRendererRuntime<T>(activeSessionId, method, params)
+          : requestGateway<T>(method, params),
+    [activeSessionId, requestGateway]
+  )
 
   const { breakdown: contextBreakdown, loading: contextBreakdownLoading } = useContextBreakdown({
     busy,
     enabled: !contextItemHidden,
-    requestGateway,
+    requestGateway: requestFocusedRuntime,
     sessionId: activeSessionId
   })
 
@@ -320,6 +329,15 @@ export function useStatusbarItems({
       version: desktopVersion?.appVersion
     })
 
+    const title = [
+      status.tooltip,
+      desktopVersion?.engineVersion && desktopVersion.engineVersion !== desktopVersion.appVersion
+        ? `Lõi Hermes Agent v${desktopVersion.engineVersion}`
+        : undefined
+    ]
+      .filter(Boolean)
+      .join(' · ')
+
     return {
       className: status.hasUpdate ? 'text-primary hover:text-primary' : undefined,
       detail: status.detail,
@@ -331,12 +349,13 @@ export function useStatusbarItems({
       // their client is behind. Listed in the menu, but locked on.
       lockedVisible: true,
       onSelect: () => openUpdateOverlayFor('client'),
-      title: status.tooltip,
+      title: title || undefined,
       toggleLabel: copy.toggleVersion,
       variant: 'action'
     }
   }, [
     desktopVersion?.appVersion,
+    desktopVersion?.engineVersion,
     connection?.mode,
     copy,
     updateApply.applying,

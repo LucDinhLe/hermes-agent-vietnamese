@@ -1,11 +1,16 @@
-import type { SessionInfo } from '@/hermes'
-import { getAllSessionMessages } from '@/hermes'
+import {
+  getAllSessionMessagesForOwner,
+  type SessionApiOwner,
+  sessionApiOwner,
+  type SessionInfo
+} from '@/hermes'
 import { translateNow } from '@/i18n'
 import { notify, notifyError } from '@/store/notifications'
 
 interface ExportSessionParams {
   sessionId: string
   profile?: string | null
+  owner?: SessionApiOwner
   title?: string | null
   session?: SessionInfo
 }
@@ -32,8 +37,13 @@ export async function exportSession(sessionId: string, params: Omit<ExportSessio
   }
 
   try {
-    const profile = params.profile ?? params.session?.profile
-    const { messages } = await getAllSessionMessages(sessionId, profile)
+    const owner = params.owner ?? (params.session ? sessionApiOwner(params.session) : null)
+
+    if (!owner) {
+      throw new Error('Cannot export session: exact backend owner is unavailable')
+    }
+
+    const { messages } = await getAllSessionMessagesForOwner(sessionId, owner)
 
     const payload = {
       exported_at: new Date().toISOString(),

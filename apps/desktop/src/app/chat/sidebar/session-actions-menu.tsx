@@ -24,12 +24,11 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { CopyButton } from '@/components/ui/copy-button'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
-import { renameSession } from '@/hermes'
+import { renameSessionForOwner, type SessionApiOwner, sessionApiOwner } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { PROFILE_SWATCHES } from '@/lib/profile-color'
 import { exportSession } from '@/lib/session-export'
-import { activeGateway } from '@/store/gateway'
 import { notify, notifyError } from '@/store/notifications'
 import { $projectTree, moveSessionToProject, projectIdForCwd, projectRootCwd } from '@/store/projects'
 import {
@@ -44,6 +43,7 @@ import {
   setSessions
 } from '@/store/session'
 import { $sessionColorOverrides, setSessionColorOverride } from '@/store/session-color'
+import { requestForRendererRuntime } from '@/store/session-request-router'
 import { $sessionTiles } from '@/store/session-states'
 import { ackStoredSessionId } from '@/store/session-unread'
 import { canOpenSessionInTerminal, canOpenSessionWindow, openSessionInTerminal } from '@/store/windows'
@@ -69,18 +69,14 @@ import type { SessionTitleResponse } from '../../types'
 export async function renameSessionPreferringRpc(
   storedSessionId: string,
   title: string,
-  profile?: string
+  owner?: SessionApiOwner
 ): Promise<{ title?: string }> {
   const isActiveRow = storedSessionId === $selectedStoredSessionId.get()
   const runtimeId = isActiveRow ? $activeSessionId.get() : null
-  const gateway = activeGateway()
 
-  if (title && runtimeId && gateway) {
+  if (title && runtimeId) {
     try {
-      const result = await gateway.request<SessionTitleResponse>('session.title', {
-        session_id: runtimeId,
-        title
-      })
+      const result = await requestForRendererRuntime<SessionTitleResponse>(runtimeId, 'session.title', { title })
 
       return { title: result?.title ?? title }
     } catch (err) {
@@ -92,10 +88,20 @@ export async function renameSessionPreferringRpc(
     }
   }
 
-  return renameSession(storedSessionId, title, profile)
+  if (!owner) {
+    throw new Error('Cannot rename session: exact backend owner is unavailable')
+  }
+
+  return renameSessionForOwner(storedSessionId, title, owner)
+}
+
+function sameSessionOwner(left: SessionApiOwner, right: SessionApiOwner): boolean {
+  return left.connectionId === right.connectionId && left.profile === right.profile
 }
 
 interface SessionActions {
+  /** `null` is explicitly local; `undefined` means the row owner is unknown. */
+  connectionId?: null | string
   sessionId: string
   title: string
   pinned?: boolean
@@ -149,11 +155,15 @@ function SessionColorSwatches({ sessionId }: { sessionId: string }) {
 // project's root — the fix for a chat created in the wrong folder. The current
 // owner and folderless projects (the Home bucket) are excluded: there is
 // nothing to move into.
-function MoveToProjectItems({ kit, sessionId, profile }: { kit: MenuKit; sessionId: string; profile?: string }) {
+function MoveToProjectItems({ kit, owner, sessionId }: { kit: MenuKit; owner?: SessionApiOwner; sessionId: string }) {
   const { t } = useI18n()
   const p = t.sidebar.projects
   const tree = useStore($projectTree)
-  const session = useStore($sessions).find(s => sessionMatchesStoredId(s, sessionId))
+
+  const session = useStore($sessions).find(
+    s => sessionMatchesStoredId(s, sessionId) && Boolean(owner && sameSessionOwner(sessionApiOwner(s), owner))
+  )
+
   const cwd = session?.cwd?.trim() || ''
   const currentProjectId = cwd ? projectIdForCwd(cwd) : null
   const targets = tree.filter(node => node.id !== currentProjectId && !node.isNoProject && projectRootCwd(node))
@@ -166,10 +176,15 @@ function MoveToProjectItems({ kit, sessionId, profile }: { kit: MenuKit; session
     <>
       {targets.map(node => (
         <kit.Item
+          disabled={!owner}
           key={node.id}
           onSelect={() => {
+            if (!owner) {
+              return
+            }
+
             triggerHaptic('selection')
-            moveSessionToProject(sessionId, node.id, profile)
+            moveSessionToProject(sessionId, node.id, owner)
               .then(() => notify({ durationMs: 2_000, kind: 'success', message: p.movedTo(node.label) }))
               .catch(err => notifyError(err, p.moveFailed))
           }}
@@ -182,6 +197,7 @@ function MoveToProjectItems({ kit, sessionId, profile }: { kit: MenuKit; session
 }
 
 function useSessionActions({
+  connectionId,
   sessionId,
   title,
   pinned = false,
@@ -215,6 +231,10 @@ function useSessionActions({
   // The row's finished-unread dot is cleared by opening the session (main or
   // tile) — this menu item is the explicit escape hatch for the rest.
   const isUnread = useStore($unreadFinishedSessionIds).includes(sessionId)
+  const exactProfile = profile?.trim()
+
+  const sessionOwner =
+    connectionId === undefined || !exactProfile ? undefined : { connectionId, profile: exactProfile }
 
   // Already showing as a tab somewhere (a tile, or loaded in main — main IS
   // a tab): offering "Open in new tab" again is noise.
@@ -236,7 +256,7 @@ function useSessionActions({
               // Stack into the MAIN zone as a tab (center dock; the strip
               // sticky-shows on gain) — the door to the tab bar. Focuses first
               // if the session is already on screen.
-              openSession(sessionId, () => undefined, 'tab')
+              openSession(sessionId, () => undefined, 'tab', sessionOwner)
             }
           })
         ]
@@ -249,7 +269,7 @@ function useSessionActions({
             label: r.newWindow,
             onSelect: () => {
               triggerHaptic('selection')
-              openSession(sessionId, () => undefined, 'window')
+              openSession(sessionId, () => undefined, 'window', sessionOwner)
             }
           })
         ]
@@ -269,10 +289,16 @@ function useSessionActions({
               // Read the row lazily: subscribing every row's menu to $sessions
               // would re-render the whole sidebar on each session update.
               const cwd =
-                $sessions
-                  .get()
-                  .find(s => sessionMatchesStoredId(s, sessionId))
-                  ?.cwd?.trim() || undefined
+                (sessionOwner
+                  ? $sessions
+                      .get()
+                      .find(
+                        s =>
+                          sessionMatchesStoredId(s, sessionId) &&
+                          sameSessionOwner(sessionApiOwner(s), sessionOwner)
+                      )
+                  : undefined
+                )?.cwd?.trim() || undefined
 
               void openSessionInTerminal(sessionId, { cwd, profile })
             }
@@ -353,7 +379,10 @@ function useSessionActions({
       label: r.export,
       onSelect: () => {
         triggerHaptic('selection')
-        void exportSession(sessionId, { profile, title })
+        void exportSession(sessionId, {
+          owner: sessionOwner,
+          title
+        })
       }
     })
   ]
@@ -487,7 +516,7 @@ function useSessionActions({
           <span>{t.sidebar.projects.moveToProject}</span>
         </kit.SubTrigger>
         <kit.SubContent>
-          <MoveToProjectItems kit={kit} profile={profile} sessionId={sessionId} />
+          <MoveToProjectItems kit={kit} owner={sessionOwner} sessionId={sessionId} />
         </kit.SubContent>
       </kit.Sub>
       {tabItems.length > 0 && (
@@ -517,6 +546,7 @@ function useSessionActions({
 
   const renameDialog = (
     <RenameSessionDialog
+      connectionId={connectionId}
       currentTitle={title}
       onOpenChange={setRenameOpen}
       open={renameOpen}
@@ -631,6 +661,7 @@ export function SessionContextMenu({ children, ...actions }: SessionContextMenuP
 }
 
 interface RenameSessionDialogProps {
+  connectionId?: null | string
   open: boolean
   onOpenChange: (open: boolean) => void
   sessionId: string
@@ -638,7 +669,14 @@ interface RenameSessionDialogProps {
   profile?: string
 }
 
-function RenameSessionDialog({ open, onOpenChange, sessionId, currentTitle, profile }: RenameSessionDialogProps) {
+function RenameSessionDialog({
+  connectionId,
+  open,
+  onOpenChange,
+  sessionId,
+  currentTitle,
+  profile
+}: RenameSessionDialogProps) {
   const { t } = useI18n()
   const r = t.sidebar.row
   const [value, setValue] = useState(currentTitle)
@@ -668,9 +706,24 @@ function RenameSessionDialog({ open, onOpenChange, sessionId, currentTitle, prof
     setSubmitting(true)
 
     try {
-      const result = await renameSessionPreferringRpc(sessionId, next, profile)
+      const exactProfile = profile?.trim()
+
+      const owner =
+        connectionId === undefined || !exactProfile ? undefined : { connectionId, profile: exactProfile }
+
+      const result = await renameSessionPreferringRpc(sessionId, next, owner)
       const finalTitle = result.title || next || ''
-      setSessions(prev => prev.map(s => (s.id === sessionId ? { ...s, title: finalTitle || null } : s)))
+
+      if (owner) {
+        setSessions(prev =>
+          prev.map(s =>
+            sessionMatchesStoredId(s, sessionId) && sameSessionOwner(sessionApiOwner(s), owner)
+              ? { ...s, title: finalTitle || null }
+              : s
+          )
+        )
+      }
+
       notify({ durationMs: 2_000, kind: 'success', message: r.renamed })
       onOpenChange(false)
     } catch (err) {

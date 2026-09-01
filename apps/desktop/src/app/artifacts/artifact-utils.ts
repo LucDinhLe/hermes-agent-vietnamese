@@ -12,6 +12,8 @@ export interface ArtifactRecord {
   href: string
   label: string
   sessionId: string
+  sessionConnectionId: null | string
+  sessionProfile: string
   sessionTitle: string
   timestamp: number
 }
@@ -391,6 +393,8 @@ function collectArtifactsFromMessage(message: SessionMessage, pushValue: (value:
 export function collectArtifactsForSession(session: SessionInfo, messages: SessionMessage[]): ArtifactRecord[] {
   const found = new Map<string, ArtifactRecord>()
   const title = artifactSessionTitle(session)
+  const sessionConnectionId = session.connection_id?.trim() || null
+  const sessionProfile = session.profile?.trim() || ''
 
   for (const message of messages) {
     if (message.role !== 'assistant' && message.role !== 'tool') {
@@ -404,7 +408,7 @@ export function collectArtifactsForSession(session: SessionInfo, messages: Sessi
         return
       }
 
-      const key = `${session.id}:${value}`
+      const key = `${sessionConnectionId ?? ''}\u0000${sessionProfile}\u0000${session.id}:${value}`
 
       if (found.has(key)) {
         return
@@ -417,6 +421,8 @@ export function collectArtifactsForSession(session: SessionInfo, messages: Sessi
         href: artifactHref(value),
         label: artifactLabel(value),
         sessionId: session.id,
+        sessionConnectionId,
+        sessionProfile,
         sessionTitle: title,
         timestamp: artifactTimestamp(message, session)
       })

@@ -41,6 +41,10 @@ test('CreateAgentDialog materializes the profile lazily and idempotently', () =>
   assert.match(fn, /createdRef\.current = slug/)
   // submit() routes through the same helper (no duplicate profiles.create).
   assert.match(fn, /const slugCreated = await ensureAgentCreated\(\)/)
+  // The roster is actively refetched before the dialog closes, so a new
+  // Agent appears immediately rather than at the next five-second poll.
+  assert.match(fn, /await queryClient\.invalidateQueries\(\{ queryKey: ROSTER_KEY \}\)/)
+  assert.match(fn, /await queryClient\.refetchQueries\(\{ queryKey: ROSTER_KEY, type: 'active' \}\)/)
   // The MCP setup button in Create is wired to lazy creation, not disabled.
   assert.match(fn, /ensureProfile: ensureAgentCreated/)
   // The dead "save the agent first" gate is gone.

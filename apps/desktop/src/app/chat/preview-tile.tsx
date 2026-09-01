@@ -10,6 +10,8 @@
  * one bar instead of two.
  */
 
+import { computed } from 'nanostores'
+
 import { findGroup } from '@/components/pane-shell/tree/model'
 import { $activeTreeGroup, $layoutTree, revealTreePane } from '@/components/pane-shell/tree/store'
 import { FileTypeIcon } from '@/components/ui/file-type-icon'
@@ -72,6 +74,12 @@ function PreviewTabLead({ tabId }: { tabId: string }) {
 
 const PREVIEW_TILE_PREFIX = 'preview-tile'
 
+/** Browser is a durable view inside the Files rail. File and artifact
+ * previews remain movable layout panes beside the workspace. */
+export function isLayoutPreviewTarget(target: PreviewTarget | null): boolean {
+  return Boolean(target && target.kind !== 'url')
+}
+
 /** Keep pane contributions mirroring `$previewTabs`, keep the store's selection
  *  and the tree's active pane agreeing, and front a tile when its tab is
  *  selected. Call once from the root. */
@@ -86,7 +94,7 @@ export function watchPreviewTiles(): void {
   const reveal = () => {
     const tabId = $rightRailActiveTabId.get()
 
-    if (tabId && targetFor(tabId)) {
+    if (tabId && isLayoutPreviewTarget(targetFor(tabId))) {
       revealTreePane(`${PREVIEW_TILE_PREFIX}:${tabId}`)
     }
   }
@@ -120,14 +128,15 @@ export function watchPreviewTiles(): void {
   $activeTreeGroup.listen(follow)
 }
 
+const $layoutPreviewTabs = computed($previewTabs, tabs => tabs.filter(tab => isLayoutPreviewTarget(tab.target)))
+
 const watchPreviewTileMirror = paneMirror<{ id: string }>({
-  source: $previewTabs,
+  source: $layoutPreviewTabs,
   key: tab => tab.id,
   prefix: PREVIEW_TILE_PREFIX,
-  // Identical to route (page) tiles: its own zone docked beside main, sized by
-  // the split weights. NOT anchored to the file tree — the old rail was a
-  // files-adjacent strip, and carrying that over welded preview into the file
-  // browser's zone, so ⌘J (toggle file browser) took the preview with it.
+  // URL tabs are deliberately filtered above: they render inside FilesPane,
+  // so switching Files/Browser never mutates the three-zone workspace tree.
+  anchor: () => 'workspace',
   dir: () => 'right',
   minWidth: '22rem',
   title: previewTitle,

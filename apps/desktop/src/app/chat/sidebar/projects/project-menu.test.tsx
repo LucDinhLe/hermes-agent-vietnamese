@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
+import { pinProject } from '@/store/layout'
+
 import { ProjectMenu } from './project-menu'
 import type { SidebarProjectTree } from './workspace-groups'
 
@@ -26,6 +28,7 @@ vi.mock('@/i18n', () => ({
     t: {
       common: { cancel: 'Cancel', confirm: 'Confirm', done: 'Done', loading: 'Loading…' },
       sidebar: {
+        row: { pin: 'Pin', unpin: 'Unpin' },
         projects: {
           copyPath: 'Copy path',
           deleteConfirm: 'This cannot be undone.',
@@ -54,7 +57,18 @@ vi.mock('@/store/layout', () => ({
       return () => {}
     }
   },
-  dismissAutoProject: vi.fn()
+  $pinnedProjectIds: {
+    get: () => [],
+    listen: () => () => {},
+    subscribe: (fn: (v: string[]) => void) => {
+      fn([])
+
+      return () => {}
+    }
+  },
+  dismissAutoProject: vi.fn(),
+  pinProject: vi.fn(),
+  unpinProject: vi.fn()
 }))
 
 vi.mock('@/store/projects', () => ({
@@ -93,6 +107,15 @@ describe('ProjectMenu', () => {
 
     const button = screen.getByRole('button', { name: 'Actions' })
     expect(tipTrigger(button)).toBeNull()
+  })
+
+  it('pins the project from the row menu', async () => {
+    render(<ProjectMenu isActive={false} project={project} />)
+
+    openTriggerMenu(screen.getByRole('button', { name: 'Actions' }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Pin' }))
+
+    expect(pinProject).toHaveBeenCalledWith('p1')
   })
 
   // When anchorRef is absent, PopoverAnchor wraps the dropdown trigger so the

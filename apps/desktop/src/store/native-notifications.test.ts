@@ -17,6 +17,10 @@ import { __resetNativeNotifyBaselineForTests, markNativeNotifyBaseline } from '.
 import { $approvalRequest, setApprovalRequest } from './prompts'
 import { $activeSessionId, setActiveSessionId } from './session'
 
+const requestEventSource = vi.hoisted(() => vi.fn())
+
+vi.mock('./gateway-event-source', () => ({ requestForGatewayEventSource: requestEventSource }))
+
 const desktopWindow = window as unknown as { hermesDesktop?: Window['hermesDesktop'] }
 const initialHermesDesktop = desktopWindow.hermesDesktop
 
@@ -315,18 +319,20 @@ describe('respondToApprovalAction', () => {
   })
 
   it('approves via approval.respond {choice: "once"} and clears the prompt', async () => {
+    requestEventSource.mockResolvedValueOnce({ resolved: true })
     setActiveSessionId('bg')
     setApprovalRequest({ command: 'rm -rf /', description: 'dangerous', sessionId: 'bg' })
 
     await respondToApprovalAction('bg', 'approve')
 
-    expect(request).toHaveBeenCalledWith('approval.respond', { choice: 'once', session_id: 'bg' })
+    expect(requestEventSource).toHaveBeenCalledWith('bg', 'approval.respond', { choice: 'once' })
     expect($approvalRequest.get()).toBeNull()
   })
 
   it('rejects via approval.respond {choice: "deny"}', async () => {
+    requestEventSource.mockResolvedValueOnce({ resolved: true })
     await respondToApprovalAction('bg', 'reject')
-    expect(request).toHaveBeenCalledWith('approval.respond', { choice: 'deny', session_id: 'bg' })
+    expect(requestEventSource).toHaveBeenCalledWith('bg', 'approval.respond', { choice: 'deny' })
   })
 
   it('ignores unknown action ids', async () => {
@@ -334,9 +340,9 @@ describe('respondToApprovalAction', () => {
     expect(request).not.toHaveBeenCalled()
   })
 
-  it('no-ops without a gateway', async () => {
-    $gateway.set(null)
-    await respondToApprovalAction('bg', 'approve')
-    expect(request).not.toHaveBeenCalled()
+  it('fails closed without a qualified event source', async () => {
+    requestEventSource.mockRejectedValueOnce(new Error('event source required'))
+    await respondToApprovalAction(null, 'approve')
+    expect(requestEventSource).toHaveBeenCalledWith(null, 'approval.respond', { choice: 'once' })
   })
 })

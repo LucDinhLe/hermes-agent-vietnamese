@@ -1,12 +1,30 @@
 import { describe, expect, it } from 'vitest'
 
 import { approvalReplaySessionId, gatewayEventRequiresSessionId, resolveGatewayEventSessionId } from './gateway-events'
+import { rendererRuntimeKey } from './session-runtime-key'
 
 describe('gateway event routing', () => {
   it('rehydrates pending approvals on reconnect ready and resumed session info', () => {
-    expect(approvalReplaySessionId('gateway.ready', 'active-1', null)).toBe('active-1')
-    expect(approvalReplaySessionId('session.info', 'active-1', 'routed-1')).toBe('routed-1')
-    expect(approvalReplaySessionId('message.delta', 'active-1', 'routed-1')).toBeNull()
+    const oldA = rendererRuntimeKey({ connectionId: 'source-a', gatewayEpoch: 1, profile: 'mbc' }, 'runtime-shared')
+    const currentA = rendererRuntimeKey({ connectionId: 'source-a', gatewayEpoch: 2, profile: 'mbc' }, 'runtime-shared')
+    const routedB = rendererRuntimeKey({ connectionId: 'source-b', gatewayEpoch: 4, profile: 'mbc' }, 'runtime-shared')
+
+    expect(
+      approvalReplaySessionId('gateway.ready', oldA, null, {
+        connectionId: 'source-a',
+        gatewayEpoch: 2,
+        profile: 'mbc'
+      })
+    ).toBe(currentA)
+    expect(
+      approvalReplaySessionId('gateway.ready', oldA, null, {
+        connectionId: 'source-b',
+        gatewayEpoch: 4,
+        profile: 'mbc'
+      })
+    ).toBeNull()
+    expect(approvalReplaySessionId('session.info', oldA, routedB)).toBe(routedB)
+    expect(approvalReplaySessionId('message.delta', oldA, routedB)).toBeNull()
   })
 
   it('drops only unscoped subagent events (genuinely background work)', () => {

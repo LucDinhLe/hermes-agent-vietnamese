@@ -1,7 +1,7 @@
 import type { ChatMessage } from '@/lib/chat-messages'
-import { activeGateway } from '@/store/gateway'
 import { notifyError } from '@/store/notifications'
 import { $activeSessionId, $messages, setMessages } from '@/store/session'
+import { requestForRendererRuntime } from '@/store/session-request-router'
 import type { MessageReaction } from '@/types/hermes'
 
 /** The six iOS Tapback defaults, in Apple's order. */
@@ -59,10 +59,9 @@ export async function toggleMessageReaction(
   // this role — which is exactly the message being reacted to.
   const rowId = message.rowId
   const sessionId = $activeSessionId.get()
-  const gateway = activeGateway()
 
-  if (!sessionId || !gateway) {
-    notifyError(new Error(!sessionId ? 'No active session' : 'Gateway not connected'), 'Could not react')
+  if (!sessionId) {
+    notifyError(new Error('No active session'), 'Could not react')
 
     return
   }
@@ -72,8 +71,7 @@ export async function toggleMessageReaction(
   writeReactions(message.id, applyReaction(snapshot, emoji, author))
 
   try {
-    const result = await gateway.request<MessageReactResponse>('message.react', {
-      session_id: sessionId,
+    const result = await requestForRendererRuntime<MessageReactResponse>(sessionId, 'message.react', {
       ...(rowId === undefined ? { newest_role: message.role } : { row_id: rowId }),
       emoji,
       author

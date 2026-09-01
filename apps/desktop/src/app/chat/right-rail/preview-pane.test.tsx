@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { forgetPreviewTabLiveUrl } from '@/store/preview'
 import { $connection } from '@/store/session'
 
 import { forgetPreviewConsole, previewConsoleState } from './preview-console-store'
@@ -33,7 +34,9 @@ describe('PreviewPane console state', () => {
 
   afterEach(() => {
     cleanup()
+    forgetPreviewTabLiveUrl('url:remount-persistence')
     $connection.set(null)
+    vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
@@ -142,6 +145,111 @@ describe('PreviewPane console state', () => {
     expect(rendered.queryByRole('textbox', { name: 'Address' })).toBeNull()
   })
 
+  it('fits the browser after it is ready and updates the fit when the rail resizes', async () => {
+    let resize: ResizeObserverCallback | null = null
+    const setZoomFactor = vi.fn()
+    const browserDocument = window.document
+    const nativeCreateElement = browserDocument.createElement.bind(browserDocument)
+
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          resize = callback
+        }
+
+        observe() {}
+        unobserve() {}
+      }
+    )
+    vi.spyOn(browserDocument, 'createElement').mockImplementation(
+      (tagName: string, options?: ElementCreationOptions) => {
+        const element = nativeCreateElement(tagName, options)
+
+        if (tagName === 'webview') {
+          Object.assign(element, { setZoomFactor })
+        }
+
+        return element
+      }
+    )
+
+    let rendered!: ReturnType<typeof render>
+    await act(async () => {
+      rendered = render(
+        <PreviewPane
+          tabId="url:fitted-browser"
+          target={{ kind: 'url', label: 'Browser', source: 'https://example.com', url: 'https://example.com' }}
+        />
+      )
+    })
+
+    const webview = rendered.container.querySelector('webview')!
+    const host = webview.parentElement!
+
+    act(() => {
+      resize?.([{ contentRect: { width: 480 }, target: host } as unknown as ResizeObserverEntry], {} as ResizeObserver)
+      webview.dispatchEvent(new Event('dom-ready'))
+    })
+
+    expect(setZoomFactor).toHaveBeenLastCalledWith(0.5)
+
+    act(() => {
+      resize?.([{ contentRect: { width: 960 }, target: host } as unknown as ResizeObserverEntry], {} as ResizeObserver)
+    })
+
+    expect(setZoomFactor).toHaveBeenLastCalledWith(1)
+  })
+
+  it('refits after a pane drag when ResizeObserver delivery is deferred', async () => {
+    const setZoomFactor = vi.fn()
+    const browserDocument = window.document
+    const nativeCreateElement = browserDocument.createElement.bind(browserDocument)
+
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+      }
+    )
+    vi.spyOn(browserDocument, 'createElement').mockImplementation(
+      (tagName: string, options?: ElementCreationOptions) => {
+        const element = nativeCreateElement(tagName, options)
+
+        if (tagName === 'webview') {
+          Object.assign(element, { setZoomFactor })
+        }
+
+        return element
+      }
+    )
+
+    let rendered!: ReturnType<typeof render>
+    await act(async () => {
+      rendered = render(
+        <PreviewPane
+          tabId="url:pointerup-refit"
+          target={{ kind: 'url', label: 'Browser', source: 'https://example.com', url: 'https://example.com' }}
+        />
+      )
+    })
+
+    const webview = rendered.container.querySelector('webview')!
+    const host = webview.parentElement!
+    let hostWidth = 480
+
+    vi.spyOn(host, 'getBoundingClientRect').mockImplementation(() => ({ width: hostWidth }) as DOMRect)
+
+    act(() => webview.dispatchEvent(new Event('dom-ready')))
+    expect(setZoomFactor).toHaveBeenLastCalledWith(0.5)
+
+    hostWidth = 720
+    act(() => browserDocument.dispatchEvent(new Event('pointerup')))
+
+    expect(setZoomFactor).toHaveBeenLastCalledWith(0.75)
+  })
+
   it('drives the webview from the bar and tracks its history', async () => {
     let rendered!: ReturnType<typeof render>
     await act(async () => {
@@ -189,6 +297,38 @@ describe('PreviewPane console state', () => {
     // forward, so the load lands a microtask later.
     await waitFor(() => expect(loadURL).toHaveBeenCalledWith('http://localhost:4000/app'))
     expect(webview.getAttribute('src')).toBe('http://localhost:5174')
+  })
+
+  it('restores a Browser tab at its live address after the rail remounts', async () => {
+    const tabId = 'url:remount-persistence'
+
+    const target = {
+      kind: 'url' as const,
+      label: 'Browser',
+      source: 'https://example.com',
+      url: 'https://example.com'
+    }
+
+    let first!: ReturnType<typeof render>
+
+    await act(async () => {
+      first = render(<PreviewPane tabId={tabId} target={target} />)
+    })
+
+    act(() => {
+      first.container
+        .querySelector('webview')!
+        .dispatchEvent(Object.assign(new Event('did-navigate'), { url: 'https://example.com/next' }))
+    })
+    first.unmount()
+
+    let restored!: ReturnType<typeof render>
+
+    await act(async () => {
+      restored = render(<PreviewPane tabId={tabId} target={target} />)
+    })
+
+    expect(restored.container.querySelector('webview')?.getAttribute('src')).toBe('https://example.com/next')
   })
 
   // The webview always runs on THIS machine, so a remote agent's localhost is

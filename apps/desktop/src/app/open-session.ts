@@ -15,6 +15,7 @@
  *     the bridge has no session-window support.
  */
 import { $activeSessionId, $selectedStoredSessionId, markSessionRead } from '@/store/session'
+import { recordSessionRouteOwner, type SessionRouteOwner } from '@/store/session-route-owner'
 import {
   focusedSessionNeedsRoute,
   focusOpenSession,
@@ -72,11 +73,14 @@ export function openSessionIntentFromModifiers(
 export function openSession(
   storedSessionId: string,
   navigate: OpenSessionNavigate,
-  intent: OpenSessionIntent = 'in-place'
+  intent: OpenSessionIntent = 'in-place',
+  owner?: SessionRouteOwner | null
 ): void {
   if (!storedSessionId) {
     return
   }
+
+  recordSessionRouteOwner(storedSessionId, owner)
 
   // Any explicit open/focus means the user has seen the finished-turn marker.
   // Must run BEFORE the focus short-circuits below: clicking a session that is

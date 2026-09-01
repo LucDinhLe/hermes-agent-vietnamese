@@ -135,6 +135,11 @@ import { describeDevCdpDecision, resolveDevCdpPort } from './dev-cdp'
 import { installEmbedReferer } from './embed-referer'
 import { createEventDeduper } from './event-dedupe'
 import {
+  configureExperimentalPackagedEnvironment,
+  materializeExperimentalPackagedRuntime,
+  verifyExperimentalRuntimeBundle
+} from './experimental-packaged-runtime'
+import {
   buildTerminalScript,
   resolveTerminalLaunch,
   terminalScriptEnv,
@@ -347,6 +352,7 @@ import {
   shouldAttemptAclRepair,
   shouldRelaunchForGpuSandboxCrash,
   shouldRelaunchForRendererSandboxCrashLoop,
+  windowsGpuSandboxCrashReason,
   writeSandboxMarker
 } from './windows-sandbox-fallback'
 import { installWindowsSystemCaTrust } from './windows-system-ca'
@@ -354,6 +360,18 @@ import { readWindowsUserEnvVar } from './windows-user-env'
 import { isPackagedInstallPath as isPackagedInstallPathUnderRoots } from './workspace-cwd'
 import { readWslWindowsClipboardImage } from './wsl-clipboard-image'
 import { resolvePickerDefaultPath, setActiveGatewayProfile, setWslBridgeProfileState } from './wsl-path-bridge'
+
+const DEV_SERVER = process.env.HERMES_DESKTOP_DEV_SERVER
+const IS_PACKAGED = app.isPackaged || Boolean(process.env.HERMES_DESKTOP_IS_PACKAGED)
+const IS_MAC = process.platform === 'darwin'
+const IS_WINDOWS = process.platform === 'win32'
+
+// The bundle script makes IS_PACKAGED true for production-shaped dev runs.
+// Isolation is installer behavior, so key it to Electron's real packaged bit.
+const EXPERIMENTAL_PACKAGED_PATHS = configureExperimentalPackagedEnvironment({
+  isPackaged: app.isPackaged,
+  isWindows: IS_WINDOWS
+})
 
 const USER_DATA_OVERRIDE = process.env.HERMES_DESKTOP_USER_DATA_DIR
 
@@ -363,10 +381,6 @@ if (USER_DATA_OVERRIDE) {
   app.setPath('userData', resolvedUserData)
 }
 
-const DEV_SERVER = process.env.HERMES_DESKTOP_DEV_SERVER
-const IS_PACKAGED = app.isPackaged || Boolean(process.env.HERMES_DESKTOP_IS_PACKAGED)
-const IS_MAC = process.platform === 'darwin'
-const IS_WINDOWS = process.platform === 'win32'
 const IS_WSL = isWslEnvironment()
 // Truthful macOS kernel major (Tahoe = 25). Product version lies (16 vs 26) per
 // build SDK, so gate Tahoe workarounds on Darwin instead.
@@ -538,16 +552,16 @@ if (IS_WINDOWS) {
     windowsNoSandboxRelaunchAttempted = true
     windowsSandboxFallbackActive = true
     windowsSandboxFallbackSticky = true
-    windowsSandboxFallbackReason = 'gpu-breakpoint'
+    windowsSandboxFallbackReason = windowsGpuSandboxCrashReason(details?.exitCode) ?? 'gpu-breakpoint'
 
     try {
-      writeSandboxMarker(app.getPath('userData'), fallbackMarker('gpu-breakpoint', app.getVersion()))
+      writeSandboxMarker(app.getPath('userData'), fallbackMarker(windowsSandboxFallbackReason, app.getVersion()))
     } catch {
       void 0
     }
 
     console.warn(
-      `[hermes] Windows GPU sandbox crashed (exit=${details?.exitCode}); relaunching once with --no-sandbox (#38216)`
+      `[hermes] Windows GPU sandbox failed (${windowsSandboxFallbackReason}, exit=${details?.exitCode}); relaunching once with --no-sandbox (#38216)`
     )
 
     try {
@@ -722,6 +736,23 @@ function pathWithHermesManagedNode(...entries) {
 const ACTIVE_HERMES_ROOT = path.join(HERMES_HOME, 'hermes-agent')
 // VENV_ROOT — venv lives inside the repo, exactly like install.ps1 does it.
 const VENV_ROOT = path.join(ACTIVE_HERMES_ROOT, 'venv')
+
+const EXPERIMENTAL_RUNTIME_BUNDLE = EXPERIMENTAL_PACKAGED_PATHS.enabled
+  ? verifyExperimentalRuntimeBundle({
+      appVersion: app.getVersion(),
+      experimentRoot: EXPERIMENTAL_PACKAGED_PATHS.experimentRoot!,
+      resourcesPath: process.resourcesPath
+    })
+  : null
+
+let experimentalRuntimeResult = EXPERIMENTAL_RUNTIME_BUNDLE
+  ? materializeExperimentalPackagedRuntime({
+      bundle: EXPERIMENTAL_RUNTIME_BUNDLE,
+      experimentRoot: EXPERIMENTAL_PACKAGED_PATHS.experimentRoot!,
+      profileRoot: EXPERIMENTAL_PACKAGED_PATHS.profileRoot!
+    })
+  : null
+
 // BOOTSTRAP_COMPLETE_MARKER — written by the first-launch bootstrap runner
 // (Phase 1D) after install.ps1 has completed all stages and the user has
 // finished initial configuration. Presence of this marker means the install
@@ -802,7 +833,7 @@ const BOOT_FAKE_STEP_MS = (() => {
   return Math.max(120, raw)
 })()
 
-const APP_NAME = process.env.HERMES_DESKTOP_APP_NAME || 'Hermes'
+const APP_NAME = process.env.HERMES_DESKTOP_APP_NAME || 'Hermes Vietnamese Advisor Experimental'
 const HUD_WINDOW_TITLE = `${APP_NAME} HUD`
 const TITLEBAR_HEIGHT = 34
 const MACOS_TRAFFIC_LIGHTS_HEIGHT = 14
@@ -1214,7 +1245,7 @@ app.setName(APP_NAME)
 // need this, so gate it on Windows. (Fixes: desktop approval/turn notifications
 // never firing on Windows.)
 if (IS_WINDOWS) {
-  app.setAppUserModelId('com.nousresearch.hermes')
+  app.setAppUserModelId('vn.lucledinh.hermes-vietnamese.advisor-experimental')
 }
 
 // Seed the native About panel with the live Hermes version. This is refreshed
@@ -1223,8 +1254,8 @@ if (IS_WINDOWS) {
 // the seed here just covers the first open and any non-menu invocation path.
 app.setAboutPanelOptions({
   applicationName: APP_NAME,
-  applicationVersion: resolveHermesVersion(),
-  copyright: 'Copyright © 2026 Nous Research'
+  applicationVersion: app.getVersion(),
+  copyright: 'Phát triển và Việt hóa bởi Lê Đình Lực · Nền tảng Hermes Agent của Nous Research'
 })
 
 // Custom scheme for streaming audio/video into the renderer. Local paths read
@@ -4442,7 +4473,58 @@ function createActiveBackend(backendArgs) {
   }
 }
 
+function resolveExperimentalPackagedBackend(backendArgs) {
+  if (!EXPERIMENTAL_RUNTIME_BUNDLE || !experimentalRuntimeResult) {
+    throw new Error('[experimental-runtime] packaged runtime state was not initialized')
+  }
+
+  if (experimentalRuntimeResult.status === 'needs-bootstrap') {
+    // Bootstrap only creates the isolated dependency/venv base. It never
+    // becomes a selectable backend: after success ensureRuntime materializes
+    // the hash-verified bundled candidate, pins it, then re-enters resolution.
+    return {
+      kind: 'bootstrap-needed',
+      label: 'Experimental Advisor runtime needs its isolated Python environment',
+      command: null,
+      args: backendArgs,
+      bootstrap: true,
+      env: {},
+      shell: false,
+      activeRoot: ACTIVE_HERMES_ROOT,
+      installStamp: {
+        schemaVersion: 1,
+        commit: EXPERIMENTAL_RUNTIME_BUNDLE.candidateReceipt.sources.officialEngineBase,
+        branch: null,
+        builtAt: INSTALL_STAMP?.builtAt || null,
+        dirty: false,
+        source: 'experimental-bundled-base'
+      },
+      isPackaged: true,
+      platform: process.platform
+    }
+  }
+
+  const backend = createPythonBackend(
+    experimentalRuntimeResult.targetRoot,
+    `Hermes Experimental candidate ${experimentalRuntimeResult.candidateId}`,
+    backendArgs
+  )
+
+  if (!backend || path.resolve(backend.root) !== path.resolve(experimentalRuntimeResult.targetRoot)) {
+    throw new Error('[experimental-runtime] the pinned packaged candidate is not runnable')
+  }
+
+  return backend
+}
+
 function resolveHermesBackend(backendArgs) {
+  // An installed Experimental EXE has exactly one allowed local backend: the
+  // bundled, verified candidate. Do not consider the mutable bootstrap base,
+  // an ambient CLI, system Python, or any stable Hermes root.
+  if (EXPERIMENTAL_RUNTIME_BUNDLE) {
+    return resolveExperimentalPackagedBackend(backendArgs)
+  }
+
   // 1. Explicit override -- HERMES_DESKTOP_HERMES_ROOT points at a developer
   //    checkout. Honour it as-is (no bootstrap; the user is driving).
   const overrideRoot = process.env.HERMES_DESKTOP_HERMES_ROOT && path.resolve(process.env.HERMES_DESKTOP_HERMES_ROOT)
@@ -4723,6 +4805,24 @@ async function ensureRuntime(backend) {
       // hermes:bootstrap:reset IPC (renderer's "Reload and retry").
       bootstrapFailure = bootstrapError
       throw bootstrapError
+    }
+
+    if (EXPERIMENTAL_RUNTIME_BUNDLE) {
+      experimentalRuntimeResult = materializeExperimentalPackagedRuntime({
+        bundle: EXPERIMENTAL_RUNTIME_BUNDLE,
+        experimentRoot: EXPERIMENTAL_PACKAGED_PATHS.experimentRoot!,
+        profileRoot: EXPERIMENTAL_PACKAGED_PATHS.profileRoot!
+      })
+
+      if (experimentalRuntimeResult.status !== 'ready') {
+        const runtimeError: Error & { isBootstrapFailure?: boolean } = new Error(
+          '[experimental-runtime] isolated bootstrap completed but the packaged candidate was not materialized'
+        )
+
+        runtimeError.isBootstrapFailure = true
+        bootstrapFailure = runtimeError
+        throw runtimeError
+      }
     }
 
     rememberLog('[bootstrap] bootstrap complete; marker written. Re-resolving backend.')
@@ -14593,6 +14693,27 @@ function resolveHermesVersion() {
   return app.getVersion()
 }
 
+function resolveAdvisorRuntimeReceipt() {
+  try {
+    const receiptPath = path.join(resolveUpdateRoot(), 'advisor-runtime-receipt.json')
+
+    if (!fileExists(receiptPath)) {
+      return null
+    }
+
+    const receipt = JSON.parse(fs.readFileSync(receiptPath, 'utf8'))
+
+    return {
+      candidateId: String(receipt.candidateId || ''),
+      productVersion: String(receipt.productVersion || ''),
+      sourceCommit: String(receipt.sourceCommit || ''),
+      manifestSha256: String(receipt.manifestSha256 || '')
+    }
+  } catch {
+    return null
+  }
+}
+
 // Renderer-bundle skew: `hermes update` moves the SOURCE TREE, but the UI
 // (including bundled plugins like Bot Mode) is compiled into this binary at
 // build time. A terminal-side update — or an in-app update whose bundle-swap
@@ -14614,10 +14735,8 @@ function showAboutPanelFresh() {
   void detectRendererSkew().then(skew => {
     app.setAboutPanelOptions({
       applicationName: APP_NAME,
-      applicationVersion: skew.outOfSync
-        ? `${resolveHermesVersion()} — app build out of date, update the desktop app`
-        : resolveHermesVersion(),
-      copyright: 'Copyright © 2026 Nous Research'
+      applicationVersion: skew.outOfSync ? `${app.getVersion()} — giao diện và runtime không đồng bộ` : app.getVersion(),
+      copyright: 'Phát triển và Việt hóa bởi Lê Đình Lực · Nền tảng Hermes Agent của Nous Research'
     })
     app.showAboutPanel()
   })
@@ -14625,15 +14744,21 @@ function showAboutPanelFresh() {
 
 ipcMain.handle('hermes:version', async () => {
   const skew = await detectRendererSkew()
+  const runtime = resolveAdvisorRuntimeReceipt()
 
   return {
-    appVersion: resolveHermesVersion(),
+    appVersion: app.getVersion(),
+    engineVersion: resolveHermesVersion(),
     electronVersion: process.versions.electron,
     nodeVersion: process.versions.node,
     platform: process.platform,
     hermesRoot: resolveUpdateRoot(),
     bundleOutOfSync: skew.outOfSync,
-    bundleCommitsBehind: skew.desktopCommitsBehind
+    bundleCommitsBehind: skew.desktopCommitsBehind,
+    runtimeCandidateId: runtime?.candidateId || null,
+    runtimeProductVersion: runtime?.productVersion || null,
+    runtimeSourceCommit: runtime?.sourceCommit || null,
+    runtimeManifestSha256: runtime?.manifestSha256 || null
   }
 })
 
@@ -14871,9 +14996,11 @@ ipcMain.handle('hermes:vscode-theme:search', async (_event, query) => searchMark
 // running app. Three delivery paths: macOS 'open-url',
 // Win/Linux running-app 'second-instance' (argv), Win/Linux cold-start argv.
 // ---------------------------------------------------------------------------
-const HERMES_PROTOCOL = DEV_SERVER ? 'hermes-dev' : 'hermes'
-/** Schemes accepted when parsing inbound URLs (dev accepts both). */
-const DEEPLINK_SCHEMES = DEV_SERVER ? ['hermes-dev', 'hermes'] : ['hermes']
+// This binary is deliberately isolated from the stable Hermes protocol. Keep
+// it hard-coded so even launching the executable without our wrapper cannot
+// claim hermes:// on the same machine.
+const HERMES_PROTOCOL = 'hermes-advisor-experimental'
+const DEEPLINK_SCHEMES = [HERMES_PROTOCOL]
 let _pendingDeepLink = null
 let _rendererReadyForDeepLink = false
 

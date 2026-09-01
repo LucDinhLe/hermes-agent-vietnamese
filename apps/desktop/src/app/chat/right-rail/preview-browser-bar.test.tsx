@@ -23,6 +23,10 @@ function address(rendered: ReturnType<typeof render>) {
   return rendered.getByRole('textbox', { name: 'Address' }) as HTMLInputElement
 }
 
+function openActions() {
+  fireEvent.pointerDown(screen.getByRole('button', { name: 'More browser actions' }), { button: 0 })
+}
+
 const desktopWindow = window as unknown as { hermesDesktop?: Window['hermesDesktop'] }
 
 function installBridge(writeClipboard: ReturnType<typeof vi.fn>) {
@@ -79,16 +83,16 @@ describe('normalizePreviewAddress', () => {
 })
 
 describe('PreviewBrowserBar', () => {
-  it('renders the navigation controls and the page toggles', () => {
+  it('keeps navigation, address, shared-agent state, and compact actions discoverable', () => {
     const rendered = render(<PreviewBrowserBar {...baseProps} />)
 
     expect(rendered.getByRole('button', { name: 'Back' })).toBeTruthy()
     expect(rendered.getByRole('button', { name: 'Forward' })).toBeTruthy()
     expect(rendered.getByRole('button', { name: 'Reload page' })).toBeTruthy()
     expect(rendered.getByRole('button', { name: 'Copy URL' })).toBeTruthy()
-    expect(rendered.getByRole('button', { name: 'Open in browser' })).toBeTruthy()
-    expect(rendered.getByRole('button', { name: 'Show preview console' })).toBeTruthy()
-    expect(rendered.getByRole('button', { name: 'Open preview DevTools' })).toBeTruthy()
+    expect(rendered.getByRole('status', { name: 'Shared with agent' })).toBeTruthy()
+    expect(rendered.getByText('Shared with agent')).toBeTruthy()
+    expect(rendered.getByRole('button', { name: 'More browser actions' })).toBeTruthy()
     expect(address(rendered)).toBeTruthy()
   })
 
@@ -109,8 +113,7 @@ describe('PreviewBrowserBar', () => {
   it.each([
     ['Back', 'onBack'],
     ['Forward', 'onForward'],
-    ['Reload page', 'onReload'],
-    ['Open in browser', 'onOpenExternal']
+    ['Reload page', 'onReload']
   ] as const)('fires %s', (label, handler) => {
     const spy = vi.fn()
     const rendered = render(<PreviewBrowserBar {...baseProps} canGoBack canGoForward {...{ [handler]: spy }} />)
@@ -118,6 +121,16 @@ describe('PreviewBrowserBar', () => {
     fireEvent.click(rendered.getByRole('button', { name: label }))
 
     expect(spy).toHaveBeenCalledOnce()
+  })
+
+  it('keeps open-external available in the compact action menu', () => {
+    const onOpenExternal = vi.fn()
+
+    render(<PreviewBrowserBar {...baseProps} onOpenExternal={onOpenExternal} />)
+    openActions()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Open in browser' }))
+
+    expect(onOpenExternal).toHaveBeenCalledOnce()
   })
 
   it('toggles the console and DevTools, and labels them by current state', () => {
@@ -128,16 +141,19 @@ describe('PreviewBrowserBar', () => {
       <PreviewBrowserBar {...baseProps} onToggleConsole={onToggleConsole} onToggleDevTools={onToggleDevTools} />
     )
 
-    fireEvent.click(rendered.getByRole('button', { name: 'Show preview console' }))
-    fireEvent.click(rendered.getByRole('button', { name: 'Open preview DevTools' }))
+    openActions()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Show preview console' }))
+    openActions()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Open preview DevTools' }))
 
     expect(onToggleConsole).toHaveBeenCalledOnce()
     expect(onToggleDevTools).toHaveBeenCalledOnce()
 
     rendered.rerender(<PreviewBrowserBar {...baseProps} consoleOpen devToolsOpen />)
 
-    expect(rendered.getByRole('button', { name: 'Hide preview console' }).getAttribute('aria-pressed')).toBe('true')
-    expect(rendered.getByRole('button', { name: 'Hide preview DevTools' }).getAttribute('aria-pressed')).toBe('true')
+    openActions()
+    expect(screen.getByRole('menuitem', { name: 'Hide preview console' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Hide preview DevTools' })).toBeTruthy()
   })
 
   it('shows the live url while idle and follows it as the page navigates', () => {
@@ -272,5 +288,6 @@ describe('PreviewBrowserBar', () => {
     // code-block copy icon (inline appearance, overlay on the field's edge).
     expect(copyButton.parentElement?.contains(address)).toBe(true)
     expect(copyButton.className).toContain('absolute')
+    expect(address.parentElement?.className).toContain('min-w-16')
   })
 })

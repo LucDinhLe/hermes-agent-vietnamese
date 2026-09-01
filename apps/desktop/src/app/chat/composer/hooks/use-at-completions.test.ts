@@ -2,8 +2,15 @@ import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { queryClient } from '@/lib/query-client'
+import { rendererRuntimeKey } from '@/lib/session-runtime-key'
 
 import { useAtCompletions } from './use-at-completions'
+
+const requestForRendererRuntime = vi.hoisted(() => vi.fn())
+
+vi.mock('@/store/session-request-router', () => ({ requestForRendererRuntime }))
+
+const SESSION_ID = rendererRuntimeKey({ connectionId: null, gatewayEpoch: 1, profile: 'default' }, 's1')
 
 function gatewayStub(latencyMs = 40) {
   const calls: string[] = []
@@ -17,13 +24,24 @@ function gatewayStub(latencyMs = 40) {
     })
   }
 
+  requestForRendererRuntime.mockReset()
+  requestForRendererRuntime.mockImplementation(
+    (runtimeId: string, method: string, params: { word: string }) => {
+      expect(runtimeId).toBe(SESSION_ID)
+
+      return gateway.request(method, params)
+    }
+  )
+
   return { calls, gateway }
 }
 
 function setup(latencyMs = 40) {
   const { calls, gateway } = gatewayStub(latencyMs)
 
-  const { result } = renderHook(() => useAtCompletions({ gateway: gateway as never, sessionId: 's1', cwd: '/repo' }))
+  const { result } = renderHook(() =>
+    useAtCompletions({ gateway: gateway as never, sessionId: SESSION_ID, cwd: '/repo' })
+  )
 
   return { calls, result }
 }

@@ -7,6 +7,8 @@ import type { ClientSessionState } from '@/app/types'
 import { createClientSessionState } from '@/lib/chat-runtime'
 import type { RpcEvent } from '@/types/hermes'
 
+import { SessionBindingRegistry } from '../../session-binding-registry'
+
 import { useMessageStream } from './index'
 
 export interface MessageStreamHarnessOptions extends Partial<Parameters<typeof useMessageStream>[0]> {
@@ -54,14 +56,19 @@ export function renderMessageStream(
   function Harness() {
     const activeSessionIdRef = useRef<string | null>(sessionId)
     const sessionStateByRuntimeIdRef = useRef(states)
+    const runtimeIdByStoredSessionIdRef = useRef(new Map<string, string>())
+    const sessionBindingRegistryRef = useRef(new SessionBindingRegistry())
     const queryClientRef = useRef(new QueryClient())
 
     const stream = useMessageStream({
       activeSessionIdRef,
       hydrateFromStoredSession: vi.fn(async () => undefined),
       queryClient: queryClientRef.current,
+      qualifyRuntimeIds: false,
       refreshHermesConfig: vi.fn(async () => undefined),
       refreshSessions: vi.fn(async () => undefined),
+      runtimeIdByStoredSessionIdRef,
+      sessionBindingRegistry: sessionBindingRegistryRef.current,
       sessionStateByRuntimeIdRef,
       updateSessionState: (id, updater) => {
         const next = updater(states.get(id) ?? createClientSessionState())

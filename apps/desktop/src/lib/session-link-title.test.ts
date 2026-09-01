@@ -1,15 +1,14 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 
-import { getSession } from '@/hermes'
 import { $sessions } from '@/store/session'
 import type { SessionInfo } from '@/types/hermes'
 
-import { __resetSessionLinkTitleCache, fetchSessionLinkTitle, lookupLocalSessionTitle } from './session-link-title'
-import { sessionRefCacheKey } from './session-refs'
-
-vi.mock('@/hermes', () => ({
-  getSession: vi.fn()
-}))
+import {
+  __resetSessionLinkTitleCache,
+  fetchSessionLinkTitle,
+  lookupLocalSessionOwner,
+  lookupLocalSessionTitle
+} from './session-link-title'
 
 function makeSession(overrides: Partial<SessionInfo> = {}): SessionInfo {
   return {
@@ -34,14 +33,17 @@ function makeSession(overrides: Partial<SessionInfo> = {}): SessionInfo {
 afterEach(() => {
   __resetSessionLinkTitleCache()
   $sessions.set([])
-  vi.mocked(getSession).mockReset()
 })
 
 describe('lookupLocalSessionTitle', () => {
-  it('reads from the in-memory session list', () => {
-    $sessions.set([makeSession({ profile: 'work', title: 'Branch plan' })])
+  it('reads a uniquely owned row from the in-memory session list', () => {
+    $sessions.set([makeSession({ connection_id: 'source-a', profile: 'work', title: 'Branch plan' })])
 
     expect(lookupLocalSessionTitle('work/20260101_abc123')).toBe('Branch plan')
+    expect(lookupLocalSessionOwner('work/20260101_abc123')).toEqual({
+      connectionId: 'source-a',
+      profile: 'work'
+    })
   })
 
   it('matches the lineage root so a compressed chat still resolves', () => {
@@ -56,6 +58,16 @@ describe('lookupLocalSessionTitle', () => {
     expect(lookupLocalSessionTitle('personal/20260101_abc123')).toBe('')
   })
 
+  it('fails closed when A and B share the profile and raw session id', () => {
+    $sessions.set([
+      makeSession({ connection_id: 'source-a', profile: 'mbc', title: 'A title' }),
+      makeSession({ connection_id: 'source-b', profile: 'mbc', title: 'B title' })
+    ])
+
+    expect(lookupLocalSessionTitle('mbc/20260101_abc123')).toBe('')
+    expect(lookupLocalSessionOwner('mbc/20260101_abc123')).toBeUndefined()
+  })
+
   it('returns empty for an untitled row so the caller can fall back to the id', () => {
     $sessions.set([makeSession({ preview: null, title: null })])
 
@@ -64,52 +76,28 @@ describe('lookupLocalSessionTitle', () => {
 })
 
 describe('fetchSessionLinkTitle', () => {
-  it('dedupes concurrent lookups', async () => {
-    vi.mocked(getSession).mockResolvedValue(makeSession({ title: 'From API' }))
-
-    const value = 'default/20260101_abc123'
-    const [first, second] = await Promise.all([fetchSessionLinkTitle(value), fetchSessionLinkTitle(value)])
-
-    expect(first).toBe('From API')
-    expect(second).toBe('From API')
-    expect(getSession).toHaveBeenCalledTimes(1)
-    expect(getSession).toHaveBeenCalledWith('20260101_abc123', 'default')
-  })
-
-  it('uses the local sidebar row before calling the API', async () => {
+  it('uses a uniquely owned local row', async () => {
     $sessions.set([makeSession({ title: 'Cached title' })])
 
     await expect(fetchSessionLinkTitle('default/20260101_abc123')).resolves.toBe('Cached title')
-    expect(getSession).not.toHaveBeenCalled()
   })
 
-  it('keeps separate cache entries per profile', async () => {
-    vi.mocked(getSession).mockImplementation(async (id, profile) =>
-      makeSession({ id, profile: profile ?? 'default', title: profile === 'work' ? 'Work chat' : 'Home chat' })
-    )
-
-    await expect(fetchSessionLinkTitle('default/20260101_abc123')).resolves.toBe('Home chat')
-    await expect(fetchSessionLinkTitle('work/20260101_abc123')).resolves.toBe('Work chat')
-    expect(sessionRefCacheKey('default/20260101_abc123')).not.toBe(sessionRefCacheKey('work/20260101_abc123'))
-  })
-
-  it('falls back to the preview when the session has no title', async () => {
-    vi.mocked(getSession).mockResolvedValue(makeSession({ preview: 'Summarize this repo', title: null }))
-
-    await expect(fetchSessionLinkTitle('20260101_abc123')).resolves.toBe('Summarize this repo')
-  })
-
-  it('resolves empty when the id is not on this backend', async () => {
-    vi.mocked(getSession).mockRejectedValue(new Error('Session not found'))
-
+  it('returns empty for an uncached raw reference without attempting owner discovery', async () => {
     await expect(fetchSessionLinkTitle('default/missing')).resolves.toBe('')
   })
 
-  it('resolves empty when the desktop bridge is unavailable', async () => {
-    vi.mocked(getSession).mockImplementation(() => {
-      throw new TypeError("Cannot read properties of undefined (reading 'api')")
-    })
+  it('returns empty for an ambiguous A/B reference', async () => {
+    $sessions.set([
+      makeSession({ connection_id: 'source-a', profile: 'mbc', title: 'A title' }),
+      makeSession({ connection_id: 'source-b', profile: 'mbc', title: 'B title' })
+    ])
 
-    await expect(fetchSessionLinkTitle('default/20260101_abc123')).resolves.toBe('')
+    await expect(fetchSessionLinkTitle('mbc/20260101_abc123')).resolves.toBe('')
+  })
+
+  it('falls back to the preview when the unique row has no title', async () => {
+    $sessions.set([makeSession({ preview: 'Summarize this repo', title: null })])
+
+    await expect(fetchSessionLinkTitle('20260101_abc123')).resolves.toBe('Summarize this repo')
   })
 })

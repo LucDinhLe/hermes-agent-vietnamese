@@ -1,4 +1,7 @@
+import { JsonRpcGatewayError } from '@hermes/shared'
 import { beforeEach, expect, test } from 'vitest'
+
+import { SESSION_RUNTIME_RECOVERY_MESSAGE } from '@/app/session/session-binding-registry'
 
 import { $notifications, clearNotifications, isDiskFullErrorMessage, notifyError } from './notifications'
 
@@ -55,3 +58,31 @@ test('session storage write failure is treated as disk-full class', () => {
 
   expect(lastMessage()).toMatch(/Disk full/i)
 })
+
+test('structural runtime-not-found notifications never expose raw backend text or code', () => {
+  notifyError(
+    new JsonRpcGatewayError('SECRET raw backend diagnostic must stay hidden', { code: 4007 }),
+    'Prompt failed'
+  )
+
+  const notification = $notifications.get()[0]
+
+  expect(notification?.message).toBe(SESSION_RUNTIME_RECOVERY_MESSAGE)
+  expect(notification?.detail).toBeUndefined()
+  expect(notification?.message).not.toMatch(/SECRET|4007/)
+})
+
+test.each(['GatewaySocketEpochMismatchError', 'RendererRuntimeEpochMismatchError'])(
+  'structural %s notifications use the same sanitized recovery message',
+  name => {
+    const error = new Error('SECRET stale epoch diagnostic')
+    error.name = name
+
+    notifyError(error, 'Prompt failed')
+
+    expect($notifications.get()[0]).toMatchObject({
+      detail: undefined,
+      message: SESSION_RUNTIME_RECOVERY_MESSAGE
+    })
+  }
+)

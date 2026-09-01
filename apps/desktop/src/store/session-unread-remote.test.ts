@@ -2,17 +2,26 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { SessionInfo } from '@/types/hermes'
 
-const patch = vi.fn<(id: string, unread: boolean, profile?: null | string) => Promise<{ ok: boolean }>>(() =>
-  Promise.resolve({ ok: true })
-)
+const patch = vi.fn<
+  (id: string, unread: boolean, owner: { connectionId: null | string; profile: string }) => Promise<{ ok: boolean }>
+>(() => Promise.resolve({ ok: true }))
 
 vi.mock('@/hermes', () => ({
   // The store only needs the REST mutation; keep the mock minimal.
+  sessionApiOwner: (row: SessionInfo) => ({
+    connectionId: row.connection_id?.trim() || null,
+    profile: row.profile?.trim() || 'default'
+  }),
   setApiRequestProfile: () => {},
-  setSessionUnreadRemote: (id: string, unread: boolean, profile?: null | string) => patch(id, unread, profile)
+  setSessionUnreadRemoteForOwner: (
+    id: string,
+    unread: boolean,
+    owner: { connectionId: null | string; profile: string }
+  ) => patch(id, unread, owner)
 }))
 
 import { $sessions } from '@/store/session'
+import { clearSessionRouteOwners, recordSessionRouteOwner } from '@/store/session-route-owner'
 
 import { $unreadWriteGuard, clearUnreadOnOpen, markSessionUnread, watchUnreadWriteGuard } from './session-unread-remote'
 
@@ -22,21 +31,23 @@ const row = (id: string, extra: Partial<SessionInfo> = {}): SessionInfo =>
 beforeEach(() => {
   $sessions.set([])
   $unreadWriteGuard.set(new Map())
+  clearSessionRouteOwners()
   patch.mockClear()
 })
 
 afterEach(() => {
   $sessions.set([])
   $unreadWriteGuard.set(new Map())
+  clearSessionRouteOwners()
 })
 
 describe('markSessionUnread', () => {
-  it('optimistically paints the row, then PATCHes with the owning profile', async () => {
-    $sessions.set([row('a', { profile: 'work', unread: false })])
+  it('optimistically paints the row, then PATCHes with the exact backend owner', async () => {
+    $sessions.set([row('a', { connection_id: 'source-a', profile: 'work', unread: false })])
 
     await markSessionUnread('a', true)
 
-    expect(patch).toHaveBeenCalledWith('a', true, 'work')
+    expect(patch).toHaveBeenCalledWith('a', true, { connectionId: 'source-a', profile: 'work' })
     expect($sessions.get().find(s => s.id === 'a')?.unread).toBe(true)
   })
 
@@ -44,6 +55,37 @@ describe('markSessionUnread', () => {
     await markSessionUnread('ghost', true)
 
     expect(patch).not.toHaveBeenCalled()
+  })
+
+  it('uses only staged owner A when A and B share the same profile and id', async () => {
+    $sessions.set([
+      row('shared', { connection_id: 'source-b', profile: 'work', unread: false }),
+      row('shared', { connection_id: 'source-a', profile: 'work', unread: false })
+    ])
+    recordSessionRouteOwner('shared', { connectionId: 'source-a', profile: 'work' })
+
+    await markSessionUnread('shared', true)
+
+    expect(patch).toHaveBeenCalledWith('shared', true, { connectionId: 'source-a', profile: 'work' })
+    expect(patch).not.toHaveBeenCalledWith(
+      'shared',
+      expect.anything(),
+      expect.objectContaining({ connectionId: 'source-b' })
+    )
+    expect($sessions.get().find(s => s.connection_id === 'source-a')?.unread).toBe(true)
+    expect($sessions.get().find(s => s.connection_id === 'source-b')?.unread).toBe(false)
+  })
+
+  it('does no network work for an ownerless A/B collision', async () => {
+    $sessions.set([
+      row('shared', { connection_id: 'source-a', profile: 'work', unread: false }),
+      row('shared', { connection_id: 'source-b', profile: 'work', unread: false })
+    ])
+
+    await markSessionUnread('shared', true)
+
+    expect(patch).not.toHaveBeenCalled()
+    expect($sessions.get().every(session => session.unread === false)).toBe(true)
   })
 
   it('rolls back the row and rethrows when the PATCH fails', async () => {
@@ -68,12 +110,12 @@ describe('clearUnreadOnOpen', () => {
     expect(patch).not.toHaveBeenCalled()
   })
 
-  it('PATCHes read for an unread session, using its owning profile', async () => {
-    $sessions.set([row('a', { profile: 'p2', unread: true })])
+  it('PATCHes read for an unread session, using its exact backend owner', async () => {
+    $sessions.set([row('a', { connection_id: 'source-a', profile: 'p2', unread: true })])
 
     await clearUnreadOnOpen('a')
 
-    expect(patch).toHaveBeenCalledWith('a', false, 'p2')
+    expect(patch).toHaveBeenCalledWith('a', false, { connectionId: 'source-a', profile: 'p2' })
     expect($sessions.get().find(s => s.id === 'a')?.unread).toBe(false)
   })
 

@@ -1,11 +1,13 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 
+import { I18nProvider } from '@/i18n'
+import type { DesktopBootState } from '@/store/boot'
 import { $desktopOnboarding, type DesktopOnboardingState, type OnboardingContext } from '@/store/onboarding'
 import { makeOAuthProvider } from '@/test/oauth-provider'
 import type { OAuthProvider } from '@/types/hermes'
 
-import { Picker } from '.'
+import { DesktopOnboardingOverlay, Picker, Preparing } from '.'
 
 function setProviders(providers: OAuthProvider[]) {
   $desktopOnboarding.set({
@@ -117,5 +119,43 @@ describe('onboarding Picker', () => {
     render(<Picker ctx={ctx} />)
 
     expect(screen.queryByRole('button', { name: "I'll choose a provider later" })).toBeNull()
+  })
+})
+
+describe('onboarding boot progress', () => {
+  it('keeps raw backend progress out of the visible Vietnamese cold-start UI', () => {
+    const boot: DesktopBootState = {
+      error: null,
+      fakeMode: false,
+      message: 'Waiting for Hermes backend to launch',
+      phase: 'backend.port',
+      progress: 42,
+      running: true,
+      timestamp: 1,
+      visible: true
+    }
+
+    render(
+      <I18nProvider configClient={null} initialLocale="vi">
+        <Preparing boot={boot} />
+      </I18nProvider>
+    )
+
+    expect(screen.queryByText('Waiting for Hermes backend to launch')).toBeNull()
+    expect(screen.getAllByText('Đang khởi động Hermes…').length).toBeGreaterThan(0)
+  })
+})
+
+describe('onboarding glass safety', () => {
+  it('keeps the blocking overlay opaque when glass mode makes chat surfaces transparent', () => {
+    setProviders([])
+
+    const { container } = render(
+      <I18nProvider configClient={null} initialLocale="vi">
+        <DesktopOnboardingOverlay enabled profile="default" requestGateway={ctx.requestGateway} />
+      </I18nProvider>
+    )
+
+    expect(container.querySelector('[data-glass-opaque]')).toBeTruthy()
   })
 })

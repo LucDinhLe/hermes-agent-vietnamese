@@ -20,6 +20,7 @@ import { sessionBucketLabel } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { sessionPinId } from '@/store/session'
 import { $sessionDotStateById, hasLiveTurn } from '@/store/session-dot-state'
+import { sessionRouteKey } from '@/store/session-route-owner'
 
 import { SidebarDateDivider, SidebarSectionMeta } from './chrome'
 import { orderRowsWithinGroups, reorderableRowIds } from './order'
@@ -120,6 +121,8 @@ interface SidebarSessionsSectionProps {
   // which then passes `projectContent` on the next render. Takes precedence
   // over `tree` / `groups`.
   projectOverview?: SidebarProjectTree[]
+  // Shortcut sections render only the project row, never its session previews.
+  projectOverviewCompact?: boolean
   // Per-project preview rows (from the backend tree), keyed by project id.
   projectOverviewPreviews?: Record<string, SessionInfo[]>
   // True while the backend project tree is loading (overview skeleton).
@@ -193,6 +196,7 @@ export function SidebarSessionsSection({
   footer,
   groups,
   projectOverview,
+  projectOverviewCompact = false,
   projectOverviewPreviews,
   projectsLoading = false,
   onEnterProject,
@@ -267,9 +271,9 @@ export function SidebarSessionsSection({
       }
 
       return draggable && !branchStem ? (
-        <SortableSidebarSessionRow key={session.id} {...rowProps} />
+        <SortableSidebarSessionRow key={sessionRouteKey(session)} {...rowProps} />
       ) : (
-        <SidebarSessionRow key={session.id} {...rowProps} />
+        <SidebarSessionRow key={sessionRouteKey(session)} {...rowProps} />
       )
     },
     [
@@ -421,7 +425,7 @@ export function SidebarSessionsSection({
         onNewSession={onNewSessionInWorkspace}
         previewSessions={projectOverviewPreviews?.[project.id]}
         project={project}
-        renderRows={renderRows}
+        renderRows={projectOverviewCompact ? undefined : renderRows}
       />
     )
 

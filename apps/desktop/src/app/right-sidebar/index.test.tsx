@@ -2,6 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { HermesReadDirResult } from '@/global'
+import { setRightSidebarView } from '@/store/layout'
+import { $previewTabs, closeRightRail } from '@/store/preview'
 import { $connection, setCurrentCwd } from '@/store/session'
 
 import { resetProjectTreeState } from './files/use-project-tree'
@@ -17,6 +19,8 @@ function installBridge() {
 describe('RightSidebarPane', () => {
   beforeEach(() => {
     $connection.set(null)
+    closeRightRail()
+    setRightSidebarView('files')
     resetProjectTreeState()
     readDir.mockReset()
     readDir.mockResolvedValue({ entries: [{ isDirectory: false, name: 'README.md', path: '/repo/README.md' }] })
@@ -26,6 +30,8 @@ describe('RightSidebarPane', () => {
   afterEach(() => {
     cleanup()
     $connection.set(null)
+    closeRightRail()
+    setRightSidebarView('files')
     setCurrentCwd('')
     resetProjectTreeState()
     delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
@@ -53,5 +59,58 @@ describe('RightSidebarPane', () => {
 
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Refresh tree' })).toBeNull())
     expect(readDir).not.toHaveBeenCalled()
+  })
+
+  it('keeps the Files action accessible without repeating a visible heading', async () => {
+    setCurrentCwd('')
+
+    render(<RightSidebarPane onActivateFile={vi.fn()} onActivateFolder={vi.fn()} />)
+
+    expect(await screen.findByRole('button', { name: 'File system' })).not.toBeNull()
+    expect(screen.queryByText('File system')).toBeNull()
+  })
+
+  it('switches one durable rail between Files and multi-tab Browser bodies', async () => {
+    setCurrentCwd('/repo')
+
+    render(
+      <RightSidebarPane
+        browserContent={<div>Shared browser surface</div>}
+        onActivateFile={vi.fn()}
+        onActivateFolder={vi.fn()}
+      />
+    )
+
+    const filesButton = await screen.findByRole('button', { name: 'File system' })
+    const browserButton = screen.getByRole('button', { name: 'Browser' })
+    const filesSurface = screen.getByTestId('right-sidebar-files')
+    const browserSurface = screen.getByTestId('right-sidebar-browser')
+
+    expect(filesButton.getAttribute('aria-pressed')).toBe('true')
+    expect(filesSurface.getAttribute('aria-hidden')).toBe('false')
+    expect(browserSurface.getAttribute('aria-hidden')).toBe('true')
+
+    fireEvent.click(browserButton)
+
+    expect(browserButton.getAttribute('aria-pressed')).toBe('true')
+    expect(filesSurface.getAttribute('aria-hidden')).toBe('true')
+    expect(browserSurface.getAttribute('aria-hidden')).toBe('false')
+    expect(screen.getByText('Shared browser surface')).not.toBeNull()
+    expect(screen.getByRole('tab', { name: 'Browser' })).not.toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'New browser tab' }))
+
+    expect(screen.getByRole('tab', { name: 'Browser 2' })).not.toBeNull()
+    expect($previewTabs.get().filter(tab => tab.target.kind === 'url')).toHaveLength(2)
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Close' })[1])
+
+    expect(screen.queryByRole('tab', { name: 'Browser 2' })).toBeNull()
+    expect($previewTabs.get().filter(tab => tab.target.kind === 'url')).toHaveLength(1)
+
+    fireEvent.click(filesButton)
+
+    expect(filesSurface.getAttribute('aria-hidden')).toBe('false')
+    expect(browserSurface.getAttribute('aria-hidden')).toBe('true')
   })
 })

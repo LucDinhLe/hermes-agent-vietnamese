@@ -1628,6 +1628,8 @@ export const ar = defineLocale({
     noFilterMatches: 'لا توجد جلسات تطابق عوامل التصفية هذه',
     projects: {
       sectionLabel: 'المشاريع',
+      pinnedSectionLabel: 'المشاريع المثبتة',
+      pinnedEmpty: 'ثبّت مشروعًا للوصول السريع إليه من هنا.',
       home: 'الرئيسية',
       newButton: 'مشروع جديد',
       createTitle: 'مشروع جديد',
@@ -2220,6 +2222,8 @@ export const ar = defineLocale({
     aria: 'الشريط الجانبي الأيمن',
     panelsAria: 'لوحات الشريط الأيمن',
     files: 'الملفات',
+    browser: 'المتصفح',
+    browserNewTab: 'علامة تبويب متصفح جديدة',
     terminal: 'الطرفية',
     noFolderSelected: 'لم يتم اختيار مجلد',
     changeCwdTitle: 'تغيير مجلد العمل',

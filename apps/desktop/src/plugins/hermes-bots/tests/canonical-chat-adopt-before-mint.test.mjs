@@ -15,7 +15,7 @@ import vm from 'node:vm'
 
 const source = readFileSync(new URL('../plugin.js', import.meta.url), 'utf8')
 
-function loadOpenPath({ openSession, request }) {
+function loadOpenPath({ openSession, request, requestProfile }) {
   const start = source.indexOf('const canonicalCreations = new Map()')
   const end = source.indexOf('function displayName(', start)
   const saved = []
@@ -26,6 +26,10 @@ function loadOpenPath({ openSession, request }) {
       request: async (method, params) => {
         requests.push({ method, params: JSON.parse(JSON.stringify(params ?? null)) })
         return request(method, params)
+      },
+      requestProfile: async (route, method, params) => {
+        requests.push({ route: JSON.parse(JSON.stringify(route)), method, params: JSON.parse(JSON.stringify(params ?? null)) })
+        return requestProfile(route, method, params)
       }
     },
     saveBotMeta: (name, patch) => saved.push({ name, patch: JSON.parse(JSON.stringify(patch)) }),
@@ -96,6 +100,83 @@ test('createCanonicalChat mints when the adoption scan fails (older gateway)', a
   })
 
   assert.equal(await runtime.createCanonicalChat('legacy'), 'fresh-2')
+})
+
+test('same-profile A/B canonical creates stay independent across a mid-await ambient switch', async () => {
+  const started = []
+  const releases = new Map()
+  const opened = []
+  const runtime = loadOpenPath({
+    openSession: async (id, options) => opened.push({ id, options }),
+    request: async () => {
+      throw new Error('ambient gateway must not be used for a source-scoped Bot Chat')
+    },
+    requestProfile: async (route, method) => {
+      if (method === 'session.list') {
+        started.push(route.connectionId)
+        await new Promise(resolve => releases.set(route.connectionId, resolve))
+        return { sessions: [] }
+      }
+      if (method === 'session.create') {
+        return { stored_session_id: `stored-${route.connectionId}`, session_id: `runtime-${route.connectionId}` }
+      }
+      return {}
+    }
+  })
+  const botA = { name: 'mbc', connectionId: 'source-a', connectionKind: 'remote', sourceScoped: true }
+  const botB = { name: 'mbc', connectionId: 'source-b', connectionKind: 'remote', sourceScoped: true }
+
+  const openingA = runtime.createCanonicalChat(botA)
+  await Promise.resolve()
+  // A foreground/ambient switch starts the same-name Bot Chat on B while A's
+  // adoption lookup is still pending. The two sources must not share a flight.
+  const openingB = runtime.createCanonicalChat(botB)
+  await Promise.resolve()
+
+  assert.deepEqual(started.sort(), ['source-a', 'source-b'])
+  releases.get('source-a')?.()
+  releases.get('source-b')?.()
+  assert.deepEqual(await Promise.all([openingA, openingB]), ['stored-source-a', 'stored-source-b'])
+  assert.deepEqual(
+    runtime.requests.filter(call => call.route).map(call => call.route.connectionId).sort(),
+    ['source-a', 'source-a', 'source-a', 'source-b', 'source-b', 'source-b']
+  )
+  assert.deepEqual(
+    opened.map(entry => [entry.id, entry.options.route.connectionId]).sort(),
+    [
+      ['stored-source-a', 'source-a'],
+      ['stored-source-b', 'source-b']
+    ]
+  )
+})
+
+test('pinned canonical lookup and hidden open retain the bot route', async () => {
+  const opened = []
+  const runtime = loadOpenPath({
+    openSession: async (id, options) => opened.push({ id, options }),
+    request: async () => {
+      throw new Error('ambient gateway must not be used')
+    },
+    requestProfile: async (route, method) => {
+      assert.equal(route.connectionId, 'source-a')
+      assert.equal(method, 'profiles.list')
+      return {
+        profiles: [
+          {
+            name: 'mbc',
+            preferred_session: { id: 'pin-a', resolved_id: 'tip-a', title: 'Bot Chat', message_count: 4 }
+          }
+        ]
+      }
+    }
+  })
+  const botA = { name: 'mbc', connectionId: 'source-a', connectionKind: 'remote', sourceScoped: true }
+
+  assert.equal(await runtime.openBotCanonicalChat(botA, 'pin-a', null), 'pin-a')
+  assert.equal(runtime.requests.length, 1)
+  assert.equal(runtime.requests[0].route.connectionId, 'source-a')
+  assert.equal(opened[0].id, 'tip-a')
+  assert.equal(opened[0].options.route.connectionId, 'source-a')
 })
 
 // ── invariant 2: a resolving pin with history is never abandoned ────────────

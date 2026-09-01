@@ -52,5 +52,6 @@ test('hint: explains hidden jobs when store has jobs but none match the bot', ()
   ]
   const hint = load().__api.routineFilterHint(all, [])
   assert.ok(hint)
-  assert.match(hint, /tagged for this bot/)
+  assert.match(hint, /được gắn cho tác nhân đang chọn/u)
+  assert.match(hint, /Tác vụ định kỳ/u)
 })

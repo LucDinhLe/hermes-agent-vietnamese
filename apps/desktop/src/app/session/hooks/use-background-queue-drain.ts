@@ -22,7 +22,9 @@ type SubmitQueuedPrompt = (text: string, options?: SubmitTextOptions) => Promise
 
 interface BackgroundQueueDrainOptions {
   enabled: boolean
-  runtimeIdByStoredSessionIdRef: MutableRefObject<Map<string, string>>
+  getRuntimeIdForStoredSession?: (storedSessionId: string) => null | string
+  /** @deprecated Test/legacy seam; production supplies the exact resolver. */
+  runtimeIdByStoredSessionIdRef?: MutableRefObject<Map<string, string>>
   selectedStoredSessionId: string | null
   submitText: SubmitQueuedPrompt
 }
@@ -39,6 +41,7 @@ const BACKGROUND_DRAIN_RETRY_MS = 750
  */
 export function useBackgroundQueueDrain({
   enabled,
+  getRuntimeIdForStoredSession,
   runtimeIdByStoredSessionIdRef,
   selectedStoredSessionId,
   submitText
@@ -116,7 +119,10 @@ export function useBackgroundQueueDrain({
             return true
           }
 
-          const runtimeSessionId = runtimeIdByStoredSessionIdRef.current.get(sessionKey) ?? null
+          const runtimeSessionId =
+            getRuntimeIdForStoredSession?.(sessionKey) ??
+            runtimeIdByStoredSessionIdRef?.current.get(sessionKey) ??
+            null
 
           const accepted = await Promise.resolve(
             submitTextRef.current(liveEntry.text, {
@@ -147,7 +153,7 @@ export function useBackgroundQueueDrain({
           drainingSessionIdsRef.current.delete(sessionKey)
         })
     },
-    [runtimeIdByStoredSessionIdRef, scheduleRetry, t]
+    [getRuntimeIdForStoredSession, runtimeIdByStoredSessionIdRef, scheduleRetry, t]
   )
 
   useEffect(() => {

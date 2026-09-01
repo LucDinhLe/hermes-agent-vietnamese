@@ -500,11 +500,18 @@ export interface HermesTerminalExit {
 }
 
 export interface DesktopVersionInfo {
+  /** Engine version reported by the raw Hermes bridge. Community editions
+   *  keep it separate while appVersion names the installed desktop product. */
+    engineVersion?: string
   appVersion: string
   electronVersion: string
   nodeVersion: string
   platform: string
-  hermesRoot: string
+    hermesRoot: string
+    runtimeCandidateId?: null | string
+    runtimeProductVersion?: null | string
+    runtimeSourceCommit?: null | string
+    runtimeManifestSha256?: null | string
   /** True when the running renderer bundle predates desktop changes in the
    *  installed source tree (runtime updated, app binary not rebuilt/swapped). */
   bundleOutOfSync?: boolean

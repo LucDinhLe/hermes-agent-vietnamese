@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { createBackendKey } from '@/app/session/session-binding-registry'
+import { parseRendererRuntimeKey, rendererRuntimeKey } from '@/lib/session-runtime-key'
 import type { ProfileInfo } from '@/types/hermes'
 
 vi.mock('@/app/chat/session-view', async () => {
@@ -79,7 +81,9 @@ vi.mock('@/store/gateway', async () => {
 
   return {
     $gateway: atom(null),
+    activeGatewayConnectionId: vi.fn(() => null),
     ensureGatewayForAgent: vi.fn(),
+    gatewayEpochForAgent: vi.fn(() => 7),
     openGatewayForAgent: vi.fn(),
     openGatewayForProfile: vi.fn(),
     requestGatewayForAgent: vi.fn(
@@ -90,11 +94,23 @@ vi.mock('@/store/gateway', async () => {
         profile
       })
     ),
+    requestGatewayForAgentWithBackend: vi.fn(
+      async (connectionId: string, profile: string, method: string, params: Record<string, unknown>) => ({
+        backend: { connectionId, gatewayEpoch: 7, profile },
+        result: { connectionId, method, params, profile }
+      })
+    ),
     requestGatewayForProfile: vi.fn(async (profile: string, method: string, params: Record<string, unknown>) => ({
       method,
       params,
       profile
     })),
+    requestGatewayForProfileWithBackend: vi.fn(
+      async (profile: string, method: string, params: Record<string, unknown>) => ({
+        backend: { connectionId: null, gatewayEpoch: 7, profile },
+        result: { method, params, profile }
+      })
+    ),
     retireLocalProfileGateways: vi.fn()
   }
 })
@@ -103,13 +119,23 @@ const { host } = await import('./index')
 const { openSession: openSessionCore } = await import('@/app/open-session')
 const { deleteProfile } = await import('@/hermes')
 
-const { openGatewayForProfile, requestGatewayForAgent, requestGatewayForProfile, retireLocalProfileGateways } =
-  await import('@/store/gateway')
+const {
+  activeGatewayConnectionId,
+  gatewayEpochForAgent,
+  openGatewayForAgent,
+  openGatewayForProfile,
+  requestGatewayForAgent,
+  requestGatewayForAgentWithBackend,
+  requestGatewayForProfile,
+  requestGatewayForProfileWithBackend,
+  retireLocalProfileGateways
+} = await import('@/store/gateway')
 
 const {
   $activeGatewayProfile,
   $gatewaySwapTarget,
   $profiles,
+  ensureGatewayAgent,
   ensureGatewayProfile,
   refreshProfiles,
   setShowAllProfiles
@@ -117,8 +143,14 @@ const {
 
 const { $focusedRuntimeId, $focusedSessionState, $focusedStoredSessionId } = await import('@/store/session-states')
 
-const { $activeSessionId, $messages, $selectedStoredSessionId, requestSessionResume, setResumeExhaustedSessionId } =
-  await import('@/store/session')
+const {
+  $activeSessionId,
+  $messages,
+  $selectedStoredSessionId,
+  $sessions,
+  requestSessionResume,
+  setResumeExhaustedSessionId
+} = await import('@/store/session')
 
 const setMockAtom = <T>(store: unknown, value: T) => (store as { set(next: T): void }).set(value)
 
@@ -134,6 +166,8 @@ const profile = (name: string): ProfileInfo => ({
 
 afterEach(() => {
   vi.clearAllMocks()
+  vi.mocked(activeGatewayConnectionId).mockReturnValue(null)
+  vi.mocked(gatewayEpochForAgent).mockReturnValue(7)
   $activeGatewayProfile.set('remote-worker')
   $gatewaySwapTarget.set(null)
   setMockAtom($focusedRuntimeId, null)
@@ -142,11 +176,114 @@ afterEach(() => {
   setMockAtom($activeSessionId, null)
   setMockAtom($selectedStoredSessionId, null)
   setMockAtom($messages, [])
+  setMockAtom($sessions, [])
   $profiles.set([profile('cached-only')])
   delete (window as unknown as { hermesDesktop?: unknown }).hermesDesktop
 })
 
 describe('connection-aware plugin host APIs', () => {
+  it('routes a raw durable id by its own A/B owner instead of the focused session or ambient backend', async () => {
+    setMockAtom($focusedStoredSessionId, 'stored-a')
+    setMockAtom($sessions, [
+      { connection_id: 'source-a', id: 'stored-a', profile: 'mbc' },
+      { connection_id: 'source-b', id: 'stored-b', profile: 'mbc' }
+    ])
+
+    vi.mocked(requestGatewayForAgentWithBackend).mockResolvedValueOnce({
+      backend: { connectionId: 'source-b', gatewayEpoch: 9, profile: 'mbc' },
+      result: { session_id: 'runtime-b', session_key: 'stored-b' }
+    })
+
+    const resumed = await host.request<{ session_id: string }>('session.resume', { session_id: 'stored-b' })
+
+    expect(requestGatewayForAgentWithBackend).toHaveBeenCalledWith('source-b', 'mbc', 'session.resume', {
+      session_id: 'stored-b'
+    })
+    expect(requestGatewayForAgentWithBackend).not.toHaveBeenCalledWith(
+      'source-a',
+      'mbc',
+      'session.resume',
+      expect.anything()
+    )
+    expect(parseRendererRuntimeKey(resumed.session_id)).toEqual({
+      backend: { connectionId: 'source-b', gatewayEpoch: 9, profile: 'mbc' },
+      runtimeSessionId: 'runtime-b'
+    })
+  })
+
+  it('fails closed for an unqualified runtime id instead of guessing the focused owner', async () => {
+    setMockAtom($focusedStoredSessionId, 'runtime-shared')
+    // A coincident durable row must not turn a raw live capability into an
+    // unfenced request. Method policy is checked before durable lookup.
+    setMockAtom($sessions, [{ connection_id: 'source-a', id: 'runtime-shared', profile: 'mbc' }])
+
+    await expect(host.request('session.interrupt', { session_id: 'runtime-shared' })).rejects.toThrow(
+      /renderer runtime key is required/i
+    )
+    expect(requestGatewayForAgent).not.toHaveBeenCalled()
+    expect(requestGatewayForAgentWithBackend).not.toHaveBeenCalled()
+  })
+
+  it('rejects an A/B durable-id collision instead of selecting the first matching owner', async () => {
+    setMockAtom($sessions, [
+      { connection_id: 'source-a', id: 'stored-shared', profile: 'mbc' },
+      { connection_id: 'source-b', id: 'stored-shared', profile: 'mbc' }
+    ])
+
+    await expect(host.request('session.resume', { session_id: 'stored-shared' })).rejects.toThrow(
+      /one exact durable session owner/i
+    )
+    expect(requestGatewayForAgent).not.toHaveBeenCalled()
+    expect(requestGatewayForAgentWithBackend).not.toHaveBeenCalled()
+  })
+
+  it('keeps raw session.set_hidden on the explicit durable-owner path', async () => {
+    setMockAtom($sessions, [{ connection_id: 'source-a', id: 'stored-a', profile: 'mbc' }])
+
+    await host.request('session.set_hidden', { hidden: true, session_id: 'stored-a' })
+
+    expect(requestGatewayForAgent).toHaveBeenCalledWith('source-a', 'mbc', 'session.set_hidden', {
+      hidden: true,
+      session_id: 'stored-a'
+    })
+    expect(requestGatewayForAgentWithBackend).not.toHaveBeenCalled()
+  })
+
+  it('qualifies a hidden offscreen create before its first live submit without a session row', async () => {
+    $activeGatewayProfile.set('mbc')
+    vi.mocked(activeGatewayConnectionId).mockReturnValue('source-a')
+    vi.mocked(gatewayEpochForAgent).mockImplementation((connectionId, profileName) =>
+      connectionId === 'source-a' && profileName === 'mbc' ? 11 : 0
+    )
+    vi.mocked(requestGatewayForAgentWithBackend).mockResolvedValueOnce({
+      backend: { connectionId: 'source-a', gatewayEpoch: 11, profile: 'mbc' },
+      result: { session_id: 'runtime-hidden', stored_session_id: 'stored-hidden' }
+    })
+
+    const created = await host.request<{ session_id: string; stored_session_id: string }>('session.create', {
+      hidden: true,
+      profile: 'mbc'
+    })
+
+    expect($sessions.get()).toEqual([])
+    expect(parseRendererRuntimeKey(created.session_id)).toEqual({
+      backend: { connectionId: 'source-a', gatewayEpoch: 11, profile: 'mbc' },
+      runtimeSessionId: 'runtime-hidden'
+    })
+
+    await host.request('prompt.submit', { session_id: created.session_id, text: 'hello' })
+
+    expect(requestGatewayForAgent).toHaveBeenCalledWith(
+      'source-a',
+      'mbc',
+      'prompt.submit',
+      { session_id: 'runtime-hidden', text: 'hello' },
+      undefined,
+      undefined,
+      11
+    )
+  })
+
   it('retires a profile gateway before deleting it', async () => {
     const order: string[] = []
 
@@ -232,6 +369,193 @@ describe('connection-aware plugin host APIs', () => {
       include_sessions: true
     })
     expect(requestGatewayForProfile).not.toHaveBeenCalled()
+  })
+
+  it('strips a renderer key only when its encoded owner matches the explicit route', async () => {
+    const route = {
+      connectionId: 'source-a',
+      mode: 'remote' as const,
+      profile: 'mbc',
+      targetProfile: 'mbc'
+    }
+
+    const runtimeId = rendererRuntimeKey(
+      createBackendKey({ connectionId: 'source-a', gatewayEpoch: 7, profile: 'mbc' }),
+      'runtime-shared'
+    )
+
+    await host.requestProfile(route, 'session.interrupt', { session_id: runtimeId })
+
+    expect(requestGatewayForAgent).toHaveBeenCalledWith(
+      'source-a',
+      'mbc',
+      'session.interrupt',
+      { session_id: 'runtime-shared' },
+      undefined,
+      undefined,
+      7
+    )
+  })
+
+  it('rejects an encoded renderer key owned by another source before sending raw id', async () => {
+    const runtimeId = rendererRuntimeKey(
+      createBackendKey({ connectionId: 'source-a', gatewayEpoch: 7, profile: 'mbc' }),
+      'runtime-shared'
+    )
+
+    await expect(
+      host.requestProfile(
+        { connectionId: 'source-b', mode: 'remote', profile: 'mbc', targetProfile: 'mbc' },
+        'session.interrupt',
+        { session_id: runtimeId }
+      )
+    ).rejects.toThrow(/different backend owner/i)
+    expect(requestGatewayForAgent).not.toHaveBeenCalled()
+    expect(requestGatewayForAgentWithBackend).not.toHaveBeenCalled()
+  })
+
+  it('rejects a raw live requestProfile id before route lookup or gateway dispatch', async () => {
+    const getAgentRoster = vi.fn()
+
+    ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = { getAgentRoster }
+
+    await expect(
+      host.requestProfile(
+        { connectionId: 'source-a', mode: 'remote', profile: 'mbc', targetProfile: 'mbc' },
+        'prompt.submit',
+        { session_id: 'runtime-shared', text: 'hello' }
+      )
+    ).rejects.toThrow(/renderer runtime key is required/i)
+    expect(getAgentRoster).not.toHaveBeenCalled()
+    expect(requestGatewayForAgent).not.toHaveBeenCalled()
+    expect(requestGatewayForAgentWithBackend).not.toHaveBeenCalled()
+  })
+
+  it('keeps raw resume and set_hidden available through an explicit profile route without a sidebar row', async () => {
+    const route = { connectionId: 'local', mode: 'local' as const, profile: 'mbc', targetProfile: 'mbc' }
+    vi.mocked(requestGatewayForAgentWithBackend).mockResolvedValueOnce({
+      backend: { connectionId: 'local', gatewayEpoch: 13, profile: 'mbc' },
+      result: { session_id: 'runtime-hidden', session_key: 'stored-hidden' }
+    })
+
+    const resumed = await host.requestProfile<{ session_id: string }>(route, 'session.resume', {
+      profile: 'mbc',
+      session_id: 'stored-hidden'
+    })
+
+    await host.requestProfile(route, 'session.set_hidden', {
+      hidden: true,
+      profile: 'mbc',
+      session_id: 'stored-hidden'
+    })
+
+    expect($sessions.get()).toEqual([])
+    expect(parseRendererRuntimeKey(resumed.session_id)?.backend).toEqual({
+      connectionId: 'local',
+      gatewayEpoch: 13,
+      profile: 'mbc'
+    })
+    expect(requestGatewayForAgent).toHaveBeenCalledWith('local', 'mbc', 'session.set_hidden', {
+      hidden: true,
+      profile: 'mbc',
+      session_id: 'stored-hidden'
+    })
+  })
+
+  it('rejects a stale renderer key before any gateway dispatch', async () => {
+    vi.mocked(gatewayEpochForAgent).mockReturnValue(8)
+
+    const runtimeId = rendererRuntimeKey(
+      createBackendKey({ connectionId: 'source-a', gatewayEpoch: 7, profile: 'mbc' }),
+      'runtime-shared'
+    )
+
+    await expect(
+      host.requestProfile(
+        { connectionId: 'source-a', mode: 'remote', profile: 'mbc', targetProfile: 'mbc' },
+        'session.interrupt',
+        { session_id: runtimeId }
+      )
+    ).rejects.toThrow(/stale gateway connection/i)
+    expect(requestGatewayForAgent).not.toHaveBeenCalled()
+    expect(requestGatewayForAgentWithBackend).not.toHaveBeenCalled()
+  })
+
+  it('isolates same-profile A/B creates and their live submits when raw runtime ids collide', async () => {
+    const epochs = new Map([
+      ['source-a', 31],
+      ['source-b', 47]
+    ])
+
+    vi.mocked(gatewayEpochForAgent).mockImplementation(connectionId => epochs.get(connectionId || '') ?? 0)
+    vi.mocked(requestGatewayForAgentWithBackend).mockImplementation(async (connectionId, profileName, method) => ({
+      backend: { connectionId, gatewayEpoch: epochs.get(connectionId || '') ?? 0, profile: profileName },
+      result: { method, session_id: 'runtime-shared', stored_session_id: `stored-${connectionId}` }
+    }))
+    const routeA = { connectionId: 'source-a', mode: 'remote' as const, profile: 'mbc', targetProfile: 'mbc' }
+    const routeB = { connectionId: 'source-b', mode: 'remote' as const, profile: 'mbc', targetProfile: 'mbc' }
+
+    const createdA = await host.requestProfile<{ session_id: string }>(routeA, 'session.create', { profile: 'mbc' })
+    const createdB = await host.requestProfile<{ session_id: string }>(routeB, 'session.create', { profile: 'mbc' })
+
+    expect(createdA.session_id).not.toBe(createdB.session_id)
+    expect(parseRendererRuntimeKey(createdA.session_id)?.backend).toEqual({
+      connectionId: 'source-a',
+      gatewayEpoch: 31,
+      profile: 'mbc'
+    })
+    expect(parseRendererRuntimeKey(createdB.session_id)?.backend).toEqual({
+      connectionId: 'source-b',
+      gatewayEpoch: 47,
+      profile: 'mbc'
+    })
+
+    await host.requestProfile(routeA, 'prompt.submit', { session_id: createdA.session_id, text: 'a' })
+    await host.requestProfile(routeB, 'prompt.submit', { session_id: createdB.session_id, text: 'b' })
+
+    expect(requestGatewayForAgent).toHaveBeenNthCalledWith(
+      1,
+      'source-a',
+      'mbc',
+      'prompt.submit',
+      { session_id: 'runtime-shared', text: 'a' },
+      undefined,
+      undefined,
+      31
+    )
+    expect(requestGatewayForAgent).toHaveBeenNthCalledWith(
+      2,
+      'source-b',
+      'mbc',
+      'prompt.submit',
+      { session_id: 'runtime-shared', text: 'b' },
+      undefined,
+      undefined,
+      47
+    )
+  })
+
+  it('qualifies a session.branch child on the exact parent runtime generation', async () => {
+    const parent = rendererRuntimeKey(
+      createBackendKey({ connectionId: 'source-a', gatewayEpoch: 7, profile: 'mbc' }),
+      'runtime-parent'
+    )
+
+    vi.mocked(requestGatewayForAgent).mockResolvedValueOnce({
+      session_id: 'runtime-child',
+      stored_session_id: 'stored-child'
+    })
+
+    const branched = await host.requestProfile<{ session_id: string }>(
+      { connectionId: 'source-a', mode: 'remote', profile: 'mbc', targetProfile: 'mbc' },
+      'session.branch',
+      { session_id: parent }
+    )
+
+    expect(parseRendererRuntimeKey(branched.session_id)).toEqual({
+      backend: { connectionId: 'source-a', gatewayEpoch: 7, profile: 'mbc' },
+      runtimeSessionId: 'runtime-child'
+    })
   })
 
   it('keeps the profile-only request overload as a legacy fallback', async () => {
@@ -320,7 +644,10 @@ describe('profile-aware plugin session opens', () => {
     // assertion anyway.
     await new Promise(resolve => setTimeout(resolve, 0))
 
-    expect(openSessionCore).toHaveBeenCalledWith('bot-chat', expect.any(Function), 'in-place')
+    expect(openSessionCore).toHaveBeenCalledWith('bot-chat', expect.any(Function), 'in-place', {
+      connectionId: null,
+      profile: 'hyoseob'
+    })
     expect(resolved).toBe(false)
     expect($gatewaySwapTarget.get()).toBe('hyoseob')
 
@@ -575,6 +902,40 @@ describe('profile-aware plugin session opens', () => {
     expect(openGatewayForProfile).toHaveBeenCalledWith('worker')
     expect(setShowAllProfiles).toHaveBeenCalledWith(true)
     expect($activeGatewayProfile.get()).toBe('default')
+  })
+
+  it('keeps a same-profile A route and owner when ambient switches to B during the wake', async () => {
+    $activeGatewayProfile.set('mbc')
+    vi.mocked(activeGatewayConnectionId).mockReturnValue('source-a')
+    let finishDial: (() => void) | undefined
+    vi.mocked(openGatewayForAgent).mockImplementationOnce(
+      () =>
+        new Promise<void>(resolve => {
+          finishDial = resolve
+        })
+    )
+
+    const opening = host.openSession('stored-shared', {
+      profile: 'mbc',
+      route: { connectionId: 'source-a', mode: 'remote', profile: 'mbc', targetProfile: 'mbc' },
+      keepAllProfilesScope: true
+    })
+
+    await Promise.resolve()
+    expect(openGatewayForAgent).toHaveBeenCalledWith('source-a', 'mbc')
+
+    // The foreground source changes while A's exact background dial is still
+    // pending. Navigation must retain A's owner and never sample ambient B.
+    vi.mocked(activeGatewayConnectionId).mockReturnValue('source-b')
+    finishDial?.()
+    await opening
+
+    expect(openGatewayForProfile).not.toHaveBeenCalled()
+    expect(ensureGatewayAgent).not.toHaveBeenCalled()
+    expect(openSessionCore).toHaveBeenCalledWith('stored-shared', expect.any(Function), 'in-place', {
+      connectionId: 'source-a',
+      profile: 'mbc'
+    })
   })
 
   it('defaults keepAllProfilesScope to navigation instead of a workspace switch', async () => {

@@ -10,9 +10,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { COMPOSER_AREAS, type ComposerAtCompletionSource } from '@/app/chat/composer/contrib'
 import { registry } from '@/contrib/registry'
 import { queryClient } from '@/lib/query-client'
+import { rendererRuntimeKey } from '@/lib/session-runtime-key'
 
 import { useAtCompletions } from './use-at-completions'
 
+const requestForRendererRuntime = vi.hoisted(() => vi.fn())
+
+vi.mock('@/store/session-request-router', () => ({ requestForRendererRuntime }))
+
+const SESSION_ID = rendererRuntimeKey({ connectionId: null, gatewayEpoch: 1, profile: 'default' }, 's1')
 const disposers: Array<() => void> = []
 
 function addSource(id: string, provide: ComposerAtCompletionSource['provide']) {
@@ -26,9 +32,18 @@ function addSource(id: string, provide: ComposerAtCompletionSource['provide']) {
 }
 
 function gatewayStub(items = [{ text: '@file:src/research-notes.md', display: 'research-notes.md', meta: 'file' }]) {
-  return {
-    request: vi.fn(async () => ({ items }))
+  const gateway = {
+    request: vi.fn(async (_method: string, _params?: unknown) => ({ items }))
   }
+
+  requestForRendererRuntime.mockReset()
+  requestForRendererRuntime.mockImplementation((runtimeId: string, method: string, params: unknown) => {
+    expect(runtimeId).toBe(SESSION_ID)
+
+    return gateway.request(method, params)
+  })
+
+  return gateway
 }
 
 /** Drive the adapter like the popover does: search, let the debounce and
@@ -56,6 +71,7 @@ async function searchAndRead(
 afterEach(() => {
   disposers.splice(0).forEach(d => d())
   queryClient.clear()
+  requestForRendererRuntime.mockReset()
   vi.useRealTimers()
 })
 
@@ -65,7 +81,7 @@ describe('contributed @ completion sources', () => {
     addSource('bots', q => ('researcher'.startsWith(q) ? [{ insert: '@researcher', meta: 'Bot · Researcher' }] : []))
 
     const { result } = renderHook(() =>
-      useAtCompletions({ gateway: gatewayStub() as never, sessionId: 's1', cwd: '/repo' })
+      useAtCompletions({ gateway: gatewayStub() as never, sessionId: SESSION_ID, cwd: '/repo' })
     )
 
     const rows = await searchAndRead(result, 'rese')
@@ -83,7 +99,9 @@ describe('contributed @ completion sources', () => {
       { text: '@file:src/researcher.md', display: 'researcher.md', meta: 'file' }
     ])
 
-    const { result } = renderHook(() => useAtCompletions({ gateway: gateway as never, sessionId: 's1', cwd: '/repo' }))
+    const { result } = renderHook(() =>
+      useAtCompletions({ gateway: gateway as never, sessionId: SESSION_ID, cwd: '/repo' })
+    )
 
     const rows = await searchAndRead(result, 'rese')
     expect(rows.filter(label => label.toLowerCase() === '@researcher')).toEqual(['@Researcher'])
@@ -96,7 +114,7 @@ describe('contributed @ completion sources', () => {
     addSource('bots', q => ('researcher'.startsWith(q) ? [{ insert: '@researcher', meta: 'Bot' }] : []))
 
     const { result } = renderHook(() =>
-      useAtCompletions({ gateway: gatewayStub() as never, sessionId: 's1', cwd: '/repo' })
+      useAtCompletions({ gateway: gatewayStub() as never, sessionId: SESSION_ID, cwd: '/repo' })
     )
 
     const rows = await searchAndRead(result, 'zzz')
@@ -111,7 +129,7 @@ describe('contributed @ completion sources', () => {
     addSource('bots', () => [{ insert: '@researcher' }])
 
     const { result } = renderHook(() =>
-      useAtCompletions({ gateway: gatewayStub() as never, sessionId: 's1', cwd: '/repo' })
+      useAtCompletions({ gateway: gatewayStub() as never, sessionId: SESSION_ID, cwd: '/repo' })
     )
 
     const rows = await searchAndRead(result, 'rese')

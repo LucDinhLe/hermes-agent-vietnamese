@@ -11,8 +11,8 @@ const pluginSource = readFileSync(new URL('../plugin.js', import.meta.url), 'utf
 
 test('source contract: header + is a dropdown offering agent and group chat', () => {
   assert.match(pluginSource, /DropdownMenuTrigger/)
-  assert.match(pluginSource, /'New Agent'/)
-  assert.match(pluginSource, /'New Group Chat'/)
+  assert.match(pluginSource, /'Tạo tác nhân'/)
+  assert.match(pluginSource, /'Tạo nhóm trò chuyện'/)
 })
 
 test('source contract: create-group modal has search, checkboxes, name, create', () => {

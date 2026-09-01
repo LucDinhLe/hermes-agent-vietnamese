@@ -27,6 +27,7 @@ import { $unreadSessionCount } from '@/store/session-dot-state'
 
 import { appViewForPath, isOverlayView } from '../routes'
 
+import { BilingualQuickToggle } from './bilingual-quick-toggle'
 import {
   TITLEBAR_ICON_BADGE_SCALE,
   titlebarButtonClass,
@@ -306,6 +307,7 @@ export function TitlebarControls({ leftTools = [], tools = [], onOpenSettings }:
         aria-label={t.shell.appControls}
         className={cn(titlebarToolClusterClass, 'right-(--titlebar-tools-right) top-(--titlebar-controls-top)')}
       >
+        <BilingualQuickToggle />
         {visibleSystemTools.map(tool => (
           <TitlebarToolButton key={tool.id} navigate={navigate} tool={tool} />
         ))}

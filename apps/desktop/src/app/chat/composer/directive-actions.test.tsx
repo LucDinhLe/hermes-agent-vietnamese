@@ -3,6 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { I18nProvider } from '@/i18n'
 import { $previewTabs, closeRightRail } from '@/store/preview'
+import { $sessions } from '@/store/session'
+import { makeSessionInfo } from '@/test/session-info'
 
 import { ComposerDirectiveActions } from './directive-actions'
 import { refChipElement } from './rich-editor'
@@ -10,6 +12,7 @@ import { refChipElement } from './rich-editor'
 const desktopWindow = window as unknown as { hermesDesktop?: Window['hermesDesktop'] }
 
 const openSession = vi.fn()
+const sessionOwner = { connectionId: 'source-default', profile: 'default' } as const
 
 vi.mock('@/app/open-session', () => ({ openSession: (...args: unknown[]) => openSession(...args) }))
 
@@ -49,6 +52,7 @@ afterEach(() => {
   document.body.replaceChildren()
   closeRightRail()
   delete desktopWindow.hermesDesktop
+  $sessions.set([])
   openSession.mockReset()
   vi.useRealTimers()
 })
@@ -80,13 +84,26 @@ describe('ComposerDirectiveActions', () => {
   })
 
   it('runs the kind-specific action — a session chip opens the session', async () => {
+    $sessions.set([
+      makeSessionInfo({
+        connection_id: sessionOwner.connectionId,
+        id: '20260722_204335_d62c16',
+        profile: sessionOwner.profile
+      })
+    ])
+
     const editor = mountEditor([{ kind: 'session', value: 'default/20260722_204335_d62c16' }])
 
     hover(chips(editor, 'session')[0]!)
     fireEvent.click(screen.getByRole('button'))
     // openSessionRef lazy-imports the navigator, so the call lands a tick later.
     await vi.waitFor(() =>
-      expect(openSession).toHaveBeenCalledWith('20260722_204335_d62c16', expect.any(Function), 'tab')
+      expect(openSession).toHaveBeenCalledWith(
+        '20260722_204335_d62c16',
+        expect.any(Function),
+        'tab',
+        sessionOwner
+      )
     )
   })
 

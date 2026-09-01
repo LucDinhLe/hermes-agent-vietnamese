@@ -4,16 +4,33 @@ import type { NavigateFunction } from 'react-router'
 
 import { graftRefreshedTailOntoBackfill } from '@/app/chat/transcript-backfill'
 import { revealTreePane } from '@/components/pane-shell/tree/store'
-import { deleteSession, getAllSessionMessages, getLatestSessionMessages, setSessionArchived } from '@/hermes'
+import {
+  deleteSessionForOwner,
+  getAllSessionMessagesForOwner,
+  getLatestSessionMessagesForOwner,
+  getSessionForOwner,
+  setSessionArchivedForOwner
+} from '@/hermes'
 import { useI18n } from '@/i18n'
 import { type ChatMessage, preserveLocalAssistantErrors, toChatMessages } from '@/lib/chat-messages'
 import { isMissingRpcMethod } from '@/lib/gateway-rpc'
 import { recoverInFlightTurnJournal } from '@/lib/inflight-turn-journal'
+import { rawRuntimeSessionId, rendererDurableKey, rendererRuntimeKey } from '@/lib/session-runtime-key'
 import { setSessionYolo } from '@/lib/yolo-session'
 import { normalizeChoices, setClarifyRequest } from '@/store/clarify'
-import { migrateSessionDraft } from '@/store/composer'
+import {
+  clearSessionDraft,
+  migrateSessionDraft,
+  stashSessionDraft,
+  takeSessionDraft
+} from '@/store/composer'
 import { clearQueuedPrompts, migrateQueuedPrompts } from '@/store/composer-queue'
-import { openGatewayForAgent, openGatewayForProfile } from '@/store/gateway'
+import {
+  activeGatewayConnectionId,
+  gatewayEpochForAgent,
+  openGatewayForAgent,
+  openGatewayForProfile
+} from '@/store/gateway'
 import { $gatewaySwitching } from '@/store/gateway-switch'
 import { $pinnedSessionIds } from '@/store/layout'
 import { clearNotifications, notify, notifyError } from '@/store/notifications'
@@ -70,14 +87,23 @@ import {
   setWorkspaceCwdOwner,
   setYoloActive
 } from '@/store/session'
-import { requestForSessionProfile } from '@/store/session-request-router'
+import {
+  RendererRuntimeEpochMismatchError,
+  type requestForSessionOwner as routeForSessionOwner
+} from '@/store/session-request-router'
+import { sessionRouteOwner } from '@/store/session-route-owner'
 import {
   $sessionTiles,
   closeSessionTile,
   dropSessionState,
+  normalizeSessionTileOwner,
+  openProvisionalSessionTile,
   openSessionTile,
   patchSessionTile,
+  type ProvisionalSessionTile,
   publishSessionState,
+  rebindProvisionalSessionTile,
+  type SessionTileOwner,
   type TileDock
 } from '@/store/session-states'
 import { broadcastSessionsChanged } from '@/store/session-sync'
@@ -89,6 +115,12 @@ import type { SessionCreateResponse, SessionMessage, SessionResumeResponse, Usag
 
 import { navigateToWorkspacePage, NEW_CHAT_ROUTE, sessionRoute, SETTINGS_ROUTE } from '../../../routes'
 import type { ClientSessionState, SidebarNavItem } from '../../../types'
+import {
+  classifySessionRuntimeNotFound,
+  createBackendKey,
+  SessionBindingRegistry,
+  SessionRuntimeRecoveryError
+} from '../../session-binding-registry'
 import { sessionContextDrift } from '../session-context-drift'
 
 import {
@@ -106,7 +138,6 @@ import {
   reconcileResumeMessages,
   removeRepresentedLocalLiveProjection,
   resolveResumedBusy,
-  resolveSessionProfile,
   resolveStoredSession,
   selectBranchMessages,
   sessionMatchesStoredId,
@@ -126,8 +157,11 @@ interface SessionActionsOptions {
   navigate: NavigateFunction
   onFreshDraftRouteIntent?: () => void
   requestGateway: <T>(method: string, params?: Record<string, unknown>) => Promise<T>
+  /** Exact owner router in production; omitted only by hook unit tests. */
+  requestSessionOwner?: typeof routeForSessionOwner
   resetViewSync: () => void
   runtimeIdByStoredSessionIdRef: MutableRefObject<Map<string, string>>
+  sessionBindingRegistry?: SessionBindingRegistry
   selectedStoredSessionId: string | null
   selectedStoredSessionIdRef: MutableRefObject<string | null>
   sessionStateByRuntimeIdRef: MutableRefObject<Map<string, ClientSessionState>>
@@ -191,7 +225,15 @@ function reconcileAuthoritativeMessages(
 // A no-op for single-profile/local-pooled users (a backend resolves its own launch
 // profile to None). The sticky UI model/effort/fast ride as per-session overrides,
 // never the profile default (that lives in Settings → Model).
-async function desktopSessionCreateParams(cwd: string): Promise<Record<string, unknown>> {
+interface DesktopSessionCreateTarget {
+  owner: SessionTileOwner
+  params: Record<string, unknown>
+}
+
+async function desktopSessionCreateTarget(
+  cwd: string,
+  fixedOwner?: SessionTileOwner
+): Promise<DesktopSessionCreateTarget> {
   // Treat Send as the linearization point for the visible selector state. The
   // profile handshake below can yield long enough for background config/model
   // refreshes to finish; reading atoms afterward would silently create the
@@ -203,20 +245,46 @@ async function desktopSessionCreateParams(cwd: string): Promise<Record<string, u
     provider: $currentProvider.get().trim()
   }
 
-  const profile = $newChatProfile.get() ?? normalizeProfileKey($activeGatewayProfile.get())
-  await ensureGatewayProfile(profile)
+  const owner = Object.freeze(
+    fixedOwner
+    ? normalizeSessionTileOwner(fixedOwner)
+    : (() => {
+        const profile = $newChatProfile.get() ?? normalizeProfileKey($activeGatewayProfile.get())
+
+        return normalizeSessionTileOwner({ connectionId: activeGatewayConnectionId(), profile })
+      })()
+  )
+
+  if (!fixedOwner) {
+    if (owner.connectionId) {
+      await ensureGatewayAgent(owner.connectionId, owner.profile)
+    } else {
+      await ensureGatewayProfile(owner.profile)
+    }
+  }
 
   return {
-    cols: 96,
-    source: 'desktop',
-    ...(cwd && { cwd }),
-    ...(profile ? { profile } : {}),
-    ...(selection.model
-      ? { model: selection.model, ...(selection.provider ? { provider: selection.provider } : {}) }
-      : {}),
-    ...(selection.effort ? { reasoning_effort: selection.effort } : {}),
-    fast: selection.fast
+    owner: normalizeSessionTileOwner(owner),
+    params: {
+      cols: 96,
+      source: 'desktop',
+      ...(cwd && { cwd }),
+      ...(owner.profile ? { profile: owner.profile } : {}),
+      ...(selection.model
+        ? { model: selection.model, ...(selection.provider ? { provider: selection.provider } : {}) }
+        : {}),
+      ...(selection.effort ? { reasoning_effort: selection.effort } : {}),
+      fast: selection.fast
+    }
   }
+}
+
+interface PendingCreatedSession {
+  candidateStoredSessionId: string
+  created: SessionCreateResponse
+  owner: SessionTileOwner
+  preview: null | string
+  runtimeSessionId: string
 }
 
 interface FreshSessionDraftOptions {
@@ -283,8 +351,10 @@ export function useSessionActions({
   navigate,
   onFreshDraftRouteIntent,
   requestGateway,
+  requestSessionOwner,
   resetViewSync,
   runtimeIdByStoredSessionIdRef,
+  sessionBindingRegistry: providedSessionBindingRegistry,
   selectedStoredSessionId,
   selectedStoredSessionIdRef,
   sessionStateByRuntimeIdRef,
@@ -294,6 +364,82 @@ export function useSessionActions({
   const { t } = useI18n()
   const copy = t.desktop
   const resumeRequestRef = useRef(0)
+  const pendingCreatedSessionRef = useRef<PendingCreatedSession | null>(null)
+  const pendingConfirmationRetryRef = useRef<number | null>(null)
+  const confirmPendingCreatedSessionRef = useRef<((runtimeSessionId: string) => Promise<boolean>) | null>(null)
+  const fallbackSessionBindingRegistryRef = useRef<SessionBindingRegistry | null>(null)
+
+  if (!fallbackSessionBindingRegistryRef.current) {
+    fallbackSessionBindingRegistryRef.current = new SessionBindingRegistry()
+  }
+
+  const sessionBindingRegistry = providedSessionBindingRegistry ?? fallbackSessionBindingRegistryRef.current
+
+  const clearPendingConfirmationRetry = useCallback(() => {
+    if (pendingConfirmationRetryRef.current !== null) {
+      window.clearTimeout(pendingConfirmationRetryRef.current)
+      pendingConfirmationRetryRef.current = null
+    }
+  }, [])
+
+  useEffect(() => clearPendingConfirmationRetry, [clearPendingConfirmationRetry])
+
+  const invalidateProvisionalMainRuntimeForOwner = useCallback(
+    (inputOwner: SessionTileOwner): null | string => {
+      const pending = pendingCreatedSessionRef.current
+      const owner = normalizeSessionTileOwner(inputOwner)
+
+      if (
+        !pending ||
+        pending.owner.connectionId !== owner.connectionId ||
+        normalizeProfileKey(pending.owner.profile) !== owner.profile
+      ) {
+        return null
+      }
+
+      const backend = createBackendKey({
+        connectionId: pending.owner.connectionId,
+        gatewayEpoch: gatewayEpochForAgent(pending.owner.connectionId, pending.owner.profile),
+        profile: pending.owner.profile
+      })
+
+      sessionBindingRegistry.observe('provisional_invalidated', {
+        backend,
+        runtimeSessionId: rawRuntimeSessionId(pending.runtimeSessionId)
+      })
+      clearPendingConfirmationRetry()
+      pendingCreatedSessionRef.current = null
+      dropSessionState(pending.runtimeSessionId)
+
+      if (activeSessionIdRef.current === pending.runtimeSessionId) {
+        activeSessionIdRef.current = null
+        setActiveSessionId(null)
+        setFreshDraftReady(true)
+      }
+
+      return pending.runtimeSessionId
+    },
+    [activeSessionIdRef, clearPendingConfirmationRetry, sessionBindingRegistry]
+  )
+
+  const requestForSessionOwner = useCallback(
+    <T,>(
+      owner: SessionTileOwner,
+      method: string,
+      params: Record<string, unknown> = {},
+      timeoutMs?: number,
+      signal?: AbortSignal
+    ): Promise<T> =>
+      requestSessionOwner
+        ? requestSessionOwner<T>(owner, method, params, timeoutMs, signal)
+        : requestGateway<T>(
+            method,
+            typeof params.session_id === 'string'
+              ? { ...params, session_id: rawRuntimeSessionId(params.session_id) }
+              : params
+          ),
+    [requestGateway, requestSessionOwner]
+  )
 
   // Follow auto-compression's stored-id rotation only while the exact runtime,
   // selection, and route intent still belong to the rotating conversation.
@@ -368,6 +514,8 @@ export function useSessionActions({
         ? normalizeNewChatWorkspaceTarget(draftOptions.workspaceTarget)
         : undefined
 
+      clearPendingConfirmationRetry()
+      pendingCreatedSessionRef.current = null
       resetViewSync()
       busyRef.current = false
       setBusy(false)
@@ -438,7 +586,15 @@ export function useSessionActions({
       // Never clear the composer here — ChatBar's per-thread draft swap owns it.
       setFreshDraftReady(true)
     },
-    [activeSessionIdRef, busyRef, navigate, onFreshDraftRouteIntent, resetViewSync, selectedStoredSessionIdRef]
+    [
+      activeSessionIdRef,
+      busyRef,
+      clearPendingConfirmationRetry,
+      navigate,
+      onFreshDraftRouteIntent,
+      resetViewSync,
+      selectedStoredSessionIdRef
+    ]
   )
 
   const createBackendSessionForSend = useCallback(
@@ -461,9 +617,37 @@ export function useSessionActions({
               ? workspaceTarget.trim()
               : $currentCwd.get().trim() || resolveNewSessionCwd()
 
-        const params = await desktopSessionCreateParams(cwd)
-        const created = await requestGateway<SessionCreateResponse>('session.create', params)
-        const stored = created.stored_session_id ?? null
+        const target = await desktopSessionCreateTarget(cwd)
+
+        const createRequestBackend = createBackendKey({
+          connectionId: target.owner.connectionId,
+          gatewayEpoch: gatewayEpochForAgent(target.owner.connectionId, target.owner.profile),
+          profile: target.owner.profile
+        })
+
+        sessionBindingRegistry.observe('session_create_requested', { backend: createRequestBackend })
+
+        const created = await requestForSessionOwner<SessionCreateResponse>(
+          target.owner,
+          'session.create',
+          target.params
+        )
+
+        const stored = created.stored_session_id?.trim() || null
+        const bindingBackend = createBackendKey({
+          connectionId: target.owner.connectionId,
+          gatewayEpoch: gatewayEpochForAgent(target.owner.connectionId, target.owner.profile),
+          profile: target.owner.profile
+        })
+        const rendererRuntimeId = rendererRuntimeKey(bindingBackend, created.session_id)
+
+        if (!stored) {
+          await requestForSessionOwner(target.owner, 'session.close', { session_id: rendererRuntimeId }).catch(
+            () => undefined
+          )
+
+          return null
+        }
 
         // Only a genuine move to a DIFFERENT chat mid-create should orphan the
         // session we just minted. The active runtime ref is deliberately not a
@@ -483,48 +667,52 @@ export function useSessionActions({
 
         if (drift) {
           console.warn('[submit-drift-abort]', drift, { phase: 'mid-create' })
-          await requestGateway('session.close', { session_id: created.session_id }).catch(() => undefined)
+          sessionBindingRegistry.observe('provisional_invalidated', {
+            backend: bindingBackend,
+            runtimeSessionId: created.session_id
+          })
+          await requestForSessionOwner(target.owner, 'session.close', { session_id: rendererRuntimeId }).catch(
+            () => undefined
+          )
 
           return null
         }
 
         resetViewSync()
-        activeSessionIdRef.current = created.session_id
-        selectedStoredSessionIdRef.current = stored
-        ensureSessionState(created.session_id, stored)
 
-        if (stored) {
-          createdThisRun.add(stored)
-          // Seed the sidebar preview with the user's first message so the row
-          // reads meaningfully while the turn is in flight, instead of flashing
-          // "Untitled session" until the turn persists and auto-title runs. The
-          // server later returns its own preview/title and supersedes this.
-          upsertOptimisticSession(created, stored, null, preview?.trim() || null)
-          navigate(sessionRoute(stored), { replace: true })
-          // Other windows (e.g. the main window when this is the pop-out) can't
-          // see this session until they re-pull the shared list.
-          broadcastSessionsChanged()
+        activeSessionIdRef.current = rendererRuntimeId
+        ensureSessionState(rendererRuntimeId, null)
+        clearPendingConfirmationRetry()
+        pendingCreatedSessionRef.current = {
+          candidateStoredSessionId: stored,
+          created,
+          owner: target.owner,
+          preview: preview?.trim() || null,
+          runtimeSessionId: rendererRuntimeId
         }
 
         setFreshDraftReady(false)
         setNewChatWorkspaceTarget(undefined)
-        setActiveSessionId(created.session_id)
-        setSelectedStoredSessionId(stored)
+        setActiveSessionId(rendererRuntimeId)
         setSessionStartedAt(Date.now())
         const yoloArmed = $yoloActive.get()
         const runtimeInfo = applyRuntimeInfo(created.info)
 
         if (runtimeInfo) {
-          updateSessionState(created.session_id, state => ({ ...state, ...runtimeInfo }), stored)
+          updateSessionState(rendererRuntimeId, state => ({ ...state, ...runtimeInfo }), null)
         }
 
         // User may have armed YOLO on the new-chat draft before the runtime
         // session existed — apply it to the freshly created session.
         if (yoloArmed) {
-          await setSessionYolo(requestGateway, created.session_id, true).catch(() => undefined)
+          await setSessionYolo(
+            (method, params) => requestForSessionOwner(target.owner, method, params),
+            rendererRuntimeId,
+            true
+          ).catch(() => undefined)
         }
 
-        return created.session_id
+        return rendererRuntimeId
       } finally {
         window.setTimeout(() => {
           creatingSessionRef.current = false
@@ -533,16 +721,185 @@ export function useSessionActions({
     },
     [
       activeSessionIdRef,
+      clearPendingConfirmationRetry,
       creatingSessionRef,
       ensureSessionState,
       getRouteToken,
-      navigate,
-      requestGateway,
+      requestForSessionOwner,
       resetViewSync,
       selectedStoredSessionIdRef,
+      sessionBindingRegistry,
       updateSessionState
     ]
   )
+
+  /** Route the just-created runtime through the owner captured before
+   * session.create. The candidate stored id is deliberately absent from every
+   * durable lookup until confirmBackendSessionForSend observes its DB row. */
+  const requestPendingCreatedSession = useCallback(
+    <T,>(method: string, params: Record<string, unknown> = {}, timeoutMs?: number): Promise<T> => {
+      const pending = pendingCreatedSessionRef.current
+
+      if (!pending) {
+        return Promise.reject(new Error('No provisional session is available for this request.'))
+      }
+
+      const requestedRuntimeId = typeof params.session_id === 'string' ? params.session_id : null
+
+      if (requestedRuntimeId && requestedRuntimeId !== pending.runtimeSessionId) {
+        return Promise.reject(new Error('The provisional runtime no longer owns this request.'))
+      }
+
+      const backend = createBackendKey({
+        connectionId: pending.owner.connectionId,
+        gatewayEpoch: gatewayEpochForAgent(pending.owner.connectionId, pending.owner.profile),
+        profile: pending.owner.profile
+      })
+
+      if (method === 'prompt.submit') {
+        sessionBindingRegistry.observe('first_prompt_routed', {
+          backend,
+          durableSessionId: pending.candidateStoredSessionId,
+          runtimeSessionId: pending.runtimeSessionId
+        })
+      }
+
+      return requestForSessionOwner<T>(pending.owner, method, params, timeoutMs).catch(error => {
+        if (classifySessionRuntimeNotFound(error) || error instanceof RendererRuntimeEpochMismatchError) {
+          sessionBindingRegistry.observe('runtime_not_found_4007', {
+            backend,
+            durableSessionId: pending.candidateStoredSessionId,
+            runtimeSessionId: rawRuntimeSessionId(pending.runtimeSessionId)
+          })
+          invalidateProvisionalMainRuntimeForOwner(pending.owner)
+
+          throw new SessionRuntimeRecoveryError(error)
+        }
+
+        throw error
+      })
+    },
+    [invalidateProvisionalMainRuntimeForOwner, requestForSessionOwner, sessionBindingRegistry]
+  )
+
+  /** Promote the fresh-chat candidate only after the exact backend returns a
+   * persisted row. A missed confirmation leaves the provisional binding in
+   * memory and returns false; it never writes the candidate into durable UI. */
+  const confirmBackendSessionForSend = useCallback(
+    async (runtimeSessionId: string): Promise<boolean> => {
+      clearPendingConfirmationRetry()
+      const pending = pendingCreatedSessionRef.current
+
+      if (!pending || pending.runtimeSessionId !== runtimeSessionId) {
+        return false
+      }
+
+      let confirmed: Awaited<ReturnType<typeof getSessionForOwner>> | null = null
+
+      for (const delayMs of [0, 50, 100, 200, 400, 800]) {
+        if (delayMs > 0) {
+          await new Promise<void>(resolve => window.setTimeout(resolve, delayMs))
+        }
+
+        if (pendingCreatedSessionRef.current !== pending) {
+          return false
+        }
+
+        try {
+          const row = await getSessionForOwner(pending.candidateStoredSessionId, pending.owner)
+
+          if (sessionMatchesStoredId(row, pending.candidateStoredSessionId)) {
+            confirmed = row
+
+            break
+          }
+        } catch {
+          // The first prompt may have returned just before the REST reader sees
+          // the transaction. Retry only this exact owner for a bounded window.
+        }
+      }
+
+      if (!confirmed || pendingCreatedSessionRef.current !== pending) {
+        if (pendingCreatedSessionRef.current === pending && pendingConfirmationRetryRef.current === null) {
+          pendingConfirmationRetryRef.current = window.setTimeout(() => {
+            pendingConfirmationRetryRef.current = null
+
+            if (pendingCreatedSessionRef.current === pending) {
+              void confirmPendingCreatedSessionRef.current?.(runtimeSessionId)
+            }
+          }, 1_000)
+        }
+
+        return false
+      }
+
+      confirmed.profile = pending.owner.profile
+
+      if (pending.owner.connectionId) {
+        confirmed.connection_id = pending.owner.connectionId
+      } else {
+        delete confirmed.connection_id
+      }
+
+      const durableSessionId = pending.candidateStoredSessionId
+
+      createdThisRun.add(durableSessionId)
+      setSessions(previous => [
+        confirmed,
+        ...previous.filter(session => !sessionMatchesStoredId(session, durableSessionId))
+      ])
+      const freshDraft = takeSessionDraft(null)
+      const durableDraft = takeSessionDraft(durableSessionId)
+
+      if (
+        (freshDraft.text.trim() || freshDraft.attachments.length > 0) &&
+        !durableDraft.text.trim() &&
+        durableDraft.attachments.length === 0
+      ) {
+        stashSessionDraft(durableSessionId, freshDraft.text, freshDraft.attachments)
+        clearSessionDraft(null)
+      }
+
+      migrateQueuedPrompts(runtimeSessionId, durableSessionId)
+      selectedStoredSessionIdRef.current = durableSessionId
+      setSelectedStoredSessionId(durableSessionId)
+      setWorkspaceCwdOwner(durableSessionId)
+      updateSessionState(runtimeSessionId, state => ({ ...state, storedSessionId: durableSessionId }), durableSessionId)
+
+      const backend = createBackendKey({
+        connectionId: pending.owner.connectionId,
+        gatewayEpoch: gatewayEpochForAgent(pending.owner.connectionId, pending.owner.profile),
+        profile: pending.owner.profile
+      })
+
+      runtimeIdByStoredSessionIdRef.current.set(rendererDurableKey(backend, durableSessionId), runtimeSessionId)
+      sessionBindingRegistry.bind(
+        {
+          backend,
+          durableSessionId
+        },
+        rawRuntimeSessionId(runtimeSessionId),
+        getRouteToken()
+      )
+      clearPendingConfirmationRetry()
+      pendingCreatedSessionRef.current = null
+      navigate(sessionRoute(durableSessionId), { replace: true })
+      broadcastSessionsChanged()
+
+      return true
+    },
+    [
+      getRouteToken,
+      clearPendingConfirmationRetry,
+      navigate,
+      runtimeIdByStoredSessionIdRef,
+      selectedStoredSessionIdRef,
+      sessionBindingRegistry,
+      updateSessionState
+    ]
+  )
+
+  confirmPendingCreatedSessionRef.current = confirmBackendSessionForSend
 
   const selectSidebarItem = useCallback(
     (item: SidebarNavItem) => {
@@ -571,32 +928,44 @@ export function useSessionActions({
    *  first message persists a turn. "Open in split" keeps the listed behavior. */
   const openNewSessionTile = useCallback(
     async (dir: TileDock = 'right', options?: { cwd?: null | string; listed?: boolean }) => {
-      const listed = options?.listed ?? true
-
       try {
         // Fresh tile → the caller's workspace when one was named (the sidebar
         // "+" on a project/worktree lane), else the resolved new-session cwd
         // (project scope → configured default).
-        const params = await desktopSessionCreateParams((options?.cwd || resolveNewSessionCwd()).trim())
-        const created = await requestGateway<SessionCreateResponse>('session.create', params)
-        const stored = created.stored_session_id
+        const target = await desktopSessionCreateTarget((options?.cwd || resolveNewSessionCwd()).trim())
+
+        sessionBindingRegistry.observe('session_create_requested', {
+          backend: createBackendKey({
+            connectionId: target.owner.connectionId,
+            gatewayEpoch: gatewayEpochForAgent(target.owner.connectionId, target.owner.profile),
+            profile: target.owner.profile
+          })
+        })
+
+        const created = await requestForSessionOwner<SessionCreateResponse>(
+          target.owner,
+          'session.create',
+          target.params
+        )
+
+        const stored = created.stored_session_id?.trim()
+        const bindingBackend = createBackendKey({
+          connectionId: target.owner.connectionId,
+          gatewayEpoch: gatewayEpochForAgent(target.owner.connectionId, target.owner.profile),
+          profile: target.owner.profile
+        })
+        const rendererRuntimeId = rendererRuntimeKey(bindingBackend, created.session_id)
 
         if (!stored) {
-          await requestGateway('session.close', { session_id: created.session_id }).catch(() => undefined)
+          await requestForSessionOwner(target.owner, 'session.close', { session_id: rendererRuntimeId }).catch(
+            () => undefined
+          )
           notify({ kind: 'error', title: copy.sessionUnavailable, message: copy.createSessionFailed })
 
           return
         }
 
-        createdThisRun.add(stored)
-
-        // Seed the per-runtime cache so the tile renders immediately without a
-        // redundant resume. Only add the row to the SIDEBAR when `listed` — an
-        // unlisted (draft) tab stays out of the session list until its first
-        // turn persists and a refresh surfaces it.
-        if (listed) {
-          upsertOptimisticSession(created, stored, null, null)
-        }
+        const draftId = `draft-${crypto.randomUUID()}`
 
         // A tile lives in its OWN worktree, so it must not run the full
         // foreground composer publish. A CENTER tile is the focused surface,
@@ -605,26 +974,91 @@ export function useSessionActions({
         // Project "+" created a session while the main chat was occupied
         // (#76696). Split/side tiles deliberately stay isolated.
         const runtimeInfo = applyRuntimeInfo(created.info, { foreground: false })
-        updateSessionState(created.session_id, state => (runtimeInfo ? { ...state, ...runtimeInfo } : state), stored)
+        updateSessionState(rendererRuntimeId, state => (runtimeInfo ? { ...state, ...runtimeInfo } : state), null)
 
-        openSessionTile(stored, dir)
-        patchSessionTile(stored, { runtimeId: created.session_id })
+        openProvisionalSessionTile({
+          dir,
+          draftId,
+          owner: target.owner,
+          provisionalStoredSessionId: stored,
+          runtimeId: rendererRuntimeId
+        })
 
         if (dir === 'center' && runtimeInfo?.cwd) {
           setCurrentCwdTransient(runtimeInfo.cwd)
-          setWorkspaceCwdOwner(stored)
+          setWorkspaceCwdOwner(draftId)
         }
 
-        revealTreePane(`session-tile:${stored}`)
-
-        if (listed) {
-          broadcastSessionsChanged()
-        }
+        revealTreePane(`session-tile:${draftId}`)
       } catch (error) {
         notifyError(error, copy.createSessionFailed)
       }
     },
-    [copy, requestGateway, updateSessionState]
+    [copy, requestForSessionOwner, sessionBindingRegistry, updateSessionState]
+  )
+
+  /** Relaunch recovery for an unsent tile draft. The previous candidate is
+   * never resumed: mint a fresh runtime on the captured owner and keep the
+   * renderer-owned draft identity stable. */
+  const createProvisionalTileRuntime = useCallback(
+    async (tile: ProvisionalSessionTile): Promise<string> => {
+      const cwd = $currentCwd.get().trim() || resolveNewSessionCwd()
+      const target = await desktopSessionCreateTarget(cwd, tile.owner)
+
+      const createRequestBackend = createBackendKey({
+        connectionId: target.owner.connectionId,
+        gatewayEpoch: gatewayEpochForAgent(target.owner.connectionId, target.owner.profile),
+        profile: target.owner.profile
+      })
+
+      sessionBindingRegistry.observe('provisional_invalidated', {
+        backend: createRequestBackend,
+        routeToken: tile.draftId
+      })
+      sessionBindingRegistry.observe('session_create_requested', { backend: createRequestBackend })
+
+      const created = await requestForSessionOwner<SessionCreateResponse>(
+        target.owner,
+        'session.create',
+        target.params
+      )
+
+      const candidateStoredSessionId = created.stored_session_id?.trim()
+      const bindingBackend = createBackendKey({
+        connectionId: target.owner.connectionId,
+        gatewayEpoch: gatewayEpochForAgent(target.owner.connectionId, target.owner.profile),
+        profile: target.owner.profile
+      })
+      const rendererRuntimeId = rendererRuntimeKey(bindingBackend, created.session_id)
+
+      if (!candidateStoredSessionId) {
+        await requestForSessionOwner(target.owner, 'session.close', { session_id: rendererRuntimeId }).catch(
+          () => undefined
+        )
+        throw new Error('session.create returned no candidate stored session id')
+      }
+
+      const runtimeInfo = applyRuntimeInfo(created.info, { foreground: false })
+
+      updateSessionState(rendererRuntimeId, state => (runtimeInfo ? { ...state, ...runtimeInfo } : state), null)
+
+      const rebound = rebindProvisionalSessionTile({
+        draftId: tile.draftId,
+        owner: tile.owner,
+        provisionalStoredSessionId: candidateStoredSessionId,
+        runtimeId: rendererRuntimeId
+      })
+
+      if (!rebound) {
+        await requestForSessionOwner(target.owner, 'session.close', { session_id: rendererRuntimeId }).catch(
+          () => undefined
+        )
+        throw new Error('The provisional tile no longer exists on its captured owner.')
+      }
+
+      return rendererRuntimeId
+    },
+    [requestForSessionOwner, sessionBindingRegistry, updateSessionState]
   )
 
   const openSettings = useCallback(() => {
@@ -697,8 +1131,10 @@ export function useSessionActions({
       // under the current route (the "open chat A, chat B loads" bug). On a
       // mismatch the mapping is cross-wired: purge both sides and report a miss
       // so the caller falls through to a full resume that rebinds a correct id.
+      let warmDurableKey: null | string = null
+
       const takeWarmCache = (): { runtimeId: string; state: ClientSessionState } | null => {
-        const runtimeId = runtimeIdByStoredSessionIdRef.current.get(storedSessionId)
+        const runtimeId = warmDurableKey ? runtimeIdByStoredSessionIdRef.current.get(warmDurableKey) : undefined
         const state = runtimeId ? sessionStateByRuntimeIdRef.current.get(runtimeId) : undefined
 
         if (!runtimeId || !state) {
@@ -706,7 +1142,10 @@ export function useSessionActions({
         }
 
         if (state.storedSessionId !== storedSessionId) {
-          runtimeIdByStoredSessionIdRef.current.delete(storedSessionId)
+          if (warmDurableKey) {
+            runtimeIdByStoredSessionIdRef.current.delete(warmDurableKey)
+          }
+
           sessionStateByRuntimeIdRef.current.delete(runtimeId)
           dropSessionState(runtimeId)
 
@@ -731,13 +1170,25 @@ export function useSessionActions({
 
       // Swap the single live gateway to this session's profile before any
       // gateway call (no-op when it's already on that profile / single-profile).
-      // resolveStoredSession finds the row by id (cheap), so an uncached pasted
-      // id loads as fast as a sidebar click instead of hanging on a list scan.
-      const storedForProfile = await resolveStoredSession(storedSessionId)
-      const sessionProfile = storedForProfile?.profile
+      // A rendered row stages its exact owner before navigation. A raw pasted
+      // id has no such authority and therefore fails closed without probing an
+      // ambient/default backend.
+      const storedForProfile = await resolveStoredSession(storedSessionId, sessionRouteOwner(storedSessionId))
+      const sessionProfile = storedForProfile?.profile?.trim()
 
       if (resumeRequestRef.current !== requestId) {
         return
+      }
+
+      if (!storedForProfile || !sessionProfile) {
+        setResumeFailedSessionId(storedSessionId)
+
+        return
+      }
+
+      const sessionOwner = {
+        connectionId: storedForProfile.connection_id?.trim() || null,
+        profile: sessionProfile
       }
 
       // A row spliced from a CONNECTED registry gateway (#88880) carries its
@@ -747,12 +1198,12 @@ export function useSessionActions({
       // dial the owning backend without moving $activeGatewayProfile.
       if ($showAllProfiles.get()) {
         if (storedForProfile?.connection_id) {
-          await openGatewayForAgent(storedForProfile.connection_id, sessionProfile || 'default')
+          await openGatewayForAgent(storedForProfile.connection_id, sessionProfile)
         } else if (sessionProfile) {
           await openGatewayForProfile(normalizeProfileKey(sessionProfile))
         }
       } else if (storedForProfile?.connection_id) {
-        await ensureGatewayAgent(storedForProfile.connection_id, sessionProfile || 'default')
+        await ensureGatewayAgent(storedForProfile.connection_id, sessionProfile)
       } else {
         await ensureGatewayProfile(sessionProfile)
       }
@@ -768,9 +1219,29 @@ export function useSessionActions({
       // of the session — the backend boots, sits idle, and the renderer burns
       // its bounded retries into the "retries gave up" screen while the bot's
       // own backend is healthy one port over (#89206: local pool AND SSH).
-      // requestForSessionProfile re-resolves the route at each call.
+      // The durable row owns the complete registry route. Profile alone is not
+      // enough: two connections may expose the same Agent name.
       const requestForSession = <T>(method: string, params: Record<string, unknown> = {}): Promise<T> =>
-        requestForSessionProfile<T>(sessionProfile, requestGateway, method, params)
+        requestForSessionOwner<T>(
+          {
+            connectionId: storedForProfile?.connection_id?.trim() || null,
+            profile: sessionProfile
+          },
+          method,
+          params
+        )
+
+      const bindingTargetForCurrentEpoch = () => ({
+        backend: createBackendKey({
+          connectionId: storedForProfile?.connection_id?.trim() || null,
+          gatewayEpoch: gatewayEpochForAgent(storedForProfile.connection_id?.trim() || null, sessionProfile),
+          profile: sessionProfile
+        }),
+        durableSessionId: storedSessionId
+      })
+      const bindingTarget = bindingTargetForCurrentEpoch()
+
+      warmDurableKey = rendererDurableKey(bindingTarget.backend, storedSessionId)
 
       // Re-check after the profile-resolve / gateway-swap awaits above: the
       // cache may have changed, and takeWarmCache re-validates belongs-to and
@@ -806,7 +1277,7 @@ export function useSessionActions({
         }
 
         if (sessionShouldHaveTranscript(stored) && cachedViewState.messages.length === 0) {
-          runtimeIdByStoredSessionIdRef.current.delete(storedSessionId)
+          runtimeIdByStoredSessionIdRef.current.delete(warmDurableKey)
           sessionStateByRuntimeIdRef.current.delete(cachedRuntimeId)
           dropSessionState(cachedRuntimeId)
         } else {
@@ -819,7 +1290,7 @@ export function useSessionActions({
           // prefetch. Watch mirrors stay live-only by design.
           const persistedTranscriptPromise = isWatchWindow()
             ? null
-            : getLatestSessionMessages(storedSessionId, sessionProfile).catch(() => null)
+            : getLatestSessionMessagesForOwner(storedSessionId, sessionOwner).catch(() => null)
 
           setFreshDraftReady(false)
           clearNotifications()
@@ -865,6 +1336,8 @@ export function useSessionActions({
                 setCurrentUsage(current => ({ ...current, ...usage }))
               }
 
+              sessionBindingRegistry.bind(bindingTarget, rawRuntimeSessionId(cachedRuntimeId), getRouteToken())
+
               return
             }
 
@@ -873,10 +1346,11 @@ export function useSessionActions({
             }
 
             if (activated.session_key && activated.session_key !== storedSessionId) {
-              runtimeIdByStoredSessionIdRef.current.delete(storedSessionId)
+              runtimeIdByStoredSessionIdRef.current.delete(warmDurableKey)
               sessionStateByRuntimeIdRef.current.delete(cachedRuntimeId)
               dropSessionState(cachedRuntimeId)
             } else {
+              sessionBindingRegistry.bind(bindingTarget, rawRuntimeSessionId(cachedRuntimeId), getRouteToken())
               const pendingApproval = restorePendingApproval(activated, cachedRuntimeId)
               const pendingClarify = restorePendingClarify(activated, cachedRuntimeId)
               const runtimeInfo = applyRuntimeInfo(activated.info)
@@ -1016,11 +1490,16 @@ export function useSessionActions({
               return
             }
 
-            if (!isSessionGoneError(error)) {
+            if (!isSessionGoneError(error) && !(error instanceof RendererRuntimeEpochMismatchError)) {
               return
             }
 
-            runtimeIdByStoredSessionIdRef.current.delete(storedSessionId)
+            sessionBindingRegistry.invalidateRuntime(
+              bindingTarget.backend,
+              rawRuntimeSessionId(cachedRuntimeId),
+              error instanceof RendererRuntimeEpochMismatchError ? 'gateway-epoch-changed' : 'runtime-not-found'
+            )
+            runtimeIdByStoredSessionIdRef.current.delete(warmDurableKey)
             sessionStateByRuntimeIdRef.current.delete(cachedRuntimeId)
             dropSessionState(cachedRuntimeId)
           }
@@ -1112,7 +1591,7 @@ export function useSessionActions({
         // max(prefetch, resume) instead of their sum. The prefetch paints the
         // transcript as soon as it lands; the RPC binds the runtime id.
         // Watch windows skip the prefetch — lazy resume attaches the live mirror.
-        const prefetchPromise = watchWindow ? null : getLatestSessionMessages(storedSessionId, sessionProfile)
+        const prefetchPromise = watchWindow ? null : getLatestSessionMessagesForOwner(storedSessionId, sessionOwner)
 
         let resumeRuntimeBaselineMessages: ChatMessage[] = []
 
@@ -1131,10 +1610,16 @@ export function useSessionActions({
           ...(watchWindow ? { lazy: true } : { omit_messages: true }),
           ...(sessionProfile ? { profile: sessionProfile } : {})
         }).then(resumed => {
-          resumeRuntimeBaselineMessages =
-            sessionStateByRuntimeIdRef.current.get(resumed.session_id)?.messages ?? resumeRuntimeBaselineMessages
+          // session.resume may cold-open or reconnect the exact socket. Runtime
+          // capabilities belong to the generation that actually returned them,
+          // not the pre-await generation captured before the RPC was dispatched.
+          const resumedBindingTarget = bindingTargetForCurrentEpoch()
+          const resumedRendererRuntimeId = rendererRuntimeKey(resumedBindingTarget.backend, resumed.session_id)
 
-          return resumed
+          resumeRuntimeBaselineMessages =
+            sessionStateByRuntimeIdRef.current.get(resumedRendererRuntimeId)?.messages ?? resumeRuntimeBaselineMessages
+
+          return { resumed, resumedBindingTarget, resumedRendererRuntimeId }
         })
 
         // The rejection is consumed by the `await` below; this guard only
@@ -1154,7 +1639,7 @@ export function useSessionActions({
           // Non-fatal: gateway resume below can still hydrate the session.
         }
 
-        const resumed = await resumePromise
+        const { resumed, resumedBindingTarget, resumedRendererRuntimeId } = await resumePromise
 
         if (!isCurrentResume()) {
           return
@@ -1241,7 +1726,7 @@ export function useSessionActions({
         })()
 
         const currentRuntimeMessages =
-          sessionStateByRuntimeIdRef.current.get(resumed.session_id)?.messages ?? resumeRuntimeBaselineMessages
+          sessionStateByRuntimeIdRef.current.get(resumedRendererRuntimeId)?.messages ?? resumeRuntimeBaselineMessages
 
         const preferredWithRuntimeChanges = overlayConcurrentMessageChanges(
           preferredMessages,
@@ -1255,7 +1740,7 @@ export function useSessionActions({
         // rewind it to idle just because the user opened the chat.
         resumedRunning = resolveResumedBusy(
           (resumed as { running?: boolean }).running,
-          Boolean(sessionStateByRuntimeIdRef.current.get(resumed.session_id)?.busy)
+          Boolean(sessionStateByRuntimeIdRef.current.get(resumedRendererRuntimeId)?.busy)
         )
 
         // Crash-survivable turn progress: fold a journaled in-flight tail
@@ -1299,10 +1784,19 @@ export function useSessionActions({
           return
         }
 
-        setActiveSessionId(resumed.session_id)
-        activeSessionIdRef.current = resumed.session_id
-        const pendingApproval = restorePendingApproval(resumed, resumed.session_id)
-        const pendingClarify = restorePendingClarify(resumed, resumed.session_id)
+        const binding = sessionBindingRegistry.bind(resumedBindingTarget, resumed.session_id, getRouteToken())
+
+        setActiveSessionId(binding.rendererRuntimeId)
+        activeSessionIdRef.current = binding.rendererRuntimeId
+        const resumedDurableKey = rendererDurableKey(resumedBindingTarget.backend, storedSessionId)
+
+        if (resumedDurableKey !== warmDurableKey) {
+          runtimeIdByStoredSessionIdRef.current.delete(warmDurableKey)
+        }
+
+        runtimeIdByStoredSessionIdRef.current.set(resumedDurableKey, binding.rendererRuntimeId)
+        const pendingApproval = restorePendingApproval(resumed, binding.rendererRuntimeId)
+        const pendingClarify = restorePendingClarify(resumed, binding.rendererRuntimeId)
         const runtimeInfo = applyRuntimeInfo(resumed.info)
 
         patchSessionWorkspace(storedSessionId, runtimeInfo?.cwd)
@@ -1316,7 +1810,7 @@ export function useSessionActions({
             : null
 
         updateSessionState(
-          resumed.session_id,
+          binding.rendererRuntimeId,
           state => ({
             ...state,
             ...(runtimeInfo ?? {}),
@@ -1371,7 +1865,7 @@ export function useSessionActions({
         let fallbackError: unknown = null
 
         try {
-          const fallback = await getLatestSessionMessages(storedSessionId, sessionProfile)
+          const fallback = await getLatestSessionMessagesForOwner(storedSessionId, sessionOwner)
 
           if (!isCurrentResume()) {
             return
@@ -1416,7 +1910,7 @@ export function useSessionActions({
           let stillListed = false
 
           try {
-            stillListed = Boolean(await resolveStoredSession(storedSessionId))
+            stillListed = Boolean(await resolveStoredSession(storedSessionId, sessionOwner))
           } catch {
             // Resolution itself failed — inconclusive, treat as not listed.
           }
@@ -1479,9 +1973,11 @@ export function useSessionActions({
       activeSessionIdRef,
       busyRef,
       copy,
-      requestGateway,
+      getRouteToken,
+      requestForSessionOwner,
       resetViewSync,
       runtimeIdByStoredSessionIdRef,
+      sessionBindingRegistry,
       selectedStoredSessionIdRef,
       sessionStateByRuntimeIdRef,
       startFreshSessionDraft,
@@ -1505,6 +2001,19 @@ export function useSessionActions({
       creatingSessionRef.current = true
 
       try {
+        const rows = $sessions.get()
+        const parent = parentStoredId ? rows.find(session => sessionMatchesStoredId(session, parentStoredId)) : null
+        const branchProfile = parent?.profile?.trim() || profile?.trim()
+
+        if (!branchProfile) {
+          throw new Error('Cannot bind branch runtime without an explicit backend profile.')
+        }
+
+        const branchOwner = {
+          connectionId: parent?.connection_id?.trim() || null,
+          profile: branchProfile
+        }
+
         // A branch belongs to its parent's OWNING profile. Swapping the live
         // gateway first AND passing `profile` on the create mirrors
         // desktopSessionCreateParams/resumeSession: in app-global remote mode
@@ -1512,19 +2021,19 @@ export function useSessionActions({
         // lands the branch on the launch (default) profile — the "session
         // jumps between profiles after branching" bug. The swap also makes
         // upsertOptimisticSession's $activeGatewayProfile stamp correct.
-        await ensureGatewayProfile(profile)
+        await ensureGatewayProfile(branchProfile)
 
         // No title: the backend auto-names the branch from its parent's lineage.
         const branched = sourceSessionId
-          ? await requestGateway<SessionCreateResponse>('session.branch', {
+          ? await requestForSessionOwner<SessionCreateResponse>(branchOwner, 'session.branch', {
               session_id: sourceSessionId,
               ...(branchCount !== undefined ? { count: branchCount } : {})
             })
-          : await requestGateway<SessionCreateResponse>('session.create', {
+          : await requestForSessionOwner<SessionCreateResponse>(branchOwner, 'session.create', {
               cols: 96,
               source: 'desktop',
               ...(cwd && { cwd }),
-              ...(profile ? { profile } : {}),
+              profile: branchProfile,
               messages: branchMessages.map(({ content, role }) => ({ content, role })),
               ...(parentStoredId && { parent_session_id: parentStoredId })
             })
@@ -1535,11 +2044,17 @@ export function useSessionActions({
         const effectiveBranchMessages = responseBranchMessages.length ? responseBranchMessages : branchMessages
         const routedSessionId = branched.stored_session_id ?? branched.session_id
         const preview = effectiveBranchMessages.map(({ content }) => content).find(Boolean) ?? null
+
         // Draft until submit: nest under the parent at the parent's recency so it
         // doesn't bubble to the top until a real message lands (backend persists
         // + auto-names it then). The selected row survives refreshes (sessionsToKeep).
-        const rows = $sessions.get()
-        const parent = parentStoredId ? rows.find(session => sessionMatchesStoredId(session, parentStoredId)) : null
+        const branchBackend = createBackendKey({
+          connectionId: parent?.connection_id?.trim() || null,
+          gatewayEpoch: gatewayEpochForAgent(parent?.connection_id?.trim() || null, branchProfile),
+          profile: branchProfile
+        })
+
+        const branchRuntimeId = rendererRuntimeKey(branchBackend, branched.session_id)
 
         const siblings = parentStoredId
           ? rows.filter(session => session.parent_session_id?.trim() === parentStoredId).length
@@ -1554,9 +2069,9 @@ export function useSessionActions({
           parentStoredId,
           parent ? parent.last_active || parent.started_at : undefined
         )
-        ensureSessionState(branched.session_id, routedSessionId)
+        ensureSessionState(branchRuntimeId, routedSessionId)
         updateSessionState(
-          branched.session_id,
+          branchRuntimeId,
           state => ({
             ...state,
             messages: effectiveBranchMessages.map(({ source }) => source),
@@ -1572,7 +2087,7 @@ export function useSessionActions({
         patchSessionWorkspace(routedSessionId, runtimeInfo?.cwd)
 
         if (runtimeInfo) {
-          updateSessionState(branched.session_id, state => ({ ...state, ...runtimeInfo }), routedSessionId)
+          updateSessionState(branchRuntimeId, state => ({ ...state, ...runtimeInfo }), routedSessionId)
         }
 
         // Open the branch as its own tab and switch to it, leaving the parent
@@ -1580,7 +2095,13 @@ export function useSessionActions({
         // skips a redundant resume. Do NOT select it as the primary session
         // first — openSessionTile no-ops when the id is already primary.
         openSessionTile(routedSessionId, 'center')
-        patchSessionTile(routedSessionId, { runtimeId: branched.session_id })
+        patchSessionTile(routedSessionId, { runtimeId: branchRuntimeId })
+        sessionBindingRegistry.bind(
+          { backend: branchBackend, durableSessionId: routedSessionId },
+          branched.session_id,
+          getRouteToken()
+        )
+        runtimeIdByStoredSessionIdRef.current.set(rendererDurableKey(branchBackend, routedSessionId), branchRuntimeId)
         revealTreePane(`session-tile:${routedSessionId}`)
         broadcastSessionsChanged()
 
@@ -1595,7 +2116,16 @@ export function useSessionActions({
         }, 0)
       }
     },
-    [copy, creatingSessionRef, ensureSessionState, requestGateway, updateSessionState]
+    [
+      copy,
+      creatingSessionRef,
+      ensureSessionState,
+      getRouteToken,
+      requestForSessionOwner,
+      runtimeIdByStoredSessionIdRef,
+      sessionBindingRegistry,
+      updateSessionState
+    ]
   )
 
   // Branch the open chat — optionally from a specific message — off its live transcript.
@@ -1625,11 +2155,17 @@ export function useSessionActions({
       // temporarily unavailable, retain the local snapshot and let the branch
       // RPC make its own authoritative read.
       let authoritativeMessages: ChatMessage[] | null = null
-      const profile = await resolveSessionProfile(storedSessionId)
+      const stored = storedSessionId
+        ? await resolveStoredSession(storedSessionId, sessionRouteOwner(storedSessionId))
+        : null
+      const profile = stored?.profile?.trim()
 
-      if (storedSessionId) {
+      if (storedSessionId && stored && profile) {
         try {
-          const persisted = await getAllSessionMessages(storedSessionId, profile)
+          const persisted = await getAllSessionMessagesForOwner(storedSessionId, {
+            connectionId: stored.connection_id?.trim() || null,
+            profile
+          })
           const hydrated = toChatMessages(persisted.messages)
 
           if (hydrated.length) {
@@ -1691,17 +2227,22 @@ export function useSessionActions({
       clearNotifications()
 
       // Right-clicking a session outside the paginated sidebar window is a cache
-      // miss: resolve it (cache → active backend → cross-profile) so the branch
-      // is created on the parent's OWNING profile, not whichever is live (#67603).
+      // miss. The rendered row stages its exact owner, so validate only on that
+      // backend and never probe whichever profile happens to be live (#67603).
       const stored =
         $sessions.get().find(session => sessionMatchesStoredId(session, storedSessionId)) ??
-        (sessionProfile ? undefined : await resolveStoredSession(storedSessionId))
+        (await resolveStoredSession(storedSessionId, sessionRouteOwner(storedSessionId)))
 
-      const profile = sessionProfile ?? stored?.profile
+      const profile = stored?.profile?.trim() || sessionProfile?.trim()
 
       try {
+        if (!stored || !profile) {
+          throw new Error('The session owner could not be resolved.')
+        }
+
+        const owner = { connectionId: stored.connection_id?.trim() || null, profile }
         await ensureGatewayProfile(profile)
-        const { messages } = await getAllSessionMessages(storedSessionId, profile)
+        const { messages } = await getAllSessionMessagesForOwner(storedSessionId, owner)
         const branchMessages = toBranchMessages(toChatMessages(messages))
 
         if (!branchMessages.length) {
@@ -1760,11 +2301,24 @@ export function useSessionActions({
       }
 
       try {
-        if (closingRuntimeId) {
-          await requestGateway('session.close', { session_id: closingRuntimeId }).catch(() => undefined)
+        const removedOwner = removed?.profile?.trim()
+          ? {
+              connectionId: removed.connection_id?.trim() || null,
+              profile: removed.profile.trim()
+            }
+          : null
+
+        if (closingRuntimeId && removedOwner) {
+          await requestForSessionOwner(removedOwner, 'session.close', { session_id: closingRuntimeId }).catch(
+            () => undefined
+          )
         }
 
-        await deleteSession(storedSessionId, removed?.profile)
+        if (!removedOwner) {
+          throw new Error('The session owner could not be resolved.')
+        }
+
+        await deleteSessionForOwner(storedSessionId, removedOwner)
         // A deleted session's cached tail must not resurrect on a recycled id.
         dropTranscriptTail(storedSessionId)
         // Only after the RPC lands — the optimistic eviction above can roll
@@ -1779,11 +2333,26 @@ export function useSessionActions({
         // A tiled copy of this session must not outlive it: collapse the pane
         // and evict its mirrored runtime state so nothing submits to (or renders)
         // a deleted session.
-        const tiledRuntimeId = runtimeIdByStoredSessionIdRef.current.get(storedSessionId)
+        const removedProfile = removed?.profile?.trim()
+
+        const removedBackend = removedProfile
+          ? createBackendKey({
+              connectionId: removed?.connection_id?.trim() || null,
+              gatewayEpoch: gatewayEpochForAgent(removed?.connection_id?.trim() || null, removedProfile),
+              profile: removedProfile
+            })
+          : null
+
+        const removedDurableKey = removedBackend ? rendererDurableKey(removedBackend, storedSessionId) : null
+
+        const tiledRuntimeId = removedDurableKey
+          ? runtimeIdByStoredSessionIdRef.current.get(removedDurableKey)
+          : undefined
+
         closeSessionTile(storedSessionId)
 
-        if (tiledRuntimeId) {
-          runtimeIdByStoredSessionIdRef.current.delete(storedSessionId)
+        if (tiledRuntimeId && removedDurableKey) {
+          runtimeIdByStoredSessionIdRef.current.delete(removedDurableKey)
           sessionStateByRuntimeIdRef.current.delete(tiledRuntimeId)
           dropSessionState(tiledRuntimeId)
         }
@@ -1830,7 +2399,7 @@ export function useSessionActions({
       activeSessionIdRef,
       copy,
       navigate,
-      requestGateway,
+      requestForSessionOwner,
       runtimeIdByStoredSessionIdRef,
       selectedStoredSessionId,
       selectedStoredSessionIdRef,
@@ -1862,16 +2431,38 @@ export function useSessionActions({
       }
 
       try {
-        await setSessionArchived(storedSessionId, true, archived?.profile)
+        const archivedProfile = archived?.profile?.trim()
+
+        if (!archived || !archivedProfile) {
+          throw new Error('The session owner could not be resolved.')
+        }
+
+        await setSessionArchivedForOwner(storedSessionId, true, {
+          connectionId: archived.connection_id?.trim() || null,
+          profile: archivedProfile
+        })
         // Archived rows never reach the sidebar, so their persisted unread can
         // only rot. Dropped after the RPC so a failed archive keeps it.
         forgetSessionUnread(archivedIds, archived?.profile)
         // An archived session is hidden from the sidebar; its tile must go too.
-        const tiledRuntimeId = runtimeIdByStoredSessionIdRef.current.get(storedSessionId)
+        const archivedBackend = archivedProfile
+          ? createBackendKey({
+              connectionId: archived?.connection_id?.trim() || null,
+              gatewayEpoch: gatewayEpochForAgent(archived?.connection_id?.trim() || null, archivedProfile),
+              profile: archivedProfile
+            })
+          : null
+
+        const archivedDurableKey = archivedBackend ? rendererDurableKey(archivedBackend, storedSessionId) : null
+
+        const tiledRuntimeId = archivedDurableKey
+          ? runtimeIdByStoredSessionIdRef.current.get(archivedDurableKey)
+          : undefined
+
         closeSessionTile(storedSessionId)
 
-        if (tiledRuntimeId) {
-          runtimeIdByStoredSessionIdRef.current.delete(storedSessionId)
+        if (tiledRuntimeId && archivedDurableKey) {
+          runtimeIdByStoredSessionIdRef.current.delete(archivedDurableKey)
           sessionStateByRuntimeIdRef.current.delete(tiledRuntimeId)
           dropSessionState(tiledRuntimeId)
         }
@@ -1897,10 +2488,14 @@ export function useSessionActions({
     branchCurrentSession,
     branchStoredSession,
     closeSettings,
+    confirmBackendSessionForSend,
     createBackendSessionForSend,
+    createProvisionalTileRuntime,
+    invalidateProvisionalMainRuntimeForOwner,
     openNewSessionTile,
     openSettings,
     removeSession,
+    requestPendingCreatedSession,
     resumeSession,
     selectSidebarItem,
     startFreshSessionDraft

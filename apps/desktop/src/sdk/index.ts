@@ -35,12 +35,21 @@ import { onGatewayEvent } from '@/contrib/events'
 import { registry } from '@/contrib/registry'
 import { deleteProfile, getLogs, getStatus, type HermesGateway } from '@/hermes'
 import {
+  type ParsedRendererRuntimeKey,
+  parseRendererRuntimeKey,
+  rendererRuntimeKey,
+  type RuntimeBackendIdentity
+} from '@/lib/session-runtime-key'
+import {
   $gateway,
   activeGatewayConnectionId,
+  gatewayEpochForAgent,
   openGatewayForAgent,
   openGatewayForProfile,
   requestGatewayForAgent,
+  requestGatewayForAgentWithBackend,
   requestGatewayForProfile,
+  requestGatewayForProfileWithBackend,
   retireLocalProfileGateways
 } from '@/store/gateway'
 import { notify, notifyError } from '@/store/notifications'
@@ -70,6 +79,12 @@ import {
   requestSessionResume,
   setResumeExhaustedSessionId
 } from '@/store/session'
+import {
+  RendererRuntimeEpochMismatchError,
+  RendererRuntimeKeyRequiredError,
+  RendererRuntimeOwnerMismatchError,
+  requestForRendererRuntime
+} from '@/store/session-request-router'
 import {
   $focusedRuntimeId,
   $focusedSessionState,
@@ -161,23 +176,174 @@ const $busyBySession = computed($sessionStates, states => {
 
 const $viewport = atom<ViewportRect>(readViewport())
 
+type PluginDurableSessionMethod = 'session.resume' | 'session.set_hidden'
+
+const DURABLE_SESSION_METHODS = new Set<PluginDurableSessionMethod>(['session.resume', 'session.set_hidden'])
+const RUNTIME_RESULT_METHODS = new Set(['session.branch', 'session.create', 'session.resume'])
+
+const isDurableSessionMethod = (method: string): method is PluginDurableSessionMethod =>
+  DURABLE_SESSION_METHODS.has(method as PluginDurableSessionMethod)
+
+function pluginSessionIdentity(
+  method: string,
+  params: Record<string, unknown>
+): {
+  hasSessionId: boolean
+  rawSessionId: string
+  rendererRuntime: null | ParsedRendererRuntimeKey
+} {
+  const hasSessionId = Object.prototype.hasOwnProperty.call(params, 'session_id')
+  const rawSessionId = typeof params.session_id === 'string' ? params.session_id.trim() : ''
+  const rendererRuntime = rawSessionId ? parseRendererRuntimeKey(rawSessionId) : null
+
+  if (hasSessionId && !rendererRuntime && (!rawSessionId || !isDurableSessionMethod(method))) {
+    throw new RendererRuntimeKeyRequiredError()
+  }
+
+  return { hasSessionId, rawSessionId, rendererRuntime }
+}
+
+function assertPluginRuntimeOwner(
+  runtime: ParsedRendererRuntimeKey,
+  owner: { connectionId: null | string; profile: string }
+): void {
+  if (
+    runtime.backend.connectionId !== owner.connectionId ||
+    normalizeProfileKey(runtime.backend.profile) !== normalizeProfileKey(owner.profile)
+  ) {
+    throw new RendererRuntimeOwnerMismatchError()
+  }
+
+  if (typeof runtime.backend.gatewayEpoch !== 'number') {
+    throw new Error('The renderer runtime has no numeric socket generation.')
+  }
+}
+
+function assertPluginRouteProfile(
+  owner: { connectionId: null | string; profile: string },
+  params: Record<string, unknown>
+): void {
+  if (
+    typeof params.profile === 'string' &&
+    normalizeProfileKey(params.profile) !== normalizeProfileKey(owner.profile)
+  ) {
+    throw new RendererRuntimeOwnerMismatchError()
+  }
+}
+
+function assertPluginRuntimeCurrent(runtime: ParsedRendererRuntimeKey): void {
+  if (
+    runtime.backend.gatewayEpoch !==
+    gatewayEpochForAgent(runtime.backend.connectionId, normalizeProfileKey(runtime.backend.profile))
+  ) {
+    throw new RendererRuntimeEpochMismatchError()
+  }
+}
+
+function qualifyPluginRuntimeResult<T>(method: string, result: T, backend: RuntimeBackendIdentity): T {
+  if (!RUNTIME_RESULT_METHODS.has(method) || !result || typeof result !== 'object') {
+    return result
+  }
+
+  const response = result as Record<string, unknown>
+  const sessionId = typeof response.session_id === 'string' ? response.session_id.trim() : ''
+
+  if (!sessionId) {
+    return result
+  }
+
+  const encoded = parseRendererRuntimeKey(sessionId)
+
+  if (encoded) {
+    assertPluginRuntimeOwner(encoded, backend)
+
+    if (encoded.backend.gatewayEpoch !== backend.gatewayEpoch) {
+      throw new RendererRuntimeEpochMismatchError()
+    }
+
+    return result
+  }
+
+  return { ...response, session_id: rendererRuntimeKey(backend, sessionId) } as T
+}
+
+async function requestPluginAgentRoute<T>(
+  owner: { connectionId: null | string; profile: string },
+  method: string,
+  params: Record<string, unknown>,
+  rendererRuntime: null | ParsedRendererRuntimeKey
+): Promise<T> {
+  assertPluginRouteProfile(owner, params)
+
+  if (rendererRuntime) {
+    assertPluginRuntimeOwner(rendererRuntime, owner)
+    assertPluginRuntimeCurrent(rendererRuntime)
+    const result = await requestForRendererRuntime<T>(params.session_id as string, method, params)
+
+    return qualifyPluginRuntimeResult(method, result, rendererRuntime.backend)
+  }
+
+  if (RUNTIME_RESULT_METHODS.has(method)) {
+    const response = await requestGatewayForAgentWithBackend<T>(owner.connectionId, owner.profile, method, params)
+
+    return qualifyPluginRuntimeResult(method, response.result, response.backend)
+  }
+
+  return requestGatewayForAgent<T>(owner.connectionId, owner.profile, method, params)
+}
+
+async function requestPluginLocalProfile<T>(
+  profile: string,
+  method: string,
+  params: Record<string, unknown>,
+  rendererRuntime: null | ParsedRendererRuntimeKey
+): Promise<T> {
+  const owner = { connectionId: null, profile }
+  assertPluginRouteProfile(owner, params)
+
+  if (rendererRuntime) {
+    assertPluginRuntimeOwner(rendererRuntime, owner)
+    assertPluginRuntimeCurrent(rendererRuntime)
+    const result = await requestForRendererRuntime<T>(params.session_id as string, method, params)
+
+    return qualifyPluginRuntimeResult(method, result, rendererRuntime.backend)
+  }
+
+  if (RUNTIME_RESULT_METHODS.has(method)) {
+    const response = await requestGatewayForProfileWithBackend<T>(profile, method, params)
+
+    return qualifyPluginRuntimeResult(method, response.result, response.backend)
+  }
+
+  return requestGatewayForProfile<T>(profile, method, params)
+}
+
 async function requestPluginProfile<T>(
   route: PluginProfileRoute | string,
   method: string,
   params: Record<string, unknown>
 ): Promise<T> {
+  const { rendererRuntime } = pluginSessionIdentity(method, params)
+
   if (typeof route !== 'string') {
-    return requestGatewayForAgent<T>(route.connectionId, route.profile, method, params)
+    const profile = normalizeProfileKey(route.profile)
+
+    return requestPluginAgentRoute<T>({ connectionId: route.connectionId, profile }, method, params, rendererRuntime)
   }
 
   const getAgentRoster = window.hermesDesktop?.getAgentRoster
+  const profile = route.trim() || 'default'
+
+  if (rendererRuntime) {
+    assertPluginRuntimeOwner(rendererRuntime, { connectionId: null, profile })
+    assertPluginRuntimeCurrent(rendererRuntime)
+  }
 
   if (!getAgentRoster) {
-    return requestGatewayForProfile<T>(route, method, params)
+    return requestPluginLocalProfile<T>(profile, method, params, rendererRuntime)
   }
 
   const roster = await getAgentRoster()
-  const profile = route.trim() || 'default'
   const soleLocalSource = roster.sources.length === 1 && roster.sources[0]?.kind === 'local'
 
   // The string overload is compatibility-only. A sole local registry is the
@@ -185,7 +351,7 @@ async function requestPluginProfile<T>(
   // its live enumeration transiently failed. Any additional source requires a
   // descriptor because an undialed/unreachable source may expose the same name.
   if (soleLocalSource) {
-    return requestGatewayForProfile<T>(profile, method, params)
+    return requestPluginLocalProfile<T>(profile, method, params, rendererRuntime)
   }
 
   throw new Error(
@@ -228,6 +394,11 @@ interface PluginOpenSessionOptions {
   intent?: OpenSessionIntent
   keepAllProfilesScope?: boolean
   profile?: null | string
+  /** Exact registry source for the durable session. Profile names and stored
+   *  ids are source-local, so multi-source callers must carry this descriptor
+   *  through navigation instead of relying on whichever gateway is active
+   *  after an async wake. */
+  route?: PluginProfileRoute
   /** A cold profile backend can lose the hydration-timeout race once and still
    *  be fine on a second try. When set, a hydration timeout is retried
    *  internally before it reaches the caller or arms the core stranded-session
@@ -568,8 +739,37 @@ export const host = {
    *  also scope chrome onto that profile and collapse the sidebar. */
   openSession: async (storedSessionId: string, options: PluginOpenSessionOptions = {}): Promise<void> => {
     const generation = ++openSessionGeneration
-    const profile = (options.profile ?? '').trim()
+
+    const routeProfile = options.route
+      ? normalizeProfileKey(options.route.targetProfile?.trim() || options.route.profile)
+      : ''
+
+    const profile = (options.profile ?? routeProfile).trim()
     const targetProfile = normalizeProfileKey(profile || $activeGatewayProfile.get())
+    const routeConnectionId = options.route?.connectionId?.trim() || ''
+
+    if (options.route && !routeConnectionId) {
+      throw new Error('openSession requires a non-empty route connection id.')
+    }
+
+    if (options.route && routeProfile !== targetProfile) {
+      throw new Error(`openSession profile "${targetProfile}" does not match its exact route "${routeProfile}".`)
+    }
+
+    // Capture a complete owner before the first await. A legacy profile-only
+    // caller remains pinned to the source active at invocation; descriptor
+    // callers (Bot Mode / hidden sessions) keep their explicit A/B owner even
+    // if the foreground gateway changes while the backend wakes.
+    const sessionOwner = {
+      connectionId:
+        options.route?.mode === 'local' || routeConnectionId === 'local'
+          ? null
+          : options.route
+            ? routeConnectionId
+            : activeGatewayConnectionId(),
+      profile: targetProfile
+    }
+
     const expectHistory = options.expectHistory ?? false
 
     const plan = planPluginOpenSession({
@@ -600,11 +800,15 @@ export const host = {
       // budget's. A workspace switch moves $activeGatewayProfile / chrome REST;
       // a plain navigation only opens the bot's gateway so session.resume can
       // hydrate, leaving chrome on the launch backend.
-      const dial = plan.switchWorkspace
-        ? () => ensureGatewayProfile(plan.switchWorkspace as string)
-        : plan.dialWithoutSwitching
-          ? () => openGatewayForProfile(plan.dialWithoutSwitching as string)
-          : null
+      const dial = options.route
+        ? plan.switchWorkspace
+          ? () => ensureGatewayAgent(sessionOwner.connectionId, targetProfile)
+          : () => openGatewayForAgent(sessionOwner.connectionId, targetProfile)
+        : plan.switchWorkspace
+          ? () => ensureGatewayProfile(plan.switchWorkspace as string)
+          : plan.dialWithoutSwitching
+            ? () => openGatewayForProfile(plan.dialWithoutSwitching as string)
+            : null
 
       if (dial) {
         // Bounded only on the hydration contract, which is where a budget and a
@@ -647,7 +851,8 @@ export const host = {
                 window.location.hash = target
               }
             },
-            options.intent ?? 'in-place'
+            options.intent ?? 'in-place',
+            sessionOwner
           )
 
           // Judge the main surface AFTER the open: on a cold start the persisted
@@ -853,6 +1058,66 @@ export const host = {
   /** Gateway JSON-RPC — sessions, config, skills, cron, kanban, everything
    *  the app itself uses. Lazy: resolves the LIVE socket per call. */
   request: async <T>(method: string, params: Record<string, unknown> = {}): Promise<T> => {
+    const { hasSessionId, rawSessionId, rendererRuntime } = pluginSessionIdentity(method, params)
+
+    if (rendererRuntime) {
+      assertPluginRouteProfile(
+        { connectionId: rendererRuntime.backend.connectionId, profile: rendererRuntime.backend.profile },
+        params
+      )
+      const result = await requestForRendererRuntime<T>(rawSessionId, method, params)
+
+      return qualifyPluginRuntimeResult(method, result, rendererRuntime.backend)
+    }
+
+    if (hasSessionId) {
+      const owners = new Map<string, { connectionId: null | string; profile: string }>()
+
+      for (const session of $sessions
+        .get()
+        .filter(row => row.id === rawSessionId || row._lineage_root_id === rawSessionId)) {
+        const profile = session.profile?.trim()
+
+        if (!profile) {
+          continue
+        }
+
+        const owner = { connectionId: session.connection_id?.trim() || null, profile: normalizeProfileKey(profile) }
+        owners.set(JSON.stringify([owner.connectionId, owner.profile]), owner)
+      }
+
+      if (owners.size !== 1) {
+        throw new Error('A raw session id requires one exact durable session owner.')
+      }
+
+      const owner = owners.values().next().value as { connectionId: null | string; profile: string }
+      assertPluginRouteProfile(owner, params)
+
+      if (RUNTIME_RESULT_METHODS.has(method)) {
+        const response = await requestGatewayForAgentWithBackend<T>(owner.connectionId, owner.profile, method, params)
+
+        return qualifyPluginRuntimeResult(method, response.result, response.backend)
+      }
+
+      return requestGatewayForAgent<T>(owner.connectionId, owner.profile, method, params)
+    }
+
+    if (RUNTIME_RESULT_METHODS.has(method)) {
+      const requestedProfile =
+        typeof params.profile === 'string'
+          ? normalizeProfileKey(params.profile)
+          : normalizeProfileKey($activeGatewayProfile.get())
+
+      const response = await requestGatewayForAgentWithBackend<T>(
+        activeGatewayConnectionId(),
+        requestedProfile,
+        method,
+        params
+      )
+
+      return qualifyPluginRuntimeResult(method, response.result, response.backend)
+    }
+
     const gateway = $gateway.get()
 
     if (!gateway) {

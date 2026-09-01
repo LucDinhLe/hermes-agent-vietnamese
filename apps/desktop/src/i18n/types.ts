@@ -5,7 +5,7 @@
 // partial locales should use `defineLocale()` so missing desktop-only strings
 // fall back to English while new keys remain type-checked.
 
-export type Locale = 'en' | 'zh' | 'zh-hant' | 'ja' | 'ar'
+export type Locale = 'en' | 'zh' | 'zh-hant' | 'ja' | 'ar' | 'vi'
 
 export type ToolTitleKey =
   | 'browser_click'
@@ -86,6 +86,8 @@ export interface Translations {
     set: string
     skip: string
     update: string
+    truncatedCharacters: (count: number) => string
+    sessionUsageSummary: (calls: number, input: number, output: number, total: number) => string
     tryHint: (term: string) => string
     on: string
     off: string
@@ -896,6 +898,23 @@ export interface Translations {
       fallbackAdd: string
       fallbackEmpty: string
       notInCatalog: string
+      moa?: {
+        title: string
+        description: string
+        preset: string
+        enabled: string
+        setDefault: string
+        delete: string
+        newPreset: string
+        addPreset: string
+        defaultLabel: string
+        disableReference: (index: number) => string
+        enableReference: (index: number) => string
+        remove: string
+        reference: (index: number) => string
+        addReference: string
+        aggregator: string
+      }
       tasks: Record<string, AuxTaskCopy>
     }
     providers: {
@@ -1754,6 +1773,8 @@ export interface Translations {
     noFilterMatches: string
     projects: {
       sectionLabel: string
+      pinnedSectionLabel: string
+      pinnedEmpty: string
       home: string
       newButton: string
       createTitle: string
@@ -2426,6 +2447,8 @@ export interface Translations {
     aria: string
     panelsAria: string
     files: string
+    browser: string
+    browserNewTab: string
     terminal: string
     noFolderSelected: string
     changeCwdTitle: string
@@ -2532,6 +2555,9 @@ export interface Translations {
       reload: string
       address: string
       addressPlaceholder: string
+      moreActions: string
+      sharedWithAgent: string
+      sharedWithAgentHint: string
       blankPageBody: string
       finishedRestarting: (message?: string) => string
       failedRestarting: (message: string) => string
@@ -2729,6 +2755,13 @@ export interface Translations {
       copyFile: string
       copyPath: string
       outputAlt: string
+      toolPayload: string
+      arguments: string
+      result: string
+      searchResults: string
+      search: string
+      standardOutput: string
+      standardError: string
       rawResponse: string
       copyActivity: string
       recoveredOne: string

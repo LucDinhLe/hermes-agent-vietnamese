@@ -189,6 +189,7 @@ interface ModelSettingsProps {
 export function ModelSettings({ onMainModelChanged, scopeProfile = null }: ModelSettingsProps) {
   const { t } = useI18n()
   const m = t.settings.model
+  const moaText = m.moa!
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [mainModel, setMainModel] = useState<{ model: string; provider: string } | null>(null)
@@ -1031,15 +1032,12 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
       </section>
       {moa && currentMoaPreset && (
         <section>
-          <SectionHeading icon={Cpu} title="Mixture of Agents" />
-          <p className="mb-2 text-xs text-muted-foreground">
-            Configure named presets that appear as models under the Mixture of Agents provider. The aggregator is the
-            acting model.
-          </p>
+          <SectionHeading icon={Cpu} title={moaText.title} />
+          <p className="mb-2 text-xs text-muted-foreground">{moaText.description}</p>
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Select onValueChange={setSelectedMoaPreset} value={selectedMoaPreset || moa.default_preset}>
               <SelectTrigger className={cn('min-w-40', CONTROL_TEXT)}>
-                <SelectValue placeholder="Preset" />
+                <SelectValue placeholder={moaText.preset} />
               </SelectTrigger>
               <SelectContent>
                 {Object.keys(moa.presets).map(name => (
@@ -1050,7 +1048,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
               </SelectContent>
             </Select>
             <label className="flex items-center gap-2 rounded-sm border border-border px-2 py-1 text-xs">
-              Enabled
+              {moaText.enabled}
               <Switch
                 checked={currentMoaPreset.enabled !== false}
                 disabled={applying}
@@ -1071,7 +1069,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
               size="sm"
               variant="text"
             >
-              Set default
+              {moaText.setDefault}
             </Button>
             <Button
               disabled={Object.keys(moa.presets).length <= 1 || applying}
@@ -1097,12 +1095,12 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
               size="sm"
               variant="ghost"
             >
-              Delete
+              {moaText.delete}
             </Button>
             <Input
               className={cn('w-40', CONTROL_TEXT)}
               onChange={event => setNewMoaPresetName(event.target.value)}
-              placeholder="new preset"
+              placeholder={moaText.newPreset}
               value={newMoaPresetName}
             />
             <Button
@@ -1125,18 +1123,22 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
               size="sm"
               variant="textStrong"
             >
-              Add preset
+              {moaText.addPreset}
             </Button>
           </div>
           <div className="mb-2 text-xs text-muted-foreground">
-            Default: <span className="font-mono">{moa.default_preset}</span>
+            {moaText.defaultLabel}: <span className="font-mono">{moa.default_preset}</span>
           </div>
           <div className="grid gap-1">
             {currentMoaPreset.reference_models.map((slot, index) => (
               <ListRow
                 action={
                   <Switch
-                    aria-label={`${slot.enabled !== false ? 'Disable' : 'Enable'} reference ${index + 1}`}
+                    aria-label={
+                      slot.enabled !== false
+                        ? moaText.disableReference(index + 1)
+                        : moaText.enableReference(index + 1)
+                    }
                     checked={slot.enabled !== false}
                     disabled={applying}
                     onCheckedChange={checked =>
@@ -1213,7 +1215,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
                       size="sm"
                       variant="ghost"
                     >
-                      Remove
+                      {moaText.remove}
                     </Button>
                   </div>
                 }
@@ -1224,7 +1226,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
                   </span>
                 }
                 key={`${selectedMoaPreset}-${index}`}
-                title={`Reference ${index + 1}`}
+                title={moaText.reference(index + 1)}
               />
             ))}
             <Button
@@ -1238,7 +1240,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
               size="sm"
               variant="textStrong"
             >
-              Add reference model
+              {moaText.addReference}
             </Button>
             <ListRow
               below={
@@ -1300,7 +1302,7 @@ export function ModelSettings({ onMainModelChanged, scopeProfile = null }: Model
                   {currentMoaPreset.aggregator.provider} · {currentMoaPreset.aggregator.model}
                 </span>
               }
-              title="Aggregator"
+              title={moaText.aggregator}
             />
           </div>
         </section>

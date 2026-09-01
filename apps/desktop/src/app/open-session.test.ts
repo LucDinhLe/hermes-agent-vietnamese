@@ -26,6 +26,11 @@ vi.mock('./routes', () => ({
 }))
 
 import { $activeSessionId, $selectedStoredSessionId } from '@/store/session'
+import {
+  clearSessionRouteOwners,
+  sessionRouteOwner,
+  stageSessionRouteOwner
+} from '@/store/session-route-owner'
 
 import { mainChatOccupied, openSession, openSessionIntentFromModifiers } from './open-session'
 
@@ -91,6 +96,7 @@ describe('openSession', () => {
     reuseBlankDraftTile.mockReset()
     $activeSessionId.set(null)
     $selectedStoredSessionId.set(null)
+    clearSessionRouteOwners()
   })
 
   it('in-place focuses an existing tile and does not navigate', () => {
@@ -210,5 +216,28 @@ describe('openSession', () => {
     openSession('', navigate)
     expect(navigate).not.toHaveBeenCalled()
     expect(focusOpenSession).not.toHaveBeenCalled()
+  })
+
+  it('records an explicit A owner for a same-id route while other backends may be ambient', () => {
+    focusOpenSession.mockReturnValue(null)
+    openSession('same-id', navigate, 'in-place', { connectionId: 'source-a', profile: 'mbc' })
+
+    expect(sessionRouteOwner('same-id')).toEqual({ connectionId: 'source-a', profile: 'mbc' })
+  })
+
+  it('consumes the exact owner staged by an id-only sidebar callback', () => {
+    focusOpenSession.mockReturnValue(null)
+    stageSessionRouteOwner('same-id', { connectionId: 'source-a', profile: 'mbc' })
+    openSession('same-id', navigate)
+
+    expect(sessionRouteOwner('same-id')).toEqual({ connectionId: 'source-a', profile: 'mbc' })
+  })
+
+  it('clears a stale owner when a truly raw id is opened without a row hint', () => {
+    focusOpenSession.mockReturnValue(null)
+    openSession('same-id', navigate, 'in-place', { connectionId: 'source-a', profile: 'mbc' })
+    openSession('same-id', navigate)
+
+    expect(sessionRouteOwner('same-id')).toBeUndefined()
   })
 })

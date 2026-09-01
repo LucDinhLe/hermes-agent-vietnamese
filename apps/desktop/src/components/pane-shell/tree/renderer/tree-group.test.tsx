@@ -2,8 +2,10 @@ import { act, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { PANE_TAB_STRIP_HEIGHT_PX } from '@/components/ui/pane-tab'
 import { registry } from '@/contrib/registry'
 
+import { $layoutEditMode } from '../../edit-mode'
 import type { GroupNode } from '../model'
 
 import { TreeGroup } from './tree-group'
@@ -50,6 +52,7 @@ afterEach(() => {
   root = null
   container = null
   disposePane = null
+  $layoutEditMode.set(false)
   vi.unstubAllGlobals()
 })
 
@@ -72,5 +75,26 @@ describe('TreeGroup', () => {
     render(<TreeGroup node={terminalGroup(true)} parentAxis="column" />)
 
     expect(toggle('Restore').querySelector('i')!.className).toContain('codicon-chevron-up')
+  })
+
+  it('starts the edit veil below the inherited 36px V32 tab strip', () => {
+    disposePane = registry.register({
+      area: 'panes',
+      data: { height: '12rem' },
+      id: 'terminal',
+      render: () => <div>Terminal</div>,
+      title: 'Terminal'
+    })
+    vi.stubGlobal('CSS', { escape: (value: string) => value })
+    $layoutEditMode.set(true)
+
+    render(<TreeGroup node={terminalGroup(false)} parentAxis="column" />)
+
+    const veil = [...container!.querySelectorAll<HTMLElement>('div')].find(
+      element => element.style.top === `${PANE_TAB_STRIP_HEIGHT_PX}px`
+    )
+
+    expect(PANE_TAB_STRIP_HEIGHT_PX).toBe(36)
+    expect(veil).toBeDefined()
   })
 })

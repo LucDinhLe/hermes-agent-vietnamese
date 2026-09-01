@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PaneVisibleContext } from '@/components/pane-shell/pane-visibility'
 import { $clarifyRequests } from '@/store/clarify'
 import type { ComposerAttachment } from '@/store/composer'
-import { $gateway } from '@/store/gateway'
 import {
   clearAllPrompts,
   hasBlockingPromptRequest,
@@ -18,6 +17,12 @@ import { type ComposerTarget, requestComposerSubmit } from '../focus'
 import { ComposerScopeProvider, ComposerSurfaceProvider, MAIN_COMPOSER_SCOPE } from '../scope'
 
 import { useComposerSubmit } from './use-composer-submit'
+
+const requestEventSource = vi.hoisted(() => vi.fn(async () => ({ ok: true })))
+
+vi.mock('@/store/gateway-event-source', () => ({
+  requestForGatewayEventSource: requestEventSource
+}))
 
 interface SubmitHarnessOptions {
   attachments?: ComposerAttachment[]
@@ -386,8 +391,6 @@ describe('useComposerSubmit busy-turn routing', () => {
 })
 
 describe('useComposerSubmit with a clarify parked on the session', () => {
-  const gatewayRequest = vi.fn(async () => ({ ok: true }))
-
   const parkClarify = (sessionId: string) => {
     $clarifyRequests.set({
       [sessionId]: {
@@ -398,14 +401,12 @@ describe('useComposerSubmit with a clarify parked on the session', () => {
         sessionId
       }
     })
-    $gateway.set({ request: gatewayRequest } as unknown as ReturnType<typeof $gateway.get>)
   }
 
   afterEach(() => {
     cleanup()
-    gatewayRequest.mockClear()
+    requestEventSource.mockClear()
     $clarifyRequests.set({})
-    $gateway.set(null)
     vi.restoreAllMocks()
   })
 
@@ -418,7 +419,7 @@ describe('useComposerSubmit with a clarify parked on the session', () => {
     })
 
     await waitFor(() =>
-      expect(gatewayRequest).toHaveBeenCalledWith('clarify.respond', {
+      expect(requestEventSource).toHaveBeenCalledWith('runtime-session', 'clarify.respond', {
         request_id: 'req-runtime-session',
         answer: ''
       })
@@ -438,7 +439,10 @@ describe('useComposerSubmit with a clarify parked on the session', () => {
     })
 
     await waitFor(() => expect(onSteer).toHaveBeenCalledWith('change course'))
-    expect(gatewayRequest).toHaveBeenCalledWith('clarify.respond', { request_id: 'req-runtime-session', answer: '' })
+    expect(requestEventSource).toHaveBeenCalledWith('runtime-session', 'clarify.respond', {
+      request_id: 'req-runtime-session',
+      answer: ''
+    })
   })
 
   it('leaves the question alone for an empty Enter (Stop, not an answer)', () => {
@@ -449,7 +453,7 @@ describe('useComposerSubmit with a clarify parked on the session', () => {
       hook.result.current.submitDraft()
     })
 
-    expect(gatewayRequest).not.toHaveBeenCalled()
+    expect(requestEventSource).not.toHaveBeenCalled()
     expect($clarifyRequests.get()['runtime-session']).toBeDefined()
     expect(onCancel).toHaveBeenCalledTimes(1)
   })
@@ -463,7 +467,7 @@ describe('useComposerSubmit with a clarify parked on the session', () => {
     })
 
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
-    expect(gatewayRequest).not.toHaveBeenCalled()
+    expect(requestEventSource).not.toHaveBeenCalled()
     expect($clarifyRequests.get()['other-session']).toBeDefined()
   })
 })

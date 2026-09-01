@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ClientSessionState } from '@/app/types'
 import { createClientSessionState } from '@/lib/chat-runtime'
+import { rendererRuntimeKey } from '@/lib/session-runtime-key'
 
 import { $activeSessionId, $selectedStoredSessionId, $unreadFinishedSessionIds } from './session'
 import {
@@ -18,6 +19,14 @@ import {
 
 function state(over: Partial<ClientSessionState> = {}): ClientSessionState {
   return { ...createClientSessionState(null), storedSessionId: 's1', ...over }
+}
+
+function scopedRuntime(connectionId: string, runtimeSessionId: string): string {
+  return rendererRuntimeKey({ connectionId, gatewayEpoch: 1, profile: 'default' }, runtimeSessionId)
+}
+
+function recordScope(connectionId: string, runtimeSessionId: string): void {
+  recordSessionEventScope({ connectionId, gatewayEpoch: 1, profile: 'default', session_id: runtimeSessionId })
 }
 
 // The stale-flag half of #53902/#73082: a backend respawn re-mints runtime
@@ -74,8 +83,10 @@ describe('reconcileBusyStatesOnReconnect', () => {
 
   it('primary reconcile leaves registry-scoped sessions alone', () => {
     const scope = registryBackendScopeKey('connA', 'default')
-    publishSessionState('rtA', state({ busy: true, storedSessionId: 'sA' }))
-    recordSessionEventScope({ connectionId: 'connA', profile: 'default', session_id: 'rtA' })
+    const runtimeA = scopedRuntime('connA', 'rtA')
+
+    recordScope('connA', 'rtA')
+    publishSessionState(runtimeA, state({ busy: true, storedSessionId: 'sA' }))
     publishSessionState('rtLocal', state({ busy: true, storedSessionId: 'sLocal' }))
 
     reconcileBusyStatesOnReconnect()
@@ -89,10 +100,13 @@ describe('reconcileBusyStatesOnReconnect', () => {
   })
 
   it('scoped reconcile does not touch other connections or the primary', () => {
-    publishSessionState('rtA', state({ busy: true, storedSessionId: 'sA' }))
-    recordSessionEventScope({ connectionId: 'connA', profile: 'default', session_id: 'rtA' })
-    publishSessionState('rtB', state({ busy: true, storedSessionId: 'sB' }))
-    recordSessionEventScope({ connectionId: 'connB', profile: 'default', session_id: 'rtB' })
+    const runtimeA = scopedRuntime('connA', 'rt-shared')
+    const runtimeB = scopedRuntime('connB', 'rt-shared')
+
+    recordScope('connA', 'rt-shared')
+    publishSessionState(runtimeA, state({ busy: true, storedSessionId: 'sA' }))
+    recordScope('connB', 'rt-shared')
+    publishSessionState(runtimeB, state({ busy: true, storedSessionId: 'sB' }))
     publishSessionState('rtLocal', state({ busy: true, storedSessionId: 'sLocal' }))
 
     reconcileBusyStatesOnReconnect(registryBackendScopeKey('connA', 'default'))

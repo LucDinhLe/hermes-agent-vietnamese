@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/pagination'
 import { RowButton } from '@/components/ui/row-button'
 import { Tip } from '@/components/ui/tooltip'
-import { getAllSessionMessages, listAllProfileSessions } from '@/hermes'
+import { getAllSessionMessagesForOwner, listAllProfileSessions, sessionApiOwner } from '@/hermes'
 import { type Translations, useI18n } from '@/i18n'
 import { resolveBrandIcon } from '@/lib/brand-icon'
 import {
@@ -93,7 +93,7 @@ function paginationItems(page: number, pageCount: number): Array<number | 'ellip
 
 type CellCtx = {
   onOpen: (href: string) => void | Promise<void>
-  onOpenChat: (sessionId: string) => void
+  onOpenChat: (artifact: ArtifactRecord) => void
 }
 
 interface ArtifactColumn {
@@ -140,7 +140,7 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
 
       const { artifacts: nextArtifacts, failures } = await loadArtifactsForSessions(
         sessions,
-        async session => (await getAllSessionMessages(session.id, session.profile)).messages
+        async session => (await getAllSessionMessagesForOwner(session.id, sessionApiOwner(session))).messages
       )
 
       if (failures.length > 0) {
@@ -308,7 +308,20 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
   // every artifact cell re-render whenever the page did — and a link cell's
   // async title fetch re-rendered the page repeatedly. openArtifact is already
   // a useCallback; navigate is stable, so onOpenChat can be too.
-  const openChat = useCallback((sessionId: string) => openSession(sessionId, navigate), [navigate])
+  const openChat = useCallback(
+    (artifact: ArtifactRecord) => {
+      if (!artifact.sessionProfile) {
+        return
+      }
+
+      openSession(artifact.sessionId, navigate, 'in-place', {
+        connectionId: artifact.sessionConnectionId,
+        profile: artifact.sessionProfile
+      })
+    },
+    [navigate]
+  )
+
   const cellCtx: CellCtx = useMemo(() => ({ onOpen: openArtifact, onOpenChat: openChat }), [openArtifact, openChat])
 
   return (
@@ -373,7 +386,7 @@ export function ArtifactsView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
                       failedImage={failedImageIds.has(artifact.id)}
                       key={artifact.id}
                       onImageError={markImageFailed}
-                      onOpenChat={sessionId => openSession(sessionId, navigate)}
+                      onOpenChat={openChat}
                     />
                   ))}
                 </div>
@@ -461,7 +474,7 @@ interface ArtifactImageCardProps {
   artifact: ArtifactRecord
   failedImage: boolean
   onImageError: (id: string) => void
-  onOpenChat: (sessionId: string) => void
+  onOpenChat: (artifact: ArtifactRecord) => void
 }
 
 function ArtifactImageCard({ artifact, failedImage, onImageError, onOpenChat }: ArtifactImageCardProps) {
@@ -533,7 +546,7 @@ function ArtifactImageCard({ artifact, failedImage, onImageError, onOpenChat }: 
         </div>
 
         <div className="flex flex-wrap gap-1.5">
-          <Button onClick={() => onOpenChat(artifact.sessionId)} size="xs" type="button" variant="textStrong">
+          <Button onClick={() => onOpenChat(artifact)} size="xs" type="button" variant="textStrong">
             <FolderOpen className="size-3" />
             {a.chat}
           </Button>
@@ -637,7 +650,7 @@ const LocationCell = memo(function LocationCell({ artifact }: { artifact: Artifa
 
 const SessionCell = memo(function SessionCell({ artifact, ctx }: { artifact: ArtifactRecord; ctx: CellCtx }) {
   return (
-    <ArtifactCellAction onClick={() => ctx.onOpenChat(artifact.sessionId)} title={artifact.sessionTitle}>
+    <ArtifactCellAction onClick={() => ctx.onOpenChat(artifact)} title={artifact.sessionTitle}>
       <span className="flex min-w-0 flex-col">
         <span className="truncate">{artifact.sessionTitle}</span>
         <span className="truncate text-[0.6875rem] font-normal text-(--ui-text-tertiary)">

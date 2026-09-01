@@ -21,6 +21,18 @@ vi.mock('@/app/gateway/hooks/use-gateway-request', () => ({
   useGatewayRequest: () => ({ requestGateway })
 }))
 
+vi.mock('@/store/session-request-router', () => ({
+  RendererRuntimeEpochMismatchError: class RendererRuntimeEpochMismatchError extends Error {},
+  requestForRendererRuntime: (
+    _runtimeId: string,
+    method: string,
+    params?: Record<string, unknown>,
+    timeoutMs?: number
+  ) => (timeoutMs === undefined ? requestGateway(method, params) : requestGateway(method, params, timeoutMs)),
+  requestForSessionOwner: (_owner: unknown, method: string, params?: Record<string, unknown>, timeoutMs?: number) =>
+    timeoutMs === undefined ? requestGateway(method, params) : requestGateway(method, params, timeoutMs)
+}))
+
 vi.mock('@/i18n', () => ({
   useI18n: () => ({
     t: {
@@ -45,6 +57,12 @@ const HOST_PATH = 'C:\\Users\\alice\\Pictures\\photo.png'
 const STAGED_PATH = '/root/.hermes/attachments/photo.png'
 const THUMBNAIL = 'data:image/png;base64,dGh1bWJuYWls'
 const FULL_SOURCE = 'data:image/png;base64,b3JpZ2luYWw='
+const TILE = {
+  kind: 'durable' as const,
+  owner: { connectionId: null, profile: 'default' },
+  runtimeId: RUNTIME_ID,
+  storedSessionId: STORED_ID
+}
 
 function makeAttachment(occurrenceId = createComposerAttachmentOccurrenceId()): ComposerAttachment {
   return {
@@ -152,7 +170,7 @@ describe('session tile attachment occurrence ownership', () => {
     scope.attachments.add(original)
 
     const { result } = renderHook(() =>
-      useSessionTileActions({ runtimeId: RUNTIME_ID, scope, storedSessionId: STORED_ID })
+      useSessionTileActions({ runtimeId: RUNTIME_ID, scope, storedSessionId: STORED_ID, tile: TILE })
     )
 
     let submitted!: Promise<boolean>
@@ -198,7 +216,7 @@ describe('session tile attachment occurrence ownership', () => {
     scope.attachments.add(original)
 
     const { result } = renderHook(() =>
-      useSessionTileActions({ runtimeId: RUNTIME_ID, scope, storedSessionId: STORED_ID })
+      useSessionTileActions({ runtimeId: RUNTIME_ID, scope, storedSessionId: STORED_ID, tile: TILE })
     )
 
     let submitted!: Promise<boolean>
@@ -236,7 +254,7 @@ describe('session tile attachment occurrence ownership', () => {
     scope.attachments.add(original)
 
     const { result } = renderHook(() =>
-      useSessionTileActions({ runtimeId: RUNTIME_ID, scope, storedSessionId: STORED_ID })
+      useSessionTileActions({ runtimeId: RUNTIME_ID, scope, storedSessionId: STORED_ID, tile: TILE })
     )
 
     let submitted!: Promise<boolean>
@@ -273,7 +291,7 @@ describe('session tile attachment occurrence ownership', () => {
     scope.attachments.add(original)
 
     const { result } = renderHook(() =>
-      useSessionTileActions({ runtimeId: RUNTIME_ID, scope, storedSessionId: STORED_ID })
+      useSessionTileActions({ runtimeId: RUNTIME_ID, scope, storedSessionId: STORED_ID, tile: TILE })
     )
 
     let submitted!: Promise<boolean>
@@ -314,7 +332,7 @@ describe('session tile attachment occurrence ownership', () => {
     scope.attachments.add(original)
 
     const { result } = renderHook(() =>
-      useSessionTileActions({ runtimeId: RUNTIME_ID, scope, storedSessionId: STORED_ID })
+      useSessionTileActions({ runtimeId: RUNTIME_ID, scope, storedSessionId: STORED_ID, tile: TILE })
     )
 
     await act(async () => {

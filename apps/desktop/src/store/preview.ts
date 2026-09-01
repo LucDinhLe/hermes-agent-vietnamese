@@ -3,7 +3,14 @@ import { atom, computed } from 'nanostores'
 import { persistentAtom } from '@/lib/persisted'
 import { normalize } from '@/lib/text'
 
-import { $rightRailActiveTabId, type RightRailTabId, selectRightRailTab } from './layout'
+import {
+  $rightRailActiveTabId,
+  $rightSidebarView,
+  type RightRailTabId,
+  selectRightRailTab,
+  setFileBrowserOpen,
+  setRightSidebarView
+} from './layout'
 
 /**
  * PREVIEW RAIL — one list of tabs, one way in.
@@ -63,6 +70,42 @@ export interface PreviewTab {
 const TABS_STORAGE_KEY = 'hermes.desktop.previewTabs.v2'
 /** Superseded by the tab list above; cleared so it can't leak forever. */
 const LEGACY_SESSION_REGISTRY_KEY = 'hermes.desktop.sessionPreviews.v1'
+export const SHARED_BROWSER_TAB_ID: RightRailTabId = 'url:shared-browser-v2'
+export const SHARED_BROWSER_HOME = 'https://www.google.com/'
+const previewTabLiveUrls = new Map<string, string>()
+
+/** The page a Browser tab most recently reached. It deliberately lives beside
+ * the tab registry instead of React state so hiding and restoring the shared
+ * Files/Browser rail cannot send the user back to the tab's opening address. */
+export function previewTabLiveUrl(tabId: string, fallback: string): string {
+  return previewTabLiveUrls.get(tabId) ?? fallback
+}
+
+export function rememberPreviewTabLiveUrl(tabId: string, url: string): void {
+  const next = url.trim()
+
+  if (next) {
+    previewTabLiveUrls.set(tabId, next)
+  }
+}
+
+export function forgetPreviewTabLiveUrl(tabId: string): void {
+  previewTabLiveUrls.delete(tabId)
+}
+
+function nextBrowserTabId(tabs: PreviewTab[]): RightRailTabId {
+  if (!tabs.some(tab => tab.id === SHARED_BROWSER_TAB_ID)) {
+    return SHARED_BROWSER_TAB_ID
+  }
+
+  let ordinal = 2
+
+  while (tabs.some(tab => tab.id === `${SHARED_BROWSER_TAB_ID}:${ordinal}`)) {
+    ordinal += 1
+  }
+
+  return `${SHARED_BROWSER_TAB_ID}:${ordinal}`
+}
 
 function isPreviewTarget(value: unknown): value is PreviewTarget {
   if (!value || typeof value !== 'object') {
@@ -124,14 +167,19 @@ export function decodePreviewTabs(raw: string): PreviewTab[] {
       : tab
   )
 
-  // One Browser: rekey restored URL tabs onto the singleton id (rows written
-  // before the id existed carried one id per address) and keep only the
-  // LAST — the most recently opened page is the one the browser shows.
-  const lastUrl = tabs.findLast(tab => tab.target.kind === 'url')
+  // URL rows written before V32 Browser tabs carried one id per address (or
+  // the dev.10 singleton id). Preserve every page while assigning stable,
+  // unique ids understood by the shared Browser rail.
+  return tabs.reduce<PreviewTab[]>((restored, tab) => {
+    if (tab.target.kind !== 'url') {
+      return [...restored, tab]
+    }
 
-  return tabs
-    .filter(tab => tab.target.kind !== 'url' || tab === lastUrl)
-    .map(tab => (tab.target.kind === 'url' ? { ...tab, id: previewTabId(tab.target) } : tab))
+    const currentId = tab.id === SHARED_BROWSER_TAB_ID || tab.id.startsWith(`${SHARED_BROWSER_TAB_ID}:`)
+    const id = currentId && !restored.some(item => item.id === tab.id) ? tab.id : nextBrowserTabId(restored)
+
+    return [...restored, { ...tab, id }]
+  }, [])
 }
 
 export const $previewTabs = persistentAtom<PreviewTab[]>(TABS_STORAGE_KEY, [], {
@@ -187,15 +235,8 @@ export const $previewReloadRequest = atom(0)
 export const $previewServerRestart = atom<PreviewServerRestart | null>(null)
 export const $previewServerRestartStatus = computed($previewServerRestart, restart => restart?.status ?? 'idle')
 
-/** The one Browser tab's id. URL targets all share it: the tab names the
- *  SURFACE (Browser), not the page, so opening a second URL navigates the
- *  browser it already has — re-front the tab, swap its target, and the pane
- *  rebuilds its webview against the new url. Files and artifacts stay keyed
- *  by identity; only the web surface is a singleton. */
-const BROWSER_TAB_ID: RightRailTabId = 'url:browser'
-
 export function previewTabId(target: PreviewTarget): RightRailTabId {
-  return target.kind === 'url' ? BROWSER_TAB_ID : `${target.kind}:${target.url}`
+  return target.kind === 'url' ? SHARED_BROWSER_TAB_ID : `${target.kind}:${target.url}`
 }
 
 // Browsing files is "peek at the source"; a tool or an explicit link handing
@@ -217,22 +258,74 @@ function previewTargetForSource(target: PreviewTarget, source: PreviewRecordSour
  *  only way anything reaches a preview. */
 export function openPreview(target: PreviewTarget, source: PreviewRecordSource = 'manual') {
   const resolved = previewTargetForSource(target, source)
-  const id = previewTabId(resolved)
   const current = $previewTabs.get()
+  const activeId = $rightRailActiveTabId.get()
+
+  const activeBrowser = current.find(tab => tab.id === activeId && tab.target.kind === 'url')
+  const existingBrowser = current.find(tab => tab.target.kind === 'url')
+
+  const id =
+    resolved.kind === 'url'
+      ? (activeBrowser?.id ?? existingBrowser?.id ?? nextBrowserTabId(current))
+      : previewTabId(resolved)
+
   const index = current.findIndex(tab => tab.id === id)
   const tab: PreviewTab = { id, target: resolved }
 
   $previewTabs.set(index === -1 ? [...current, tab] : current.map((item, i) => (i === index ? tab : item)))
   selectRightRailTab(id)
+
+  if (resolved.kind === 'url') {
+    rememberPreviewTabLiveUrl(id, resolved.url)
+    setRightSidebarView('browser')
+    setFileBrowserOpen(true)
+  }
 }
 
-/** Open the Browser tab — the surface, not a page. Keeps whatever it was last
- *  showing so the hotkey re-fronts your page instead of wiping it; a fresh tab
- *  lands on `about:blank`, where the pane's empty state invites an address. */
-export function openBrowserTab() {
-  const existing = $previewTabs.get().find(tab => tab.id === BROWSER_TAB_ID)
+function browserHomeTarget(): PreviewTarget {
+  return {
+    kind: 'url',
+    label: 'Browser',
+    source: SHARED_BROWSER_HOME,
+    url: SHARED_BROWSER_HOME
+  }
+}
 
-  openPreview(existing?.target ?? { kind: 'url', label: 'Browser', source: 'about:blank', url: 'about:blank' })
+/** Add a distinct V32 Browser tab at the shared home and front it. */
+export function openNewBrowserTab(): void {
+  const current = $previewTabs.get()
+  const id = nextBrowserTabId(current)
+
+  $previewTabs.set([...current, { id, target: browserHomeTarget() }])
+  rememberPreviewTabLiveUrl(id, SHARED_BROWSER_HOME)
+  selectRightRailTab(id)
+  setRightSidebarView('browser')
+  setFileBrowserOpen(true)
+}
+
+/** Reveal Browser without resetting its current page. */
+export function openSharedBrowser(): void {
+  const current = $previewTabs.get()
+  const activeId = $rightRailActiveTabId.get()
+
+  const existing =
+    current.find(tab => tab.id === activeId && tab.target.kind === 'url') ??
+    current.find(tab => tab.target.kind === 'url')
+
+  if (existing) {
+    selectRightRailTab(existing.id)
+    setRightSidebarView('browser')
+    setFileBrowserOpen(true)
+
+    return
+  }
+
+  openNewBrowserTab()
+}
+
+/** Public upstream command/keybind compatibility. */
+export function openBrowserTab(): void {
+  openSharedBrowser()
 }
 
 export function closeRightRailTab(tabId: string) {
@@ -243,16 +336,26 @@ export function closeRightRailTab(tabId: string) {
     return
   }
 
+  forgetPreviewTabLiveUrl(tabId)
+
   const next = current.filter(tab => tab.id !== tabId)
+  const closingTab = current[index]
 
   $previewTabs.set(next)
 
   if ($rightRailActiveTabId.get() === tabId) {
-    selectRightRailTab(next[Math.min(index, next.length - 1)]?.id ?? null)
+    const candidates = closingTab.target.kind === 'url' ? next.filter(tab => tab.target.kind === 'url') : next
+    const precedingPeers = current.slice(0, index).filter(tab => tab.target.kind === closingTab.target.kind).length
+
+    selectRightRailTab(candidates[Math.min(precedingPeers, candidates.length - 1)]?.id ?? next[0]?.id ?? null)
   }
 
   if (next.length === 0) {
     selectRightRailTab(null)
+  }
+
+  if (closingTab.target.kind === 'url' && !next.some(tab => tab.target.kind === 'url')) {
+    setRightSidebarView('files')
   }
 }
 
@@ -299,7 +402,12 @@ export function closeArtifactPreviewTabs() {
 /** Close every tab so the rail's panes leave the tree. */
 export function closeRightRail() {
   $previewTabs.set([])
+  previewTabLiveUrls.clear()
   selectRightRailTab(null)
+
+  if ($rightSidebarView.get() === 'browser') {
+    setRightSidebarView('files')
+  }
 }
 
 export function requestPreviewReload() {

@@ -1,18 +1,25 @@
 import { useStore } from '@nanostores/react'
-import type { ComponentProps } from 'react'
+import { type ComponentProps, type ReactNode } from 'react'
 
 import { TreeSkeleton } from '@/components/chat/skeletons'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
+import { PaneStripGlyph, PaneTab, PaneTabLabel, PaneTabStrip } from '@/components/ui/pane-tab'
 import { Tip } from '@/components/ui/tooltip'
 import { useDelayedTrue } from '@/hooks/use-delayed-true'
 import { useI18n } from '@/i18n'
 import { normalizeOrLocalPreviewTarget } from '@/lib/local-preview'
 import { cn } from '@/lib/utils'
-import { $panesFlipped } from '@/store/layout'
+import {
+  $panesFlipped,
+  $rightRailActiveTabId,
+  $rightSidebarView,
+  selectRightRailTab,
+  setRightSidebarView
+} from '@/store/layout'
 import { notifyError } from '@/store/notifications'
-import { openPreview } from '@/store/preview'
+import { $previewTabs, closeRightRailTab, openNewBrowserTab, openPreview, openSharedBrowser } from '@/store/preview'
 import { $currentCwd } from '@/store/session'
 
 import { SidebarPanelLabel } from '../shell/sidebar-label'
@@ -21,14 +28,18 @@ import { ProjectTree } from './files/tree'
 import { useProjectTree } from './files/use-project-tree'
 
 interface RightSidebarPaneProps {
+  browserContent?: ReactNode
   onActivateFile: (path: string) => void
   onActivateFolder: (path: string) => void
 }
 
-export function RightSidebarPane({ onActivateFile, onActivateFolder }: RightSidebarPaneProps) {
+export function RightSidebarPane({ browserContent, onActivateFile, onActivateFolder }: RightSidebarPaneProps) {
   const { t } = useI18n()
   const r = t.rightSidebar
   const panesFlipped = useStore($panesFlipped)
+  const activeTabId = useStore($rightRailActiveTabId)
+  const rightSidebarView = useStore($rightSidebarView)
+  const previewTabs = useStore($previewTabs)
   const currentCwd = useStore($currentCwd).trim()
 
   // The file tree is simply "browse the session's working directory". If the
@@ -50,13 +61,8 @@ export function RightSidebarPane({ onActivateFile, onActivateFolder }: RightSide
     setNodeOpen
   } = useProjectTree(hasWorkspace ? currentCwd : '')
 
-  const cwdName =
-    effectiveCwd
-      .split(/[\\/]+/)
-      .filter(Boolean)
-      .pop() ?? effectiveCwd
-
   const canCollapse = Object.values(openState).some(Boolean)
+  const browserTabs = previewTabs.filter(tab => tab.target.kind === 'url')
 
   const previewFile = async (path: string) => {
     try {
@@ -82,34 +88,123 @@ export function RightSidebarPane({ onActivateFile, onActivateFolder }: RightSide
           : 'border-l shadow-[inset_0.0625rem_0_0_color-mix(in_srgb,white_18%,transparent)]'
       )}
     >
-      <FilesystemTab
-        canCollapse={canCollapse}
-        collapseNonce={collapseNonce}
-        cwd={effectiveCwd}
-        cwdName={cwdName}
-        data={data}
-        error={rootError}
-        hasWorkspace={hasWorkspace}
-        loading={rootLoading}
-        onActivateFile={onActivateFile}
-        onActivateFolder={onActivateFolder}
-        onCollapseAll={collapseAll}
-        onLoadChildren={loadChildren}
-        onNodeOpenChange={setNodeOpen}
-        onPreviewFile={previewFile}
-        onRefresh={() => void refreshRoot()}
-        openState={openState}
-      />
+      <PaneTabStrip
+        className="h-8"
+        trailing={
+          <div className="flex shrink-0 items-center gap-0.5 pr-1">
+            {rightSidebarView === 'browser' && (
+              <PaneStripGlyph icon={<Codicon name="add" />} label={r.browserNewTab} onSelect={openNewBrowserTab} />
+            )}
+            <Tip label={r.files}>
+              <Button
+                aria-label={r.files}
+                aria-pressed={rightSidebarView === 'files'}
+                className={cn(HEADER_ACTION_CLASS, rightSidebarView === 'files' && HEADER_ACTION_ACTIVE_CLASS)}
+                onClick={() => setRightSidebarView('files')}
+                size="icon-pane"
+                variant="ghost"
+              >
+                <Codicon name="files" />
+              </Button>
+            </Tip>
+            <Tip label={r.browser}>
+              <Button
+                aria-label={r.browser}
+                aria-pressed={rightSidebarView === 'browser'}
+                className={cn(HEADER_ACTION_CLASS, rightSidebarView === 'browser' && HEADER_ACTION_ACTIVE_CLASS)}
+                onClick={openSharedBrowser}
+                size="icon-pane"
+                variant="ghost"
+              >
+                <Codicon name="globe" />
+              </Button>
+            </Tip>
+            {rightSidebarView === 'files' && hasWorkspace && (
+              <>
+                <Tip label={r.refreshTree}>
+                  <Button
+                    aria-label={r.refreshTree}
+                    className={HEADER_ACTION_LABEL_REVEAL}
+                    disabled={rootLoading}
+                    onClick={() => void refreshRoot()}
+                    size="icon-pane"
+                    variant="ghost"
+                  >
+                    <Codicon name="refresh" spinning={rootLoading} />
+                  </Button>
+                </Tip>
+                <Tip label={r.collapseAll}>
+                  <Button
+                    aria-label={r.collapseAll}
+                    className={cn(HEADER_ACTION_CLASS, !canCollapse && 'pointer-events-none opacity-0')}
+                    disabled={!canCollapse}
+                    onClick={collapseAll}
+                    size="icon-pane"
+                    variant="ghost"
+                  >
+                    <Codicon name="collapse-all" />
+                  </Button>
+                </Tip>
+              </>
+            )}
+          </div>
+        }
+      >
+        {rightSidebarView === 'browser' &&
+          browserTabs.map((tab, index) => {
+            const label = index === 0 ? r.browser : `${r.browser} ${index + 1}`
+            const active = tab.id === activeTabId
+
+            return (
+              <PaneTab
+                active={active}
+                aria-label={label}
+                aria-selected={active}
+                key={tab.id}
+                onClose={() => closeRightRailTab(tab.id)}
+                role="tab"
+              >
+                <PaneTabLabel aria-label={label} as="button" onClick={() => selectRightRailTab(tab.id)} type="button">
+                  {label}
+                </PaneTabLabel>
+              </PaneTab>
+            )
+          })}
+      </PaneTabStrip>
+      <div
+        aria-hidden={rightSidebarView !== 'files'}
+        className={cn('min-h-0 flex-1 flex-col', rightSidebarView === 'files' ? 'flex' : 'hidden')}
+        data-testid="right-sidebar-files"
+      >
+        <FilesystemTab
+          collapseNonce={collapseNonce}
+          cwd={effectiveCwd}
+          data={data}
+          error={rootError}
+          hasWorkspace={hasWorkspace}
+          loading={rootLoading}
+          onActivateFile={onActivateFile}
+          onActivateFolder={onActivateFolder}
+          onLoadChildren={loadChildren}
+          onNodeOpenChange={setNodeOpen}
+          onPreviewFile={previewFile}
+          onRetry={() => void refreshRoot()}
+          openState={openState}
+        />
+      </div>
+      <div
+        aria-hidden={rightSidebarView !== 'browser'}
+        className={cn('min-h-0 flex-1 flex-col', rightSidebarView === 'browser' ? 'flex' : 'hidden')}
+        data-testid="right-sidebar-browser"
+      >
+        {browserContent ?? <PaneEmptyState label={r.browser} />}
+      </div>
     </aside>
   )
 }
 
 interface FilesystemTabProps extends FileTreeBodyProps {
-  canCollapse: boolean
-  cwdName: string
   hasWorkspace: boolean
-  onCollapseAll: () => void
-  onRefresh: () => void
 }
 
 // Sidebar palette + hover-reveal: header actions stay reachable while moving
@@ -117,24 +212,23 @@ interface FilesystemTabProps extends FileTreeBodyProps {
 const HEADER_ACTION_CLASS =
   'text-sidebar-foreground/70 hover:bg-sidebar-accent! hover:text-sidebar-accent-foreground! focus-visible:ring-sidebar-ring'
 
+const HEADER_ACTION_ACTIVE_CLASS = 'bg-(--ui-control-active-background) text-foreground'
+
 const HEADER_ACTION_LABEL_REVEAL = `${HEADER_ACTION_CLASS} pointer-events-none opacity-0 transition-opacity focus-visible:pointer-events-auto focus-visible:opacity-100 group-focus-within/project-header:pointer-events-auto group-focus-within/project-header:opacity-100 group-hover/project-header:pointer-events-auto group-hover/project-header:opacity-100`
 
 function FilesystemTab({
-  canCollapse,
   collapseNonce,
   cwd,
-  cwdName,
   data,
   error,
   hasWorkspace,
   loading,
   onActivateFile,
   onActivateFolder,
-  onCollapseAll,
   onLoadChildren,
   onNodeOpenChange,
   onPreviewFile,
-  onRefresh,
+  onRetry,
   openState
 }: FilesystemTabProps) {
   const { t } = useI18n()
@@ -147,51 +241,20 @@ function FilesystemTab({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <RightSidebarSectionHeader>
-        <div className="flex min-w-0 flex-1">
-          <SidebarPanelLabel>{cwdName}</SidebarPanelLabel>
-        </div>
-        <Tip label={r.refreshTree}>
-          <Button
-            aria-label={r.refreshTree}
-            className={HEADER_ACTION_LABEL_REVEAL}
-            disabled={loading}
-            onClick={onRefresh}
-            size="icon-xs"
-            variant="ghost"
-          >
-            <Codicon name="refresh" size="0.8125rem" spinning={loading} />
-          </Button>
-        </Tip>
-        <Tip label={r.collapseAll}>
-          <Button
-            aria-label={r.collapseAll}
-            className={cn(HEADER_ACTION_CLASS, !canCollapse && 'pointer-events-none opacity-0')}
-            disabled={!canCollapse}
-            onClick={onCollapseAll}
-            size="icon-xs"
-            variant="ghost"
-          >
-            <Codicon name="collapse-all" size="0.8125rem" />
-          </Button>
-        </Tip>
-      </RightSidebarSectionHeader>
-      <FileTreeBody
-        collapseNonce={collapseNonce}
-        cwd={cwd}
-        data={data}
-        error={error}
-        loading={loading}
-        onActivateFile={onActivateFile}
-        onActivateFolder={onActivateFolder}
-        onLoadChildren={onLoadChildren}
-        onNodeOpenChange={onNodeOpenChange}
-        onPreviewFile={onPreviewFile}
-        onRetry={onRefresh}
-        openState={openState}
-      />
-    </div>
+    <FileTreeBody
+      collapseNonce={collapseNonce}
+      cwd={cwd}
+      data={data}
+      error={error}
+      loading={loading}
+      onActivateFile={onActivateFile}
+      onActivateFolder={onActivateFolder}
+      onLoadChildren={onLoadChildren}
+      onNodeOpenChange={onNodeOpenChange}
+      onPreviewFile={onPreviewFile}
+      onRetry={onRetry}
+      openState={openState}
+    />
   )
 }
 

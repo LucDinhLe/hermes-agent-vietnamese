@@ -1,209 +1,112 @@
 import { useStore } from '@nanostores/react'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 
 import { BrandMark } from '@/components/brand-mark'
 import { Button } from '@/components/ui/button'
-import { Codicon } from '@/components/ui/codicon'
-import { type Translations, useI18n } from '@/i18n'
-import { AlertTriangle, CheckCircle2, ExternalLink, Loader2, RefreshCw } from '@/lib/icons'
-import { cn } from '@/lib/utils'
-import {
-  $desktopVersion,
-  $updateApply,
-  $updateChecking,
-  $updateStatus,
-  checkUpdates,
-  openUpdatesWindow,
-  refreshDesktopVersion,
-  startActiveUpdate
-} from '@/store/updates'
+import { AlertTriangle, ExternalLink, Info, Package, RefreshCw } from '@/lib/icons'
+import productMetadata from '@/plugins/hermes-vietnamese/product-metadata.json'
+import { $desktopVersion, refreshDesktopVersion } from '@/store/updates'
 
 import { ListRow, SectionHeading, SettingsContent } from './primitives'
 import { UninstallSection } from './uninstall-section'
 
-const RELEASE_NOTES_URL = 'https://github.com/NousResearch/hermes-agent/releases'
-const INSTALLER_URL = 'https://hermes-agent.nousresearch.com/'
+const RELEASES_URL = productMetadata.communityLinks.releases
 
-function relativeTime(ms: number | undefined, a: Translations['settings']['about']) {
-  if (!ms) {
-    return a.never
-  }
-
-  const diff = Date.now() - ms
-
-  if (diff < 60_000) {
-    return a.justNow
-  }
-
-  if (diff < 3_600_000) {
-    return a.minAgo(Math.round(diff / 60_000))
-  }
-
-  if (diff < 86_400_000) {
-    return a.hoursAgo(Math.round(diff / 3_600_000))
-  }
-
-  return a.daysAgo(Math.round(diff / 86_400_000))
+function openExternal(url: string) {
+  void window.hermesDesktop?.openExternal?.(url)
 }
 
 export function AboutSettings() {
-  const { t } = useI18n()
-  const a = t.settings.about
-  const version = useStore($desktopVersion)
-  const status = useStore($updateStatus)
-  const apply = useStore($updateApply)
-  const checking = useStore($updateChecking)
-  const [justChecked, setJustChecked] = useState(false)
+  const runtime = useStore($desktopVersion)
 
-  // The version atom is loaded once at app boot, which makes About show a
-  // stale number after a self-update (the running binary is current, the
-  // displayed string is not). Re-read on mount so opening About always
-  // reflects the running build.
   useEffect(() => {
     void refreshDesktopVersion()
   }, [])
 
-  const behind = status?.behind ?? 0
-  // behind is null when the exact count is unknowable (shallow clone): the
-  // backend flags that case via updateAvailable instead of a number.
-  const updateAvailable = behind > 0 || Boolean(status?.updateAvailable)
-  const supported = status?.supported !== false
-  const applying = apply.applying || apply.stage === 'restart'
-
-  const handleCheck = async () => {
-    setJustChecked(false)
-    const next = await checkUpdates()
-    setJustChecked(Boolean(next))
-  }
-
-  let statusLine: string
-  let statusTone: 'idle' | 'available' | 'error' = 'idle'
-
-  if (!supported) {
-    statusLine = status?.message ?? a.cantUpdate
-    statusTone = 'error'
-  } else if (status?.error) {
-    statusLine = a.cantReach
-    statusTone = 'error'
-  } else if (applying) {
-    statusLine = a.installing
-    statusTone = 'available'
-  } else if (updateAvailable) {
-    statusLine = behind > 0 ? a.updateReady(behind) : a.updateReadyUnknown
-    statusTone = 'available'
-  } else if (status) {
-    statusLine = a.onLatest
-  } else {
-    statusLine = a.tapCheck
-  }
+  const runningEngineVersion = runtime?.engineVersion
+  const expectedEngineVersion = productMetadata.upstream.version
+  const engineMismatch = Boolean(runningEngineVersion && runningEngineVersion !== expectedEngineVersion)
+  const runtimeMismatch = runtime?.runtimeProductVersion !== productMetadata.technicalVersion
 
   return (
     <SettingsContent>
       <div className="flex flex-col items-center gap-3 pt-6 pb-2 text-center">
         <BrandMark className="size-16" />
         <div>
-          <h2 className="text-lg font-semibold tracking-tight">{a.heading}</h2>
+          <h2 className="text-lg font-semibold tracking-tight">{productMetadata.displayName}</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            {version?.appVersion ? a.version(version.appVersion) : a.versionUnavailable}
+            {productMetadata.productVersion} · {productMetadata.technicalVersion}
+          </p>
+          <p className="mt-2 text-sm text-foreground">
+            Phát triển và Việt hóa bởi {productMetadata.communityMaintainer.name}
           </p>
         </div>
-        {version?.bundleOutOfSync && (
-          <div className="mx-auto w-full max-w-2xl rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-left text-sm">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
-              <div className="min-w-0">
-                <p className="font-medium">{a.bundleOutOfSync}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{a.bundleOutOfSyncDesc}</p>
-                <Button asChild className="mt-2" size="sm" variant="textStrong">
-                  <a
-                    href={INSTALLER_URL}
-                    onClick={event => {
-                      event.preventDefault()
-                      void window.hermesDesktop?.openExternal?.(INSTALLER_URL)
-                    }}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    <ExternalLink className="size-3" />
-                    {a.bundleOutOfSyncAction}
-                  </a>
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="mx-auto mt-4 w-full max-w-2xl">
-        <SectionHeading icon={RefreshCw} title={a.updates} />
+        <SectionHeading icon={Info} title="Thông tin phát hành" />
+        <ListRow
+          description={`Nền chính thức: ${productMetadata.upstream.publisher} · ${productMetadata.upstream.tag}`}
+          hint={productMetadata.upstream.commit.slice(0, 12)}
+          title={`${productMetadata.upstream.productName} ${expectedEngineVersion}`}
+        />
+        <ListRow
+          description={runtime?.runtimeCandidateId ?? 'Chưa có biên nhận runtime đã xác minh'}
+          hint={runtime?.runtimeSourceCommit?.slice(0, 12) ?? 'Không xác định'}
+          title={`Runtime Advisor đang chạy · ${runtime?.runtimeProductVersion ?? 'không xác định'}`}
+        />
 
-        <div
-          className={cn(
-            'rounded-xl border px-4 py-3 text-sm',
-            statusTone === 'available' && 'border-primary/30 bg-primary/5 text-foreground',
-            statusTone === 'error' && 'border-destructive/35 bg-destructive/5 text-destructive',
-            statusTone === 'idle' && 'border-border/70 bg-muted/20 text-foreground'
-          )}
-        >
+        {engineMismatch ? (
+          <div className="my-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div>
+                <p className="font-medium">Lõi đang chạy chưa khớp với bản phát hành</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Hồ sơ cũ đang dùng Hermes Agent {runningEngineVersion}; bản này khóa {expectedEngineVersion}. Không
+                  cập nhật trực tiếp checkout lõi. Hãy chọn “Gỡ GUI + agent, giữ dữ liệu”, rồi chạy lại bộ cài Hermes
+                  Vietnamese mới nhất.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {runtimeMismatch ? (
+          <div className="my-3 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-500" />
+              <div>
+                <p className="font-medium">Runtime Advisor không khớp giao diện Experimental</p>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Ứng dụng sẽ không được coi là đạt kiểm thử cho đến khi runtime {productMetadata.technicalVersion} có
+                  biên nhận và hash hợp lệ. Hãy đóng ứng dụng rồi mở bằng lối tắt Experimental để đồng bộ lại.
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <SectionHeading icon={RefreshCw} title="Cập nhật" />
+        <div className="rounded-xl border border-border/70 bg-muted/20 px-4 py-3 text-sm">
           <div className="flex items-start gap-2">
-            {statusTone === 'available' ? (
-              <Codicon className="mt-0.5 size-4 shrink-0 text-primary" name="cloud-download" size="1rem" />
-            ) : statusTone === 'error' ? null : (
-              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-            )}
+            <Package className="mt-0.5 size-4 shrink-0 text-primary" />
             <div className="min-w-0">
-              <p className="font-medium">{statusLine}</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {a.lastChecked(relativeTime(status?.fetchedAt, a))}
-                {justChecked && !checking ? a.justNowSuffix : ''}
+              <p className="font-medium">Kênh Experimental riêng · cập nhật bằng bộ cài thử nghiệm</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Bản này dùng runtime Advisor cô lập từ mã PR chưa hợp nhất và không thay Hermes Vietnamese ổn định.
+                Mỗi lần mở đều xác minh candidate trước khi khởi chạy.
               </p>
             </div>
           </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-4">
-            <Button
-              disabled={checking || applying || !supported}
-              onClick={() => void handleCheck()}
-              size="sm"
-              variant="textStrong"
-            >
-              {checking ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
-              {checking ? a.checking : a.checkNow}
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Button onClick={() => openExternal(RELEASES_URL)} size="sm" variant="textStrong">
+              <ExternalLink className="size-3" />
+              Xem kho Hermes Vietnamese
             </Button>
-
-            {updateAvailable && supported && !applying && (
-              <>
-                <Button onClick={() => startActiveUpdate()} size="sm">
-                  {a.updateNow}
-                </Button>
-                <Button onClick={() => openUpdatesWindow()} size="sm" variant="textStrong">
-                  {a.seeWhatsNew}
-                </Button>
-              </>
-            )}
-
-            <Button asChild className="ml-auto" size="sm" variant="text">
-              <a
-                href={RELEASE_NOTES_URL}
-                onClick={event => {
-                  event.preventDefault()
-                  void window.hermesDesktop?.openExternal?.(RELEASE_NOTES_URL)
-                }}
-                rel="noreferrer"
-                target="_blank"
-              >
-                <ExternalLink className="size-3" />
-                {a.releaseNotes}
-              </a>
-            </Button>
+            <span className="text-xs text-muted-foreground">Tự động cập nhật: tắt ở kênh Experimental</span>
           </div>
         </div>
-
-        <ListRow
-          description={a.automaticUpdatesDesc}
-          hint={a.branchCommit(status?.branch ?? 'unknown', status?.currentSha?.slice(0, 7) ?? 'unknown')}
-          title={a.automaticUpdates}
-        />
 
         <UninstallSection />
       </div>

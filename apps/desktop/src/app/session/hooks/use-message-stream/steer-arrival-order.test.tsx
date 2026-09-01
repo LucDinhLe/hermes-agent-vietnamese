@@ -25,6 +25,8 @@ import { chatMessageText } from '@/lib/chat-messages'
 import { createClientSessionState } from '@/lib/chat-runtime'
 import type { RpcEvent } from '@/types/hermes'
 
+import { SessionBindingRegistry } from '../../session-binding-registry'
+
 import { STREAM_DELTA_FLUSH_MS } from './utils'
 
 import { useMessageStream } from './index'
@@ -52,6 +54,7 @@ function Harness() {
   const queryClientRef = useRef(new QueryClient())
   const busyRef = useRef(false)
   const runtimeIdByStoredSessionIdRef = useRef(new Map<string, string>())
+  const sessionBindingRegistryRef = useRef(new SessionBindingRegistry())
   const selectedStoredSessionIdRef = useRef<null | string>(SID)
 
   const updateSessionState = (sessionId: string, updater: (state: ClientSessionState) => ClientSessionState) => {
@@ -66,8 +69,11 @@ function Harness() {
     activeSessionIdRef,
     hydrateFromStoredSession: vi.fn(async () => undefined),
     queryClient: queryClientRef.current,
+    qualifyRuntimeIds: false,
     refreshHermesConfig: vi.fn(async () => undefined),
     refreshSessions: vi.fn(async () => undefined),
+    runtimeIdByStoredSessionIdRef,
+    sessionBindingRegistry: sessionBindingRegistryRef.current,
     sessionStateByRuntimeIdRef,
     updateSessionState
   })
@@ -75,6 +81,7 @@ function Harness() {
   const actions = usePromptActions({
     activeSessionId: SID,
     activeSessionIdRef,
+    bindSessionRuntime: (_storedSessionId, runtimeSessionId) => runtimeSessionId,
     branchCurrentSession: async () => true,
     busyRef,
     createBackendSessionForSend: async () => SID,
@@ -82,11 +89,13 @@ function Harness() {
     getRuntimeIdForStoredSession: () => null,
     getRouteToken: () => 'token',
     handleSkinCommand: () => '',
+    invalidateSessionRuntimeBinding: () => undefined,
     openMemoryGraph: () => undefined,
     refreshSessions: async () => undefined,
+    requestDurableSession: (_storedSessionId, method, params, timeoutMs) =>
+      requestGateway(method, params, timeoutMs),
     requestGateway,
     resumeStoredSession: () => undefined,
-    runtimeIdByStoredSessionIdRef,
     selectedStoredSessionIdRef,
     startFreshSessionDraft: () => undefined,
     sttEnabled: false,

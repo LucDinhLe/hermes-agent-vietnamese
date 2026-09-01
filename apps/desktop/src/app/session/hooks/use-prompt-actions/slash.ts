@@ -120,6 +120,7 @@ interface SlashActionCtx {
 
 interface SlashCommandDeps {
   activeSessionIdRef: MutableRefObject<string | null>
+  bindSessionRuntime: (storedSessionId: string, runtimeSessionId: string) => null | string
   appendSessionTextMessage: (
     sessionId: string,
     role: ChatMessage['role'],
@@ -140,6 +141,13 @@ interface SlashCommandDeps {
   openMemoryGraph: () => void
   refreshSessions: () => Promise<void>
   requestGateway: GatewayRequest
+  requestForStoredSession: <T>(
+    storedSessionId: string,
+    method: string,
+    params?: Record<string, unknown>,
+    timeoutMs?: number
+  ) => Promise<T>
+  resolveStoredSessionProfile?: (storedSessionId: string) => Promise<string | undefined>
   resumeStoredSession: (storedSessionId: string) => Promise<void> | void
   selectedStoredSessionIdRef: MutableRefObject<string | null>
   startFreshSessionDraft: () => void
@@ -155,6 +163,7 @@ interface SlashCommandDeps {
 export function useSlashCommand(deps: SlashCommandDeps) {
   const {
     activeSessionIdRef,
+    bindSessionRuntime,
     appendSessionTextMessage,
     branchCurrentSession,
     busyRef,
@@ -167,6 +176,8 @@ export function useSlashCommand(deps: SlashCommandDeps) {
     openMemoryGraph,
     refreshSessions,
     requestGateway,
+    requestForStoredSession,
+    resolveStoredSessionProfile,
     resumeStoredSession,
     selectedStoredSessionIdRef,
     startFreshSessionDraft,
@@ -190,10 +201,12 @@ export function useSlashCommand(deps: SlashCommandDeps) {
       const ensureSessionId = async (sessionHint?: string, preview?: null | string) =>
         resolveTargetSessionId({
           activeRuntimeId: activeSessionIdRef.current,
+          bindSessionRuntime,
           createSession: () => createBackendSessionForSend(preview),
           explicitRuntimeId: sessionHint,
           getRuntimeIdForStoredSession,
-          requestGateway,
+          requestStoredSession: requestForStoredSession,
+          resolveStoredSessionProfile,
           routedStoredSessionId: getRoutedStoredSessionId(),
           selectedStoredSessionId: selectedStoredSessionIdRef.current
         })
@@ -550,17 +563,30 @@ export function useSlashCommand(deps: SlashCommandDeps) {
                   SESSION_COMPRESS_TIMEOUT_MS
                 ),
               {
-                requestGateway,
+                requestGateway: <T,>(method: string, params?: Record<string, unknown>, timeoutMs?: number) =>
+                  storedSessionId
+                    ? requestForStoredSession<T>(storedSessionId, method, params, timeoutMs)
+                    : Promise.reject<T>(new Error('Cannot recover a runtime without a durable session owner.')),
                 onRecovered: recoveredId => {
+                  const rendererRuntimeId = storedSessionId
+                    ? bindSessionRuntime(storedSessionId, recoveredId)
+                    : null
+
+                  if (!rendererRuntimeId) {
+                    throw new Error('Recovered slash runtime has no exact durable owner.')
+                  }
+
                   // Move the in-flight claim onto the live id so the coalesce
                   // guard releases the right key in `finally`.
                   compressInFlightRef.current.delete(sessionId)
-                  compressInFlightRef.current.add(recoveredId)
+                  compressInFlightRef.current.add(rendererRuntimeId)
 
                   if (activeSessionIdRef.current === initialSessionId) {
-                    activeSessionIdRef.current = recoveredId
-                    setActiveSessionId(recoveredId)
+                    activeSessionIdRef.current = rendererRuntimeId
+                    setActiveSessionId(rendererRuntimeId)
                   }
+
+                  return rendererRuntimeId
                 }
               }
             )
@@ -1106,6 +1132,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
     [
       activeSessionIdRef,
       appendSessionTextMessage,
+      bindSessionRuntime,
       branchCurrentSession,
       busyRef,
       copy,
@@ -1117,6 +1144,8 @@ export function useSlashCommand(deps: SlashCommandDeps) {
       openMemoryGraph,
       refreshSessions,
       requestGateway,
+      requestForStoredSession,
+      resolveStoredSessionProfile,
       resumeStoredSession,
       selectedStoredSessionIdRef,
       startFreshSessionDraft,

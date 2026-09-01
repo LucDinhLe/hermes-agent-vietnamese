@@ -94,6 +94,19 @@ describe('PaneTab close gestures', () => {
 })
 
 describe('PaneTab hover close button', () => {
+  it('keeps the active V32 tab close button visible without hover', () => {
+    render(
+      <PaneTab active onClose={vi.fn()}>
+        <PaneTabLabel>active tab</PaneTabLabel>
+      </PaneTab>
+    )
+
+    const closeLayer = screen.getByRole('button', { name: 'Close' }).parentElement
+
+    expect(closeLayer?.className).toContain('opacity-100')
+    expect(closeLayer?.className).toContain('pointer-events-auto')
+  })
+
   it('clicking the ✕ closes without activating or dragging the tab', () => {
     const onClose = vi.fn()
     const onActivate = vi.fn()

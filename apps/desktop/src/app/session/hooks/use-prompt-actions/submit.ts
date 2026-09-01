@@ -30,9 +30,16 @@ import {
   setMessages,
   touchSessionActivity
 } from '@/store/session'
+import { RendererRuntimeEpochMismatchError } from '@/store/session-request-router'
+import { sessionRouteOwner } from '@/store/session-route-owner'
 import { $sessionStates } from '@/store/session-states'
 
 import type { ClientSessionState } from '../../../types'
+import {
+  classifySessionRuntimeNotFound,
+  SESSION_RUNTIME_RECOVERY_MESSAGE,
+  SessionRuntimeRecoveryError
+} from '../../session-binding-registry'
 import { sessionContextDrift } from '../session-context-drift'
 import { resolveSessionProfile } from '../use-session-actions/utils'
 
@@ -53,14 +60,23 @@ import {
 
 interface SubmitPromptDeps {
   activeSessionIdRef: MutableRefObject<string | null>
+  bindSessionRuntime: (storedSessionId: string, runtimeSessionId: string) => null | string
   busyRef: MutableRefObject<boolean>
   copy: Translations['desktop']
+  confirmBackendSessionForSend?: (runtimeSessionId: string) => Promise<boolean>
   createBackendSessionForSend: (preview?: string | null) => Promise<string | null>
   getRoutedStoredSessionId: () => null | string
   getRuntimeIdForStoredSession: (storedSessionId: string) => null | string
   getRouteToken: () => string
+  invalidateSessionRuntimeBinding: (storedSessionId: string, runtimeSessionId: string) => void
   requestGateway: GatewayRequest
-  runtimeIdByStoredSessionIdRef: MutableRefObject<Map<string, string>>
+  requestForStoredSession: (
+    storedSessionId: null | string,
+    method: string,
+    params?: Record<string, unknown>,
+    timeoutMs?: number
+  ) => Promise<unknown>
+  resolveStoredSessionProfile?: (storedSessionId: string) => Promise<string | undefined>
   resumeStoredSession: (storedSessionId: string) => Promise<void> | void
   selectedStoredSessionIdRef: MutableRefObject<string | null>
   syncAttachmentsForSubmit: (
@@ -99,20 +115,31 @@ const MAIN_SUBMIT_SCOPE: NonNullable<SubmitPromptDeps['scope']> = {
 export function useSubmitPrompt(deps: SubmitPromptDeps) {
   const {
     activeSessionIdRef,
+    bindSessionRuntime,
     busyRef,
     copy,
+    confirmBackendSessionForSend,
     createBackendSessionForSend,
     getRoutedStoredSessionId,
     getRuntimeIdForStoredSession,
     getRouteToken,
+    invalidateSessionRuntimeBinding,
     requestGateway,
-    runtimeIdByStoredSessionIdRef,
+    requestForStoredSession,
+    resolveStoredSessionProfile,
     resumeStoredSession,
     selectedStoredSessionIdRef,
     syncAttachmentsForSubmit,
     updateSessionState,
     scope = MAIN_SUBMIT_SCOPE
   } = deps
+  const resolveExactSessionProfile = useCallback(
+    (storedSessionId: string) =>
+      resolveStoredSessionProfile
+        ? resolveStoredSessionProfile(storedSessionId)
+        : resolveSessionProfile(storedSessionId, sessionRouteOwner(storedSessionId)),
+    [resolveStoredSessionProfile]
+  )
 
   return useCallback(
     async (rawText: string, options?: SubmitTextOptions) => {
@@ -205,6 +232,13 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
       // must never inherit the currently selected session after the user moves
       // to another chat.
       const targetStoredSessionId = options?.storedSessionId ?? selectedStoredSessionIdRef.current
+      const requestTargetGateway: GatewayRequest = <T,>(method: string, params = {}, timeoutMs?: number) =>
+        requestForStoredSession(
+          targetStoredSessionId ?? selectedStoredSessionIdRef.current,
+          method,
+          params,
+          timeoutMs
+        ) as Promise<T>
 
       const targetStartedInCurrentView =
         !targetStoredSessionId || targetStoredSessionId === selectedStoredSessionIdRef.current
@@ -488,18 +522,14 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
       const ownershipStoredSessionId = options?.sessionId ? null : targetStoredSessionId
 
       if (sessionId && ownershipStoredSessionId) {
-        const provenRuntimeId = runtimeIdByStoredSessionIdRef.current.get(ownershipStoredSessionId)
+        const provenRuntimeId = getRuntimeIdForStoredSession(ownershipStoredSessionId)
         // A selected stored session requires positive ownership proof. A cache
         // miss is therefore unsafe too: the active runtime may belong to an
         // entirely different stored session, so resume the selected id instead
         // of sending to an unverified runtime.
         const knownMismatch = provenRuntimeId !== sessionId
 
-        const runtimeOwnedByOtherStored = Array.from(runtimeIdByStoredSessionIdRef.current.entries()).some(
-          ([storedId, runtimeId]) => runtimeId === sessionId && storedId !== ownershipStoredSessionId
-        )
-
-        if (knownMismatch || runtimeOwnedByOtherStored) {
+        if (knownMismatch) {
           sessionId = null
         }
       }
@@ -556,9 +586,13 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
         try {
           // Re-register on the session's OWNING profile — resuming on whichever
           // profile is live would fork the conversation into the wrong DB (#67603).
-          const resumeProfile = await resolveSessionProfile(targetStoredSessionId)
+          const resumeProfile = await resolveExactSessionProfile(targetStoredSessionId)
 
-          const resumed = await requestGateway<{ session_id: string }>('session.resume', {
+          if (!resumeProfile) {
+            throw new SessionRuntimeRecoveryError(new Error('The durable session owner is unresolved.'))
+          }
+
+          const resumed = await requestTargetGateway<{ session_id: string }>('session.resume', {
             session_id: targetStoredSessionId,
             source: 'desktop',
             omit_messages: true,
@@ -574,7 +608,13 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
           }
 
           if (resumed?.session_id) {
-            sessionId = resumed.session_id
+            const rendererRuntimeId = bindSessionRuntime(targetStoredSessionId, resumed.session_id)
+
+            if (!rendererRuntimeId) {
+              throw new SessionRuntimeRecoveryError(new Error('Resume returned a runtime without an exact owner.'))
+            }
+
+            sessionId = rendererRuntimeId
 
             if (targetIsCurrentView()) {
               activeSessionIdRef.current = sessionId
@@ -725,16 +765,33 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
             recoverStoredSessionId,
             liveId =>
               withSessionBusyRetry(() =>
-                requestGateway('prompt.submit', submitParams(liveId), PROMPT_SUBMIT_REQUEST_TIMEOUT_MS)
+                requestTargetGateway('prompt.submit', submitParams(liveId), PROMPT_SUBMIT_REQUEST_TIMEOUT_MS)
               ),
             {
-              requestGateway,
+              requestGateway: requestTargetGateway,
+              resolveProfile: resolveExactSessionProfile,
               driftReason: sessionDriftReason,
-              onRecovered: recoveredId => {
-                if (targetIsCurrentView()) {
-                  activeSessionIdRef.current = recoveredId
-                  setActiveSessionId(recoveredId)
+              onRuntimeInvalidated: deadRuntimeId => {
+                const storedSessionId = targetStoredSessionId ?? selectedStoredSessionIdRef.current
+
+                if (storedSessionId) {
+                  invalidateSessionRuntimeBinding(storedSessionId, deadRuntimeId)
                 }
+              },
+              onRecovered: recoveredId => {
+                const storedSessionId = targetStoredSessionId ?? selectedStoredSessionIdRef.current
+                const rendererRuntimeId = storedSessionId ? bindSessionRuntime(storedSessionId, recoveredId) : null
+
+                if (!rendererRuntimeId) {
+                  throw new Error('Recovered submit runtime has no exact durable owner.')
+                }
+
+                if (targetIsCurrentView()) {
+                  activeSessionIdRef.current = rendererRuntimeId
+                  setActiveSessionId(rendererRuntimeId)
+                }
+
+                return rendererRuntimeId
               }
             },
             // A starved backend loop (#55578 symptom d) rejects the submit even
@@ -754,6 +811,10 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
 
         if (submitErr !== null) {
           throw submitErr
+        }
+
+        if (!targetStoredSessionId && !startingStoredSessionId) {
+          await confirmBackendSessionForSend?.(liveSessionId)
         }
 
         if (usingComposerAttachments) {
@@ -779,7 +840,18 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
           return false
         }
 
-        const message = inlineErrorMessage(err, copy.promptFailed)
+        const runtimeRecoveryError =
+          classifySessionRuntimeNotFound(err) ||
+          err instanceof RendererRuntimeEpochMismatchError ||
+          err instanceof SessionRuntimeRecoveryError
+        const surfacedError = runtimeRecoveryError
+          ? err instanceof SessionRuntimeRecoveryError
+            ? err
+            : new SessionRuntimeRecoveryError(err)
+          : err
+        const message = runtimeRecoveryError
+          ? SESSION_RUNTIME_RECOVERY_MESSAGE
+          : inlineErrorMessage(surfacedError, copy.promptFailed)
         const occurredAt = Date.now() / 1000
 
         updateSessionState(
@@ -815,7 +887,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
         }
 
         if (targetIsCurrentView()) {
-          notifyError(err, copy.promptFailed)
+          notifyError(surfacedError, copy.promptFailed)
         }
 
         return false
@@ -823,14 +895,18 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
     },
     [
       activeSessionIdRef,
+      bindSessionRuntime,
       busyRef,
       copy,
+      confirmBackendSessionForSend,
       createBackendSessionForSend,
       getRoutedStoredSessionId,
       getRuntimeIdForStoredSession,
       getRouteToken,
+      invalidateSessionRuntimeBinding,
       requestGateway,
-      runtimeIdByStoredSessionIdRef,
+      requestForStoredSession,
+      resolveExactSessionProfile,
       resumeStoredSession,
       scope,
       selectedStoredSessionIdRef,

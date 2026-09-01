@@ -57,16 +57,32 @@ function runtime() {
   return context
 }
 
-test('botConnectionRoute: remote rows get a route descriptor, local rows do not', () => {
+test('botConnectionRoute: every source-scoped row keeps its exact route descriptor', () => {
   const ctx = runtime()
   const { botConnectionRoute } = ctx.__x
 
   assert.equal(botConnectionRoute({ name: 'writer', connectionId: 'local' }), null)
   assert.equal(botConnectionRoute({ name: 'writer' }), null)
-  // remoteSource is required — an annotated ACTIVE row keeps the active door.
-  assert.equal(botConnectionRoute({ name: 'writer', connectionId: 'spark', sourceScoped: true }), null)
+  assert.deepEqual(
+    JSON.parse(
+      JSON.stringify(
+        botConnectionRoute({
+          name: 'writer',
+          connectionId: 'local',
+          connectionKind: 'local',
+          sourceScoped: true
+        })
+      )
+    ),
+    { connectionId: 'local', mode: 'local', profile: 'writer', targetProfile: 'writer' }
+  )
 
-  const route = botConnectionRoute({ name: 'dixie', connectionId: 'mac-mini', remoteSource: true })
+  const route = botConnectionRoute({
+    name: 'dixie',
+    connectionId: 'mac-mini',
+    remoteSource: true,
+    sourceScoped: true
+  })
   assert.deepEqual(JSON.parse(JSON.stringify(route)), {
     connectionId: 'mac-mini',
     mode: 'remote',
@@ -75,7 +91,7 @@ test('botConnectionRoute: remote rows get a route descriptor, local rows do not'
   })
 })
 
-test('requestForBot: remote members go through requestProfile, local through host.request', async () => {
+test('requestForBot: source-scoped members use requestProfile; legacy local rows keep host.request', async () => {
   const ctx = runtime()
   const calls = []
   ctx.host.request = async (method, params) => {
@@ -90,13 +106,21 @@ test('requestForBot: remote members go through requestProfile, local through hos
   const { requestForBot } = ctx.__x
 
   await requestForBot({ name: 'local-bot' }, 'session.create', { title: 'x' })
+  await requestForBot(
+    { name: 'local-bot', connectionId: 'local', connectionKind: 'local', sourceScoped: true },
+    'session.resume',
+    { session_id: 'hidden-stored' }
+  )
   await requestForBot({ name: 'dixie', connectionId: 'mac-mini', remoteSource: true }, 'prompt.submit', { text: 'hi' })
 
   assert.equal(calls[0][0], 'active')
   assert.equal(calls[0][1], 'session.create')
   assert.equal(calls[1][0], 'routed')
-  assert.equal(calls[1][1], 'mac-mini')
-  assert.equal(calls[1][2], 'prompt.submit')
+  assert.equal(calls[1][1], 'local')
+  assert.equal(calls[1][2], 'session.resume')
+  assert.equal(calls[2][0], 'routed')
+  assert.equal(calls[2][1], 'mac-mini')
+  assert.equal(calls[2][2], 'prompt.submit')
 })
 
 test('groupMemberKey: local members keep bare names (persisted-room compat), remote members are source-qualified', () => {
@@ -146,8 +170,8 @@ test('room lines and turn prompts badge cross-connection speakers with their dev
   assert.match(prompt, /@dixie \[on Mac Mini\]/)
 })
 
-test('source contract: New Agent has a Create on picker that routes creation to the target backend', () => {
-  assert.match(pluginSource, /'Create on'/)
+test('source contract: New Agent has a localized target picker that routes creation to the target backend', () => {
+  assert.match(pluginSource, /'Tạo trên'/)
   assert.match(pluginSource, /const \[targetConnection, setTargetConnection\] = useState\(''\)/)
   // Creation and configuration go through the target door, not bare host.request.
   assert.match(pluginSource, /await requestForTarget\('profiles\.create', \{/)

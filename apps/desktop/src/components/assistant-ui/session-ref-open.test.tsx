@@ -1,13 +1,16 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { __resetSessionLinkTitleCache } from '@/lib/session-link-title'
 import { $previewTabs, closeRightRail } from '@/store/preview'
+import { $sessions } from '@/store/session'
+import { makeSessionInfo } from '@/test/session-info'
 
 import { DirectiveContent } from './directive-text'
 import { MarkdownTextContent } from './markdown-text'
 
 const openSession = vi.fn()
+const sessionOwner = { connectionId: 'source-work', profile: 'work' } as const
 
 vi.mock('@/app/open-session', () => ({
   openSession: (...args: unknown[]) => openSession(...args)
@@ -15,12 +18,23 @@ vi.mock('@/app/open-session', () => ({
 
 const desktopWindow = window as unknown as { hermesDesktop?: Window['hermesDesktop'] }
 
+beforeEach(() => {
+  $sessions.set([
+    makeSessionInfo({
+      connection_id: sessionOwner.connectionId,
+      id: '20260101_abc123',
+      profile: sessionOwner.profile
+    })
+  ])
+})
+
 afterEach(() => {
   cleanup()
   closeRightRail()
   openSession.mockClear()
   delete desktopWindow.hermesDesktop
   __resetSessionLinkTitleCache()
+  $sessions.set([])
 })
 
 // Both surfaces render a session ref differently — an inline link in agent
@@ -32,7 +46,9 @@ describe('session refs open the session', () => {
 
     fireEvent.click(await screen.findByTitle('work/20260101_abc123'))
 
-    await vi.waitFor(() => expect(openSession).toHaveBeenCalledWith('20260101_abc123', expect.any(Function), 'tab'))
+    await vi.waitFor(() =>
+      expect(openSession).toHaveBeenCalledWith('20260101_abc123', expect.any(Function), 'tab', sessionOwner)
+    )
   })
 
   it('opens the session from a chip in the user transcript', async () => {
@@ -43,7 +59,9 @@ describe('session refs open the session', () => {
     expect(chip.tagName).toBe('BUTTON')
     fireEvent.click(chip)
 
-    await vi.waitFor(() => expect(openSession).toHaveBeenCalledWith('20260101_abc123', expect.any(Function), 'tab'))
+    await vi.waitFor(() =>
+      expect(openSession).toHaveBeenCalledWith('20260101_abc123', expect.any(Function), 'tab', sessionOwner)
+    )
   })
 })
 

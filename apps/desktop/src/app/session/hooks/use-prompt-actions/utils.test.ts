@@ -2,6 +2,7 @@ import type { AppendMessage } from '@assistant-ui/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { ChatMessage } from '@/lib/chat-messages'
+import { rendererRuntimeKey } from '@/lib/session-runtime-key'
 
 import {
   acquireSubmitInFlight,
@@ -37,6 +38,8 @@ afterEach(() => {
   clearSessionRecentlyInterrupted()
   clearSubmitInFlight()
 })
+
+const runtimeNotFound = (message = 'opaque gateway failure') => Object.assign(new Error(message), { code: 4007 })
 
 describe('recent interrupt cooldown', () => {
   it('is true within the cooldown and false after expiry', () => {
@@ -125,6 +128,14 @@ describe('isSessionIdCandidate', () => {
 })
 
 describe('inlineErrorMessage', () => {
+  it('replaces typed 4007 with Vietnamese recovery guidance without exposing the raw gateway error', () => {
+    const message = inlineErrorMessage(runtimeNotFound('RAW 4007 INTERNAL'), 'fallback')
+
+    expect(message).toBe('Hermes không còn giữ phiên đang chạy này. Cuộc trò chuyện và bản nháp vẫn được giữ.')
+    expect(message).not.toContain('4007')
+    expect(message).not.toContain('RAW')
+  })
+
   it('unwraps an electron remote-method error', () => {
     expect(inlineErrorMessage(new Error("Error invoking remote method 'x': Error: boom"), 'fallback')).toBe('boom')
   })
@@ -139,8 +150,10 @@ describe('inlineErrorMessage', () => {
 })
 
 describe('session error classifiers', () => {
-  it('detects not-found and busy errors', () => {
-    expect(isSessionNotFoundError(new Error('Session not found'))).toBe(true)
+  it('classifies runtime-not-found by structured gateway code, never localized message text', () => {
+    expect(isSessionNotFoundError(runtimeNotFound())).toBe(true)
+    expect(isSessionNotFoundError({ data: { error: { code: 4007 } } })).toBe(true)
+    expect(isSessionNotFoundError(new Error('Session not found'))).toBe(false)
     expect(isSessionBusyError(new Error('session busy'))).toBe(true)
     expect(isSessionNotFoundError(new Error('other'))).toBe(false)
     expect(isSessionBusyError(new Error('other'))).toBe(false)
@@ -151,12 +164,14 @@ describe('withSessionNotFoundResume', () => {
   const STORED = 'stored-1'
   const DEAD = 'rt-dead'
   const FRESH = 'rt-fresh'
+  const FRESH_KEY = rendererRuntimeKey({ connectionId: null, gatewayEpoch: 7, profile: 'work' }, FRESH)
 
   // Profile resolution is injected, so these tests never reach the REST layer.
   // Before this was a dependency the helper called resolveStoredSession ->
   // getSession() and its coverage silently depended on $sessions/$profiles
   // state left behind by whichever test file ran first.
   const deps = (overrides: Record<string, unknown> = {}) => ({
+    onRecovered: vi.fn(() => FRESH_KEY),
     requestGateway: vi.fn(async (method: string) => {
       if (method === 'session.resume') {
         return { session_id: FRESH }
@@ -164,7 +179,7 @@ describe('withSessionNotFoundResume', () => {
 
       throw new Error(`unexpected ${method}`)
     }) as unknown as GatewayRequest,
-    resolveProfile: vi.fn(async () => undefined),
+    resolveProfile: vi.fn(async () => 'work'),
     ...overrides
   })
 
@@ -198,7 +213,7 @@ describe('withSessionNotFoundResume', () => {
       attempts += 1
 
       if (attempts === 1) {
-        throw new Error(`${rpc} failed: session not found`)
+        throw runtimeNotFound(`${rpc} failed without localized text`)
       }
 
       return `ok:${sid}`
@@ -206,10 +221,10 @@ describe('withSessionNotFoundResume', () => {
 
     expect(await withSessionNotFoundResume(DEAD, STORED, call, d)).toEqual({
       recovered: true,
-      result: `ok:${FRESH}`,
-      sessionId: FRESH
+      result: `ok:${FRESH_KEY}`,
+      sessionId: FRESH_KEY
     })
-    expect(call.mock.calls.map(c => c[0])).toEqual([DEAD, FRESH])
+    expect(call.mock.calls.map(c => c[0])).toEqual([DEAD, FRESH_KEY])
   })
 
   it('resumes on the session-owning profile so recovery cannot fork the conversation', async () => {
@@ -222,7 +237,7 @@ describe('withSessionNotFoundResume', () => {
       async (sid: string) => {
         if (first) {
           first = false
-          throw new Error('session not found')
+          throw runtimeNotFound()
         }
 
         return sid
@@ -237,7 +252,7 @@ describe('withSessionNotFoundResume', () => {
   })
 
   it('publishes the recovered id exactly once', async () => {
-    const onRecovered = vi.fn()
+    const onRecovered = vi.fn(() => FRESH_KEY)
     const d = deps({ onRecovered })
     let first = true
 
@@ -247,7 +262,7 @@ describe('withSessionNotFoundResume', () => {
       async (sid: string) => {
         if (first) {
           first = false
-          throw new Error('session not found')
+          throw runtimeNotFound()
         }
 
         return sid
@@ -259,11 +274,11 @@ describe('withSessionNotFoundResume', () => {
   })
 
   it('aborts instead of retrying when the user moved on during the resume', async () => {
-    const onRecovered = vi.fn()
+    const onRecovered = vi.fn(() => FRESH_KEY)
     const d = deps({ driftReason: () => 'selection:a->b', onRecovered })
 
     const call = vi.fn(async () => {
-      throw new Error('session not found')
+      throw runtimeNotFound()
     })
 
     await expect(withSessionNotFoundResume(DEAD, STORED, call, d)).rejects.toThrow(SessionRecoveryAborted)
@@ -281,7 +296,7 @@ describe('withSessionNotFoundResume', () => {
     })
 
     const call = vi.fn(async () => {
-      throw new Error('prompt.submit failed: original symptom')
+      throw runtimeNotFound('prompt.submit failed: original symptom')
     })
 
     // The ORIGINAL error, not the secondary resume failure — the double-404
@@ -293,7 +308,7 @@ describe('withSessionNotFoundResume', () => {
     const d = deps()
 
     const call = vi.fn(async () => {
-      throw new Error('session not found')
+      throw runtimeNotFound('session not found')
     })
 
     await expect(withSessionNotFoundResume(DEAD, null, call, d)).rejects.toThrow('session not found')
@@ -332,14 +347,14 @@ describe('withSessionNotFoundResume', () => {
         optIn,
         { alsoTimeout: true }
       )
-    ).toMatchObject({ recovered: true, sessionId: FRESH })
+    ).toMatchObject({ recovered: true, sessionId: FRESH_KEY })
   })
 
   it('gives up after one retry so a genuinely broken session still surfaces', async () => {
     const d = deps()
 
     const call = vi.fn(async () => {
-      throw new Error('session not found')
+      throw runtimeNotFound('session not found')
     })
 
     await expect(withSessionNotFoundResume(DEAD, STORED, call, d)).rejects.toThrow('session not found')

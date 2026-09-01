@@ -75,6 +75,7 @@ import { cn } from '@/lib/utils'
 import type { ComposerAttachment } from '@/store/composer'
 import { notifyError } from '@/store/notifications'
 import { $connection, $terminalBackend } from '@/store/session'
+import { requestForRendererRuntime } from '@/store/session-request-router'
 import { notifyThreadEditClose } from '@/store/thread-scroll'
 
 interface UserEditComposerProps {
@@ -411,7 +412,7 @@ export const UserEditComposer: FC<UserEditComposerProps> = ({ cwd, gateway, sess
       const remote = $connection.get()?.mode === 'remote'
 
       const requestGateway = <T,>(method: string, params?: Record<string, unknown>) =>
-        gateway.request<T>(method, params)
+        requestForRendererRuntime<T>(sessionId, method, params)
 
       const refs: InlineRefInput[] = []
 

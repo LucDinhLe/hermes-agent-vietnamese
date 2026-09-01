@@ -4,15 +4,25 @@ import type { ClientSessionState } from '@/app/types'
 import { createClientSessionState } from '@/lib/chat-runtime'
 import type { SessionInfo } from '@/types/hermes'
 
-const setUnreadRemote = vi.fn<(id: string, unread: boolean, profile?: null | string) => Promise<{ ok: boolean }>>(() =>
-  Promise.resolve({ ok: true })
+interface MockSessionApiOwner {
+  connectionId: null | string
+  profile: string
+}
+
+const setUnreadRemote = vi.fn<(id: string, unread: boolean, owner: MockSessionApiOwner) => Promise<{ ok: boolean }>>(
+  () => Promise.resolve({ ok: true })
 )
 
 vi.mock('@/hermes', () => ({
   // Opening a session now PATCHes its persisted unread flag (clearUnreadOnOpen
-  // -> markSessionUnread); keep the REST mutation minimal for the suite.
+  // -> markSessionUnread); keep the exact-owner REST mutation minimal for the suite.
+  sessionApiOwner: (row: { connection_id?: string; profile?: string }) => ({
+    connectionId: row.connection_id?.trim() || null,
+    profile: row.profile?.trim() || 'default'
+  }),
   setApiRequestProfile: () => {},
-  setSessionUnreadRemote: (id: string, unread: boolean, profile?: null | string) => setUnreadRemote(id, unread, profile)
+  setSessionUnreadRemoteForOwner: (id: string, unread: boolean, owner: MockSessionApiOwner) =>
+    setUnreadRemote(id, unread, owner)
 }))
 
 import { makeSessionInfo } from '../test/session-info'
@@ -702,7 +712,7 @@ describe('unread finished sessions', () => {
     expect($sessions.get().find(s => s.id === 's1')?.unread).toBe(false)
 
     await Promise.resolve()
-    expect(setUnreadRemote).toHaveBeenCalledWith('s1', false, undefined)
+    expect(setUnreadRemote).toHaveBeenCalledWith('s1', false, { connectionId: null, profile: 'default' })
   })
 
   it('does not PATCH a read row when it is opened', async () => {

@@ -5,6 +5,7 @@ import { prettyName } from '@/lib/text'
 import { type ComposerSuggestion, offerSuggestions } from '@/store/composer-suggestions'
 import { $gateway } from '@/store/gateway'
 import { notifyError } from '@/store/notifications'
+import { requestForRendererRuntime } from '@/store/session-request-router'
 
 /**
  * Connection-repair event provider: an MCP tool call just failed with an
@@ -48,10 +49,12 @@ async function reconnect(server: string, sessionId: string | null, cancelled: ()
     })
 
     // Fresh tokens reach the live session before the pill claims success.
-    await $gateway
-      .get()
-      ?.request('reload.mcp', { confirm: true, session_id: sessionId ?? undefined })
-      .catch(() => {})
+    const gateway = $gateway.get()
+    const reload = sessionId
+      ? requestForRendererRuntime(sessionId, 'reload.mcp', { confirm: true })
+      : gateway?.request('reload.mcp', { confirm: true })
+
+    await reload?.catch(() => {})
 
     clearMcpFailure(sessionId, server)
   } catch (error) {

@@ -243,6 +243,11 @@ _EPHEMERAL_SCAFFOLDING_FLAGS = (
     # persisted and emitted as an interim message (#65919).
     "_verification_stop_synthetic",
     "_pre_verify_synthetic",
+    # Advisor final-review rewrites keep the rejected assistant candidate and
+    # the synthetic rewrite instruction in memory for exactly one bounded
+    # retry. Neither is user-visible transcript content.
+    "_review_revision_candidate",
+    "_review_revision_synthetic",
     # kanban worker stop-guard: narrated exit without kanban_complete/block
     "_kanban_stop_synthetic",
     # dropped tool-call re-prompt pair (finish_reason=tool_calls with an
@@ -6565,6 +6570,27 @@ class AIAgent:
 
     def _reset_stream_delivery_tracking(self) -> None:
         """Reset tracking for text delivered during the current model response."""
+        if getattr(self, "_review_hold_output", False):
+            # A fresh provider attempt owns a fresh candidate. Discard any
+            # partial bytes and scrubber tails from the previous/retried
+            # attempt; a reviewed PASS path releases its buffer explicitly
+            # before another request can begin.
+            for scrubber_name in (
+                "_stream_think_scrubber",
+                "_stream_context_scrubber",
+            ):
+                scrubber = getattr(self, scrubber_name, None)
+                if scrubber is not None:
+                    try:
+                        scrubber.flush()
+                    except Exception:
+                        pass
+            self._current_streamed_assistant_text = ""
+            self._review_held_stream_chunks = []
+            self._review_held_stream_chars = 0
+            self._review_held_stream_overflow = False
+            self._review_release_interim_once = False
+            return
         # Flush any benign partial-tag tail held by the think scrubber
         # first (#17924): an innocent '<' at the end of the stream that
         # turned out not to be a tag prefix should reach the UI.  Then
@@ -6732,6 +6758,8 @@ class AIAgent:
 
     def _fire_streamed_codex_commentary(self, text: str) -> None:
         """Deliver a completed live Codex commentary message immediately."""
+        if getattr(self, "_review_hold_output", False):
+            return
         cb = getattr(self, "interim_assistant_callback", None)
         if cb is None or not isinstance(text, str):
             return
@@ -6761,6 +6789,11 @@ class AIAgent:
         """
         if not isinstance(assistant_msg, dict):
             return
+        if getattr(self, "_review_hold_output", False):
+            if getattr(self, "_review_release_interim_once", False):
+                self._review_release_interim_once = False
+            else:
+                return
         commentary_parts = self._extract_codex_interim_visible_parts(assistant_msg)
         undelivered_parts: List[str] = []
         pending_keys: set[str] = set()
@@ -6968,6 +7001,21 @@ class AIAgent:
             ):
                 text = text.lstrip("\n")
         if not text:
+            return
+        if getattr(self, "_review_hold_output", False):
+            held = getattr(self, "_review_held_stream_chunks", None)
+            if not isinstance(held, list):
+                held = []
+                self._review_held_stream_chunks = held
+            current_chars = int(
+                getattr(self, "_review_held_stream_chars", 0) or 0
+            )
+            next_chars = current_chars + len(text)
+            if next_chars <= 2_000_000:
+                held.append(text)
+                self._review_held_stream_chars = next_chars
+            else:
+                self._review_held_stream_overflow = True
             return
         callbacks = [cb for cb in (self.stream_delta_callback, self._stream_callback) if cb is not None]
         delivered = False

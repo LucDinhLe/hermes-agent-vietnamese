@@ -40,6 +40,10 @@ export const en: Translations = {
     set: 'Set',
     skip: 'Skip',
     update: 'Update',
+    truncatedCharacters: count =>
+      `${count.toLocaleString('en-US')} more characters truncated — use Copy for the full output.`,
+    sessionUsageSummary: (calls, input, output, total) =>
+      `Usage: ${calls.toLocaleString('en-US')} calls · ${input.toLocaleString('en-US')} in / ${output.toLocaleString('en-US')} out · ${total.toLocaleString('en-US')} total`,
     tryHint: term => `Try “${term}”`,
     on: 'On',
     off: 'Off'
@@ -1029,6 +1033,24 @@ export const en: Translations = {
       fallbackAdd: 'Add fallback',
       fallbackEmpty: 'No fallback models — the default model is used unless it fails.',
       notInCatalog: "isn't in this provider's model list — calls may fall back to a backup.",
+      moa: {
+        title: 'Advisory Council (MoA)',
+        description:
+          'Configure named Mixture of Agents presets. Reference models contribute opinions; the aggregator produces the final answer.',
+        preset: 'Preset',
+        enabled: 'Enabled',
+        setDefault: 'Set default',
+        delete: 'Delete',
+        newPreset: 'new preset',
+        addPreset: 'Add preset',
+        defaultLabel: 'Default',
+        disableReference: index => `Disable reference ${index}`,
+        enableReference: index => `Enable reference ${index}`,
+        remove: 'Remove',
+        reference: index => `Reference ${index}`,
+        addReference: 'Add reference model',
+        aggregator: 'Aggregator'
+      },
       tasks: {
         vision: { label: 'Vision', hint: 'Image analysis' },
         web_extract: { label: 'Web extract', hint: 'Page summarization' },
@@ -2048,6 +2070,8 @@ export const en: Translations = {
   sidebar: {
     nav: {
       'new-session': 'New session',
+      projects: 'Projects',
+      'usage-nav': 'Usage statistics',
       skills: 'Capabilities',
       messaging: 'Messaging',
       artifacts: 'Artifacts',
@@ -2075,6 +2099,8 @@ export const en: Translations = {
     noFilterMatches: 'No sessions match these filters',
     projects: {
       sectionLabel: 'Projects',
+      pinnedSectionLabel: 'Pinned projects',
+      pinnedEmpty: 'Pin a project to keep it here.',
       home: 'Home',
       newButton: 'New project',
       createTitle: 'New project',
@@ -2848,6 +2874,8 @@ export const en: Translations = {
     aria: 'Right sidebar',
     panelsAria: 'Right sidebar panels',
     files: 'File system',
+    browser: 'Browser',
+    browserNewTab: 'New browser tab',
     terminal: 'Terminal',
     noFolderSelected: 'No folder selected',
     changeCwdTitle: 'Change working directory',
@@ -2956,6 +2984,9 @@ export const en: Translations = {
       reload: 'Reload page',
       address: 'Address',
       addressPlaceholder: 'Enter address',
+      moreActions: 'More browser actions',
+      sharedWithAgent: 'Shared with agent',
+      sharedWithAgentHint: 'You and the agent are using this same page and signed-in session.',
       blankPageBody: 'Type an address above to browse, or ask Hermes to open a page.',
       finishedRestarting: message => `Hermes finished restarting the preview server${message ? `: ${message}` : ''}`,
       failedRestarting: message => `Server restart failed: ${message}`,
@@ -3161,6 +3192,13 @@ export const en: Translations = {
       copyFile: 'Copy file',
       copyPath: 'Copy path',
       outputAlt: 'Tool output',
+      toolPayload: 'Tool payload',
+      arguments: 'Arguments',
+      result: 'Result',
+      searchResults: 'Search results',
+      search: 'Search',
+      standardOutput: 'Standard output',
+      standardError: 'Standard error',
       rawResponse: 'Raw response',
       copyActivity: 'Copy activity',
       recoveredOne: 'Recovered after 1 failed step',

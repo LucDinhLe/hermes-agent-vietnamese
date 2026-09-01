@@ -30,9 +30,10 @@ import { completeMcpDesktopOAuth, McpOAuthCancelled } from '@/lib/mcp-dashboard-
 import { directoryEntry } from '@/lib/mcp-directory'
 import { prettyName } from '@/lib/text'
 import { cn } from '@/lib/utils'
-import { $gateway } from '@/store/gateway'
+import { requestForGatewayEventSource } from '@/store/gateway-event-source'
 import { clearMcpSetupRequest, type McpSetupOutcome, sessionMcpSetupRequest } from '@/store/mcp-setup'
 import { notifyError } from '@/store/notifications'
+import { requestForRendererRuntime } from '@/store/session-request-router'
 import { invalidateMcpSuggestionIndex } from '@/store/suggestion-providers/mcp'
 
 import { selectMessageRunning } from './tool/fallback-model'
@@ -171,7 +172,6 @@ function McpSetupPending({ args }: ToolCallMessagePartProps) {
   const sessionId = useStore(useSessionView().$runtimeId)
   const $request = useMemo(() => sessionMcpSetupRequest(sessionId), [sessionId])
   const request = useStore($request)
-  const gateway = useStore($gateway)
   const fromArgs = useMemo(() => readSetupArgs(args), [args])
 
   const server = fromArgs.server || request?.server || ''
@@ -200,12 +200,6 @@ function McpSetupPending({ args }: ToolCallMessagePartProps) {
         return
       }
 
-      if (!gateway) {
-        notifyError(new Error(copy.gatewayDisconnected), copy.sendFailed)
-
-        return
-      }
-
       // Clear first: the answer is decided, and an in-flight RPC must not
       // leave a live card that can be answered a second time.
       clearMcpSetupRequest(request.requestId, request.sessionId)
@@ -218,7 +212,7 @@ function McpSetupPending({ args }: ToolCallMessagePartProps) {
       // the config landed, tools arrive next session — report it and move on.
       if (outcome.status === 'installed' || outcome.status === 'enabled' || outcome.status === 'authorized') {
         try {
-          await gateway.request('reload.mcp', { confirm: true, session_id: request.sessionId ?? undefined })
+          await requestForRendererRuntime(request.sessionId ?? '', 'reload.mcp', { confirm: true })
         } catch (error) {
           notifyError(error, copy.reloadFailed)
         }
@@ -228,16 +222,15 @@ function McpSetupPending({ args }: ToolCallMessagePartProps) {
       }
 
       try {
-        await gateway.request<{ status?: string }>('mcp.setup.respond', {
-          request_id: request.requestId,
-          result: JSON.stringify(outcome)
-        })
+        const params = { request_id: request.requestId, result: JSON.stringify(outcome) }
+
+        await requestForGatewayEventSource<{ status?: string }>(request.sessionId, 'mcp.setup.respond', params)
         // tool.complete lands next → McpSetupSettled.
       } catch (error) {
         notifyError(error, copy.sendFailed)
       }
     },
-    [copy.gatewayDisconnected, copy.reloadFailed, copy.sendFailed, gateway, request]
+    [copy.reloadFailed, copy.sendFailed, request]
   )
 
   const decline = useCallback(() => {

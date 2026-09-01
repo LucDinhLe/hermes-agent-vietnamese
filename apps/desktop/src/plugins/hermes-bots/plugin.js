@@ -46,6 +46,7 @@ import {
   host,
   Input,
   PALETTE_AREA,
+  ROUTES_AREA,
   profileColor,
   queryClient,
   relativeTime,
@@ -57,6 +58,7 @@ import {
   SelectTrigger,
   SelectValue,
   Switch,
+  SIDEBAR_NAV_AREA,
   Textarea,
   Tip,
   useQuery,
@@ -86,6 +88,20 @@ const ID = 'hermes-bots'
 const ROSTER_KEY = [ID, 'roster']
 const ROUTINES_KEY = [ID, 'routines']
 const NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/
+
+function relativeTimeVi(targetMs, nowMs = Date.now()) {
+  if (!Number.isFinite(targetMs)) return relativeTime(targetMs, nowMs)
+  const delta = targetMs - nowMs
+  const abs = Math.abs(delta)
+  const future = delta > 0
+  if (abs < 60_000) return future ? 'sắp tới' : 'vừa xong'
+  const units = abs < 3_600_000
+    ? [Math.round(abs / 60_000), 'phút']
+    : abs < 86_400_000
+      ? [Math.round(abs / 3_600_000), 'giờ']
+      : [Math.round(abs / 86_400_000), 'ngày']
+  return future ? `sau ${units[0]} ${units[1]}` : `${units[0]} ${units[1]} trước`
+}
 
 /** Captured in register() so components can reach plugin storage. */
 let pluginCtx = null
@@ -162,8 +178,8 @@ function trackInboundActivity(roster) {
 
       host.notify({
         kind: 'info',
-        title: inbound ? `\uD83E\uDD16 New message for ${label}` : `${label} has new activity`,
-        message: preview.slice(0, 140) || 'Open the chat to see it.'
+        title: inbound ? `\uD83E\uDD16 Tin nhắn mới cho ${label}` : `${label} có hoạt động mới`,
+        message: preview.slice(0, 140) || 'Mở cuộc trò chuyện để xem.'
       })
     }
   }
@@ -258,27 +274,27 @@ function currentGroupActivity(group) {
  *  the expanded rows. */
 function groupActivityLabel(event) {
   const kind = event?.kind
-  const base = GROUP_ACTIVITY_LABELS[kind] || kind || 'did something'
+  const base = GROUP_ACTIVITY_LABELS[kind] || kind || 'đã thực hiện một việc'
 
   if (kind === 'cancelled' || kind === 'settled') {
     return base
   }
 
-  const who = event?.member === 'You' ? 'You' : groupSpeakerLabel(event?.member || 'A bot')
+  const who = event?.member === 'You' ? 'Đại ca' : groupSpeakerLabel(event?.member || 'Một tác nhân')
 
   return `${who} ${base}`
 }
 
 const GROUP_ACTIVITY_LABELS = {
-  queued: 'sent a message',
-  working: 'is working…',
-  replied: 'replied',
-  passed: 'passed',
-  'timed-out': 'took too long',
-  failed: 'hit an error',
-  cancelled: 'turn interrupted by a newer message',
-  settled: 'turn settled',
-  delivered: 'delivered a late reply'
+  queued: 'đã gửi tin nhắn',
+  working: 'đang làm việc…',
+  replied: 'đã phản hồi',
+  passed: 'đã bỏ lượt',
+  'timed-out': 'mất quá nhiều thời gian',
+  failed: 'gặp lỗi',
+  cancelled: 'bị ngắt bởi tin nhắn mới hơn',
+  settled: 'đã hoàn tất lượt',
+  delivered: 'đã gửi câu trả lời đến muộn'
 }
 
 const GROUP_ACTIVITY_GLYPHS = {
@@ -1153,7 +1169,7 @@ function noteBotMetaWrite(name) {
   botMetaWriteAt.set(name, Date.now())
 }
 
-async function saveBotMeta(name, patch) {
+async function saveBotMeta(name, patch, ownerBot = null) {
   const prevMeta = $botMeta.get()[name] || {}
   const next = { ...$botMeta.get(), [name]: { ...prevMeta, ...patch } }
   noteBotMetaWrite(name)
@@ -1177,7 +1193,11 @@ async function saveBotMeta(name, patch) {
   let serverRequest = null
   try {
     const { image, pet, ...rest } = next[name] || {}
-    serverRequest = Promise.resolve(host.request('profiles.configure', { name, ui_meta: { 'hermes-bots': rest } }))
+    serverRequest = Promise.resolve(
+      ownerBot
+        ? requestForBot(ownerBot, 'profiles.configure', { name, ui_meta: { 'hermes-bots': rest } })
+        : host.request('profiles.configure', { name, ui_meta: { 'hermes-bots': rest } })
+    )
   } catch {
     /* older/unavailable gateway — the local fallback remains saved */
   }
@@ -1190,9 +1210,10 @@ async function saveBotMeta(name, patch) {
   // `data` push re-uploads the full data URL for nothing.
   if ('image' in patch && patch.image !== (prevMeta.image ?? null)) {
     try {
-      const req = patch.image
-        ? host.request('profiles.set_asset', { name, asset: 'avatar', data: patch.image })
-        : host.request('profiles.set_asset', { name, asset: 'avatar', clear: true })
+      const params = patch.image
+        ? { name, asset: 'avatar', data: patch.image }
+        : { name, asset: 'avatar', clear: true }
+      const req = ownerBot ? requestForBot(ownerBot, 'profiles.set_asset', params) : host.request('profiles.set_asset', params)
       req.catch(() => undefined)
     } catch {
       /* older gateway */
@@ -1283,52 +1304,67 @@ function fallbackSelectionAfterHide(name) {
  *  setter is a no-op on already-hidden rows) and feature-detected: older
  *  gateways lack session.set_hidden and simply keep the rows visible. */
 function hideOwnedBotSessions() {
+  const roster = Array.isArray($lastRoster.get()) ? $lastRoster.get() : []
+  const ownerKey = bot =>
+    bot?.remoteSource ? `${String(bot.connectionId || '').trim()}::${String(bot.name || '').trim()}` : String(bot?.name || '').trim()
+  const ownerForMember = memberKey => roster.find(bot => ownerKey(bot) === memberKey)
+  const ownerForActiveName = name => roster.find(bot => !bot?.remoteSource && String(bot?.name || '').trim() === name)
   const canonical = Object.entries($botMeta.get())
-    .map(([name, meta]) => ({ name, id: meta && meta.chat }))
+    .map(([name, meta]) => ({ bot: ownerForActiveName(name), name, id: meta && meta.chat }))
     .filter(entry => Boolean(entry.id))
   const rooms = Object.values($groupChats.get())
-    .flatMap(room => Object.values(room?.sessions || {}))
-    .filter(sid => Boolean(sid) && sid !== true)
+    .flatMap(room =>
+      Object.entries(room?.sessions || {}).map(([memberKey, sid]) => ({ bot: ownerForMember(memberKey), id: sid }))
+    )
+    .filter(entry => Boolean(entry.id) && entry.id !== true)
 
   // A stale local/server pointer must not be trusted merely because it looks
   // like a session id. Resolve every canonical pointer through the backend and
   // require the canonical Bot Chat title before the hide write. This is
   // deliberately fail-closed: an unavailable/old gateway may leave an old
   // Bot Chat visible, but it must never hide an unrelated user conversation.
-  const verifiedCanonical = Promise.resolve()
-    .then(() =>
-      host.request('profiles.list', {
-        include_sessions: true,
-        preferred_session_ids: Object.fromEntries(canonical.map(entry => [entry.name, entry.id]))
-      })
-    )
-    .then(res => {
-      const profiles = Array.isArray(res?.profiles) ? res.profiles : []
-      const valid = []
+  const verifiedCanonical = Promise.all(
+    canonical.map(async entry => {
+      if (!entry.bot) {
+        return null
+      }
 
-      for (const entry of canonical) {
-        const profile = profiles.find(item => item?.name === entry.name)
+      try {
+        const res = await requestForBot(entry.bot, 'profiles.list', {
+          include_sessions: true,
+          preferred_session_ids: { [entry.name]: entry.id }
+        })
+        const profile = (Array.isArray(res?.profiles) ? res.profiles : []).find(item => item?.name === entry.name)
         const preferred = profile?.preferred_session
         const ids = [preferred?.id, preferred?.resolved_id, preferred?.session_id, preferred?.session_key]
           .filter(Boolean)
           .map(String)
 
-        if (String(preferred?.title || '').trim() === 'Bot Chat' && ids.includes(String(entry.id))) {
-          valid.push(entry.id)
-        }
+        return String(preferred?.title || '').trim() === 'Bot Chat' && ids.includes(String(entry.id))
+          ? { bot: entry.bot, id: entry.id }
+          : null
+      } catch {
+        return null
       }
-
-      return valid
     })
-    .catch(() => [])
+  )
 
-  const known = verifiedCanonical.then(validCanonical =>
-    Promise.all(
-      [...new Set([...validCanonical, ...rooms])].map(sid =>
-        Promise.resolve(host.request('session.set_hidden', { session_id: sid, hidden: true })).catch(() => undefined)
+  const known = verifiedCanonical.then(validCanonical => {
+    const exact = [...validCanonical.filter(Boolean), ...rooms.filter(entry => entry.bot)]
+    const unique = new Map(exact.map(entry => [`${ownerKey(entry.bot)}::${String(entry.id)}`, entry]))
+
+    return Promise.all(
+      [...unique.values()].map(entry =>
+        Promise.resolve(
+          requestForBot(entry.bot, 'session.set_hidden', {
+            session_id: entry.id,
+            hidden: true,
+            profile: entry.bot.name
+          })
+        ).catch(() => undefined)
       )
     )
-  )
+  })
 
   return Promise.all([known, sweepBotProfileSessions().catch(() => undefined)])
 }
@@ -1369,7 +1405,17 @@ async function sweepBotProfileSessions() {
     // sources get covered by the next sweep once the roster cache exists).
     try {
       const res = await host.request('profiles.list', {})
-      roster = Array.isArray(res?.profiles) ? res.profiles : []
+      const connectionId = String(host.activeConnectionId?.() || host.state?.connectionId?.get?.() || '').trim()
+      roster = (Array.isArray(res?.profiles) ? res.profiles : []).map(bot =>
+        connectionId
+          ? {
+              ...bot,
+              connectionId,
+              connectionKind: connectionId === 'local' ? 'local' : 'remote',
+              sourceScoped: true
+            }
+          : bot
+      )
     } catch {
       return
     }
@@ -1633,7 +1679,7 @@ async function duplicateBot(bot, roster) {
   }
 
   if (!name) {
-    throw new Error('No free name for the duplicate.')
+    throw new Error('Không còn tên trống cho bản sao.')
   }
 
   await host.request('profiles.create', {
@@ -1678,7 +1724,7 @@ async function deleteBot(bot) {
     })
 
     if (result?.blocked || result?.code !== 0) {
-      throw new Error(result?.hint || result?.output || `Could not delete profile ${bot.name}.`)
+      throw new Error(result?.hint || result?.output || `Không thể xóa hồ sơ ${bot.name}.`)
     }
   }
 
@@ -2695,7 +2741,7 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
       const add = await mcpRpc('mcp.servers.add', { profile, name: entry.name, preset: entry.name })
       if (!add.ok) {
         setPhase('error')
-        setMessage(add.error || 'Could not add server')
+        setMessage(add.error || 'Không thể thêm máy chủ')
         return
       }
     }
@@ -2707,7 +2753,7 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
     const profile = profileRef.current
     if (!profile) {
       setPhase('error')
-      setMessage('No target profile')
+      setMessage('Chưa chọn hồ sơ đích')
       return
     }
     for (const k of requires) {
@@ -2718,7 +2764,7 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
       const r = await mcpRpc('mcp.servers.set_api_key', { profile, name: entry.name, env_var: k, value: val })
       if (!r.ok) {
         setPhase('error')
-        setMessage(r.error || ('Failed to set ' + k))
+        setMessage(r.error || ('Không thể lưu ' + k))
         return
       }
     }
@@ -2730,7 +2776,7 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
       onDone && onDone()
     } else {
       setPhase('error')
-      setMessage((t.result && (t.result.error || (t.result.result && t.result.result.error))) || 'Server test failed after setup')
+      setMessage((t.result && (t.result.error || (t.result.result && t.result.result.error))) || 'Kiểm tra máy chủ sau thiết lập không thành công')
     }
   }
 
@@ -2753,7 +2799,7 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
       const add = await mcpRpc('mcp.servers.add', { profile, name: entry.name, preset: entry.name })
       if (!add.ok) {
         setPhase('error')
-        setMessage(add.error || 'Could not add server')
+        setMessage(add.error || 'Không thể thêm máy chủ')
         return
       }
     }
@@ -2763,7 +2809,7 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
     const sessionId = payload && payload.session_id
     if (!start.ok || !authUrl || !sessionId) {
       setPhase('error')
-      setMessage((start.error) || 'Could not start OAuth')
+      setMessage((start.error) || 'Không thể bắt đầu đăng nhập OAuth')
       return
     }
     // Open the auth URL in the native browser, same as provider OAuth.
@@ -2779,7 +2825,7 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
       /* fall through to poll; user can open the URL from the toast */
     }
     setPhase('oauth')
-    setMessage('Complete sign-in in your browser...')
+    setMessage('Hoàn tất đăng nhập trong trình duyệt…')
     pollRef.current = setInterval(async () => {
       const poll = await mcpRpc('mcp.servers.oauth.poll', { profile, name: entry.name, session_id: sessionId })
       const pd = poll.result && (poll.result.result || poll.result)
@@ -2788,13 +2834,13 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
         clearInterval(pollRef.current)
         pollRef.current = null
         setPhase('done')
-        host.notify({ kind: 'success', message: entry.name + ' authenticated' })
+        host.notify({ kind: 'success', message: entry.name + ' đã được xác thực' })
         onDone && onDone()
       } else if (status === 'error') {
         clearInterval(pollRef.current)
         pollRef.current = null
         setPhase('error')
-        setMessage((pd && pd.error_message) || 'OAuth failed')
+        setMessage((pd && pd.error_message) || 'Đăng nhập OAuth không thành công')
       }
     }, 2000)
   }
@@ -2802,11 +2848,11 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
   if (supported === false) {
     return jsx('span', {
       className: 'ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)',
-      children: 'needs setup (' + requires.join(', ') + ') \u2014 restart the gateway to enable in-app setup'
+      children: 'cần thiết lập (' + requires.join(', ') + ') — khởi động lại Gateway để thiết lập trong ứng dụng'
     })
   }
   if (phase === 'done') {
-    return jsx('span', { className: 'ml-1.5 text-[0.65rem] text-(--ui-success,#22c55e)', children: 'set up \u2713' })
+    return jsx('span', { className: 'ml-1.5 text-[0.65rem] text-(--ui-success,#22c55e)', children: 'đã thiết lập ✓' })
   }
   if (phase === 'keys') {
     return jsxs('div', {
@@ -2825,30 +2871,30 @@ function McpSetupButton({ profile, entry, onDone, ensureProfile }) {
         jsxs('div', {
           className: 'flex gap-1',
           children: [
-            jsx(Button, { size: 'xs', variant: 'secondary', onClick: () => void submitKeys(), children: 'Save & test' }),
-            jsx(Button, { size: 'xs', variant: 'ghost', onClick: () => setPhase('idle'), children: 'Cancel' })
+            jsx(Button, { size: 'xs', variant: 'secondary', onClick: () => void submitKeys(), children: 'Lưu và kiểm tra' }),
+            jsx(Button, { size: 'xs', variant: 'ghost', onClick: () => setPhase('idle'), children: 'Hủy' })
           ]
         })
       ]
     })
   }
   if (phase === 'oauth') {
-    return jsx('span', { className: 'ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)', children: message || 'Authorizing\u2026' })
+    return jsx('span', { className: 'ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)', children: message || 'Đang xác thực…' })
   }
   if (phase === 'busy') {
-    return jsx('span', { className: 'ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)', children: 'Working\u2026' })
+    return jsx('span', { className: 'ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)', children: 'Đang xử lý…' })
   }
   if (phase === 'error') {
     return jsxs('span', {
       className: 'ml-1.5 text-[0.65rem] text-(--ui-danger,#ef4444)',
-      children: [(message || 'Setup failed') + ' ', jsx('button', { className: 'underline', onClick: () => setPhase('idle'), children: 'retry' })]
+      children: [(message || 'Thiết lập không thành công') + ' ', jsx('button', { className: 'underline', onClick: () => setPhase('idle'), children: 'thử lại' })]
     })
   }
   // idle
   return jsx('button', {
     className: 'ml-1.5 text-[0.65rem] text-(--ui-accent,#4f9cf9) underline',
     onClick: () => void (isOAuth ? beginOAuth() : beginKeys()),
-    children: isOAuth ? 'Sign in\u2026' : 'Set up\u2026'
+    children: isOAuth ? 'Đăng nhập…' : 'Thiết lập…'
   })
 }
 
@@ -2908,7 +2954,7 @@ function pickImageFromDevice() {
       }
 
       if (file.size > 15_000_000) {
-        host.notify({ kind: 'error', message: 'Image too large (max 15MB).' })
+        host.notify({ kind: 'error', message: 'Ảnh quá lớn (tối đa 15 MB).' })
         return resolve(null)
       }
 
@@ -2949,7 +2995,7 @@ async function filesToGroupAttachments(files) {
     }
 
     if (file.size > 15_000_000) {
-      host.notify({ kind: 'error', message: `${file.name || 'attachment'}: too large (max 15MB).` })
+      host.notify({ kind: 'error', message: `${file.name || 'tệp đính kèm'}: quá lớn (tối đa 15 MB).` })
       continue
     }
 
@@ -2966,7 +3012,7 @@ async function filesToGroupAttachments(files) {
 
     const kind = groupAttachmentKind(file)
     picked.push({
-      name: file.name || (kind === 'image' ? 'pasted image' : 'attachment'),
+      name: file.name || (kind === 'image' ? 'ảnh đã dán' : 'tệp đính kèm'),
       data: kind === 'image' ? await normalizeGroupAttachment(data) : data,
       kind
     })
@@ -3120,7 +3166,7 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
         onImage(await normalizeAvatarImage(img))
       }
     } catch (err) {
-      host.notifyError(err, 'Avatar generation failed')
+      host.notifyError(err, 'Không thể tạo ảnh đại diện')
     } finally {
       setGenBusy(false)
     }
@@ -3149,7 +3195,7 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
       // Tab pills: Bot | Generate | Upload | Pet
       jsxs('div', {
         className: 'flex items-center gap-1',
-        children: [tabButton('bot', 'Bot'), tabButton('generate', 'Generate'), tabButton('upload', 'Upload'), tabButton('pet', 'Pet')]
+        children: [tabButton('bot', 'Biểu tượng'), tabButton('generate', 'Tạo ảnh'), tabButton('upload', 'Tải lên'), tabButton('pet', 'Thú cưng')]
       }),
 
       image && tab !== 'generate'
@@ -3158,7 +3204,7 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
             variant: 'ghost',
             size: 'sm',
             onClick: () => onImage(null),
-            children: 'Remove image — use shape'
+            children: 'Bỏ ảnh — dùng hình đại diện'
           })
         : null,
 
@@ -3183,7 +3229,7 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
                         'button',
                         {
                           type: 'button',
-                          title: k || 'Auto — the name decides',
+                          title: k || 'Tự động — khuôn mặt thay đổi theo tên',
                           className: cn(
                             'flex items-center justify-center rounded-md transition-colors hover:bg-(--chrome-action-hover)',
                             k === kind && !image && 'ring-1 ring-(--ui-accent)'
@@ -3195,7 +3241,7 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
                           },
                           children: k
                             ? jsx(BotFace, { shape: blobShapeString(seedPart, k), color, size: 32, name: pickerName })
-                            : jsx('span', { className: 'text-[0.6rem] text-(--ui-text-tertiary)', children: 'Auto' })
+                            : jsx('span', { className: 'text-[0.6rem] text-(--ui-text-tertiary)', children: 'Tự động' })
                         },
                         k || 'auto'
                       )
@@ -3212,26 +3258,26 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
                           onImage(null)
                           onShape(blobShapeString(Math.random().toString(36).slice(2, 10), kind))
                         },
-                        children: [jsx(Codicon, { name: 'refresh', className: 'mr-1 text-[0.8rem]' }), 'Randomize']
+                        children: [jsx(Codicon, { name: 'refresh', className: 'mr-1 text-[0.8rem]' }), 'Tạo ngẫu nhiên']
                       }),
                       jsxs(Button, {
                         type: 'button',
                         variant: 'ghost',
                         size: 'sm',
                         title: locked
-                          ? 'Unlock — the face follows the agent\u2019s name again'
-                          : 'Keep this exact face even if the name changes',
+                          ? 'Mở khóa — khuôn mặt lại thay đổi theo tên tác nhân'
+                          : 'Giữ nguyên khuôn mặt này dù tên tác nhân thay đổi',
                         onClick: () => onShape(blobShapeString(locked ? '' : pickerName, kind)),
                         children: [
                           jsx(Codicon, { name: locked ? 'unlock' : 'lock', className: 'mr-1 text-[0.8rem]' }),
-                          locked ? 'Unlock' : 'Lock face'
+                          locked ? 'Mở khóa' : 'Khóa khuôn mặt'
                         ]
                       })
                     ]
                   }),
                   jsx('div', {
                     className: 'text-center text-[0.65rem] text-(--ui-text-quaternary)',
-                    children: locked ? 'Face locked — renaming won\u2019t change it.' : 'Face follows the name.'
+                    children: locked ? 'Khuôn mặt đã khóa — đổi tên sẽ không làm thay đổi.' : 'Khuôn mặt thay đổi theo tên.'
                   }),
                   jsx(Button, {
                     type: 'button',
@@ -3239,7 +3285,7 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
                     size: 'sm',
                     className: 'text-(--ui-text-tertiary)',
                     onClick: () => onShape(defaultShapeFor(pickerName)),
-                    children: 'Classic shapes'
+                    children: 'Hình đại diện cổ điển'
                   })
                 ]
               })
@@ -3259,7 +3305,7 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
                     'button',
                     {
                       type: 'button',
-                      title: s === 'blobatar' ? 'Blob face — drawn from the agent\u2019s name' : undefined,
+                      title: s === 'blobatar' ? 'Khuôn mặt tạo từ tên tác nhân' : undefined,
                       className: cn(
                         'flex items-center justify-center rounded-md transition-colors hover:bg-(--chrome-action-hover)',
                         s === shape && !image && 'ring-1 ring-(--ui-accent)'
@@ -3309,7 +3355,7 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
               children: [
                 jsx(Textarea, {
                   className: 'min-h-16 text-xs',
-                  placeholder: 'Describe your avatar…',
+                    placeholder: 'Mô tả ảnh đại diện…',
                   value: describe,
                   onChange: event => setDescribe(event.target.value)
                 }),
@@ -3323,14 +3369,14 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
                     genBusy
                       ? jsx(GlyphSpinner, { spinner: 'breathe', className: 'mr-1 text-[0.8rem]' })
                       : jsx(Codicon, { name: 'sparkle', className: 'mr-1 text-[0.8rem]' }),
-                    genBusy ? 'Generating…' : 'Generate'
+                    genBusy ? 'Đang tạo…' : 'Tạo ảnh'
                   ]
                 }),
                 describe.trim()
                   ? null
                   : jsx('div', {
                       className: 'text-center text-[0.65rem] text-(--ui-text-quaternary)',
-                      children: 'Leave blank to generate from the agent\u2019s name and description.'
+                      children: 'Để trống để tạo từ tên và mô tả của tác nhân.'
                     })
               ]
             })
@@ -3338,8 +3384,8 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
               className: 'px-2 py-3 text-center text-xs leading-5 text-(--ui-text-tertiary)',
               children:
                 imagen === false
-                  ? 'No image model available. If you just enabled one (or updated Hermes), restart the gateway: Ctrl+K → "Restart gateway".'
-                  : 'Checking image backend…'
+                  ? 'Chưa có model tạo ảnh. Nếu Đại ca vừa bật model hoặc cập nhật Hermes, hãy khởi động lại cổng kết nối: Ctrl+K → “Khởi động lại cổng”.'
+                  : 'Đang kiểm tra dịch vụ tạo ảnh…'
             })
         : null,
 
@@ -3349,7 +3395,7 @@ function AvatarPicker({ shape, color, image, onShape, onColor, onImage, generate
             variant: 'secondary',
             className: 'w-full justify-center',
             onClick: upload,
-            children: [jsx(Codicon, { name: 'device-camera', className: 'mr-1 text-[0.8rem]' }), 'Choose an image…']
+            children: [jsx(Codicon, { name: 'device-camera', className: 'mr-1 text-[0.8rem]' }), 'Chọn ảnh…']
           })
         : null,
 
@@ -3471,7 +3517,7 @@ function PetTab({ image, onImage }) {
   if (!pets.length) {
     return jsx('div', {
       className: 'px-2 py-3 text-center text-xs text-(--ui-text-tertiary)',
-      children: 'No pets in the petdex gallery. Run `hermes pets` to explore.'
+      children: 'Chưa có thú cưng trong Petdex. Chạy `hermes pets` để khám phá.'
     })
   }
 
@@ -3499,11 +3545,11 @@ function PetTab({ image, onImage }) {
     children: [
       jsx('div', {
         className: 'text-center text-[0.65rem] text-(--ui-text-quaternary)',
-        children: 'Pick a pet as this agent’s profile picture.'
+        children: 'Chọn thú cưng làm ảnh hồ sơ của tác nhân này.'
       }),
       jsx(Input, {
         className: 'h-7 text-xs',
-        placeholder: `Search ${pets.length} pets…`,
+        placeholder: `Tìm trong ${pets.length} thú cưng…`,
         value: query,
         onChange: event => {
           setQuery(event.target.value)
@@ -3520,13 +3566,13 @@ function PetTab({ image, onImage }) {
               setSelectedSlug(null)
               onImage(null)
             },
-            children: 'Remove — back to shape avatar'
+            children: 'Bỏ — trở về hình đại diện'
           })
         : null,
       filtered.length === 0
         ? jsx('div', {
             className: 'py-3 text-center text-xs text-(--ui-text-quaternary)',
-            children: 'No pets match.'
+            children: 'Không có thú cưng phù hợp.'
           })
         : jsxs('div', {
             onScroll,
@@ -3557,7 +3603,7 @@ function PetTab({ image, onImage }) {
                             onImage(icon)
                           } else {
                             setSelectedSlug(null)
-                            host.notify({ kind: 'error', message: 'Could not load that pet — try another.' })
+                            host.notify({ kind: 'error', message: 'Không tải được thú cưng này — hãy thử con khác.' })
                           }
                         })
                       },
@@ -3576,7 +3622,7 @@ function PetTab({ image, onImage }) {
               limit < ranked.length
                 ? jsx('div', {
                     className: 'py-2 text-center text-[0.65rem] text-(--ui-text-quaternary)',
-                    children: `Scroll for more (${limit} of ${ranked.length})`
+            children: `Cuộn để xem thêm (${limit}/${ranked.length})`
                   })
                 : null
             ]
@@ -4157,7 +4203,7 @@ async function deliverRemoteRosterMentions(bots, userText, sender) {
       host.notify?.({
         kind: 'info',
         title: displayName(bot),
-        message: `Messaged @${botHandle(profile, bot)} on ${label} — will relay the reply here.`
+        message: `Đã nhắn @${botHandle(profile, bot)} trên ${label} — câu trả lời sẽ được chuyển về đây.`
       })
 
       const reply = await pollRemoteDmReply(route, profile, stored || runtime, before)
@@ -4172,11 +4218,11 @@ async function deliverRemoteRosterMentions(bots, userText, sender) {
         host.notify?.({
           kind: 'info',
           title: displayName(bot),
-          message: `No reply from @${botHandle(profile, bot)} yet — check its Bot Chat on ${label}.`
+          message: `@${botHandle(profile, bot)} chưa trả lời — hãy kiểm tra cuộc trò chuyện của tác nhân trên ${label}.`
         })
       }
     } catch (error) {
-      host.notifyError?.(error, `Could not reach ${label}`)
+      host.notifyError?.(error, `Không thể kết nối tới ${label}`)
     }
   }
 }
@@ -4192,31 +4238,36 @@ function botRosterKey(bot) {
 
 // ── cross-connection routing ─────────────────────────────────────────────────
 // A bot from another registered connection (remoteSource rows) is reached
-// through host.requestProfile with a route descriptor; local bots keep the
-// active-gateway door. Feature-detected: older desktops without
-// requestProfile simply have no remote routes (callers fall back / disable).
+// through host.requestProfile with a route descriptor. Source-scoped rows
+// never fall back to the active-gateway door; older unscoped desktops keep the
+// legacy host.request path.
 
-/** Route descriptor for a bot on another connection, or null for the local /
- *  active source (or when the desktop can't route). */
+/** Exact route descriptor for any source-scoped bot. Hidden Bot/room sessions
+ *  may not have a sidebar row, so even the active/local source must keep the
+ *  roster's connection identity instead of falling back to an ambient socket. */
 function botConnectionRoute(bot) {
   const id = String(bot?.connectionId || '').trim()
 
-  if (!bot?.remoteSource || !id || id === 'local' || typeof host.requestProfile !== 'function') {
+  if ((!bot?.sourceScoped && !bot?.remoteSource) || !id || typeof host.requestProfile !== 'function') {
     return null
   }
 
   const profile = String(bot?.name || '').trim() || 'default'
+  const mode = bot?.connectionKind === 'local' || id === 'local' ? 'local' : 'remote'
 
-  return { connectionId: id, mode: 'remote', profile, targetProfile: profile }
+  return { connectionId: id, mode, profile, targetProfile: profile }
 }
 
-/** Gateway RPC on the bot's OWN source: requestProfile for remote rows,
- *  the active gateway for local ones. Never activates/foregrounds. */
+/** Gateway RPC on the bot's OWN source. Never activates/foregrounds. */
 async function requestForBot(bot, method, params = {}) {
   const route = botConnectionRoute(bot)
 
   if (route) {
     return host.requestProfile(route, method, params)
+  }
+
+  if (bot?.sourceScoped || bot?.remoteSource) {
+    throw new Error('Exact agent source routing is unavailable.')
   }
 
   return host.request(method, params)
@@ -4266,10 +4317,59 @@ const canonicalCreations = new Map()
 const PROFILE_SESSION_LIST_LIMIT = 200
 let botOpenGeneration = 0
 
-async function openStoredBotChat(name, storedId, summary) {
-  if (!storedId || typeof host.openSession !== 'function') {
-    throw new Error('This Hermes Desktop version cannot open stored sessions')
+function canonicalBotIdentity(botOrName) {
+  return typeof botOrName === 'string' ? { name: botOrName } : botOrName || { name: '' }
+}
+
+function canonicalBotRoute(botOrName) {
+  const bot = canonicalBotIdentity(botOrName)
+  const connectionId = String(bot.connectionId || '').trim()
+
+  if (!connectionId || typeof host.requestProfile !== 'function') {
+    if (bot.sourceScoped || bot.remoteSource) {
+      throw new Error('Exact Bot Chat source routing is unavailable.')
+    }
+
+    return null
   }
+
+  const profile = String(bot.name || '').trim() || 'default'
+
+  return {
+    connectionId,
+    mode: bot.connectionKind === 'local' || connectionId === 'local' ? 'local' : 'remote',
+    profile,
+    targetProfile: profile
+  }
+}
+
+function requestCanonicalBot(botOrName, method, params = {}) {
+  const route = canonicalBotRoute(botOrName)
+
+  return route ? host.requestProfile(route, method, params) : host.request(method, params)
+}
+
+function canonicalCreationKey(botOrName) {
+  const bot = canonicalBotIdentity(botOrName)
+  const route = canonicalBotRoute(bot)
+
+  return route ? `${route.connectionId}::${route.profile}` : `legacy::${String(bot.name || '').trim()}`
+}
+
+function saveCanonicalBotMeta(botOrName, patch) {
+  const bot = canonicalBotIdentity(botOrName)
+
+  return saveBotMeta(bot.name, patch, bot)
+}
+
+async function openStoredBotChat(botOrName, storedId, summary) {
+  if (!storedId || typeof host.openSession !== 'function') {
+    throw new Error('Phiên bản Hermes Desktop này chưa thể mở phiên đã lưu')
+  }
+
+  const bot = canonicalBotIdentity(botOrName)
+  const name = String(bot.name || '').trim()
+  const route = canonicalBotRoute(bot)
 
   const hasAuthoritativeCount =
     typeof summary?.message_count === 'number' && Number.isFinite(summary.message_count)
@@ -4287,7 +4387,8 @@ async function openStoredBotChat(name, storedId, summary) {
     awaitHydration: true,
     expectHistory,
     keepAllProfilesScope: true,
-    retryHydrationTimeoutOnce: true
+    retryHydrationTimeoutOnce: true,
+    ...(route ? { route } : {})
   })
 
   return storedId
@@ -4309,9 +4410,12 @@ async function openStoredBotChat(name, storedId, summary) {
  *  behavior — so the local scan below stays as the compatibility rung.
  *  include_hidden is required (canonical chats are always hidden); a gateway
  *  without it simply finds nothing and we fall through to mint. */
-async function findExistingCanonicalChat(name) {
+async function findExistingCanonicalChat(botOrName) {
+  const bot = canonicalBotIdentity(botOrName)
+  const name = String(bot.name || '').trim()
+
   try {
-    const res = await host.request('session.list', {
+    const res = await requestCanonicalBot(bot, 'session.list', {
       profile: name,
       title: 'Bot Chat',
       limit: PROFILE_SESSION_LIST_LIMIT,
@@ -4329,30 +4433,33 @@ async function findExistingCanonicalChat(name) {
  *  with the bot introducing itself). Pins the stored id in bot meta and
  *  returns it. Adopts an existing "Bot Chat" row instead of creating when
  *  the profile already has one (see findExistingCanonicalChat). */
-function createCanonicalChat(name) {
-  const inflight = canonicalCreations.get(name)
+function createCanonicalChat(botOrName) {
+  const bot = canonicalBotIdentity(botOrName)
+  const name = String(bot.name || '').trim()
+  const creationKey = canonicalCreationKey(bot)
+  const inflight = canonicalCreations.get(creationKey)
 
   if (inflight) {
     return inflight
   }
 
   const run = (async () => {
-    const existing = await findExistingCanonicalChat(name)
+    const existing = await findExistingCanonicalChat(bot)
 
     if (existing?.id) {
-      saveBotMeta(name, { chat: existing.id })
+      saveCanonicalBotMeta(bot, { chat: existing.id })
 
       if (typeof host.openSession === 'function') {
         // The exact-lookup gateway reports the compression-lineage tip as
         // resolved_id; the pin stays the durable row id (same split the
         // preferred_session path uses).
-        await openStoredBotChat(name, existing.resolved_id || existing.id, existing)
+        await openStoredBotChat(bot, existing.resolved_id || existing.id, existing)
       }
 
       return existing.id
     }
 
-    const res = await host.request('session.create', {
+    const res = await requestCanonicalBot(bot, 'session.create', {
       profile: name,
       title: 'Bot Chat',
       // Always born hidden from the global sidebar — Bot Mode sessions are
@@ -4365,7 +4472,7 @@ function createCanonicalChat(name) {
     const runtime = res?.session_id
 
     if (sid) {
-      saveBotMeta(name, { chat: sid })
+      saveCanonicalBotMeta(bot, { chat: sid })
     }
 
     // Mount the session view FIRST, then send the kickoff — submitting into
@@ -4374,7 +4481,13 @@ function createCanonicalChat(name) {
 
     if (sid && typeof host.openSession === 'function') {
       try {
-        await host.openSession(sid, { profile: name, intent: 'main', keepAllProfilesScope: true })
+        const route = canonicalBotRoute(bot)
+        await host.openSession(sid, {
+          profile: name,
+          intent: 'main',
+          keepAllProfilesScope: true,
+          ...(route ? { route } : {})
+        })
         opened = true
       } catch {
         // The stored row may not exist until the kickoff persists it. Retry
@@ -4386,10 +4499,19 @@ function createCanonicalChat(name) {
       await new Promise(resolve => window.setTimeout(resolve, 400))
 
       try {
-        await host.request('prompt.submit', { session_id: runtime, text: 'Hey, tell me about yourself!' })
+        await requestCanonicalBot(bot, 'prompt.submit', {
+          session_id: runtime,
+          text: 'Hãy giới thiệu ngắn gọn về bản thân và cách bạn có thể hỗ trợ Đại ca.'
+        })
 
         if (!opened && sid && typeof host.openSession === 'function') {
-          await host.openSession(sid, { profile: name, intent: 'main', keepAllProfilesScope: true })
+          const route = canonicalBotRoute(bot)
+          await host.openSession(sid, {
+            profile: name,
+            intent: 'main',
+            keepAllProfilesScope: true,
+            ...(route ? { route } : {})
+          })
         }
       } catch {
         // The chat already exists. Keep the pin so the next click
@@ -4398,9 +4520,9 @@ function createCanonicalChat(name) {
     }
 
     return sid || null
-  })().finally(() => canonicalCreations.delete(name))
+  })().finally(() => canonicalCreations.delete(creationKey))
 
-  canonicalCreations.set(name, run)
+  canonicalCreations.set(creationKey, run)
 
   return run
 }
@@ -4425,18 +4547,21 @@ function isCanonicalBotChatHistory(history) {
   return rootTitle === 'Bot Chat' || (!rootTitle && title === 'Bot Chat')
 }
 
-async function openBotCanonicalChat(name, pinned, history) {
+async function openBotCanonicalChat(botOrName, pinned, history) {
+  const bot = canonicalBotIdentity(botOrName)
+  const name = String(bot.name || '').trim()
+
   if (!pinned) {
     // Grandfather only an actual Bot Chat. `last_session` is merely the most
     // recent row for the profile; adopting it blindly can claim an unrelated
     // user conversation and the hide sweep would then hide that conversation.
     const adoptId = isCanonicalBotChatHistory(history) ? history.id : null
     if (adoptId && typeof host.openSession === 'function') {
-      await openStoredBotChat(name, adoptId, history)
-      saveBotMeta(name, { chat: adoptId })
+      await openStoredBotChat(bot, adoptId, history)
+      saveCanonicalBotMeta(bot, { chat: adoptId })
       return adoptId
     }
-    return createCanonicalChat(name)
+    return createCanonicalChat(bot)
   }
 
   // Precise verification. An older gateway ignores the unknown param and
@@ -4445,7 +4570,7 @@ async function openBotCanonicalChat(name, pinned, history) {
   let preferred
   let lookupFailed = false
   try {
-    const res = await host.request('profiles.list', {
+    const res = await requestCanonicalBot(bot, 'profiles.list', {
       include_sessions: true,
       preferred_session_ids: { [name]: pinned }
     })
@@ -4463,12 +4588,12 @@ async function openBotCanonicalChat(name, pinned, history) {
     // until proven guilty — try it as-is. A rejected open is still ambiguous:
     // it can be the same reconnect/hydration outage that broke this lookup, so
     // preserve the forever-chat pin and surface Retry instead of forking it.
-    return openStoredBotChat(name, pinned, history)
+    return openStoredBotChat(bot, pinned, history)
   }
 
   if (preferred && isCanonicalBotChatHistory(preferred)) {
     try {
-      await openStoredBotChat(name, preferred.resolved_id || preferred.id, preferred)
+      await openStoredBotChat(bot, preferred.resolved_id || preferred.id, preferred)
       return pinned
     } catch (error) {
       // The precise lookup JUST confirmed this session exists, so a failed
@@ -4500,12 +4625,12 @@ async function openBotCanonicalChat(name, pinned, history) {
     const messageCount = Number(preferred.message_count) || 0
 
     if (messageCount > 0) {
-      await openStoredBotChat(name, preferred.resolved_id || preferred.id, preferred)
+      await openStoredBotChat(bot, preferred.resolved_id || preferred.id, preferred)
       return pinned
     }
 
-    await saveBotMeta(name, { chat: null })
-    return createCanonicalChat(name)
+    await saveCanonicalBotMeta(bot, { chat: null })
+    return createCanonicalChat(bot)
   }
 
   // Definitively gone (db reset, or the lineage was rewritten past
@@ -4514,12 +4639,12 @@ async function openBotCanonicalChat(name, pinned, history) {
   // Otherwise a stale pin must not steal the profile's ordinary latest chat.
   const recoveryId = isCanonicalBotChatHistory(history) ? history.id : null
   if (recoveryId && typeof host.openSession === 'function') {
-    await openStoredBotChat(name, recoveryId, history)
-    saveBotMeta(name, { chat: recoveryId })
+    await openStoredBotChat(bot, recoveryId, history)
+    saveCanonicalBotMeta(bot, { chat: recoveryId })
     return recoveryId
   }
-  saveBotMeta(name, { chat: null })
-  return createCanonicalChat(name)
+  saveCanonicalBotMeta(bot, { chat: null })
+  return createCanonicalChat(bot)
 }
 
 async function prepareBotSource(bot, pinnedChat) {
@@ -4528,7 +4653,7 @@ async function prepareBotSource(bot, pinnedChat) {
   }
 
   if (typeof host.ensureAgent !== 'function') {
-    throw new Error('Update Hermes Desktop to chat with agents on other connections.')
+    throw new Error('Hãy cập nhật Hermes Desktop để trò chuyện với tác nhân trên kết nối khác.')
   }
 
   await host.ensureAgent(bot.connectionId, bot.name)
@@ -4541,14 +4666,14 @@ async function prepareBotSource(bot, pinnedChat) {
   const targetId = String(bot.connectionId || '').trim()
 
   if (targetId && targetId !== 'local' && liveId !== targetId) {
-    throw new Error(`Still on ${liveId || 'this device'}, not ${bot.connectionLabel || targetId}`)
+    throw new Error(`Vẫn đang ở ${liveId || 'thiết bị này'}, chưa chuyển sang ${bot.connectionLabel || targetId}`)
   }
 
   // Thin rows deliberately omit metadata from the active source. Once their
   // owner is active, recover that source's canonical-chat pointer so
   // same-named agents never reuse or overwrite each other's pin.
   try {
-    const refreshed = await host.request('profiles.list', {})
+    const refreshed = await requestForBot(bot, 'profiles.list', {})
     const owner = refreshed?.profiles?.find(profile => profile.name === bot.name)
 
     return owner?.ui_meta?.['hermes-bots']?.chat || null
@@ -4930,17 +5055,17 @@ function formatGroupChatLine(entry, viewerName) {
   const attached = Array.isArray(entry.images) && entry.images.length
     ? ` ${entry.images
         .map(img => {
-          const label = img.kind === 'pdf' ? 'attached PDF' : img.kind === 'file' ? 'attached file' : 'attached image'
+          const label = img.kind === 'pdf' ? 'PDF đính kèm' : img.kind === 'file' ? 'tệp đính kèm' : 'ảnh đính kèm'
           return `[${label}: ${img.name || 'image'}]`
         })
         .join(' ')}`
     : ''
 
   if (entry.from.kind === 'user') {
-    return `${entry.from.name || 'User'} (user): ${entry.text}${attached}`
+    return `Đại ca (người dùng): ${entry.text}${attached}`
   }
 
-  const suffix = entry.from.name === viewerName ? ' (you)' : ''
+  const suffix = entry.from.name === viewerName ? ' (bạn)' : ''
   // Cross-connection speakers carry their device so same-named agents on
   // two machines stay tellable apart in every member's transcript.
   const source = entry.from.source ? ` [${entry.from.source}]` : ''
@@ -5117,7 +5242,7 @@ async function disbandGroupChat(group, members) {
     }
 
     const meta = $botMeta.get()[member.name] || {}
-    await saveBotMeta(member.name, groupMembershipPatch(meta, group, false))
+    await saveBotMeta(member.name, groupMembershipPatch(meta, group, false), member)
   }
 
   // Converge on server truth: the cached roster still carries the pre-disband
@@ -5166,7 +5291,7 @@ async function renameGroupChat(oldName, newName, members) {
   taken.delete(oldName)
 
   if (taken.has(next)) {
-    host.notify({ kind: 'error', message: `A group named “${next}” already exists.` })
+    host.notify({ kind: 'error', message: `Đã có nhóm tên “${next}”.` })
     return null
   }
 
@@ -5206,7 +5331,7 @@ async function renameGroupChat(oldName, newName, members) {
     const meta = $botMeta.get()[member.name] || {}
     const groups = [...new Set(botGroups(meta).map(g => (g === oldName ? next : g)))]
 
-    await saveBotMeta(member.name, { groups, group: groups[0] || null })
+    await saveBotMeta(member.name, { groups, group: groups[0] || null }, member)
   }
 
   // Persist the re-keyed map (updateGroupChat writes the whole durable map).
@@ -5297,7 +5422,7 @@ function uniqueGroupChatName(base, taken) {
     }
   }
 
-  throw new Error('No free name for the group.')
+  throw new Error('Không còn tên trống cho nhóm.')
 }
 
 /** Ensure the member's per-group session exists and return a LIVE runtime
@@ -6294,7 +6419,7 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
   const displayPreview = stripPreviewMarkdown(
     fromBot
       ? (previewSession?.preview || '').replace(A2A_PREFIX_RE, '').trim() || '…'
-      : previewSession?.preview || bot.description || 'No conversations yet — say hi'
+      : previewSession?.preview || bot.description || 'Chưa có cuộc trò chuyện — hãy chào tác nhân'
   )
 
   const warm = () => {
@@ -6331,7 +6456,7 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
       host.notify?.({
         kind: 'info',
         title: displayName(bot),
-        message: `Stay in this chat and @${handle} to message them. Gateway stays on this device.`
+        message: `Hãy ở lại cuộc trò chuyện này và nhắn @${handle}. Gateway vẫn dùng thiết bị hiện tại.`
       })
       return
     }
@@ -6349,7 +6474,7 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
     try {
       pinnedChat = await prepareBotSource(bot, pinnedChat)
     } catch (error) {
-      host.notifyError?.(error, `Could not reach ${bot.connectionLabel || 'the remote source'}`)
+      host.notifyError?.(error, `Không thể kết nối tới ${bot.connectionLabel || 'nguồn từ xa'}`)
 
       return
     }
@@ -6359,14 +6484,14 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
     }
 
     try {
-      const id = await openBotCanonicalChat(bot.name, pinnedChat, previewSession)
+      const id = await openBotCanonicalChat(bot, pinnedChat, previewSession)
 
       if (generation === botOpenGeneration && id) {
         return
       }
     } catch (error) {
       if (generation === botOpenGeneration) {
-        host.notifyError?.(error, `Could not open ${displayName(bot, meta)}'s chat — try again`)
+        host.notifyError?.(error, `Không thể mở cuộc trò chuyện của ${displayName(bot, meta)} — hãy thử lại`)
       }
 
       return
@@ -6413,7 +6538,7 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
                   meta?.pinned
                     ? jsx('span', {
                         className: 'shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)',
-                        title: 'Pinned',
+                        title: 'Đã ghim',
                         children: '📌'
                       })
                     : null,
@@ -6421,7 +6546,7 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
                     ? jsx(Codicon, {
                         name: 'eye-closed',
                         className: 'shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)',
-                        title: 'Hidden from the roster'
+                        title: 'Đã ẩn khỏi danh sách'
                       })
                     : null,
                   jsx('span', {
@@ -6441,7 +6566,7 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
                     ? jsx('span', {
                         className:
                           'max-w-[28%] shrink-0 truncate rounded bg-(--chrome-action-hover) px-1 font-mono text-[0.625rem] text-(--ui-text-tertiary)',
-                        title: `Lives on ${bot.connectionLabel}`,
+                        title: `Đang chạy trên ${bot.connectionLabel}`,
                         children: bot.connectionLabel
                       })
                     : null
@@ -6450,19 +6575,19 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
               unread
                 ? jsx('span', {
                     className: 'size-2 shrink-0 rounded-full bg-(--ui-accent,#4f9cf9)',
-                    'aria-label': 'unread'
+                    'aria-label': 'chưa đọc'
                   })
                 : null,
               activeNow
                 ? jsx('span', {
                     className: 'hermes-bots-pulse size-1.5 shrink-0 rounded-full bg-(--ui-accent,#4f9cf9)',
-                    title: workerActive ? 'Working on a task right now' : 'Active in the last 90s'
+                    title: workerActive ? 'Đang thực hiện một tác vụ' : 'Có hoạt động trong 90 giây gần đây'
                   })
                 : null,
               rowAgeTs
                 ? jsx('span', {
                     className: 'shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)',
-                    children: relativeTime(rowAgeTs * 1000)
+                    children: relativeTimeVi(rowAgeTs * 1000)
                   })
                 : null
             ]
@@ -6480,7 +6605,7 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
                 ? jsxs('span', {
                     className:
                       'flex shrink-0 items-center gap-1 rounded-full bg-(--chrome-action-hover) px-1.5 py-px text-[0.625rem] font-medium text-(--ui-accent,#4f9cf9)',
-                    title: `Last message came from @${fromBot} (bot-to-bot)`,
+                    title: `Tin nhắn gần nhất từ @${fromBot} (giữa các tác nhân)`,
                     children: ['🤖', `@${fromBot}`]
                   })
                 : null
@@ -6507,20 +6632,20 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
           jsx(ContextMenuItem, {
             onSelect: () => {
               const pinned = Boolean($botMeta.get()[bot.name]?.pinned)
-              saveBotMeta(bot.name, { pinned: !pinned })
+              saveBotMeta(bot.name, { pinned: !pinned }, bot)
               host.notify({
                 kind: 'info',
-                message: `${displayName(bot, meta)} ${pinned ? 'unpinned' : 'pinned to top'}`
+                message: `${pinned ? 'Đã bỏ ghim' : 'Đã ghim lên đầu'} ${displayName(bot, meta)}`
               })
             },
-            children: meta?.pinned ? 'Unpin' : 'Pin to top'
+            children: meta?.pinned ? 'Bỏ ghim' : 'Ghim lên đầu'
           }),
           jsx(ContextMenuItem, {
             onSelect: () => {
               const hidden = Boolean($botMeta.get()[bot.name]?.hidden)
               // `hidden: false` (not null) so unhide round-trips through the
               // server ui_meta merge the same way the local merge sees it.
-              saveBotMeta(bot.name, { hidden: !hidden })
+              saveBotMeta(bot.name, { hidden: !hidden }, bot)
 
               if (!hidden) {
                 fallbackSelectionAfterHide(bot.name)
@@ -6529,31 +6654,31 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
               host.notify({
                 kind: 'info',
                 message: hidden
-                  ? `${displayName(bot, meta)} is back in the roster`
-                  : `${displayName(bot, meta)} hidden — use the eye button in the Bots header to see hidden bots`
+                  ? `${displayName(bot, meta)} đã trở lại danh sách`
+                  : `${displayName(bot, meta)} đã bị ẩn — dùng nút hình con mắt ở đầu trang để hiện lại`
               })
             },
-            children: meta?.hidden ? 'Unhide Bot' : 'Hide Bot'
+            children: meta?.hidden ? 'Hiện tác nhân' : 'Ẩn tác nhân'
           }),
           jsx(ContextMenuSeparator, {}),
-          jsx(ContextMenuItem, { onSelect: () => onEdit(bot), children: 'Edit Profile' }),
+          jsx(ContextMenuItem, { onSelect: () => onEdit(bot), children: 'Chỉnh sửa hồ sơ' }),
           !bot.remoteSource
             ? jsx(ContextMenuItem, {
                 onSelect: () => onGroup(bot),
-                children: groups.length ? `Groups: ${groups.join(', ')}…` : 'Manage groups…'
+                children: groups.length ? `Nhóm: ${groups.join(', ')}…` : 'Quản lý nhóm…'
               })
             : null,
           jsx(ContextMenuItem, {
             onSelect: () => {
-              host.notify({ kind: 'info', message: `Duplicating ${displayName(bot, meta)}…` })
+              host.notify({ kind: 'info', message: `Đang nhân bản ${displayName(bot, meta)}…` })
               duplicateBot(bot, $lastRoster.get().filter(candidate => !candidate.remoteSource))
                 .then(name => {
                   queryClient.invalidateQueries({ queryKey: ROSTER_KEY })
-                  host.notify({ kind: 'success', message: `Created ${name} — full copy of ${bot.name}` })
+                  host.notify({ kind: 'success', message: `Đã tạo ${name} — bản sao đầy đủ của ${bot.name}` })
                 })
-                .catch(err => host.notifyError(err, 'Duplicate failed'))
+                .catch(err => host.notifyError(err, 'Nhân bản không thành công'))
             },
-            children: 'Duplicate'
+            children: 'Nhân bản'
           }),
           jsx(ContextMenuSeparator, {}),
           jsx(ContextMenuItem, {
@@ -6564,7 +6689,7 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
                 host.newChat(bot.name)
               }
             },
-            children: 'New chat with this agent'
+            children: 'Cuộc trò chuyện mới với tác nhân này'
           }),
           bot.is_default ? null : jsx(ContextMenuSeparator, {}),
           bot.is_default
@@ -6572,7 +6697,7 @@ function BotRow({ bot, onDelete, onEdit, onGroup }) {
             : jsx(ContextMenuItem, {
                 onSelect: () => onDelete(bot),
                 variant: 'destructive',
-                children: 'Delete'
+                children: 'Xóa'
               })
         ]
       })
@@ -6596,7 +6721,7 @@ function useModelOptions() {
  * same data the core model picker shows. `value = {provider, model}`;
  * onChange receives the merged patch.
  */
-function ModelPicker({ value, onChange, placeholderModel = 'gateway default' }) {
+function ModelPicker({ value, onChange, placeholderModel = 'mặc định Gateway' }) {
   const { data, isLoading, error } = useModelOptions()
 
   // Hooks are ALWAYS declared up front, before any conditional return.
@@ -6650,7 +6775,7 @@ function ModelPicker({ value, onChange, placeholderModel = 'gateway default' }) 
             labeled(
               'Provider (Custom)',
               jsx(Input, {
-                placeholder: 'e.g. omnirouter, inferx, 9router',
+            placeholder: 'ví dụ: omnirouter, inferx, 9router',
                 value: value.provider,
                 onChange: event => onChange({ provider: event.target.value })
               })
@@ -6658,7 +6783,7 @@ function ModelPicker({ value, onChange, placeholderModel = 'gateway default' }) 
             labeled(
               'Model (Custom)',
               jsx(Input, {
-                placeholder: 'e.g. antigravity/gemini-3.6-flash-high',
+            placeholder: 'ví dụ: antigravity/gemini-3.6-flash-high',
                 value: value.model,
                 onChange: event => onChange({ model: event.target.value })
               })
@@ -6670,7 +6795,7 @@ function ModelPicker({ value, onChange, placeholderModel = 'gateway default' }) 
           size: 'sm',
           className: 'h-6 self-start text-xs text-(--ui-text-tertiary)',
           onClick: () => setUseFreeText(false),
-          children: '← Back to dropdowns'
+          children: '← Quay lại danh sách chọn'
         })
       ]
     })
@@ -6709,7 +6834,7 @@ function ModelPicker({ value, onChange, placeholderModel = 'gateway default' }) 
             jsx(SelectTrigger, { className: 'h-8 rounded-md', children: jsx(SelectValue, {}) }),
             jsxs(SelectContent, {
               children: [
-                jsx(SelectItem, { value: NONE, children: 'Inherit (launch profile)' }),
+                jsx(SelectItem, { value: NONE, children: 'Kế thừa từ hồ sơ khởi chạy' }),
                 ...providers.map(p =>
                   jsx(
                     SelectItem,
@@ -6717,7 +6842,7 @@ function ModelPicker({ value, onChange, placeholderModel = 'gateway default' }) 
                     p.slug
                   )
                 ),
-                jsx(SelectItem, { value: CUSTOM, children: '✏️ Enter manually…' })
+                jsx(SelectItem, { value: CUSTOM, children: '✏️ Nhập thủ công…' })
               ]
             })
           ]
@@ -6737,7 +6862,7 @@ function ModelPicker({ value, onChange, placeholderModel = 'gateway default' }) 
               ]
             })
           : jsx(Input, {
-              placeholder: placeholderModel || 'e.g. model name',
+              placeholder: placeholderModel || 'ví dụ: tên model',
               value: value.model,
               onChange: event => onChange({ model: event.target.value })
             })
@@ -6828,7 +6953,7 @@ function AdvancedProfileConfig({ bot, state, setState }) {
   if (unsupported) {
     return jsx('div', {
       className: 'px-2 py-3 text-center text-xs text-(--ui-text-tertiary)',
-      children: 'Full configuration needs a newer gateway (restart it after updating Hermes).'
+      children: 'Cấu hình đầy đủ cần Gateway mới hơn; hãy khởi động lại Gateway sau khi cập nhật Hermes.'
     })
   }
 
@@ -6885,7 +7010,7 @@ function AdvancedProfileConfig({ bot, state, setState }) {
           onChange: patch => setState(prev => ({ ...prev, dirtyModel: true, ...patch }))
         }),
         labeled(
-          'Capabilities (applies immediately — skills, tools, MCP)',
+          'Năng lực (áp dụng ngay — kỹ năng, công cụ, MCP)',
           jsx('div', {
             className: 'overflow-hidden rounded-md border border-(--ui-stroke-secondary)',
             style: { height: 460, minHeight: 300, resize: 'vertical', overflow: 'auto' },
@@ -6893,7 +7018,7 @@ function AdvancedProfileConfig({ bot, state, setState }) {
           })
         ),
         labeled(
-          'SOUL.md (persona + agent-messaging protocol)',
+          'SOUL.md (tính cách + quy tắc nhắn tin giữa các tác nhân)',
           jsx(Textarea, {
             className: 'min-h-28 font-mono text-xs leading-5',
             value: state.soul,
@@ -6912,13 +7037,13 @@ function AdvancedProfileConfig({ bot, state, setState }) {
         onChange: patch => setState(prev => ({ ...prev, dirtyModel: true, ...patch }))
       }),
       labeled(
-        `Skills (${enabledSkills}/${state.skills.length} enabled)`,
+        `Kỹ năng (${enabledSkills}/${state.skills.length} đang bật)`,
         jsxs('div', {
           className: 'grid gap-1.5 rounded-md border border-(--ui-stroke-secondary) p-2',
           children: [
             jsx(Input, {
               className: 'h-7 text-xs',
-              placeholder: 'Filter skills…',
+              placeholder: 'Lọc kỹ năng…',
               value: skillFilter,
               onChange: event => setSkillFilter(event.target.value)
             }),
@@ -6940,7 +7065,7 @@ function AdvancedProfileConfig({ bot, state, setState }) {
         })
       ),
       labeled(
-        `Toolsets (${enabledToolsets}/${state.toolsets.length} enabled — unchecking all restores the default)`,
+        `Bộ công cụ (${enabledToolsets}/${state.toolsets.length} đang bật — bỏ chọn tất cả để dùng mặc định)`,
         jsx('div', {
           className: 'rounded-md border border-(--ui-stroke-secondary) p-2',
           children: jsx(ScrollArea, {
@@ -6983,7 +7108,7 @@ function AdvancedProfileConfig({ bot, state, setState }) {
         })
       ),
       labeled(
-        'MCP servers',
+        'Máy chủ MCP',
         jsx('div', {
           className: 'overflow-hidden rounded-md border border-(--ui-stroke-secondary)',
           // The REAL MCP tab core Settings renders — per-server enable + OAuth
@@ -6998,7 +7123,7 @@ function AdvancedProfileConfig({ bot, state, setState }) {
             : mcpList.length === 0
               ? jsx('div', {
                   className: 'px-1 py-2 text-center text-xs text-(--ui-text-tertiary)',
-                  children: 'No MCP servers configured or in the catalog.'
+                  children: 'Chưa có máy chủ MCP nào trong cấu hình hoặc danh mục.'
                 })
               : jsx(ScrollArea, {
                   className: 'hermes-scroll-cap',
@@ -7024,7 +7149,7 @@ function AdvancedProfileConfig({ bot, state, setState }) {
                                 m.fromCatalog && !needsSetup
                                   ? jsx('span', {
                                       className: 'ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)',
-                                      children: m.installed ? 'catalog · installed' : 'catalog'
+                                      children: m.installed ? 'danh mục · đã cài' : 'danh mục'
                                     })
                                   : null,
                                 needsSetup
@@ -7052,7 +7177,7 @@ function AdvancedProfileConfig({ bot, state, setState }) {
         })
       ),
       labeled(
-        'SOUL.md (persona + agent-messaging protocol)',
+        'SOUL.md (tính cách + quy tắc nhắn tin giữa các tác nhân)',
         jsx(Textarea, {
           className: 'min-h-28 font-mono text-xs leading-5',
           value: state.soul,
@@ -7164,13 +7289,13 @@ function HubSkillsSection({ forProfile, onInstalled }) {
         ...(forProfile ? { profile: forProfile } : {})
       })
       setInstalled(prev => ({ ...prev, [label]: true }))
-      host.notify({ kind: 'success', message: `Skill "${label}" installed` })
+      host.notify({ kind: 'success', message: `Đã cài kỹ năng “${label}”` })
 
       if (typeof onInstalled === 'function') {
         onInstalled(label)
       }
     } catch (err) {
-      host.notifyError(err, `Installing "${label}" failed`)
+      host.notifyError(err, `Không thể cài “${label}”`)
     } finally {
       setInstalling(null)
     }
@@ -7186,13 +7311,13 @@ function HubSkillsSection({ forProfile, onInstalled }) {
         children: [
           jsx('div', {
             className: 'text-[0.7rem] font-medium text-(--ui-text-secondary)',
-            children: 'Skills Hub'
+            children: 'Kho kỹ năng'
           }),
           jsx('button', {
             type: 'button',
             className: 'text-[0.65rem] text-(--ui-text-quaternary) hover:text-(--ui-text-secondary)',
             onClick: () => setBrowseHub(v => !v),
-            children: browseHub ? 'hide the hub browser' : 'browse the full hub ▾'
+            children: browseHub ? 'ẩn kho kỹ năng' : 'mở toàn bộ kho kỹ năng ▾'
           })
         ]
       }),
@@ -7220,7 +7345,7 @@ function HubSkillsSection({ forProfile, onInstalled }) {
                 },
                 children: jsx('iframe', {
                   src: HUB_PICKER_URL,
-                  title: 'Hermes Skills Hub',
+                  title: 'Kho kỹ năng Hermes',
                   ref: frameRef,
                   style: {
                     width: '133.34%',
@@ -7237,8 +7362,8 @@ function HubSkillsSection({ forProfile, onInstalled }) {
                 className: 'px-1 text-[0.65rem] leading-4 text-(--ui-text-quaternary)',
                 children:
                   installing
-                    ? `Installing "${installing}"…`
-                    : 'Hit "+ Add to this Agent" on any skill — it installs and appears in the list above. Drag the corner to resize.'
+                    ? `Đang cài “${installing}”…`
+                    : 'Chọn “+ Thêm vào tác nhân này” trên một kỹ năng để cài và đưa kỹ năng đó vào danh sách phía trên. Kéo góc để đổi kích thước.'
               })
             ]
           })
@@ -7248,7 +7373,7 @@ function HubSkillsSection({ forProfile, onInstalled }) {
         children: [
           jsx(Input, {
             className: 'h-7 flex-1 text-xs',
-            placeholder: 'Search the hub (community + well-known sources)…',
+            placeholder: 'Tìm trong kho (cộng đồng và nguồn đáng tin cậy)…',
             value: query,
             onChange: event => setQuery(event.target.value),
             onKeyDown: event => {
@@ -7263,14 +7388,14 @@ function HubSkillsSection({ forProfile, onInstalled }) {
             variant: 'secondary',
             disabled: searching || !query.trim(),
             onClick: () => void search(),
-            children: searching ? 'Searching…' : 'Search'
+            children: searching ? 'Đang tìm…' : 'Tìm kiếm'
           })
         ]
       }),
       searching
         ? jsx('div', {
             className: 'px-1 text-[0.65rem] text-(--ui-text-quaternary)',
-            children: 'Searching community + well-known sources — can take ~10s…'
+            children: 'Đang tìm trong cộng đồng và các nguồn đáng tin cậy — có thể mất khoảng 10 giây…'
           })
         : null,
       results === null
@@ -7278,7 +7403,7 @@ function HubSkillsSection({ forProfile, onInstalled }) {
         : results.length === 0
           ? jsx('div', {
               className: 'px-1 py-1.5 text-[0.7rem] text-(--ui-text-quaternary)',
-              children: 'No hub skills matched.'
+              children: 'Không có kỹ năng phù hợp.'
             })
           : jsx(ScrollArea, {
               className: 'hermes-scroll-cap',
@@ -7313,7 +7438,7 @@ function HubSkillsSection({ forProfile, onInstalled }) {
                               variant: 'ghost',
                               className: 'shrink-0 px-2 font-semibold',
                               disabled: installing !== null,
-                              title: `Install "${r.name}" and add it to the list above`,
+                              title: `Cài “${r.name}” và thêm vào danh sách bên trên`,
                               onClick: () => void install(r.name),
                               children: installing === r.name ? '…' : '+'
                             })
@@ -7463,14 +7588,14 @@ function EditProfileDialog({ bot, open, onClose }) {
       imageKind: image ? 'photo' : 'shape',
       title: title.trim(),
       custom: true
-    })
+    }, bot)
     // Only an explicit remote failure is an error — 'unsupported' is the
     // documented older-gateway fallback (local wins, silently), and toasting
     // it would flag every save on every legacy setup forever.
     const lookFailed = persistence.serverOutcome === 'failed'
 
     if (lookFailed) {
-      host.notify({ kind: 'error', message: 'Saved look locally; remote persistence failed' })
+      host.notify({ kind: 'error', message: 'Đã lưu giao diện cục bộ nhưng chưa đồng bộ được lên máy chủ' })
     }
     if (persistence.serverOutcome === 'persisted') {
       queryClient.invalidateQueries({ queryKey: ROSTER_KEY })
@@ -7484,7 +7609,7 @@ function EditProfileDialog({ bot, open, onClose }) {
         })
         queryClient.invalidateQueries({ queryKey: ROSTER_KEY })
       } catch (err) {
-        host.notifyError(err, 'Saved look locally; description update failed')
+        host.notifyError(err, 'Đã lưu giao diện cục bộ nhưng chưa cập nhật được mô tả')
       }
     }
 
@@ -7495,16 +7620,16 @@ function EditProfileDialog({ bot, open, onClose }) {
 
         if (failed.length) {
           advancedFailed = true
-          host.notify({ kind: 'error', message: `Some sections failed: ${failed.map(([k]) => k).join(', ')}` })
+          host.notify({ kind: 'error', message: `Một số phần chưa lưu được: ${failed.map(([k]) => k).join(', ')}` })
         }
       } catch (err) {
         advancedFailed = true
-        host.notifyError(err, 'Advanced configuration failed')
+        host.notifyError(err, 'Không thể lưu cấu hình nâng cao')
       }
     }
 
     if (!advancedFailed && !lookFailed) {
-      host.notify({ kind: 'success', message: `${displayName(bot, { title })} updated` })
+      host.notify({ kind: 'success', message: `Đã cập nhật ${displayName(bot, { title })}` })
     }
     setBusy(false)
     onClose()
@@ -7522,8 +7647,8 @@ function EditProfileDialog({ bot, open, onClose }) {
       children: [
         jsxs(DialogHeader, {
           children: [
-            jsx(DialogTitle, { children: 'Edit Profile' }),
-            jsx(DialogDescription, { children: `Appearance and role for ${displayName(bot, null)} (${bot.name}).` })
+            jsx(DialogTitle, { children: 'Chỉnh sửa hồ sơ' }),
+            jsx(DialogDescription, { children: `Giao diện và vai trò của ${displayName(bot, null)} (${bot.name}).` })
           ]
         }),
         jsxs('div', {
@@ -7543,7 +7668,7 @@ function EditProfileDialog({ bot, open, onClose }) {
               generateSeed: { name: bot.name, title, description }
             }),
             labeled(
-              'Title',
+              'Tên hiển thị',
               jsx(Input, {
                 placeholder: displayName(bot, null),
                 value: title,
@@ -7551,10 +7676,10 @@ function EditProfileDialog({ bot, open, onClose }) {
               })
             ),
             labeled(
-              'Description',
+              'Mô tả nhiệm vụ',
               jsx(Textarea, {
                 className: 'min-h-16',
-                placeholder: 'What should this agent help with?',
+                placeholder: 'Tác nhân này sẽ giúp Đại ca việc gì?',
                 value: description,
                 onChange: event => setDescription(event.target.value)
               })
@@ -7566,7 +7691,7 @@ function EditProfileDialog({ bot, open, onClose }) {
               onClick: () => setAdvanced(v => !v),
               children: [
                 jsx(Codicon, { name: advanced ? 'chevron-down' : 'chevron-right', className: 'text-[0.8rem]' }),
-                'Advanced — model, skills, toolsets, SOUL.md'
+                'Nâng cao — model, kỹ năng, bộ công cụ, SOUL.md'
               ]
             }),
             advanced
@@ -7579,8 +7704,8 @@ function EditProfileDialog({ bot, open, onClose }) {
         }),
         jsxs(DialogFooter, {
           children: [
-            jsx(Button, { variant: 'ghost', disabled: busy, onClick: onClose, children: 'Cancel' }),
-            jsx(Button, { disabled: busy, onClick: submit, children: busy ? 'Saving…' : 'Save' })
+            jsx(Button, { variant: 'ghost', disabled: busy, onClick: onClose, children: 'Hủy' }),
+            jsx(Button, { disabled: busy, onClick: submit, children: busy ? 'Đang lưu…' : 'Lưu' })
           ]
         })
       ]
@@ -7644,17 +7769,21 @@ function CreateAgentDialog({ open, onClose, roster }) {
   const targetLabel = remoteTarget
     ? (connections || []).find(c => c.id === targetConnection)?.label || targetConnection
     : ''
+  const effectiveTargetConnection = targetConnection || activeConnectionId
+  const targetRoute =
+    effectiveTargetConnection && typeof host.requestProfile === 'function'
+      ? {
+          connectionId: effectiveTargetConnection,
+          mode: effectiveTargetConnection === 'local' ? 'local' : 'remote',
+          profile: 'default',
+          targetProfile: 'default'
+        }
+      : null
 
   /** Gateway RPC on the create target: the picked connection's default
    *  backend for remote targets, the active gateway otherwise. */
   const requestForTarget = (method, params = {}) =>
-    remoteTarget
-      ? host.requestProfile(
-          { connectionId: targetConnection, mode: 'remote', profile: 'default', targetProfile: 'default' },
-          method,
-          params
-        )
-      : host.request(method, params)
+    targetRoute ? host.requestProfile(targetRoute, method, params) : host.request(method, params)
 
   // Set once ensureAgentCreated() materializes the profile for the live
   // Capabilities tab (SkillsView needs a real backend to point at). State —
@@ -7697,8 +7826,8 @@ function CreateAgentDialog({ open, onClose, roster }) {
       ? requestForTarget('cli.exec', { argv: ['profile', 'delete', draft, '--yes'] })
       : deleteBot({ name: draft })
     void Promise.resolve(discard)
-      .then(() => host.notify({ kind: 'success', message: `Draft agent "${draft}" discarded` }))
-      .catch(err => host.notifyError(err, `Could not clean up draft profile "${draft}"`))
+      .then(() => host.notify({ kind: 'success', message: `Đã bỏ bản nháp tác nhân “${draft}”` }))
+      .catch(err => host.notifyError(err, `Không thể dọn hồ sơ nháp “${draft}”`))
   }
 
   const reset = () => {
@@ -7871,10 +8000,29 @@ function CreateAgentDialog({ open, onClose, roster }) {
           /* older remote gateway */
         }
       } else {
-        saveBotMeta(slug, { shape, color, image, imageKind: image ? 'photo' : 'shape', title: title.trim(), created: Date.now() })
+        const ownerConnectionId = targetConnection || activeConnectionId
+        const owner = ownerConnectionId
+          ? {
+              connectionId: ownerConnectionId,
+              connectionKind: ownerConnectionId === 'local' ? 'local' : 'remote',
+              name: slug,
+              sourceScoped: true
+            }
+          : null
+        saveBotMeta(
+          slug,
+          { shape, color, image, imageKind: image ? 'photo' : 'shape', title: title.trim(), created: Date.now() },
+          owner
+        )
       }
 
-      queryClient.invalidateQueries({ queryKey: ROSTER_KEY })
+      await queryClient.invalidateQueries({ queryKey: ROSTER_KEY })
+      // The create dialog used to close before the invalidated roster query
+      // had actually completed, so a new Agent could appear only on the next
+      // five-second poll. Force one active refresh before opening its chat.
+      if (typeof queryClient.refetchQueries === 'function') {
+        await queryClient.refetchQueries({ queryKey: ROSTER_KEY, type: 'active' })
+      }
       return slug
     })
 
@@ -7893,15 +8041,15 @@ function CreateAgentDialog({ open, onClose, roster }) {
       const slugCreated = await ensureAgentCreated()
       if (!slugCreated) {
         setBusy(false)
-        setError('Could not create the agent.')
+        setError('Không thể tạo tác nhân.')
         return
       }
 
       host.notify({
         kind: 'success',
         message: remoteTarget
-          ? `Agent "${displayName({ name: slug, title })}" created on ${targetLabel}`
-          : `Agent "${displayName({ name: slug, title })}" created`
+          ? `Đã tạo Agent "${displayName({ name: slug, title })}" trên ${targetLabel}`
+          : `Đã tạo Agent "${displayName({ name: slug, title })}" và mở cuộc trò chuyện riêng`
       })
       const wasRemote = remoteTarget
       reset()
@@ -7921,7 +8069,16 @@ function CreateAgentDialog({ open, onClose, roster }) {
       // the first thing the user sees, and the pin exists from minute one.
       try {
         // Creates, pins, opens, and kicks off the intro in one flow.
-        const sid = await createCanonicalChat(slug)
+        const ownerConnectionId = targetConnection || activeConnectionId
+        const owner = ownerConnectionId
+          ? {
+              connectionId: ownerConnectionId,
+              connectionKind: ownerConnectionId === 'local' ? 'local' : 'remote',
+              name: slug,
+              sourceScoped: true
+            }
+          : slug
+        const sid = await createCanonicalChat(owner)
 
         if (!sid && typeof host.newChat === 'function') {
           host.newChat(slug)
@@ -7959,9 +8116,9 @@ function CreateAgentDialog({ open, onClose, roster }) {
       children: [
         jsxs(DialogHeader, {
           children: [
-            jsx(DialogTitle, { children: 'New Agent' }),
+            jsx(DialogTitle, { children: 'Tạo tác nhân' }),
             jsx(DialogDescription, {
-              children: 'A named teammate with its own memory, skills, and chat. It can message your other agents.'
+              children: 'Một cộng sự AI có bộ nhớ, kỹ năng và cuộc trò chuyện riêng; có thể phối hợp với các tác nhân khác.'
             })
           ]
         }),
@@ -7982,7 +8139,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
               generateSeed: { name: slug || 'agent', title, description }
             }),
             labeled(
-              'Name',
+              'Tên định danh',
               jsx(Input, {
                 autoFocus: true,
                 placeholder: 'inbox-triage',
@@ -7994,8 +8151,8 @@ function CreateAgentDialog({ open, onClose, roster }) {
               ? jsx('div', {
                   className: 'text-xs text-(--ui-accent)',
                   children: remoteTarget
-                    ? `An agent named "${slug}" already exists on ${targetLabel}.`
-                    : `An agent named "${slug}" already exists.`
+                    ? `Tác nhân tên "${slug}" đã tồn tại trên ${targetLabel}.`
+                    : `Tác nhân tên "${slug}" đã tồn tại.`
                 })
               : null,
             // Multi-connection desktops choose WHERE the agent lives. Hidden
@@ -8003,7 +8160,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
             // possible home, exactly the old behavior.
             Array.isArray(connections) && connections.length > 1
               ? labeled(
-                  'Create on',
+                  'Tạo trên',
                   jsxs(Select, {
                     value: targetConnection || activeConnectionId || 'local',
                     onValueChange: value => {
@@ -8029,7 +8186,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
                               value: connection.id,
                               children:
                                 connection.id === (activeConnectionId || 'local')
-                                  ? `${connection.label || connection.id} (current)`
+                                  ? `${connection.label || connection.id} (hiện tại)`
                                   : connection.label || connection.id
                             },
                             connection.id
@@ -8043,22 +8200,22 @@ function CreateAgentDialog({ open, onClose, roster }) {
             remoteTarget
               ? jsx('div', {
                   className: 'text-[0.7rem] leading-5 text-(--ui-text-tertiary)',
-                  children: `The agent is created on ${targetLabel} and appears in the roster as a Connections bot. Chat routes to that machine.`
+                  children: `Tác nhân sẽ được tạo trên ${targetLabel}; mọi cuộc trò chuyện của tác nhân sẽ chạy trên máy đó.`
                 })
               : null,
             labeled(
-              'Title',
+              'Tên hiển thị',
               jsx(Input, {
-                placeholder: 'Inbox Triage',
+                placeholder: 'Phân loại hộp thư',
                 value: title,
                 onChange: event => setTitle(event.target.value)
               })
             ),
             labeled(
-              'Description',
+              'Mô tả nhiệm vụ',
               jsx(Textarea, {
                 className: 'min-h-16',
-                placeholder: 'What should this Bot help with?',
+                placeholder: 'Tác nhân này sẽ giúp Đại ca việc gì?',
                 value: description,
                 onChange: event => setDescription(event.target.value)
               })
@@ -8077,7 +8234,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
               },
               children: [
                 jsx(Codicon, { name: advanced ? 'chevron-down' : 'chevron-right', className: 'text-[0.8rem]' }),
-                'Advanced'
+                'Thiết lập nâng cao'
               ]
             }),
             advanced
@@ -8097,13 +8254,13 @@ function CreateAgentDialog({ open, onClose, roster }) {
                       // reads already route to the target).
                       children: (SkillsView && (!remoteTarget || skillsViewRoutesConnections)
                         ? [
-                            ['general', 'General'],
-                            ['capabilities', 'Capabilities']
+                            ['general', 'Cấu hình'],
+                            ['capabilities', 'Năng lực']
                           ]
                         : [
-                            ['general', 'General'],
-                            ['skills', 'Skills'],
-                            ['toolsets', 'Tools'],
+                            ['general', 'Cấu hình'],
+                            ['skills', 'Kỹ năng'],
+                            ['toolsets', 'Công cụ'],
                             ['mcp', 'MCP']
                           ]
                       ).map(([id, label]) =>
@@ -8126,7 +8283,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                 // the MCP setup buttons use).
                                 void ensureAgentCreated()
                                   .then(created => created && setCreatedForCaps(created))
-                                  .catch(err => host.notifyError(err, 'Could not create the profile yet'))
+                                  .catch(err => host.notifyError(err, 'Chưa thể tạo hồ sơ tác nhân'))
                               } else if (id !== 'general') {
                                 ensureCaps()
                               }
@@ -8142,7 +8299,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
                           className: 'grid gap-3.5',
                           children: [
                             labeled(
-                              remoteTarget ? `Clone from profile (on ${targetLabel})` : 'Clone from profile',
+                              remoteTarget ? `Sao chép từ hồ sơ (trên ${targetLabel})` : 'Sao chép từ hồ sơ',
                               jsxs(Select, {
                                 disabled: remoteTarget,
                                 value: remoteTarget ? 'default' : cloneFrom,
@@ -8160,7 +8317,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                     children: [
                                       jsx(SelectItem, {
                                         value: '__none__',
-                                        children: 'Fresh profile (bundled skills)'
+                                        children: 'Hồ sơ mới (kèm kỹ năng mặc định)'
                                       }),
                                       ...roster.map(b => jsx(SelectItem, { value: b.name, children: b.name }, b.name))
                                     ]
@@ -8178,14 +8335,14 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                   setModel(patch.model)
                                 }
                               },
-                              placeholderModel: 'inherited from launch profile'
+                              placeholderModel: 'kế thừa từ hồ sơ khởi chạy'
                             }),
                             labeled(
-                              'SOUL.md (optional — replaces the generated persona)',
+                              'SOUL.md (tùy chọn — thay thế tính cách tự sinh)',
                               jsx(Textarea, {
                                 className: 'min-h-24 font-mono text-xs leading-5',
                                 placeholder:
-                                  'Leave blank to auto-generate from name/title/description + agent-messaging roster.',
+                                  'Để trống để tự tạo từ tên, mô tả và danh sách tác nhân.',
                                 value: soul,
                                 onChange: event => setSoul(event.target.value)
                               })
@@ -8197,13 +8354,13 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                   checked: shareAuth,
                                   onCheckedChange: value => setShareAuth(Boolean(value))
                                 }),
-                                'Share keys & accounts with the main profile'
+                                'Dùng chung tài khoản và khóa với hồ sơ chính'
                               ]
                             }),
                             jsx('div', {
                               className: 'pl-6 pt-0.5 text-[0.7rem] leading-5 text-(--ui-text-tertiary)',
                               children:
-                                'Subscriptions, OAuth logins, and API keys stay shared (not copied), so token refreshes never invalidate each other. Uncheck for an isolated snapshot copy.'
+                                'Gói thuê bao, đăng nhập OAuth và API key được dùng chung, không sao chép; làm mới token sẽ không khiến các hồ sơ mất đăng nhập.'
                             }),
                             jsxs('label', {
                               className: 'flex items-center gap-2 text-xs text-(--ui-text-secondary)',
@@ -8212,7 +8369,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                   checked: noSkills,
                                   onCheckedChange: value => setNoSkills(Boolean(value))
                                 }),
-                                'Create empty (skip bundled skills)'
+                                'Tạo hồ sơ trống (không cài kỹ năng mặc định)'
                               ]
                             })
                           ]
@@ -8222,8 +8379,8 @@ function CreateAgentDialog({ open, onClose, roster }) {
                           ? jsx('div', {
                               className: 'px-2 py-3 text-center text-xs text-(--ui-text-tertiary)',
                               children: taken
-                                ? 'That name is taken — pick another before configuring capabilities.'
-                                : 'Name the agent first — a draft profile is created when you open this tab (discarded if you cancel).'
+                                ? 'Tên này đã được dùng — hãy chọn tên khác trước khi cấu hình năng lực.'
+                                : 'Hãy đặt tên tác nhân trước — Hermes sẽ tạo hồ sơ nháp khi mở thẻ này và xóa nếu Đại ca hủy.'
                             })
                           : !createdForCaps
                             ? jsx('div', {
@@ -8252,7 +8409,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
                         ? jsx('div', {
                             className: 'px-2 py-3 text-center text-xs text-(--ui-text-tertiary)',
                             children:
-                              'Capability catalog needs a newer gateway (restart it after updating Hermes).'
+                              'Danh mục năng lực cần Gateway mới hơn; hãy cập nhật Hermes rồi khởi động lại Gateway.'
                           })
                         : !caps
                           ? jsx('div', {
@@ -8266,14 +8423,14 @@ function CreateAgentDialog({ open, onClose, roster }) {
                             ? noSkills
                               ? jsx('div', {
                                   className: 'px-2 py-3 text-center text-xs text-(--ui-text-tertiary)',
-                                  children: '“Create empty” is checked — no bundled skills will be installed.'
+                                  children: 'Đã chọn hồ sơ trống — Hermes sẽ không cài các kỹ năng đi kèm.'
                                 })
                               : jsxs('div', {
                                   className: 'grid gap-1.5',
                                   children: [
                                     jsx(Input, {
                                       className: 'h-7 text-xs',
-                                      placeholder: 'Filter skills…',
+                                      placeholder: 'Lọc kỹ năng…',
                                       value: capFilter,
                                       onChange: event => setCapFilter(event.target.value)
                                     }),
@@ -8292,7 +8449,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                     }),
                                     jsx('div', {
                                       className: 'text-[0.65rem] leading-4 text-(--ui-text-quaternary)',
-                                      children: `Catalog from ${caps.source} — unchecked skills are disabled after creation.`
+                                      children: `Danh mục từ ${caps.source} — kỹ năng bỏ chọn sẽ bị tắt sau khi tạo.`
                                     }),
                                     jsx(HubSkillsSection, {
                                       forProfile: null,
@@ -8320,14 +8477,14 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                     }),
                                     jsx('div', {
                                       className: 'text-[0.65rem] leading-4 text-(--ui-text-quaternary)',
-                                      children: 'Leaving all (or none) checked keeps the default toolset behavior.'
+                                      children: 'Chọn tất cả hoặc không chọn mục nào sẽ giữ hành vi bộ công cụ mặc định.'
                                     })
                                   ]
                                 })
                               : caps.mcp.length === 0
                                 ? jsx('div', {
                                     className: 'px-2 py-3 text-center text-xs text-(--ui-text-tertiary)',
-                                    children: 'No MCP servers configured or in the catalog.'
+                                    children: 'Chưa có máy chủ MCP nào trong cấu hình hoặc danh mục.'
                                   })
                                 : jsxs('div', {
                                     className: 'grid gap-1.5',
@@ -8359,8 +8516,8 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                                         ? jsx('span', {
                                                             className: 'ml-1.5 text-[0.65rem] text-(--ui-text-quaternary)',
                                                             children: m.installed
-                                                              ? 'catalog · installed'
-                                                              : 'catalog'
+                                                              ? 'danh mục · đã cài'
+                                                              : 'danh mục'
                                                           })
                                                         : null,
                                                       needsSetup
@@ -8406,7 +8563,7 @@ function CreateAgentDialog({ open, onClose, roster }) {
                                       jsx('div', {
                                         className: 'text-[0.65rem] leading-4 text-(--ui-text-quaternary)',
                                         children:
-                                          'Configured servers copy from the main profile; catalog entries are the bundled MCP menu. Entries needing API keys route through setup first (credentials follow the shared keys setting).'
+                                          'Máy chủ đã cấu hình được lấy từ hồ sơ chính; các mục danh mục thuộc menu MCP đi kèm. Mục cần khóa API sẽ mở bước thiết lập trước và tuân theo lựa chọn dùng chung thông tin đăng nhập.'
                                       })
                                     ]
                                   })
@@ -8431,12 +8588,12 @@ function CreateAgentDialog({ open, onClose, roster }) {
                 reset()
                 onClose()
               },
-              children: 'Cancel'
+              children: 'Hủy'
             }),
             jsx(Button, {
               disabled: busy || !valid || taken,
               onClick: submit,
-              children: busy ? 'Creating…' : 'Create Agent'
+              children: busy ? 'Đang tạo…' : 'Tạo tác nhân'
             })
           ]
         })
@@ -8461,7 +8618,7 @@ function routineBot(job) {
 }
 
 function routineTitle(job) {
-  return (job?.name || '').replace(BOT_TAG_RE, '') || 'Untitled cronjob'
+  return (job?.name || '').replace(BOT_TAG_RE, '') || 'Tác vụ chưa đặt tên'
 }
 
 function isLegacyDelegatedRoutine(job) {
@@ -8552,8 +8709,8 @@ function routineFilterHint(all, jobs) {
   if (jobs.length !== 0 || !Array.isArray(all) || all.length === 0) {
     return null
   }
-  return 'Cronjobs exist in this profile but none are tagged for this bot. ' +
-    'Name a job "[bot:<name>] …" to show it here, or see them in Cron below.'
+  return 'Hồ sơ này có tác vụ định kỳ nhưng chưa có tác vụ nào được gắn cho tác nhân đang chọn. ' +
+    'Đặt tên theo mẫu "[bot:<tên>] …" để hiện tại đây, hoặc xem toàn bộ trong mục Tác vụ định kỳ.'
 }
 
 function normalizedProfileName(profile) {
@@ -8573,11 +8730,11 @@ function shellDoubleQuote(value) {
 
 function routineInputError(title, instruction) {
   if (String(title).includes('\0')) {
-    return 'Cronjob name cannot contain NUL (U+0000).'
+    return 'Tên tác vụ không được chứa ký tự NUL (U+0000).'
   }
 
   if (String(instruction).includes('\0')) {
-    return 'Cronjob instruction cannot contain NUL (U+0000).'
+    return 'Hướng dẫn tác vụ không được chứa ký tự NUL (U+0000).'
   }
 
   return null
@@ -8599,13 +8756,13 @@ function scheduleLabel(schedule) {
   const once = /^once in (.+)$/.exec(schedule || '')
 
   if (once) {
-    return `Once (${once[1]})`
+    return `Một lần (${once[1]})`
   }
 
   const bare = /^(\d+)([mhd])$/.exec(schedule || '')
 
   if (bare) {
-    return `Once (${bare[1]}${bare[2]})`
+    return `Một lần (${bare[1]}${bare[2]})`
   }
 
   const match = /^every (\d+)m$/.exec(schedule || '')
@@ -8615,15 +8772,15 @@ function scheduleLabel(schedule) {
 
     if (minutes % 1440 === 0) {
       const d = minutes / 1440
-      return d === 1 ? 'Daily' : `Every ${d} days`
+      return d === 1 ? 'Hằng ngày' : `Mỗi ${d} ngày`
     }
 
     if (minutes % 60 === 0) {
       const h = minutes / 60
-      return h === 1 ? 'Hourly' : `Every ${h}h`
+      return h === 1 ? 'Mỗi giờ' : `Mỗi ${h} giờ`
     }
 
-    return `Every ${minutes}m`
+    return `Mỗi ${minutes} phút`
   }
 
   return schedule || ''
@@ -8658,7 +8815,7 @@ function RoutineRow({ job, profile }) {
       await invalidateRoutineOwner(profile)
     } catch (err) {
       setPendingActive(null)
-      host.notifyError(err, 'Cronjob update failed')
+      host.notifyError(err, 'Không thể cập nhật tác vụ định kỳ')
     } finally {
       setBusy(false)
     }
@@ -8687,7 +8844,7 @@ function RoutineRow({ job, profile }) {
             onCheckedChange: value => act(value ? 'resume' : 'pause')
           }),
           jsx(Tip, {
-            label: 'Delete cronjob',
+            label: 'Xóa tác vụ định kỳ',
             children: jsx('button', {
               type: 'button',
               disabled: busy,
@@ -8709,7 +8866,7 @@ function RoutineRow({ job, profile }) {
           }),
           jsx('span', {
             className: 'truncate text-[0.65rem] text-(--ui-text-quaternary)',
-            children: active && job.next_run_at ? `next ${relativeTime(new Date(job.next_run_at).getTime())}` : 'paused'
+            children: active && job.next_run_at ? `lần tới ${relativeTimeVi(new Date(job.next_run_at).getTime())}` : 'đã tạm dừng'
           })
         ]
       }),
@@ -8717,7 +8874,7 @@ function RoutineRow({ job, profile }) {
         ? jsx('div', {
             className:
               'rounded-md border border-(--ui-stroke-secondary) px-2 py-1.5 text-[0.65rem] leading-4 text-(--ui-accent)',
-            children: 'Paused for security: delete and recreate this legacy cronjob before running it again.'
+            children: 'Đã tạm dừng để bảo đảm an toàn: hãy xóa rồi tạo lại tác vụ cũ này trước khi chạy tiếp.'
           })
         : null
     ]
@@ -8728,24 +8885,24 @@ function RoutineRow({ job, profile }) {
 // frequency needs (time of day, weekday, day of month, interval). Emits a
 // Hermes-native schedule string; Advanced exposes it raw.
 const FREQUENCIES = [
-  { id: 'once', label: 'Once, in\u2026' },
-  { id: 'hourly', label: 'Every hour' },
-  { id: 'daily', label: 'Every day' },
-  { id: 'weekdays', label: 'Weekdays' },
-  { id: 'weekly', label: 'Every week' },
-  { id: 'monthly', label: 'Every month' },
-  { id: 'interval', label: 'Interval' },
-  { id: 'advanced', label: 'Advanced\u2026' }
+  { id: 'once', label: 'Một lần, sau\u2026' },
+  { id: 'hourly', label: 'Mỗi giờ' },
+  { id: 'daily', label: 'Mỗi ngày' },
+  { id: 'weekdays', label: 'Các ngày trong tuần' },
+  { id: 'weekly', label: 'Mỗi tuần' },
+  { id: 'monthly', label: 'Mỗi tháng' },
+  { id: 'interval', label: 'Theo khoảng thời gian' },
+  { id: 'advanced', label: 'Nâng cao\u2026' }
 ]
 
 const WEEKDAYS = [
-  { id: '1', label: 'Monday' },
-  { id: '2', label: 'Tuesday' },
-  { id: '3', label: 'Wednesday' },
-  { id: '4', label: 'Thursday' },
-  { id: '5', label: 'Friday' },
-  { id: '6', label: 'Saturday' },
-  { id: '0', label: 'Sunday' }
+  { id: '1', label: 'Thứ Hai' },
+  { id: '2', label: 'Thứ Ba' },
+  { id: '3', label: 'Thứ Tư' },
+  { id: '4', label: 'Thứ Năm' },
+  { id: '5', label: 'Thứ Sáu' },
+  { id: '6', label: 'Thứ Bảy' },
+  { id: '0', label: 'Chủ Nhật' }
 ]
 
 const TIMES = (() => {
@@ -8792,29 +8949,29 @@ function scheduleSummary(state) {
   const t = TIMES.find(x => x.id === state.time)
   const tl = t ? t.label : '9:00 AM'
 
-  const unitWord = u => (u === 'm' ? 'minute(s)' : u === 'd' ? 'day(s)' : 'hour(s)')
+  const unitWord = u => (u === 'm' ? 'phút' : u === 'd' ? 'ngày' : 'giờ')
   const cap =
     state.freq !== 'once' && String(state.repeatN || '').trim()
-      ? `, ${Math.max(1, parseInt(state.repeatN, 10) || 1)} time(s) total`
+      ? `, tổng cộng ${Math.max(1, parseInt(state.repeatN, 10) || 1)} lần`
       : ''
 
   switch (state.freq) {
     case 'once':
-      return `Runs once, ${Math.max(1, parseInt(state.onceN, 10) || 1)} ${unitWord(state.onceUnit)} from now`
+      return `Chạy một lần sau ${Math.max(1, parseInt(state.onceN, 10) || 1)} ${unitWord(state.onceUnit)}`
     case 'hourly':
-      return 'Runs at the top of every hour' + cap
+      return 'Chạy vào đầu mỗi giờ' + cap
     case 'daily':
-      return `Runs every day at ${tl}` + cap
+      return `Chạy mỗi ngày lúc ${tl}` + cap
     case 'weekdays':
-      return `Runs Monday\u2013Friday at ${tl}` + cap
+      return `Chạy từ Thứ Hai đến Thứ Sáu lúc ${tl}` + cap
     case 'weekly':
-      return `Runs every ${(WEEKDAYS.find(w => w.id === state.weekday) || WEEKDAYS[0]).label} at ${tl}` + cap
+      return `Chạy vào ${(WEEKDAYS.find(w => w.id === state.weekday) || WEEKDAYS[0]).label} hằng tuần lúc ${tl}` + cap
     case 'monthly':
-      return `Runs on day ${state.monthday || '1'} of each month at ${tl}` + cap
+      return `Chạy vào ngày ${state.monthday || '1'} hằng tháng lúc ${tl}` + cap
     case 'interval':
-      return `Runs every ${Math.max(1, parseInt(state.intervalN, 10) || 1)} ${unitWord(state.intervalUnit)}` + cap
+      return `Chạy mỗi ${Math.max(1, parseInt(state.intervalN, 10) || 1)} ${unitWord(state.intervalUnit)}` + cap
     default:
-      return 'Raw schedule \u2014 every Nm/Nh/Nd or 5-field cron'
+      return 'Lịch thô \u2014 every Nm/Nh/Nd hoặc biểu thức cron 5 trường'
   }
 }
 
@@ -8856,9 +9013,9 @@ function SchedulePicker({ state, setState }) {
                 onChange: event => upd({ onceN: event.target.value.replace(/[^0-9]/g, '').slice(0, 4) })
               }),
               pickerSelect(state.onceUnit, v => upd({ onceUnit: v }), [
-                { id: 'm', label: 'minutes from now' },
-                { id: 'h', label: 'hours from now' },
-                { id: 'd', label: 'days from now' }
+                { id: 'm', label: 'phút kể từ bây giờ' },
+                { id: 'h', label: 'giờ kể từ bây giờ' },
+                { id: 'd', label: 'ngày kể từ bây giờ' }
               ])
             ]
           })
@@ -8868,7 +9025,7 @@ function SchedulePicker({ state, setState }) {
         : null,
       state.freq === 'monthly'
         ? labeled(
-            'Day of month',
+            'Ngày trong tháng',
             jsx(Input, {
               className: 'h-8',
               placeholder: '1',
@@ -8888,9 +9045,9 @@ function SchedulePicker({ state, setState }) {
                 onChange: event => upd({ intervalN: event.target.value.replace(/[^0-9]/g, '').slice(0, 4) })
               }),
               pickerSelect(state.intervalUnit, v => upd({ intervalUnit: v }), [
-                { id: 'm', label: 'minutes' },
-                { id: 'h', label: 'hours' },
-                { id: 'd', label: 'days' }
+                { id: 'm', label: 'phút' },
+                { id: 'h', label: 'giờ' },
+                { id: 'd', label: 'ngày' }
               ])
             ]
           })
@@ -8907,14 +9064,14 @@ function SchedulePicker({ state, setState }) {
         ? jsxs('div', {
             className: 'flex items-center gap-2',
             children: [
-              jsx('span', { className: 'text-xs text-(--ui-text-tertiary)', children: 'Stop after' }),
+              jsx('span', { className: 'text-xs text-(--ui-text-tertiary)', children: 'Dừng sau' }),
               jsx(Input, {
                 className: 'h-7 w-16 text-xs',
                 placeholder: '\u221e',
                 value: state.repeatN,
                 onChange: event => upd({ repeatN: event.target.value.replace(/[^0-9]/g, '').slice(0, 4) })
               }),
-              jsx('span', { className: 'text-xs text-(--ui-text-tertiary)', children: 'runs (blank = forever)' })
+              jsx('span', { className: 'text-xs text-(--ui-text-tertiary)', children: 'lần chạy (để trống = không giới hạn)' })
             ]
           })
         : null,
@@ -8981,7 +9138,7 @@ function CreateRoutineDialog({ bot, open, onClose }) {
         ...(continuity ? { continuity: true } : {})
       })
       await invalidateRoutineOwner(bot)
-      host.notify({ kind: 'success', message: `Cronjob "${title}" scheduled` })
+      host.notify({ kind: 'success', message: `Đã lên lịch tác vụ “${title}”` })
       reset()
       onClose()
     } catch (err) {
@@ -9003,9 +9160,9 @@ function CreateRoutineDialog({ bot, open, onClose }) {
       children: [
         jsxs(DialogHeader, {
           children: [
-            jsx(DialogTitle, { children: 'New Cronjob' }),
+            jsx(DialogTitle, { children: 'Tạo tác vụ định kỳ' }),
             jsx(DialogDescription, {
-              children: `A recurring task ${displayName({ name: bot }, $botMeta.get()[bot])} runs on a schedule. Runs land in its own chat history.`
+              children: `Tác vụ của ${displayName({ name: bot }, $botMeta.get()[bot])} sẽ tự chạy theo lịch và lưu kết quả vào lịch sử trò chuyện riêng.`
             })
           ]
         }),
@@ -9013,24 +9170,24 @@ function CreateRoutineDialog({ bot, open, onClose }) {
           className: 'grid gap-3.5',
           children: [
             labeled(
-              'Name',
+              'Tên',
               jsx(Input, {
                 autoFocus: true,
-                placeholder: 'Name this cronjob',
+                placeholder: 'Đặt tên tác vụ',
                 value: name,
                 onChange: event => setName(event.target.value)
               })
             ),
             labeled(
-              'Instruction',
+              'Hướng dẫn',
               jsx(Textarea, {
                 className: 'min-h-20',
-                placeholder: 'What should this cronjob do each time it runs?',
+                placeholder: 'Tác vụ cần làm gì trong mỗi lần chạy?',
                 value: instruction,
                 onChange: event => setInstruction(event.target.value)
               })
             ),
-            labeled('When to run', jsx(SchedulePicker, { state: sched, setState: setSched })),
+            labeled('Thời điểm chạy', jsx(SchedulePicker, { state: sched, setState: setSched })),
             jsxs('label', {
               className: 'flex items-center gap-2 text-xs text-(--ui-text-tertiary) cursor-pointer select-none',
               children: [
@@ -9040,7 +9197,7 @@ function CreateRoutineDialog({ bot, open, onClose }) {
                   checked: continuity,
                   onChange: event => setContinuity(event.target.checked)
                 }),
-                'Continuity: each run sees the previous run\u2019s output (dedupe, continue where it left off)'
+                'Duy trì liên tục: mỗi lần chạy được xem kết quả lần trước để tránh lặp và tiếp tục phần còn lại'
               ]
             }),
             error
@@ -9060,12 +9217,12 @@ function CreateRoutineDialog({ bot, open, onClose }) {
                 reset()
                 onClose()
               },
-              children: 'Cancel'
+              children: 'Hủy'
             }),
             jsx(Button, {
               disabled: busy || !name.trim() || !instruction.trim() || !schedule.trim(),
               onClick: submit,
-              children: busy ? 'Scheduling…' : 'Create Cronjob'
+              children: busy ? 'Đang lên lịch…' : 'Tạo tác vụ'
             })
           ]
         })
@@ -9119,7 +9276,7 @@ function RoutinesPane() {
   }
   const jobs = view.jobs
   const staleNotice = error && !view.live && view.all.length
-    ? 'Could not refresh cronjobs. Showing the last list we had.'
+    ? 'Không thể làm mới tác vụ định kỳ. Đang hiển thị danh sách gần nhất.'
     : null
   const filterHint = routineFilterHint(view.all, jobs)
 
@@ -9150,12 +9307,12 @@ function RoutinesPane() {
               }),
               jsx('div', {
                 className: 'text-[0.65rem] uppercase tracking-wider text-(--ui-text-quaternary)',
-                children: 'Cronjobs'
+                children: 'Tác vụ định kỳ'
               })
             ]
           }),
           jsx(Tip, {
-            label: 'New Cronjob',
+            label: 'Tác vụ mới',
             children: jsx('button', {
               type: 'button',
               className:
@@ -9185,13 +9342,13 @@ function RoutinesPane() {
                 jsx(Codicon, { name: 'warning', className: 'text-[1.6rem] text-(--ui-text-quaternary)' }),
                 jsx('div', {
                   className: 'text-xs leading-5 text-(--ui-text-tertiary)',
-                  children: 'Could not load cronjobs. The list may still be there.'
+                  children: 'Không tải được danh sách tác vụ. Dữ liệu có thể vẫn còn nguyên.'
                 }),
                 jsx(Button, {
                   variant: 'secondary',
                   size: 'sm',
                   onClick: () => void refetch(),
-                  children: 'Retry'
+                  children: 'Thử lại'
                 })
               ]
             })
@@ -9213,7 +9370,7 @@ function RoutinesPane() {
                   variant: 'secondary',
                   size: 'sm',
                   onClick: openCreate,
-                  children: filterHint ? 'Create a cronjob for this bot' : 'Create Cronjob'
+                  children: filterHint ? 'Tạo tác vụ cho tác nhân này' : 'Tạo tác vụ'
                 })
               ]
             })
@@ -9255,12 +9412,12 @@ function ActiveNowStrip({ roster, activeProfile, gatewayState, metaByName, onOpe
   return jsxs('div', {
     role: 'status',
     'aria-live': 'polite',
-    'aria-label': 'Active now',
+    'aria-label': 'Đang hoạt động',
     className: 'flex flex-wrap items-center gap-1.5 px-2.5 pb-1.5',
     children: [
       jsx('span', {
         className: 'text-[0.6875rem] font-semibold uppercase tracking-wider text-(--ui-text-quaternary)',
-        children: 'Active now'
+        children: 'Đang hoạt động'
       }),
       ...active.map(bot => {
         const meta = metaByName?.[bot.name]
@@ -9270,7 +9427,7 @@ function ActiveNowStrip({ roster, activeProfile, gatewayState, metaByName, onOpe
 
         return jsx('button', {
           type: 'button',
-          title: `Open ${label}'s chat`,
+          title: `Mở cuộc trò chuyện của ${label}`,
           className: cn(
             'flex items-center gap-1.5 rounded-md bg-(--chrome-action-hover) px-1.5 py-1 text-left transition-colors',
             'hover:bg-(--chrome-action-hover) hover:text-foreground'
@@ -9306,7 +9463,7 @@ function GroupDialog({ bot, onClose }) {
   const groups = knownGroups(meta)
 
   const setMembership = (group, enabled) => {
-    saveBotMeta(bot.name, groupMembershipPatch(meta[bot.name], group, enabled))
+    saveBotMeta(bot.name, groupMembershipPatch(meta[bot.name], group, enabled), bot)
     host.notify({
       kind: 'info',
       message: enabled
@@ -9327,9 +9484,9 @@ function GroupDialog({ bot, onClose }) {
       children: [
         jsxs(DialogHeader, {
           children: [
-            jsx(DialogTitle, { children: 'Manage groups' }),
+            jsx(DialogTitle, { children: 'Quản lý nhóm' }),
             jsx(DialogDescription, {
-              children: 'A bot can join multiple group chats. Memberships sync to every machine.'
+              children: 'Một tác nhân có thể tham gia nhiều nhóm trò chuyện; thành viên được đồng bộ giữa các máy.'
             })
           ]
         }),
@@ -9371,11 +9528,11 @@ function GroupDialog({ bot, onClose }) {
           children: [
             jsx(Input, {
               autoFocus: true,
-              placeholder: groups.length ? 'New group…' : 'Group name (e.g. Research)',
+              placeholder: groups.length ? 'Nhóm mới…' : 'Tên nhóm, ví dụ: Nghiên cứu',
               value: name,
               onChange: event => setName(event.target.value)
             }),
-            jsx(Button, { type: 'submit', size: 'sm', disabled: !name.trim(), children: 'Create & join' })
+            jsx(Button, { type: 'submit', size: 'sm', disabled: !name.trim(), children: 'Tạo và tham gia' })
           ]
         }),
         current.length
@@ -9383,8 +9540,8 @@ function GroupDialog({ bot, onClose }) {
               variant: 'ghost',
               size: 'sm',
               className: 'justify-self-start',
-              onClick: () => saveBotMeta(bot.name, { groups: [], group: null }),
-              children: 'Remove from all groups'
+              onClick: () => saveBotMeta(bot.name, { groups: [], group: null }, bot),
+              children: 'Rời khỏi tất cả nhóm'
             })
           : null
       ]
@@ -9440,7 +9597,7 @@ function GroupImageControls({ image, onImage, seedName, seedMembers }) {
         onImage(await normalizeAvatarImage(img))
       }
     } catch (err) {
-      host.notifyError(err, 'Group picture generation failed')
+      host.notifyError(err, 'Không thể tạo ảnh nhóm')
     } finally {
       setBusy(false)
     }
@@ -9456,7 +9613,7 @@ function GroupImageControls({ image, onImage, seedName, seedMembers }) {
           ? jsx('img', { src: image, alt: '', className: 'size-full object-cover' })
           : jsx(Codicon, { name: 'organization', className: 'text-(--ui-text-tertiary)' })
       }),
-      jsx(Button, { type: 'button', variant: 'secondary', size: 'sm', onClick: upload, children: 'Upload' }),
+      jsx(Button, { type: 'button', variant: 'secondary', size: 'sm', onClick: upload, children: 'Tải ảnh lên' }),
       imagen
         ? jsx(Button, {
             type: 'button',
@@ -9464,11 +9621,11 @@ function GroupImageControls({ image, onImage, seedName, seedMembers }) {
             size: 'sm',
             disabled: busy,
             onClick: generate,
-            children: busy ? 'Generating…' : 'Generate'
+            children: busy ? 'Đang tạo…' : 'Tạo ảnh'
           })
         : null,
       image
-        ? jsx(Button, { type: 'button', variant: 'ghost', size: 'sm', onClick: () => onImage(null), children: 'Remove' })
+        ? jsx(Button, { type: 'button', variant: 'ghost', size: 'sm', onClick: () => onImage(null), children: 'Bỏ ảnh' })
         : null
     ]
   })
@@ -9521,9 +9678,9 @@ function GroupChatSettingsDialog({ group, members, open, onClose, onRenamed }) {
       children: [
         jsxs(DialogHeader, {
           children: [
-            jsx(DialogTitle, { children: 'Group settings' }),
+            jsx(DialogTitle, { children: 'Cài đặt nhóm' }),
             jsx(DialogDescription, {
-              children: 'Rename the group or set a room picture. Members and history are kept.'
+              children: 'Đổi tên nhóm hoặc đặt ảnh phòng; thành viên và lịch sử vẫn được giữ nguyên.'
             })
           ]
         }),
@@ -9539,7 +9696,7 @@ function GroupChatSettingsDialog({ group, members, open, onClose, onRenamed }) {
             void save()
           },
           children: jsx(Input, {
-            'aria-label': 'Group name',
+            'aria-label': 'Tên nhóm',
             autoFocus: true,
             maxLength: 64,
             value: name,
@@ -9548,8 +9705,8 @@ function GroupChatSettingsDialog({ group, members, open, onClose, onRenamed }) {
         }),
         jsxs(DialogFooter, {
           children: [
-            jsx(Button, { variant: 'secondary', onClick: onClose, children: 'Cancel' }),
-            jsx(Button, { disabled: !name.trim(), onClick: () => void save(), children: 'Save' })
+            jsx(Button, { variant: 'secondary', onClick: onClose, children: 'Hủy' }),
+            jsx(Button, { disabled: !name.trim(), onClick: () => void save(), children: 'Lưu' })
           ]
         })
       ]
@@ -9583,7 +9740,7 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
   const atCap = selected.length >= GROUP_CHAT_MAX_MEMBERS
   const placeholder = selected.length
     ? selected.map(bot => displayName(bot, botRosterMeta(bot, allMeta))).join(', ')
-    : 'Group name'
+    : 'Tên nhóm'
   const canCreate = selected.length >= 2 && Boolean(name.trim() || selected.length)
 
   const create = () => {
@@ -9614,7 +9771,7 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
 
     for (const bot of selected) {
       if (!bot.remoteSource) {
-        void saveBotMeta(bot.name, groupMembershipPatch(botRosterMeta(bot, allMeta), groupName, true))
+        void saveBotMeta(bot.name, groupMembershipPatch(botRosterMeta(bot, allMeta), groupName, true), bot)
       }
     }
 
@@ -9634,7 +9791,7 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
       return room
     })
 
-    host.notify({ kind: 'info', message: `“${groupName}” created with ${selected.length} bots` })
+    host.notify({ kind: 'info', message: `Đã tạo “${groupName}” với ${selected.length} tác nhân` })
     onClose()
     onCreated?.(groupName)
   }
@@ -9651,18 +9808,18 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
       children: [
         jsxs(DialogHeader, {
           children: [
-            jsx(DialogTitle, { children: 'New Group Chat' }),
+            jsx(DialogTitle, { children: 'Tạo nhóm trò chuyện' }),
             jsx(DialogDescription, {
-              children: `Pick 2–${GROUP_CHAT_MAX_MEMBERS} bots. Local memberships sync through each Bot profile; cross-machine members stay scoped to this room.`
+              children: `Chọn từ 2 đến ${GROUP_CHAT_MAX_MEMBERS} tác nhân. Thành viên cục bộ đồng bộ qua từng hồ sơ; thành viên trên máy khác chỉ thuộc nhóm này.`
             })
           ]
         }),
         jsx(SearchField, {
-          'aria-label': 'Search bots to add',
+          'aria-label': 'Tìm tác nhân để thêm',
           autoFocus: true,
           containerClassName: 'w-full',
           inputClassName: 'w-full',
-          placeholder: 'Search bots to add…',
+          placeholder: 'Tìm tác nhân để thêm…',
           value: query,
           onChange: setQuery
         }),
@@ -9674,7 +9831,7 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
                   type: 'button',
                   className:
                     'flex items-center gap-1 rounded-full bg-(--chrome-action-hover) py-0.5 pl-2 pr-1.5 text-[0.6875rem] text-(--ui-text-secondary) transition-colors hover:text-foreground',
-                  title: 'Remove from selection',
+                  title: 'Bỏ khỏi danh sách đã chọn',
                   onClick: () => setChecked(prev => ({ ...prev, [botRosterKey(bot)]: false })),
                   children: [displayName(bot, botRosterMeta(bot, allMeta)), jsx(Codicon, { name: 'close', className: 'text-[0.6rem]' })]
                 }, botRosterKey(bot))
@@ -9731,7 +9888,9 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
                 })
               : jsx('div', {
                   className: 'px-1.5 py-3 text-center text-xs text-(--ui-text-tertiary)',
-                  children: query.trim() ? `No bots match “${query.trim()}”` : 'No bots yet — create agents first.'
+                  children: query.trim()
+                    ? `Không có tác nhân khớp “${query.trim()}”`
+                    : 'Chưa có tác nhân — hãy tạo tác nhân trước.'
                 })
           })
         }),
@@ -9750,7 +9909,7 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
                 create()
               },
               children: jsx(Input, {
-                'aria-label': 'Group name',
+                'aria-label': 'Tên nhóm',
                 maxLength: 64,
                 placeholder,
                 value: name,
@@ -9761,12 +9920,12 @@ function CreateGroupChatDialog({ open, roster, onClose, onCreated }) {
         }),
         jsxs(DialogFooter, {
           children: [
-            jsx(Button, { variant: 'secondary', onClick: onClose, children: 'Cancel' }),
+            jsx(Button, { variant: 'secondary', onClick: onClose, children: 'Hủy' }),
             jsx(Button, {
               disabled: !canCreate,
-              title: selected.length < 2 ? 'Pick at least 2 bots' : undefined,
+              title: selected.length < 2 ? 'Chọn ít nhất 2 tác nhân' : undefined,
               onClick: create,
-              children: `Create Group${selected.length ? ` (${selected.length})` : ''}`
+              children: `Tạo nhóm${selected.length ? ` (${selected.length})` : ''}`
             })
           ]
         })
@@ -9853,7 +10012,7 @@ function GroupMentionInput({ members, onChange, onSubmitDraft, value, ...inputPr
   if (token) {
     for (const pick of ['everyone', 'all']) {
       if (pick.startsWith(token.query)) {
-        options.push({ handle: pick, meta: 'Every bot in the room' })
+        options.push({ handle: pick, meta: 'Mọi tác nhân trong nhóm' })
       }
     }
 
@@ -10059,13 +10218,13 @@ function GroupClarifyCard({ entry, members }) {
 
       // Echo the exchange into the room log so the thread reads complete.
       const summary = isApproval
-        ? `${answerFor(questions[0])} — ${entry.command || entry.question || 'command approval'}`
+        ? `${answerFor(questions[0])} — ${entry.command || entry.question || 'phê duyệt lệnh'}`
         : questions
             .map(q => (questions.length > 1 ? `${q.question}: ${answerFor(q)}` : answerFor(q)))
             .join('\n')
       appendGroupChatEntry(group, { kind: 'user', name: 'You' }, summary, entry.thread || 'legacy')
     } catch (err) {
-      host.notify({ kind: 'error', message: `Could not send the answer to @${botHandle(entry.member, member)}: ${err?.message || err}` })
+      host.notify({ kind: 'error', message: `Không thể gửi câu trả lời tới @${botHandle(entry.member, member)}: ${err?.message || err}` })
     } finally {
       setSending(false)
     }
@@ -10139,7 +10298,7 @@ function GroupClarifyCard({ entry, members }) {
               ? null
               : jsx(Input, {
                   'aria-label': `Answer @${entry.member}`,
-                  placeholder: q.choices.length ? 'Or type your own answer…' : 'Type your answer…',
+                  placeholder: q.choices.length ? 'Hoặc nhập câu trả lời khác…' : 'Nhập câu trả lời…',
                   value: drafts[q.qid] || '',
                   onChange: event => {
                     const value = event.target.value
@@ -10163,7 +10322,7 @@ function GroupClarifyCard({ entry, members }) {
           size: 'sm',
           disabled: sending || !allAnswered || !member,
           onClick: () => void submit(),
-          children: sending ? 'Sending…' : isApproval ? 'Respond' : 'Answer'
+          children: sending ? 'Đang gửi…' : isApproval ? 'Phản hồi' : 'Trả lời'
         })
       })
     ]
@@ -10312,7 +10471,7 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
         variant: 'ghost',
         size: 'sm',
         onClick: () => (onBack ? onBack() : $groupChatWorkspace.set(null)),
-        children: 'Back'
+        children: 'Quay lại'
       }),
       // Room picture (set via Group settings) leads the title when present.
       room.image
@@ -10324,7 +10483,7 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
         : null,
       jsx('div', {
         className: 'min-w-0 flex-1 truncate text-sm font-semibold',
-        children: `${group} — group chat`
+        children: `${group} — trò chuyện nhóm`
       }),
       // Member faces: the room's roster at a glance, matching each bot's
       // avatar in the sidebar. Falls back to the count for the title tooltip.
@@ -10344,13 +10503,13 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
       }),
       jsx('span', {
         className: 'shrink-0 text-[0.65rem] text-(--ui-text-quaternary)',
-        children: `${members.length} bots`
+        children: `${members.length} tác nhân`
       }),
       jsx(Button, {
         variant: 'ghost',
         size: 'sm',
         className: 'shrink-0 text-(--ui-text-tertiary) hover:text-foreground',
-        title: `Group settings — rename ${group} or set a room picture`,
+        title: `Cài đặt nhóm — đổi tên ${group} hoặc đặt ảnh phòng`,
         onClick: () => setSettingsOpen(true),
         children: jsx(Codicon, { name: 'gear' })
       }),
@@ -10358,7 +10517,7 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
         variant: 'ghost',
         size: 'sm',
         className: 'shrink-0 text-(--ui-text-tertiary) hover:text-destructive',
-        title: `Disband the ${group} group chat`,
+        title: `Giải tán nhóm trò chuyện ${group}`,
         onClick: () => setConfirmDisband(true),
         children: jsx(Codicon, { name: 'trash' })
       })
@@ -10383,7 +10542,7 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
         type: 'button',
         'aria-expanded': activityOpen,
         'aria-controls': `group-activity:${group}`,
-        title: activityOpen ? 'Hide room activity' : 'Show room activity',
+        title: activityOpen ? 'Ẩn hoạt động của nhóm' : 'Hiện hoạt động của nhóm',
         className:
           'flex w-full items-center gap-1.5 px-2.5 py-1 text-left text-[0.7rem] text-(--ui-text-quaternary) transition-colors hover:text-foreground',
         onClick: () => setActivityOpen(prev => !prev),
@@ -10392,11 +10551,11 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
             name: activityOpen ? 'chevron-down' : 'chevron-right',
             className: 'shrink-0 text-[0.65rem]'
           }),
-          jsx('span', { className: 'shrink-0 font-medium', children: 'Activity' }),
+          jsx('span', { className: 'shrink-0 font-medium', children: 'Hoạt động' }),
           latestActivity
             ? jsx('span', {
                 className: 'min-w-0 flex-1 truncate',
-                children: `${groupActivityLabel(latestActivity)} · ${relativeTime(latestActivity.at)}`
+                children: `${groupActivityLabel(latestActivity)} · ${relativeTimeVi(latestActivity.at)}`
               })
             : null
         ]
@@ -10422,14 +10581,14 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
                         }),
                         jsx('span', {
                           className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary)',
-                          children: relativeTime(event.at)
+                          children: relativeTimeVi(event.at)
                         })
                       ]
                     }, `${event.at}:${i}`)
                   )
               : jsx('div', {
                   className: 'px-0.5 pb-0.5 text-[0.625rem] text-(--ui-text-quaternary)',
-                  children: 'No activity in this turn yet.'
+                  children: 'Chưa có hoạt động trong lượt này.'
                 })
           })
         : null
@@ -10502,7 +10661,7 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
             jsx('button', {
               type: 'button',
               className: 'cursor-pointer border-0 bg-transparent p-0 text-(--ui-text-quaternary) hover:text-foreground',
-              title: 'Remove attachment',
+              title: 'Bỏ tệp đính kèm',
               onClick: () => removeImage(thread, index),
               children: jsx(Codicon, { name: 'close', className: 'text-[0.65rem]' })
             })
@@ -10518,7 +10677,7 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
       variant: 'ghost',
       size: 'sm',
       className: 'shrink-0 text-(--ui-text-tertiary) hover:text-foreground',
-      title: 'Attach files — every responding bot sees them',
+      title: 'Đính kèm tệp — mọi tác nhân phản hồi đều có thể xem',
       onClick: () => void pickGroupAttachments().then(picked => addImages(thread, picked)),
       children: jsx(Codicon, { name: 'attach' })
     })
@@ -10539,13 +10698,13 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
                           ? (b.connectionLabel || b.connectionId) === entry.from.source
                           : !b.remoteSource)
                       ) || null
-                  const display = isUser ? 'You' : displayName(member || { name: entry.from.name }, meta)
+                  const display = isUser ? 'Đại ca' : displayName(member || { name: entry.from.name }, meta)
                   const entryKey = `${entry.at}:${index}`
                   const revealed = !isUser && revealedSpeaker === entryKey
                   // Clicked: append the gateway name so same-named agents on
                   // two connections are tellable apart on demand.
                   const label = isUser
-                    ? 'You'
+                    ? 'Đại ca'
                     : revealed
                       ? `${display}${entry.from.source ? `-${entry.from.source}` : ''} (@${botHandle(entry.from.name, member || undefined)})`
                       : display
@@ -10591,13 +10750,13 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
                                     type: 'button',
                                     className:
                                       'cursor-pointer border-0 bg-transparent p-0 text-left text-[0.7rem] font-semibold text-(--ui-accent,#4f9cf9)',
-                                    title: revealed ? 'Hide full handle' : 'Show full handle',
+                                    title: revealed ? 'Ẩn tên định danh đầy đủ' : 'Hiện tên định danh đầy đủ',
                                     onClick: () => setRevealedSpeaker(revealed ? null : entryKey),
                                     children: label
                                   }),
                               jsx('span', {
                                 className: 'text-[0.625rem] text-(--ui-text-quaternary)',
-                                children: relativeTime(entry.at)
+                                children: relativeTimeVi(entry.at)
                               }),
                               entry.text.trim()
                                 ? jsx('div', {
@@ -10632,16 +10791,16 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
                                     ? jsxs('div', {
                                         className:
                                           'flex items-center gap-1 rounded-md border border-(--ui-stroke-secondary) px-1.5 py-1 text-[0.65rem] text-(--ui-text-tertiary)',
-                                        title: img.name || 'attached file',
+                                        title: img.name || 'tệp đính kèm',
                                         children: [
                                           jsx(Codicon, { name: img.kind === 'pdf' ? 'file-pdf' : 'file', className: 'text-[0.8rem]' }),
-                                          jsx('span', { className: 'max-w-48 truncate', children: img.name || 'attached file' })
+                                          jsx('span', { className: 'max-w-48 truncate', children: img.name || 'tệp đính kèm' })
                                         ]
                                       }, `${entryKey}:img:${imgIndex}`)
                                     : jsx('img', {
                                         src: img.data,
-                                        alt: img.name || 'attached image',
-                                        title: img.name || 'attached image',
+                                        alt: img.name || 'ảnh đính kèm',
+                                        title: img.name || 'ảnh đính kèm',
                                         className:
                                           'max-h-40 max-w-60 rounded-md border border-(--ui-stroke-secondary) object-contain'
                                       }, `${entryKey}:img:${imgIndex}`)
@@ -10696,14 +10855,14 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
           type: 'button',
           className:
             'flex w-full items-center gap-2 rounded-md border border-(--ui-stroke-secondary) px-2 py-1.5 text-left text-xs text-(--ui-text-tertiary) transition-colors hover:bg-(--chrome-action-hover)',
-          title: 'Open this thread',
+          title: 'Mở luồng này',
           onClick: () => setOpenThreads(prev => ({ ...prev, [id]: true })),
           children: [
             jsx(Codicon, { name: 'chevron-right', className: 'shrink-0 text-[0.65rem]' }),
             jsx('span', { className: 'min-w-0 flex-1 truncate', children: headText || 'Thread' }),
             jsx('span', {
               className: 'shrink-0 text-[0.625rem] text-(--ui-text-quaternary)',
-              children: `${replies} ${replies === 1 ? 'reply' : 'replies'} · ${relativeTime(entries[entries.length - 1].entry.at)}`
+              children: `${replies} phản hồi · ${relativeTimeVi(entries[entries.length - 1].entry.at)}`
             })
           ]
         }, `fold:${id}`)
@@ -10722,9 +10881,9 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
           type: 'button',
           className:
             'flex w-full items-center gap-1.5 px-2 pt-1 text-left text-[0.65rem] text-(--ui-text-quaternary) transition-colors hover:text-foreground',
-          title: 'Collapse this thread',
+          title: 'Thu gọn luồng này',
           onClick: () => setOpenThreads(prev => ({ ...prev, [id]: false })),
-          children: [jsx(Codicon, { name: 'chevron-down', className: 'text-[0.6rem]' }), 'Collapse thread']
+          children: [jsx(Codicon, { name: 'chevron-down', className: 'text-[0.6rem]' }), 'Thu gọn luồng']
         }, `unfold:${id}`)
       )
     }
@@ -10749,9 +10908,9 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
                 className: 'flex items-center gap-1.5',
                 children: [
                   jsx(GroupMentionInput, {
-                    'aria-label': 'Reply in thread',
+                    'aria-label': 'Trả lời trong luồng',
                     autoFocus: true,
-                    placeholder: 'Reply in thread…',
+                    placeholder: 'Trả lời trong luồng…',
                     members,
                     value: replyDrafts[id] || '',
                     onChange: text => setReplyDrafts(prev => ({ ...prev, [id]: text })),
@@ -10763,7 +10922,7 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
                     type: 'submit',
                     size: 'sm',
                     disabled: !(replyDrafts[id] || '').trim() && !imagesFor(id).length,
-                    children: 'Reply'
+                    children: 'Trả lời'
                   })
                 ]
               })
@@ -10774,7 +10933,7 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
             className:
               'w-fit px-2 pb-1 text-left text-[0.65rem] text-(--ui-accent,#4f9cf9) transition-colors hover:underline',
             onClick: () => setReplyThread(id),
-            children: 'Reply in thread'
+            children: 'Trả lời trong luồng'
           }, `replylink:${id}`)
     )
 
@@ -10807,7 +10966,7 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
         ? jsx('div', {
             className:
               'pointer-events-none absolute inset-0 z-40 flex items-center justify-center border-2 border-dashed border-(--ui-accent,#4f9cf9) text-sm font-medium text-(--ui-accent,#4f9cf9)',
-            children: replyThread ? 'Drop to attach to this thread reply' : 'Drop to attach — every responding bot sees it'
+            children: replyThread ? 'Thả để đính kèm vào câu trả lời trong luồng' : 'Thả để đính kèm — mọi tác nhân phản hồi đều thấy tệp'
           }, 'dropzone')
         : null,
       header,
@@ -10822,7 +10981,7 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
               : [
                   jsx('div', {
                     className: 'px-2 py-4 text-center text-xs text-(--ui-text-tertiary)',
-                    children: 'Say something — every bot in this group hears the room.'
+                    children: 'Nhập tin nhắn — mọi tác nhân trong nhóm đều nhận được.'
                   }, 'empty')
                 ]),
             ...roomClarifies.map(entry =>
@@ -10832,10 +10991,10 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
               ? jsx('div', {
                   className: 'px-2 py-1 text-[0.7rem] italic text-(--ui-text-quaternary)',
                   children: roomClarifies.length
-                    ? 'Waiting for your answer…'
+                    ? 'Đang chờ Đại ca trả lời…'
                     : room.turn
                       ? `${groupSpeakerLabel(room.turn)} is thinking…`
-                      : 'The room is working…'
+                      : 'Nhóm đang làm việc…'
                 }, 'working')
               : null,
             // Scroll anchor (#89835): rooms opened at scroll position 0, mid-
@@ -10860,7 +11019,7 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
               children: [
                 jsx(GroupMentionInput, {
                   'aria-label': `Message ${group}`,
-                  placeholder: `New thread in ${group}… (@name to direct, @everyone for all)`,
+                  placeholder: `Luồng mới trong ${group}… (@tên để chỉ định, @everyone cho tất cả)`,
                   members,
                   value: draft,
                   onChange: setDraft,
@@ -10872,7 +11031,7 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
                   type: 'submit',
                   size: 'sm',
                   disabled: !draft.trim() && !imagesFor(null).length,
-                  children: 'New Thread'
+                  children: 'Luồng mới'
                 })
               ]
             })
@@ -10887,26 +11046,26 @@ function GroupChatWorkspace({ group, members, onBack, visible = true }) {
       }),
       jsx(ConfirmDialog, {
         open: confirmDisband,
-        title: 'Disband group chat?',
+        title: 'Giải tán nhóm trò chuyện?',
         description: jsxs('span', {
           children: [
-            'This removes the ',
+            'Thao tác này gỡ nhóm ',
             jsx('span', { className: 'font-medium text-foreground', children: group }),
-            ' grouping from its ',
+            ' khỏi ',
             String(members.length),
             // New rooms title member sessions by roomId, legacy rooms by name —
             // so the copy names the concept, not a literal session title.
-            ' bots and clears the shared room log. The bots themselves and their per-group sessions are kept.'
+            ' tác nhân và xóa lịch sử chung của nhóm. Các tác nhân cùng phiên riêng trong nhóm vẫn được giữ lại.'
           ]
         }),
         destructive: true,
-        confirmLabel: 'Disband',
-        busyLabel: 'Disbanding…',
-        doneLabel: 'Disbanded',
+        confirmLabel: 'Giải tán',
+        busyLabel: 'Đang giải tán…',
+        doneLabel: 'Đã giải tán',
         onClose: () => setConfirmDisband(false),
         onConfirm: async () => {
           await disbandGroupChat(group, members)
-          host.notify({ kind: 'success', message: `Disbanded “${group}”` })
+          host.notify({ kind: 'success', message: `Đã giải tán “${group}”` })
         }
       })
     ]
@@ -11049,8 +11208,8 @@ function GroupRow({ active, group, members, needsYou, onOpen, onDisband }) {
   const lastFrom = last?.from?.name || ''
   const lastHandle = botHandle(lastFrom || 'bot', members.find(member => member?.name === lastFrom))
   const preview = last
-    ? `${last.from?.kind === 'user' ? 'You' : `@${lastHandle}`}: ${stripPreviewMarkdown(last.text) || '…'}`
-    : 'No messages yet — say hi to the room'
+    ? `${last.from?.kind === 'user' ? 'Đại ca' : `@${lastHandle}`}: ${stripPreviewMarkdown(last.text) || '…'}`
+    : 'Chưa có tin nhắn — hãy chào cả nhóm'
   const faces = members.slice(0, 3)
 
   const row = jsxs('button', {
@@ -11114,7 +11273,7 @@ function GroupRow({ active, group, members, needsYou, onOpen, onDisband }) {
                   jsx('span', { className: 'truncate text-[0.8125rem] font-medium', children: group }),
                   jsx('span', {
                     className: 'shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)',
-                    children: `${members.length} bots`
+                    children: `${members.length} tác nhân`
                   })
                 ]
               }),
@@ -11122,14 +11281,14 @@ function GroupRow({ active, group, members, needsYou, onOpen, onDisband }) {
                 ? jsx('span', {
                     className:
                       'shrink-0 rounded-full bg-(--ui-accent,#4f9cf9) px-1.5 text-[0.6rem] font-semibold text-white',
-                    title: 'A bot in this room needs your input',
-                    children: 'needs you'
+                    title: 'Một tác nhân trong phòng đang cần Đại ca phản hồi',
+                    children: 'cần phản hồi'
                   })
                 : null,
               lastAt
                 ? jsx('span', {
                     className: 'shrink-0 text-[0.6875rem] text-(--ui-text-quaternary)',
-                    children: relativeTime(lastAt)
+                    children: relativeTimeVi(lastAt)
                   })
                 : null
             ]
@@ -11150,13 +11309,13 @@ function GroupRow({ active, group, members, needsYou, onOpen, onDisband }) {
         children: [
           jsx(ContextMenuItem, {
             onSelect: () => onOpen(group),
-            children: 'Open Group Chat'
+            children: 'Mở nhóm trò chuyện'
           }),
           jsx(ContextMenuSeparator, {}),
           jsx(ContextMenuItem, {
             className: 'text-destructive focus:text-destructive',
             onSelect: () => onDisband({ name: group, members }),
-            children: 'Delete Group'
+            children: 'Xóa nhóm'
           })
         ]
       })
@@ -11271,7 +11430,7 @@ function BotsPane() {
   }
 
   const staleNotice = error && !live && roster.length
-    ? 'Roster refresh failed — showing the last good list.' + (gatewayUp ? '' : ' Waiting for the gateway to reconnect…')
+    ? 'Không thể làm mới danh sách tác nhân — đang hiển thị dữ liệu gần nhất.' + (gatewayUp ? '' : ' Đang chờ Gateway kết nối lại…')
     : null
 
   const groupChatMembers = groupChatName ? groupChatMemberBots(groupChatName, roster, allMeta) : []
@@ -11288,13 +11447,13 @@ function BotsPane() {
         children: [
           jsx('span', {
             className: 'text-[0.6875rem] font-semibold uppercase tracking-wider text-(--ui-text-quaternary)',
-            children: 'Bots'
+            children: 'Tác nhân'
           }),
           jsxs('div', {
             className: 'flex items-center gap-0.5',
             children: [
               jsx(Tip, {
-                label: activityToasts ? 'Activity toasts on — click to silence' : 'Activity toasts off — click to enable',
+                label: activityToasts ? 'Đang báo hoạt động — nhấp để tắt' : 'Đã tắt báo hoạt động — nhấp để bật',
                 children: jsx('button', {
                   type: 'button',
                   className:
@@ -11308,12 +11467,10 @@ function BotsPane() {
               // hidden rows are revealed, so Unhide is always reachable.
               hiddenBots.length
                 ? jsx(Tip, {
-                    label: showHidden
-                      ? 'Hide hidden bots again'
-                      : `Show ${hiddenBots.length} hidden bot${hiddenBots.length === 1 ? '' : 's'}`,
+                    label: showHidden ? 'Ẩn lại các tác nhân đã giấu' : `Hiện ${hiddenBots.length} tác nhân đã giấu`,
                     children: jsxs('button', {
                       type: 'button',
-                      'aria-label': showHidden ? 'Hide hidden bots' : 'Show hidden bots',
+                      'aria-label': showHidden ? 'Ẩn các tác nhân đã giấu' : 'Hiện các tác nhân đã giấu',
                       className: cn(
                         'relative flex size-6 items-center justify-center rounded-md transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground',
                         showHidden ? 'text-foreground' : 'text-(--ui-text-tertiary)'
@@ -11325,7 +11482,7 @@ function BotsPane() {
                           ? jsx('span', {
                               className:
                                 'absolute right-0.5 top-0.5 size-1.5 rounded-full bg-(--ui-accent,#4f9cf9)',
-                              'aria-label': 'a hidden bot has unread activity'
+                              'aria-label': 'một tác nhân đang ẩn có hoạt động chưa đọc'
                             })
                           : null
                       ]
@@ -11335,12 +11492,12 @@ function BotsPane() {
               jsxs(DropdownMenu, {
                 children: [
                   jsx(Tip, {
-                    label: 'New…',
+                    label: 'Tạo mới…',
                     children: jsx(DropdownMenuTrigger, {
                       asChild: true,
                       children: jsx('button', {
                         type: 'button',
-                        'aria-label': 'New agent or group chat',
+                        'aria-label': 'Tạo tác nhân hoặc nhóm trò chuyện',
                         className:
                           'flex size-6 items-center justify-center rounded-md text-(--ui-text-tertiary) transition-colors hover:bg-(--chrome-action-hover) hover:text-foreground',
                         children: jsx(Codicon, { name: 'add' })
@@ -11352,12 +11509,12 @@ function BotsPane() {
                     children: [
                       jsxs(DropdownMenuItem, {
                         onSelect: () => setCreateOpen(true),
-                        children: [jsx(Codicon, { name: 'hubot', className: 'mr-1.5' }), 'New Agent']
+                        children: [jsx(Codicon, { name: 'hubot', className: 'mr-1.5' }), 'Tạo tác nhân']
                       }),
                       jsxs(DropdownMenuItem, {
                         disabled: activeSourceRoster.length < 2,
                         onSelect: () => setGroupCreateOpen(true),
-                        children: [jsx(Codicon, { name: 'organization', className: 'mr-1.5' }), 'New Group Chat']
+                        children: [jsx(Codicon, { name: 'organization', className: 'mr-1.5' }), 'Tạo nhóm trò chuyện']
                       })
                     ]
                   })
@@ -11382,7 +11539,7 @@ function BotsPane() {
             host.notify?.({
               kind: 'info',
               title: displayName(bot),
-              message: `Stay in this chat and @${handle} to message them. Gateway stays on this device.`
+              message: `Hãy ở lại cuộc trò chuyện này và nhắn @${handle}. Gateway vẫn dùng thiết bị hiện tại.`
             })
             return
           }
@@ -11399,7 +11556,7 @@ function BotsPane() {
             try {
               pinnedChat = await prepareBotSource(bot, pinnedChat)
             } catch (error) {
-              host.notifyError?.(error, `Could not reach ${bot.connectionLabel || 'the remote source'}`)
+              host.notifyError?.(error, `Không thể kết nối tới ${bot.connectionLabel || 'nguồn từ xa'}`)
 
               return
             }
@@ -11409,18 +11566,14 @@ function BotsPane() {
             }
 
             try {
-              const id = await openBotCanonicalChat(
-                bot.name,
-                pinnedChat,
-                bot.preferred_session || bot.last_session
-              )
+              const id = await openBotCanonicalChat(bot, pinnedChat, bot.preferred_session || bot.last_session)
 
               if (generation === botOpenGeneration && id) {
                 return
               }
             } catch (error) {
               if (generation === botOpenGeneration) {
-                host.notifyError?.(error, `Could not open ${displayName(bot)}'s chat — try again`)
+                host.notifyError?.(error, `Không thể mở cuộc trò chuyện của ${displayName(bot)} — hãy thử lại`)
               }
 
               return
@@ -11442,10 +11595,10 @@ function BotsPane() {
         ? jsx('div', {
             className: 'px-2.5 pb-1.5',
             children: jsx(SearchField, {
-              'aria-label': 'Search bots',
+              'aria-label': 'Tìm tác nhân',
               containerClassName: 'w-full',
               inputClassName: 'w-full',
-              placeholder: 'Search bots…',
+              placeholder: 'Tìm tác nhân…',
               value: query,
               onChange: setQuery
             })
@@ -11468,23 +11621,23 @@ function BotsPane() {
               children: [
                 jsx('div', {
                   children: gatewayUp
-                    ? `Roster unavailable: ${error instanceof Error ? error.message : 'gateway error'}. If your gateway predates profiles.list, update Hermes and restart the gateway.`
-                    : 'Waiting for the gateway connection… (remote gateways can take a few seconds; retries automatically)'
+                    ? `Không tải được danh sách tác nhân: ${error instanceof Error ? error.message : 'lỗi Gateway'}. Hãy cập nhật Hermes rồi khởi động lại Gateway.`
+                    : 'Đang chờ kết nối Gateway… máy từ xa có thể cần vài giây và Hermes sẽ tự thử lại.'
                 }),
                 jsx(Button, {
                   variant: 'secondary',
                   size: 'sm',
                   className: 'justify-self-start',
                   onClick: () => void refetch(),
-                  children: 'Retry now'
+                  children: 'Thử lại ngay'
                 })
               ]
             })
           : roster.length === 0
             ? jsx(EmptyState, {
                 icon: 'hubot',
-                title: 'No agents yet',
-                description: 'Create your first teammate.'
+                title: 'Chưa có tác nhân',
+                description: 'Tạo cộng sự AI đầu tiên của Đại ca.'
               })
             : filteredRoster.length === 0 && rosterRows.length === 0
               ? jsx('div', {
@@ -11493,8 +11646,8 @@ function BotsPane() {
                     'flex flex-1 items-center justify-center px-4 text-center text-xs text-(--ui-text-tertiary)',
                   role: 'status',
                   children: query.trim()
-                    ? `No bots match “${query.trim()}”`
-                    : 'All bots are hidden — use the eye button above to show them.'
+                    ? `Không có tác nhân khớp “${query.trim()}”`
+                    : 'Tất cả tác nhân đang bị ẩn — dùng nút hình con mắt phía trên để hiện lại.'
                 })
               : jsx(ScrollArea, {
                   className: 'hermes-bots-roster min-h-0 flex-1',
@@ -11530,7 +11683,7 @@ function BotsPane() {
           className: 'w-full justify-center gap-1.5',
           variant: 'secondary',
           onClick: () => setCreateOpen(true),
-          children: [jsx(Codicon, { name: 'add' }), 'New Agent']
+          children: [jsx(Codicon, { name: 'add' }), 'Tạo tác nhân']
         })
       }),
       jsx(CreateAgentDialog, {
@@ -11560,22 +11713,22 @@ function BotsPane() {
       grouping ? jsx(GroupDialog, { bot: grouping, onClose: () => setGrouping(null) }) : null,
       jsx(ConfirmDialog, {
         open: Boolean(deleting),
-        title: 'Delete bot and profile?',
+        title: 'Xóa tác nhân và hồ sơ?',
         description: deleting
           ? jsxs('span', {
               children: [
-                'This will permanently delete the bot ',
+                'Thao tác này sẽ xóa vĩnh viễn tác nhân ',
                 jsx('span', { className: 'font-medium text-foreground', children: deleting.name }),
-                ' and its associated Hermes profile at ',
+                ' cùng hồ sơ Hermes tương ứng tại ',
                 jsx('span', { className: 'font-mono text-xs', children: deleting.path }),
-                '. This cannot be undone.'
+                '. Không thể hoàn tác.'
               ]
             })
           : null,
         destructive: true,
-        confirmLabel: 'Delete',
-        busyLabel: 'Deleting…',
-        doneLabel: 'Deleted',
+        confirmLabel: 'Xóa',
+        busyLabel: 'Đang xóa…',
+        doneLabel: 'Đã xóa',
         onClose: () => setDeleting(null),
         onConfirm: async () => {
           if (!deleting) {
@@ -11585,24 +11738,24 @@ function BotsPane() {
           const name = deleting.name
           await deleteBot(deleting)
           await refetch()
-          host.notify({ kind: 'success', message: `Deleted profile ${name}` })
+          host.notify({ kind: 'success', message: `Đã xóa hồ sơ ${name}` })
         }
       }),
       jsx(ConfirmDialog, {
         open: Boolean(deletingGroup),
-        title: 'Delete group chat?',
+        title: 'Xóa nhóm trò chuyện?',
         description: deletingGroup
-          ? `This removes “${deletingGroup.name}” from its bots and clears the shared room log. The bots and their individual chats are kept.`
+          ? `Thao tác này gỡ “${deletingGroup.name}” khỏi các tác nhân và xóa lịch sử chung của nhóm. Các tác nhân cùng cuộc trò chuyện riêng vẫn được giữ lại.`
           : null,
         destructive: true,
-        confirmLabel: 'Delete Group',
-        busyLabel: 'Deleting…',
-        doneLabel: 'Deleted',
+        confirmLabel: 'Xóa nhóm',
+        busyLabel: 'Đang xóa…',
+        doneLabel: 'Đã xóa',
         onClose: () => setDeletingGroup(null),
         onConfirm: async () => {
           if (!deletingGroup) return
           await disbandGroupChat(deletingGroup.name, deletingGroup.members)
-          host.notify({ kind: 'success', message: `Deleted group “${deletingGroup.name}”` })
+          host.notify({ kind: 'success', message: `Đã xóa nhóm “${deletingGroup.name}”` })
         }
       })
     ]
@@ -11613,8 +11766,9 @@ function BotsPane() {
 
 export default {
   id: ID,
-  name: 'Bots',
-  description: 'Bot Mode — a one-chat-per-agent roster with avatars, routines, group chats, and bot-to-bot messaging. Ships with the app; disable here if unwanted.',
+  name: 'Quản lý Agents',
+  description: 'Tạo và quản lý các tác nhân Hermes có hồ sơ, model, kỹ năng và cuộc trò chuyện riêng.',
+  defaultEnabled: true,
   register(ctx) {
     pluginCtx = ctx
     groupChatSyncDisposed = false
@@ -11815,33 +11969,18 @@ export default {
     scheduleHideSweep()
 
     ctx.register({
-      id: 'pane',
-      area: 'panes',
-      title: 'Bots',
-      // dock: explicit adoption gesture — CENTER-STACK into the sessions zone
-      // so the sidebar grows a SESSIONS | BOTS tab strip instead of splitting
-      // two cramped panes down the column. Center is safe now: insertAtGroup
-      // pins the zone's header explicitly shown on a center gain (and it
-      // stays shown once the zone has stacked), so the sessions pane can
-      // never vanish behind a stripless Bots tab — the lone-pane auto-hide
-      // trap this dock used to work around with a 'bottom' split.
-      // enforce: standing invariant, not a one-shot migration — the pane
-      // re-homes into the sessions strip at EVERY boot it isn't already
-      // there, whatever tokens or user placement an older install persisted.
-      // The one-time heal ('sessions-tab-v1') burned its token even when its
-      // guards skipped the move, so exactly the users who had fought the old
-      // stacked layout (dragged panes → $userPlacedPanes) stayed stacked
-      // forever. Owner's order: SESSIONS | BOTS is always a tab strip.
-      // An intra-session drag still sticks until the next launch (the
-      // invariant runs at adoption time only — see enforceDockedPanes in the
-      // tree store).
-      // collapsible: the pane lives in the sessions zone, so it must LEAVE
-      // the grid with that zone below the sidebar-collapse breakpoint. The
-      // sessions pane collapses alone without this flag. The zone then keeps
-      // a stranded BOTS tab on screen. The narrow edge overlay mirrors the
-      // zone's tab strip, so the pane stays reachable while collapsed.
-      data: { placement: 'left', width: '260px', collapsible: true, showCloseButton: false, hideOnly: true, dock: { pane: 'sessions', pos: 'center', enforce: true } },
+      id: 'agents-route',
+      area: typeof ROUTES_AREA === 'undefined' ? 'routes' : ROUTES_AREA,
+      title: 'Quản lý Agents',
+      data: { path: '/agents/manage' },
       render: () => jsx(BotsPane, {})
+    })
+
+    ctx.register({
+      id: 'agents-nav',
+      area: typeof SIDEBAR_NAV_AREA === 'undefined' ? 'sidebar-nav' : SIDEBAR_NAV_AREA,
+      order: 25,
+      data: { codicon: 'hubot', label: 'Quản lý Agents', path: '/agents/manage' }
     })
 
     // Routines — its OWN tiling pane splitting the workspace's right edge
@@ -11860,7 +11999,7 @@ export default {
       ctx.register({
         id: 'routines',
         area: 'panes',
-        title: 'Cronjobs',
+        title: 'Tác vụ định kỳ',
         data: {
           placement: 'main',
           // Repair persisted layouts that stranded Cronjobs in the Bots tab strip.
@@ -11901,10 +12040,10 @@ export default {
       area: PALETTE_AREA,
       data: {
         id: `${ID}.new-agent`,
-        label: 'New Agent…',
+        label: 'Tạo tác nhân…',
         keywords: ['bot', 'agent', 'profile', 'teammate', 'create'],
         run: () => {
-          host.notify({ kind: 'info', message: 'Open the Bots pane and hit “New Agent”.' })
+          host.notify({ kind: 'info', message: 'Mở trang Quản lý Agents rồi chọn “Tạo tác nhân”.' })
         }
       }
     })
@@ -11937,10 +12076,10 @@ export default {
             if (activeBot && pinnedId && currentId && String(currentId) === String(pinnedId)) {
               host.notify({
                 kind: 'info',
-                title: 'This chat never resets',
+                title: 'Cuộc trò chuyện này không tự đặt lại',
                 message:
-                  'Bot chats are one continuous conversation — compacting instead. ' +
-                  'For a throwaway session with this agent, use Sessions mode.'
+                  'Cuộc trò chuyện với tác nhân được duy trì liên tục nên Hermes sẽ nén ngữ cảnh thay vì đặt lại. ' +
+                  'Nếu cần một phiên tạm thời với tác nhân này, hãy tạo Phiên mới.'
               })
 
               return { ...draft, text: '/compact' }

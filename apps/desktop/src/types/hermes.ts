@@ -462,6 +462,8 @@ export interface RpcEvent<T = unknown> {
   /** Registry connection whose socket delivered the event (renderer-side tag;
    * absent for the local/legacy primary path). */
   connectionId?: string
+  /** Renderer-owned WebSocket generation; never supplied by the backend. */
+  gatewayEpoch?: number
   session_id?: string
   type: string
 }

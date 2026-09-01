@@ -7,13 +7,17 @@ import {
   resolveGatewayEventSessionId,
   UNSCOPED_STREAM_EVENT_TYPES
 } from '@/lib/gateway-events'
+import { rendererRuntimeKey } from '@/lib/session-runtime-key'
 import { setSessionCompacting } from '@/store/compaction'
 import { $gateway, activeGatewayConnectionId } from '@/store/gateway'
+import { requestForGatewayEventSource } from '@/store/gateway-event-source'
 import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
 import { replayPendingApproval } from '@/store/prompts'
 import { setSessionProviderWait } from '@/store/provider-wait'
 import { setSessionDraftingTool } from '@/store/tool-drafting'
 import type { RpcEvent } from '@/types/hermes'
+
+import { createBackendKey } from '../../../session-binding-registry'
 
 import { handleDesktopBridgeEvent } from './desktop-bridge'
 import { handleInputRequestEvent } from './input-requests'
@@ -76,6 +80,24 @@ const PROVIDER_WAIT_SUPERSEDING_EVENT_TYPES = new Set([
   'tool.generating',
   'tool.progress',
   'tool.start'
+])
+
+// These events block a backend caller until the renderer answers a raw
+// request id. Unlike session RPCs, the response payload has no identity for a
+// router to recover from, so an exact event source is mandatory. Never park a
+// prompt against the active-session fallback: a later click would answer the
+// foreground backend rather than the backend that is actually waiting.
+const EVENT_SOURCE_REQUIRED_TYPES = new Set([
+  'approval.request',
+  'clarify.request',
+  'mcp.setup.request',
+  'preview.act.request',
+  'preview.read.request',
+  'secret.request',
+  'sudo.request',
+  'terminal.read.request',
+  'tour.request',
+  'window.read.request'
 ])
 
 // Ordered family handlers; each consumes its own event types and reports
@@ -141,17 +163,47 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
       // 'default'. Compare the composite (connectionId, profile) scope with
       // registryBackendScopeKey — untagged primary events keep the legacy
       // bare-profile behavior byte-identical.
+      const eventProfile = event.profile?.trim()
+
+      const eventBackend =
+        eventProfile && typeof event.gatewayEpoch === 'number'
+          ? createBackendKey({
+              connectionId: event.connectionId?.trim() || null,
+              gatewayEpoch: event.gatewayEpoch,
+              profile: eventProfile
+            })
+          : null
+
       const fromActiveSource = (): boolean =>
-        (!event.profile || normalizeProfileKey(event.profile) === normalizeProfileKey($activeGatewayProfile.get())) &&
-        registryBackendScopeKey(event.connectionId ?? null, event.profile ?? null) ===
-          registryBackendScopeKey(activeGatewayConnectionId(), event.profile ?? null)
+        Boolean(
+          eventBackend &&
+          normalizeProfileKey(eventBackend.profile) === normalizeProfileKey($activeGatewayProfile.get()) &&
+          registryBackendScopeKey(eventBackend.connectionId, eventBackend.profile) ===
+            registryBackendScopeKey(activeGatewayConnectionId(), eventBackend.profile)
+        )
 
       const occurredAt =
         typeof payload?.timestamp === 'number' && Number.isFinite(payload.timestamp)
           ? payload.timestamp
           : Date.now() / 1000
 
-      const explicitSid = event.session_id || ''
+      const rawExplicitSid = event.session_id || ''
+
+      // Every production gateway fan-in stamps profile (and connectionId for
+      // registry sources). A scoped event without that owner is ambiguous and
+      // must not mutate whichever raw runtime happens to share its id.
+      if (deps.qualifyRuntimeIds && rawExplicitSid && !eventBackend) {
+        return
+      }
+
+      const explicitSid =
+        deps.qualifyRuntimeIds && rawExplicitSid && eventBackend
+          ? rendererRuntimeKey(eventBackend, rawExplicitSid)
+          : rawExplicitSid
+
+      if (EVENT_SOURCE_REQUIRED_TYPES.has(event.type) && !explicitSid) {
+        return
+      }
 
       const route = resolveGatewayEventSessionId({
         activeSessionId: activeSessionIdRef.current,
@@ -167,6 +219,19 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
       }
 
       const sessionId = route.sessionId
+
+      const requestEventSource = <T>(
+        method: string,
+        params: Record<string, unknown> = {},
+        timeoutMs?: number,
+        signal?: AbortSignal
+      ): Promise<T> => {
+        const sourceRuntimeId = deps.qualifyRuntimeIds ? explicitSid || null : null
+
+        return timeoutMs === undefined && signal === undefined
+          ? requestForGatewayEventSource<T>(sourceRuntimeId, method, params)
+          : requestForGatewayEventSource<T>(sourceRuntimeId, method, params, timeoutMs, signal)
+      }
 
       // Late stragglers: an unscoped stream event attributed via the
       // active-session fallback (no pin) to a session that has no live turn
@@ -195,7 +260,7 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
 
       const isActiveEvent = !!sessionId && sessionId === activeSessionIdRef.current
 
-      const replaySessionId = approvalReplaySessionId(event.type, activeSessionIdRef.current, sessionId)
+      const replaySessionId = approvalReplaySessionId(event.type, activeSessionIdRef.current, sessionId, eventBackend)
 
       if (replaySessionId) {
         void replayPendingApproval($gateway.get(), replaySessionId).catch(() => undefined)
@@ -223,6 +288,7 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
         payload,
         sessionId,
         explicitSid,
+        requestEventSource,
         isActiveEvent,
         occurredAt,
         fromActiveSource,
@@ -253,8 +319,11 @@ export function useGatewayEventHandler(deps: GatewayEventDeps) {
       deps.lastCwdInfoSessionRef,
       deps.nativeSubagentSessionsRef,
       deps.queryClient,
+      deps.qualifyRuntimeIds,
       scheduleConfigRefresh,
       deps.scheduleSessionsRefresh,
+      deps.runtimeIdByStoredSessionIdRef,
+      deps.sessionBindingRegistry,
       deps.sessionInterrupted,
       deps.sessionStateByRuntimeIdRef,
       deps.updateSessionState,

@@ -9,22 +9,38 @@
  */
 
 import type { AppendMessage, ThreadMessage } from '@assistant-ui/react'
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 
-import { useGatewayRequest } from '@/app/gateway/hooks/use-gateway-request'
 import type { ClientSessionState } from '@/app/types'
+import { canRekeyTreePane, rekeyTreePane } from '@/components/pane-shell/tree/store'
+import { getSessionForOwner } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { textPart } from '@/lib/chat-messages'
 import { SLASH_COMMAND_RE } from '@/lib/chat-runtime'
 import { triggerHaptic } from '@/lib/haptics'
 import { clearClarifyRequest } from '@/store/clarify'
-import type { ComposerAttachment } from '@/store/composer'
+import { type ComposerAttachment, migrateSessionDraft } from '@/store/composer'
+import { migrateQueuedPrompts } from '@/store/composer-queue'
 import { resetSessionBackground } from '@/store/composer-status'
 import { notifyError } from '@/store/notifications'
 import { clearPreviewArtifacts } from '@/store/preview-status'
 import { clearAllPrompts } from '@/store/prompts'
-import { $connection, $sessions, sessionMatchesStoredId } from '@/store/session'
-import { $sessionStates, sessionTileDelegate } from '@/store/session-states'
+import { $connection, $sessions, sessionMatchesStoredId, setSessions } from '@/store/session'
+import { RendererRuntimeEpochMismatchError, requestForSessionOwner } from '@/store/session-request-router'
+import {
+  $sessionStates,
+  $sessionTiles,
+  invalidateProvisionalSessionTileRuntime,
+  isProvisionalSessionTile,
+  normalizeSessionTileOwner,
+  patchSessionTile,
+  promoteProvisionalSessionTile,
+  type ProvisionalSessionTile,
+  rollbackProvisionalSessionTilePromotion,
+  type SessionTile,
+  sessionTileDelegate,
+  type SessionTilePromotionPlan
+} from '@/store/session-states'
 import { broadcastSessionsChanged } from '@/store/session-sync'
 import { clearSessionSubagents } from '@/store/subagents'
 import { clearSessionTodos } from '@/store/todos'
@@ -53,6 +69,11 @@ import {
   withSessionNotFoundResume
 } from '../session/hooks/use-prompt-actions/utils'
 import { upsertOptimisticSession } from '../session/hooks/use-session-actions/utils'
+import {
+  classifySessionRuntimeNotFound,
+  SESSION_RUNTIME_RECOVERY_MESSAGE,
+  SessionRuntimeRecoveryError
+} from '../session/session-binding-registry'
 
 import type { ComposerScope } from './composer/scope'
 
@@ -99,22 +120,158 @@ interface SessionTileActionsArgs {
   runtimeId: string
   scope: ComposerScope
   storedSessionId: string
+  tile: SessionTile
 }
 
-export function useSessionTileActions({ runtimeId, scope, storedSessionId }: SessionTileActionsArgs) {
+/** Coordinate the provisional tile store and layout tree as one transition.
+ * Missing/colliding layout state is rejected before the tile store changes;
+ * an unexpected rekey failure restores the exact provisional tile. */
+export function promoteProvisionalTileWithLayout(input: {
+  durableSessionId: string
+  provisionalTile: ProvisionalSessionTile
+  runtimeId: string
+}): SessionTilePromotionPlan | null {
+  const { durableSessionId, provisionalTile, runtimeId } = input
+  const expectedLayout = {
+    fromPaneId: `session-tile:${provisionalTile.draftId}`,
+    toPaneId: `session-tile:${durableSessionId}`
+  }
+
+  if (!canRekeyTreePane(expectedLayout.fromPaneId, expectedLayout.toPaneId)) {
+    return null
+  }
+
+  const plan = promoteProvisionalSessionTile({
+    draftId: provisionalTile.draftId,
+    durableSessionId,
+    owner: provisionalTile.owner,
+    runtimeId
+  })
+
+  if (!plan) {
+    return null
+  }
+
+  if (!rekeyTreePane(plan.layout.fromPaneId, plan.layout.toPaneId)) {
+    const rolledBack = rollbackProvisionalSessionTilePromotion({
+      durableSessionId,
+      owner: provisionalTile.owner,
+      provisionalTile
+    })
+
+    if (!rolledBack) {
+      throw new Error('Session tile promotion could not restore its provisional state.')
+    }
+
+    return null
+  }
+
+  return plan
+}
+
+export function useSessionTileActions({ runtimeId, scope, storedSessionId, tile }: SessionTileActionsArgs) {
   const { t } = useI18n()
   const copy = t.desktop
-  const { requestGateway } = useGatewayRequest()
+  const confirmationRetryRef = useRef<number | null>(null)
+  const confirmProvisionalTileRef = useRef<null | (() => Promise<boolean>)>(null)
+  const clearConfirmationRetry = useCallback(() => {
+    if (confirmationRetryRef.current !== null) {
+      window.clearTimeout(confirmationRetryRef.current)
+      confirmationRetryRef.current = null
+    }
+  }, [])
+
+  useEffect(() => clearConfirmationRetry, [clearConfirmationRetry])
+
+  const requestGateway = useCallback(
+    async <T,>(method: string, params: Record<string, unknown> = {}, timeoutMs?: number): Promise<T> => {
+      const currentTile = $sessionTiles.get().find(candidate => candidate.storedSessionId === storedSessionId) ?? tile
+      const owner = currentTile.owner
+
+      if (!owner) {
+        throw new Error(`Cannot route ${method}: tile has no exact backend owner`)
+      }
+
+      try {
+        return await requestForSessionOwner<T>(owner, method, params, timeoutMs)
+      } catch (error) {
+        if (
+          isProvisionalSessionTile(currentTile) &&
+          (classifySessionRuntimeNotFound(error) || error instanceof RendererRuntimeEpochMismatchError)
+        ) {
+          const deadRuntimeId = currentTile.runtimeId ?? String(params.session_id ?? '').trim()
+
+          if (deadRuntimeId) {
+            clearConfirmationRetry()
+            invalidateProvisionalSessionTileRuntime({
+              draftId: currentTile.draftId,
+              error: SESSION_RUNTIME_RECOVERY_MESSAGE,
+              owner: currentTile.owner,
+              runtimeId: deadRuntimeId
+            })
+          }
+        }
+
+        if (classifySessionRuntimeNotFound(error) || error instanceof RendererRuntimeEpochMismatchError) {
+          throw new SessionRuntimeRecoveryError(error)
+        }
+
+        throw error
+      }
+    },
+    [clearConfirmationRetry, storedSessionId, tile]
+  )
+  const resolveTileProfile = useCallback(async (): Promise<string | undefined> => {
+    const currentTile = $sessionTiles.get().find(candidate => candidate.storedSessionId === storedSessionId) ?? tile
+
+    return currentTile.owner?.profile?.trim() || undefined
+  }, [storedSessionId, tile])
 
   const runtimeIdRef = useRef(runtimeId)
   runtimeIdRef.current = runtimeId
-  const storedIdRef = useRef(storedSessionId)
-  storedIdRef.current = storedSessionId
+  const storedIdRef = useRef<null | string>(isProvisionalSessionTile(tile) ? null : storedSessionId)
+  storedIdRef.current = isProvisionalSessionTile(tile) ? null : storedSessionId
   // A tile IS its session (see the comment on the useSubmitPrompt call below)
   // A tile owns one stable stored/runtime pair, so seed the shared ownership
   // cache explicitly rather than relying on the primary route cache.
-  const runtimeIdByStoredSessionIdRef = useRef(new Map([[storedSessionId, runtimeId]]))
-  runtimeIdByStoredSessionIdRef.current.set(storedSessionId, runtimeId)
+  const runtimeIdByStoredSessionIdRef = useRef(
+    new Map<string, string>(isProvisionalSessionTile(tile) ? [] : [[storedSessionId, runtimeId]])
+  )
+
+  if (!isProvisionalSessionTile(tile)) {
+    runtimeIdByStoredSessionIdRef.current.set(storedSessionId, runtimeId)
+  }
+
+  const adoptRecoveredTileRuntime = useCallback(
+    (rawRuntimeId: string): string => {
+      const durableSessionId = storedIdRef.current
+      const stored = durableSessionId
+        ? $sessions.get().find(session => sessionMatchesStoredId(session, durableSessionId))
+        : null
+      const currentTile = $sessionTiles.get().find(candidate => candidate.storedSessionId === storedSessionId) ?? tile
+      const owner = currentTile.owner ??
+        (stored?.profile?.trim()
+          ? normalizeSessionTileOwner({
+              connectionId: stored.connection_id?.trim() || null,
+              profile: stored.profile
+            })
+          : null)
+      const rendererRuntimeId = durableSessionId
+        ? sessionTileDelegate()?.bindSessionRuntime?.(durableSessionId, rawRuntimeId) ?? null
+        : null
+
+      if (!durableSessionId || !owner || !rendererRuntimeId) {
+        throw new Error('Recovered tile runtime has no exact durable session owner.')
+      }
+
+      runtimeIdRef.current = rendererRuntimeId
+      runtimeIdByStoredSessionIdRef.current.set(durableSessionId, rendererRuntimeId)
+      patchSessionTile(durableSessionId, { runtimeId: rendererRuntimeId }, owner)
+
+      return rendererRuntimeId
+    },
+    [storedSessionId, tile]
+  )
 
   // Tile busy tracks the SESSION state, never the global $busy — and it must
   // read LIVE. A render-time snapshot goes stale (this hook's host doesn't
@@ -150,6 +307,11 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId }: Ses
   const listTileSession = useCallback((preview: string) => {
     const runtimeId = runtimeIdRef.current
     const state = $sessionStates.get()[runtimeId]
+    const durableStoredSessionId = storedIdRef.current
+
+    if (!durableStoredSessionId) {
+      return
+    }
 
     listTileSessionRow({
       cwd: state?.cwd,
@@ -157,9 +319,105 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId }: Ses
       preview,
       runtimeId,
       sessions: $sessions.get(),
-      storedSessionId: storedIdRef.current
+      storedSessionId: durableStoredSessionId
     })
   }, [])
+
+  const confirmProvisionalTile = useCallback(async (): Promise<boolean> => {
+    clearConfirmationRetry()
+    const current = $sessionTiles.get().find(candidate => candidate.storedSessionId === storedSessionId)
+
+    if (!current || !isProvisionalSessionTile(current) || !current.provisionalStoredSessionId) {
+      return false
+    }
+
+    const candidateStoredSessionId = current.provisionalStoredSessionId
+    let confirmed: Awaited<ReturnType<typeof getSessionForOwner>> | null = null
+
+    for (const delayMs of [0, 50, 100, 200, 400, 800, 1_600]) {
+      if (delayMs > 0) {
+        await new Promise<void>(resolve => window.setTimeout(resolve, delayMs))
+      }
+
+      const latest = $sessionTiles.get().find(candidate => candidate.storedSessionId === storedSessionId)
+
+      if (
+        !latest ||
+        !isProvisionalSessionTile(latest) ||
+        latest.provisionalStoredSessionId !== candidateStoredSessionId
+      ) {
+        return false
+      }
+
+      try {
+        const row = await getSessionForOwner(candidateStoredSessionId, current.owner)
+
+        if (sessionMatchesStoredId(row, candidateStoredSessionId)) {
+          confirmed = row
+          break
+        }
+      } catch {
+        // prompt.submit can acknowledge just before the DB reader observes the
+        // first-message transaction. Retry only the captured owner.
+      }
+    }
+
+    if (!confirmed) {
+      const latest = $sessionTiles.get().find(candidate => candidate.storedSessionId === storedSessionId)
+
+      if (
+        latest &&
+        isProvisionalSessionTile(latest) &&
+        latest.provisionalStoredSessionId === candidateStoredSessionId &&
+        confirmationRetryRef.current === null
+      ) {
+        confirmationRetryRef.current = window.setTimeout(() => {
+          confirmationRetryRef.current = null
+          void confirmProvisionalTileRef.current?.()
+        }, 1_000)
+      }
+
+      return false
+    }
+
+    confirmed.profile = current.owner.profile
+
+    if (current.owner.connectionId) {
+      confirmed.connection_id = current.owner.connectionId
+    } else {
+      delete confirmed.connection_id
+    }
+
+    const plan = promoteProvisionalTileWithLayout({
+      durableSessionId: candidateStoredSessionId,
+      provisionalTile: current,
+      runtimeId: runtimeIdRef.current
+    })
+
+    if (!plan) {
+      return false
+    }
+
+    setSessions(previous => [
+      confirmed!,
+      ...previous.filter(session => !sessionMatchesStoredId(session, candidateStoredSessionId))
+    ])
+    migrateSessionDraft(plan.draft.fromScope, plan.draft.toScope)
+    migrateQueuedPrompts(plan.draft.fromScope, plan.draft.toScope)
+    sessionTileDelegate()?.updateSession(runtimeIdRef.current, state => ({
+      ...state,
+      storedSessionId: candidateStoredSessionId
+    }))
+    sessionTileDelegate()?.bindSessionRuntime?.(candidateStoredSessionId, runtimeIdRef.current)
+    storedIdRef.current = candidateStoredSessionId
+    runtimeIdByStoredSessionIdRef.current.set(candidateStoredSessionId, runtimeIdRef.current)
+    broadcastSessionsChanged()
+    clearConfirmationRetry()
+
+    return true
+  }, [clearConfirmationRetry, storedSessionId])
+
+  confirmProvisionalTileRef.current = confirmProvisionalTile
 
   // Tile-side attachment staging: same upload rules as the primary submit
   // (skip synced/pathless, byte-upload files+images), against the tile scope.
@@ -175,9 +433,10 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId }: Ses
 
       // A tile owns its own runtime binding, so a recovery here rebinds the
       // tile's ref rather than the foreground session's.
-      const onSessionRecovered = (recoveredId: string) => {
-        liveSessionId = recoveredId
-        runtimeIdRef.current = recoveredId
+      const onSessionRecovered = (recoveredId: string): string => {
+        liveSessionId = adoptRecoveredTileRuntime(recoveredId)
+
+        return liveSessionId
       }
 
       for (const attachment of attachments) {
@@ -194,7 +453,8 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId }: Ses
             requestGateway,
             sessionId: liveSessionId,
             storedSessionId: storedIdRef.current,
-            onSessionRecovered
+            onSessionRecovered,
+            resolveRecoveryProfile: resolveTileProfile
           })
 
           if (options.updateComposerAttachments ?? true) {
@@ -224,13 +484,15 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId }: Ses
 
       return { attachments: synced, sessionId: liveSessionId }
     },
-    [requestGateway, scope.attachments]
+    [adoptRecoveredTileRuntime, requestGateway, resolveTileProfile, scope.attachments]
   )
 
   // The REAL submit pipeline with tile seams: session always exists, and the
   // scope's writers replace the global view/attachment writes.
   const submitPromptText = useSubmitPrompt({
     activeSessionIdRef: runtimeIdRef,
+    bindSessionRuntime: (durableSessionId, liveRuntimeId) =>
+      sessionTileDelegate()?.bindSessionRuntime?.(durableSessionId, liveRuntimeId) ?? null,
     busyRef,
     copy,
     createBackendSessionForSend: async () => runtimeIdRef.current,
@@ -239,8 +501,12 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId }: Ses
     // A tile IS its session — no route to abandon, so the create-abort guard's
     // token is a stable constant (the guard never trips for a tile).
     getRouteToken: () => runtimeId,
+    invalidateSessionRuntimeBinding: (durableSessionId, deadRuntimeId) =>
+      sessionTileDelegate()?.invalidateSessionRuntimeBinding?.(durableSessionId, deadRuntimeId),
     requestGateway,
-    runtimeIdByStoredSessionIdRef,
+    requestForStoredSession: (_durableSessionId, method, params, timeoutMs) =>
+      requestGateway(method, params, timeoutMs),
+    resolveStoredSessionProfile: resolveTileProfile,
     // Tile ids are always bound before this hook mounts, so routed recovery is
     // unreachable here; keep the shared submit contract explicit.
     resumeStoredSession: () => undefined,
@@ -268,13 +534,20 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId }: Ses
       if (!attachments.length && SLASH_COMMAND_RE.test(visibleText)) {
         triggerHaptic('selection')
         await sessionTileDelegate()?.executeSlash(visibleText, runtimeIdRef.current)
+        await confirmProvisionalTile()
 
         return true
       }
 
-      return await submitPromptText(rawText, options)
+      const submitted = await submitPromptText(rawText, options)
+
+      if (submitted) {
+        await confirmProvisionalTile()
+      }
+
+      return submitted
     },
-    [listTileSession, scope.attachments.$attachments, submitPromptText]
+    [confirmProvisionalTile, listTileSession, scope.attachments.$attachments, submitPromptText]
   )
 
   const cancelRun = useCallback(async () => {
@@ -308,15 +581,14 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId }: Ses
         liveId => requestGateway('session.interrupt', { session_id: liveId }),
         {
           requestGateway,
-          onRecovered: recoveredId => {
-            runtimeIdRef.current = recoveredId
-          }
+          onRecovered: adoptRecoveredTileRuntime,
+          resolveProfile: resolveTileProfile
         }
       )
     } catch (err) {
       notifyError(err, copy.stopFailed)
     }
-  }, [copy.stopFailed, requestGateway, update])
+  }, [adoptRecoveredTileRuntime, copy.stopFailed, requestGateway, resolveTileProfile, update])
 
   const steerPrompt = useCallback(
     async (rawText: string): Promise<boolean> => {
@@ -369,9 +641,8 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId }: Ses
           liveId => requestGateway<{ status?: string }>('session.redirect', { session_id: liveId, text }),
           {
             requestGateway,
-            onRecovered: recoveredId => {
-              runtimeIdRef.current = recoveredId
-            }
+            onRecovered: adoptRecoveredTileRuntime,
+            resolveProfile: resolveTileProfile
           }
         )
 
@@ -398,7 +669,7 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId }: Ses
 
       return false
     },
-    [requestGateway]
+    [adoptRecoveredTileRuntime, requestGateway, resolveTileProfile]
   )
 
   // Rewind primitive (interrupt-first for live turns, busy-retry) — shared with
@@ -421,14 +692,13 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId }: Ses
         interruptFirst,
         {
           storedSessionId: storedIdRef.current,
-          onSessionRecovered: recoveredId => {
-            runtimeIdRef.current = recoveredId
-          }
+          onSessionRecovered: adoptRecoveredTileRuntime,
+          resolveProfile: resolveTileProfile
         },
         truncateRowId,
         sourceText
       ),
-    [requestGateway]
+    [adoptRecoveredTileRuntime, requestGateway]
   )
 
   // After a durable rewind the surviving bubbles' cached rowIds are stale (the

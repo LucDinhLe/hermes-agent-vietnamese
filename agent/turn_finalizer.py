@@ -53,6 +53,8 @@ def _is_pure_tool_call_tail(msg: dict) -> bool:
 _VERIFICATION_CONTINUATION_FLAGS = (
     "_verification_stop_synthetic",
     "_pre_verify_synthetic",
+    "_review_revision_candidate",
+    "_review_revision_synthetic",
 )
 
 
@@ -105,11 +107,11 @@ def _record_kanban_budget_exhausted(
 
 
 def _drop_verification_continuation_scaffolding(messages) -> None:
-    """Remove verification-continuation nudge messages from *messages* in place.
+    """Remove internal continuation/rewrite messages from *messages* in place.
 
-    Only the synthetic nudges carry these flags, so this strips just the
-    nudges while preserving the real attempted-final-answer that was
-    persisted to state.db.
+    Verification nudges and Advisor's rejected candidate/rewrite instruction
+    exist only to drive an internal bounded retry. None may be returned to the
+    Desktop or persisted to state.db as if it were authored by the user.
     """
     messages[:] = [
         m for m in messages
@@ -298,10 +300,9 @@ def finalize_turn(
     try:
         agent._drop_trailing_empty_response_scaffolding(messages)
 
-        # Drop verification-continuation nudges (synthetic user messages)
-        # from the live history before the tail-assistant check — only the
-        # nudges need stripping; the assistant candidate persists in
-        # state.db. (#65919 §7)
+        # Drop verification/Advisor continuation scaffolding from the live
+        # history before the tail-assistant check. Advisor's rejected answer
+        # and private rewrite instruction must never surface in the chat.
         _drop_verification_continuation_scaffolding(messages)
 
         # When the turn was interrupted and the last message is a tool

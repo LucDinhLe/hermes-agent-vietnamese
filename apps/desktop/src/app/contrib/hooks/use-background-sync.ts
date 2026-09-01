@@ -2,7 +2,7 @@ import { useStore } from '@nanostores/react'
 import { type MutableRefObject, useCallback, useEffect, useRef } from 'react'
 
 import { graftRefreshedTailOntoBackfill } from '@/app/chat/transcript-backfill'
-import { getLatestSessionMessages } from '@/hermes'
+import { getLatestSessionMessagesForOwner, sessionApiOwner } from '@/hermes'
 import { preserveLocalAssistantErrors, sealOpenToolParts, toChatMessages } from '@/lib/chat-messages'
 import { createClientSessionState } from '@/lib/chat-runtime'
 import { sessionMessagesSignature } from '@/lib/session-signatures'
@@ -30,7 +30,8 @@ import type { ClientSessionState } from '../../types'
 import type { GatewayRequester } from '../types'
 
 interface ActiveTranscriptSession {
-  profile?: string | null
+  connection_id?: string
+  profile?: string
 }
 
 /** Resolve an active transcript from either local recents or messaging slices. */
@@ -80,9 +81,10 @@ export async function reconcileActiveTranscript({
 
   const requestId = requestSequenceRef.current + 1
   requestSequenceRef.current = requestId
+  const owner = sessionApiOwner(stored)
 
   try {
-    const latest = await getLatestSessionMessages(storedSessionId, stored.profile)
+    const latest = await getLatestSessionMessagesForOwner(storedSessionId, owner)
 
     if (
       requestId !== requestSequenceRef.current ||
@@ -93,7 +95,7 @@ export async function reconcileActiveTranscript({
       return
     }
 
-    const signatureKey = `${stored.profile ?? 'default'}:${storedSessionId}`
+    const signatureKey = `${owner.connectionId ?? 'local'}:${owner.profile}:${storedSessionId}`
     const signature = sessionMessagesSignature(latest.messages)
 
     if (signatureRef.current.get(signatureKey) === signature) {

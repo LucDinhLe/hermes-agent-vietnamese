@@ -23,10 +23,9 @@
 
 import { atom } from 'nanostores'
 
-import { setSessionPinnedRemote } from '@/hermes'
+import { sessionApiOwner, type SessionApiOwner, setSessionPinnedRemoteForOwner } from '@/hermes'
 import { onConnectionScopeChange } from '@/lib/connection-scoped'
 import { $pinnedSessionIds, pinSession, unpinSession } from '@/store/layout'
-import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
 import { $sessions, sessionMatchesStoredId, sessionPinId } from '@/store/session'
 import type { SessionInfo } from '@/types/hermes'
 
@@ -34,6 +33,10 @@ import type { SessionInfo } from '@/types/hermes'
 const mirrored = new Set<string>()
 // pin ids awaiting their row so we can resolve the owning profile before PATCH.
 const pending = new Set<string>()
+// Preserve the exact source after a row leaves the current page (notably the
+// unpin transition). Profile alone is not an owner: two registry connections
+// may both expose the same profile and durable session id.
+const ownerByPinId = new Map<string, SessionApiOwner>()
 // Writes we've issued, id -> the value we wrote and when. A list page already
 // in flight when we PATCH still carries the OLD value, and it can land after
 // our ack — so the ack is not proof the page we're reading is newer than the
@@ -70,36 +73,70 @@ function publishUnconfirmed(): void {
   $unconfirmedPinWrites.set(new Set(unconfirmed.keys()))
 }
 
-function profileFor(pinId: string): null | string | undefined {
-  return $sessions.get().find(row => sessionMatchesStoredId(row, pinId))?.profile
+/** Preserve the exact row the user acted on before the id-only local pin atom
+ * synchronously notifies this mirror. */
+export function rememberSessionPinOwner(session: SessionInfo): void {
+  const profile = session.profile?.trim()
+
+  if (!profile) {
+    return
+  }
+
+  const owner = { connectionId: session.connection_id?.trim() || null, profile }
+  const pinId = sessionPinId(session)
+
+  ownerByPinId.set(pinId, owner)
+  ownerByPinId.set(session.id, owner)
+}
+
+function ownerFor(pinId: string): SessionApiOwner | undefined {
+  const remembered = ownerByPinId.get(pinId)
+
+  if (remembered) {
+    return remembered
+  }
+
+  const row = uniqueOwnedRowForId($sessions.get(), pinId)
+
+  if (!row) {
+    return ownerByPinId.get(pinId)
+  }
+
+  const owner = sessionApiOwner(row)
+  ownerByPinId.set(pinId, owner)
+  ownerByPinId.set(row.id, owner)
+
+  return owner
 }
 
 /**
  * One authoritative row per durable pin id. Session ids are only unique inside
- * a profile, so the cross-profile list can legitimately hold two rows with the
- * same `sessionPinId` but different `pinned` flags (copied/imported profile
- * databases). Iterating both would pin then unpin the same id in one pass and
- * re-fire `reconcile` forever — the runaway that overflows nanostores'
- * listenerQueue. Collapse to a single row per id, preferring the active
- * gateway's profile (the same tie-break `resolveLoadedRow` uses), so the pull
- * is deterministic and never oscillates.
+ * an exact `(connection, profile)` owner. When multiple owners share a pin id,
+ * an id-only persisted pin cannot say which backend it belongs to, so that id
+ * is omitted unless a rendered row explicitly staged its owner. This is a
+ * fail-closed boundary: ambient active profile/connection state must never
+ * break the tie.
  */
 function rowsByPinId(rows: readonly SessionInfo[]): Map<string, SessionInfo> {
-  const byId = new Map<string, SessionInfo>()
-  const gateway = normalizeProfileKey($activeGatewayProfile.get())
+  const candidates = new Map<string, SessionInfo[]>()
 
   for (const row of rows) {
     const pinId = sessionPinId(row)
-    const existing = byId.get(pinId)
+    const matching = candidates.get(pinId)
 
-    if (!existing) {
-      byId.set(pinId, row)
-
-      continue
+    if (matching) {
+      matching.push(row)
+    } else {
+      candidates.set(pinId, [row])
     }
+  }
 
-    // Prefer the active gateway's profile; otherwise keep the first seen.
-    if (normalizeProfileKey(row.profile) === gateway && normalizeProfileKey(existing.profile) !== gateway) {
+  const byId = new Map<string, SessionInfo>()
+
+  for (const [pinId, matching] of candidates) {
+    const row = uniqueOwnedRow(matching, ownerByPinId.get(pinId))
+
+    if (row) {
       byId.set(pinId, row)
     }
   }
@@ -107,11 +144,43 @@ function rowsByPinId(rows: readonly SessionInfo[]): Map<string, SessionInfo> {
   return byId
 }
 
+function ownerKey(owner: SessionApiOwner): string {
+  return `${owner.connectionId ?? ''}\u0000${owner.profile}`
+}
+
+function sameOwner(a: SessionApiOwner, b: SessionApiOwner): boolean {
+  return a.connectionId === b.connectionId && a.profile === b.profile
+}
+
+function uniqueOwnedRow(
+  rows: readonly SessionInfo[],
+  ownerHint?: SessionApiOwner
+): SessionInfo | undefined {
+  if (ownerHint) {
+    return rows.find(row => sameOwner(sessionApiOwner(row), ownerHint))
+  }
+
+  const byOwner = new Map<string, SessionInfo>()
+
+  for (const row of rows) {
+    byOwner.set(ownerKey(sessionApiOwner(row)), row)
+  }
+
+  return byOwner.size === 1 ? [...byOwner.values()][0] : undefined
+}
+
+function uniqueOwnedRowForId(rows: readonly SessionInfo[], storedId: string): SessionInfo | undefined {
+  return uniqueOwnedRow(
+    rows.filter(row => sessionMatchesStoredId(row, storedId)),
+    ownerByPinId.get(storedId)
+  )
+}
+
 /** PATCH the flag, guarding reads against pages that predate the write. */
-function writePin(id: string, pinned: boolean, profile?: null | string): Promise<void> {
+function writePin(id: string, pinned: boolean, owner: SessionApiOwner): Promise<void> {
   unconfirmed.set(id, { at: Date.now(), value: pinned })
 
-  return setSessionPinnedRemote(id, pinned, profile).then(
+  return setSessionPinnedRemoteForOwner(id, pinned, owner).then(
     () => {
       // Deliberately NOT cleared here: a list request issued before this PATCH
       // can still land after the ack carrying the pre-write value. The guard
@@ -150,6 +219,15 @@ function pullRemotePins(): void {
     // tip rotation; the row may surface under either identity.
     const pinId = sessionPinId(row)
     const heldLocally = local.has(pinId) || local.has(row.id)
+    const owner = sessionApiOwner(row)
+
+    if (!ownerByPinId.has(pinId)) {
+      ownerByPinId.set(pinId, owner)
+    }
+
+    if (!ownerByPinId.has(row.id)) {
+      ownerByPinId.set(row.id, owner)
+    }
 
     // A write of ours this page may predate. Confirmed (page agrees) → release
     // the guard, the server has caught up. Contradicted but still inside the
@@ -235,7 +313,11 @@ function reconcileInner(): void {
     if (!current.has(id)) {
       mirrored.delete(id)
       pending.delete(id)
-      void writePin(id, false, profileFor(id)).catch(() => {})
+      const owner = ownerFor(id)
+
+      if (owner) {
+        void writePin(id, false, owner).catch(() => {})
+      }
     }
   }
 
@@ -249,7 +331,8 @@ function reconcileInner(): void {
   // Flush whatever we can resolve now; unresolved ids (row not loaded yet)
   // retry on the next $sessions change.
   for (const id of [...pending]) {
-    const row = $sessions.get().find(entry => sessionMatchesStoredId(entry, id))
+    const remembered = ownerByPinId.get(id)
+    const row = uniqueOwnedRowForId($sessions.get(), id)
 
     if (!row) {
       continue
@@ -257,7 +340,10 @@ function reconcileInner(): void {
 
     pending.delete(id)
     mirrored.add(id)
-    void writePin(id, true, row.profile).catch(() => {
+    const owner = remembered ?? sessionApiOwner(row)
+    ownerByPinId.set(id, owner)
+    ownerByPinId.set(row.id, owner)
+    void writePin(id, true, owner).catch(() => {
       // Let a later reconcile retry the mirror.
       mirrored.delete(id)
       pending.add(id)
@@ -292,6 +378,7 @@ export function watchSessionPins(): void {
 export function resetSessionPinMirror(): void {
   mirrored.clear()
   pending.clear()
+  ownerByPinId.clear()
   unconfirmed.clear()
   publishUnconfirmed()
 }

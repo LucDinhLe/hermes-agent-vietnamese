@@ -89,7 +89,7 @@ export function ProjectDialog() {
 
   const pickFolder = async () => {
     try {
-      const dir = await pickProjectFolder()
+      const dir = await pickProjectFolder(p.addFolderTitle)
 
       if (!dir) {
         return
@@ -150,7 +150,11 @@ export function ProjectDialog() {
 
   return (
     <Dialog onOpenChange={onOpenChange} open={open}>
-      <DialogContent className="max-w-md" onInteractOutside={event => event.preventDefault()}>
+      <DialogContent
+        bodyClassName="min-w-0 overflow-x-hidden"
+        className="min-w-0 max-w-md"
+        onInteractOutside={event => event.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {mode === 'create' && <DialogDescription>{p.createDesc}</DialogDescription>}
@@ -176,16 +180,16 @@ export function ProjectDialog() {
         )}
 
         {mode === 'create' && (
-          <div className="flex flex-col gap-1.5">
+          <div className="min-w-0 flex flex-col gap-1.5">
             <span className="text-[0.6875rem] font-medium text-(--ui-text-tertiary)">{p.foldersLabel}</span>
             {folders.length === 0 ? (
               <span className="text-[0.75rem] text-(--ui-text-quaternary)">{p.noFolders}</span>
             ) : (
-              <ul className="flex flex-col gap-1">
+              <ul className="min-w-0 w-full flex flex-col gap-1">
                 {folders.map((folder, index) => (
                   <li
                     className={cn(
-                      'flex items-center gap-2 rounded-md bg-(--ui-control-hover-background) px-2 py-1 text-[0.75rem]'
+                      'min-w-0 max-w-full overflow-hidden flex items-center gap-2 rounded-md bg-(--ui-control-hover-background) px-2 py-1 text-[0.75rem]'
                     )}
                     key={folder}
                   >

@@ -23,6 +23,7 @@ import { RootErrorBoundary } from './components/error-boundary'
 import { HapticsProvider } from './components/haptics-provider'
 import { RootTooltipProvider } from './components/ui/tooltip'
 import { I18nProvider } from './i18n'
+import { VIETNAMESE_INITIAL_LOCALE, vietnameseI18nConfigClient } from './i18n/vietnamese-locale-policy'
 import { installClipboardShim } from './lib/clipboard'
 import { queryClient } from './lib/query-client'
 import { installRendererAnimationPauseState } from './lib/renderer-loop-pause'
@@ -60,7 +61,11 @@ if (winParam === 'overlay') {
     <StrictMode>
       <RootErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <I18nProvider>
+          <I18nProvider
+            configClient={vietnameseI18nConfigClient}
+            configLoadFallbackLocale={VIETNAMESE_INITIAL_LOCALE}
+            initialLocale={VIETNAMESE_INITIAL_LOCALE}
+          >
             <ThemeProvider>
               <HapticsProvider>
                 {/* ONE tooltip provider for the whole app. Every `Tip` used to

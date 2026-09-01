@@ -26,11 +26,11 @@ type RunCategory = 'delegate' | 'edit' | 'explore' | 'other' | 'run'
 const CATEGORY_ORDER: readonly RunCategory[] = ['edit', 'explore', 'run', 'delegate', 'other']
 
 const CATEGORY_COPY: Record<RunCategory, { noun: [string, string]; past: string; present: string }> = {
-  delegate: { noun: ['task', 'tasks'], past: 'Delegated', present: 'Delegating' },
-  edit: { noun: ['file', 'files'], past: 'Edited', present: 'Editing' },
-  explore: { noun: ['file', 'files'], past: 'Explored', present: 'Exploring' },
-  other: { noun: ['tool', 'tools'], past: 'Used', present: 'Using' },
-  run: { noun: ['command', 'commands'], past: 'Ran', present: 'Running' }
+  delegate: { noun: ['tác vụ', 'tác vụ'], past: 'Đã giao', present: 'Đang giao' },
+  edit: { noun: ['tệp', 'tệp'], past: 'Đã sửa', present: 'Đang sửa' },
+  explore: { noun: ['tệp', 'tệp'], past: 'Đã xem', present: 'Đang xem' },
+  other: { noun: ['công cụ', 'công cụ'], past: 'Đã dùng', present: 'Đang dùng' },
+  run: { noun: ['lệnh', 'lệnh'], past: 'Đã chạy', present: 'Đang chạy' }
 }
 
 const EXPLORE_TOOLS = new Set([

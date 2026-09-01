@@ -2,7 +2,10 @@
  * Windows Chromium/Electron sandbox recovery for #38216.
  *
  * On some Windows hosts the GPU/renderer sandboxes die with STATUS_BREAKPOINT
- * (`0x80000003` / exit `-2147483645`). Chromium then FATAL-exits
+ * (`0x80000003` / exit `-2147483645`) or the sandboxed GPU child cannot load
+ * its adjacent runtime DLLs (`0xC0000135` / STATUS_DLL_NOT_FOUND) even though
+ * the same signed package starts correctly without the AppContainer sandbox.
+ * Chromium then FATAL-exits
  * ("GPU process isn't usable. Goodbye.") before the UI is usable.
  *
  * Recovery ladder, all scoped to win32:
@@ -35,12 +38,15 @@ export const ALL_APPLICATION_PACKAGES_SID = 'S-1-15-2-2'
 /** STATUS_BREAKPOINT as a signed Win32 exit code (WER / Chromium). */
 export const WINDOWS_SANDBOX_BREAKPOINT_EXIT = -2147483645
 
+/** STATUS_DLL_NOT_FOUND as a signed Win32 exit code. */
+export const WINDOWS_GPU_DLL_NOT_FOUND_EXIT = -1073741515
+
 /** Consecutive mid-boot aborts required before enabling --no-sandbox. */
 export const BOOT_ABORTS_BEFORE_FALLBACK = 2
 
 export type SandboxMarkerState = 'booting' | 'fallback' | 'ok'
 
-export type SandboxFallbackReason = 'gpu-breakpoint' | 'renderer-crash-loop' | 'boot-loop'
+export type SandboxFallbackReason = 'gpu-breakpoint' | 'gpu-loader' | 'renderer-crash-loop' | 'boot-loop'
 
 export interface SandboxMarker {
   state: SandboxMarkerState
@@ -70,6 +76,23 @@ export function isWindowsSandboxBreakpointExit(exitCode: unknown): boolean {
   return n === WINDOWS_SANDBOX_BREAKPOINT_EXIT || n >>> 0 === 0x80000003
 }
 
+export function windowsGpuSandboxCrashReason(exitCode: unknown): Extract<
+  SandboxFallbackReason,
+  'gpu-breakpoint' | 'gpu-loader'
+> | null {
+  if (isWindowsSandboxBreakpointExit(exitCode)) {
+    return 'gpu-breakpoint'
+  }
+
+  const n = Number(exitCode)
+
+  if (Number.isFinite(n) && (n === WINDOWS_GPU_DLL_NOT_FOUND_EXIT || n >>> 0 === 0xc0000135)) {
+    return 'gpu-loader'
+  }
+
+  return null
+}
+
 export function alreadyHasNoSandbox(argv: readonly string[] = [], env: NodeJS.ProcessEnv = process.env): boolean {
   if (Array.isArray(argv) && argv.some(arg => arg === '--no-sandbox')) {
     return true
@@ -82,7 +105,7 @@ export function alreadyHasNoSandbox(argv: readonly string[] = [], env: NodeJS.Pr
   return disable === '1' || disable === 'true' || disable === 'yes' || disable === 'on'
 }
 
-const FALLBACK_REASONS: readonly string[] = ['gpu-breakpoint', 'renderer-crash-loop', 'boot-loop']
+const FALLBACK_REASONS: readonly string[] = ['gpu-breakpoint', 'gpu-loader', 'renderer-crash-loop', 'boot-loop']
 
 export function parseSandboxMarker(raw: unknown): SandboxMarker | null {
   if (!raw || typeof raw !== 'object') {
@@ -330,7 +353,8 @@ export function grantAllApplicationPackagesAcl(
 }
 
 /**
- * True when a GPU child died with the #38216 breakpoint signature and we
+ * True when a GPU child died with a known #38216 sandbox compatibility
+ * signature and we
  * should one-shot relaunch with `--no-sandbox` before Chromium FATAL-exits.
  */
 export function shouldRelaunchForGpuSandboxCrash(options: {
@@ -353,7 +377,7 @@ export function shouldRelaunchForGpuSandboxCrash(options: {
     return false
   }
 
-  return isWindowsSandboxBreakpointExit(options.details?.exitCode)
+  return windowsGpuSandboxCrashReason(options.details?.exitCode) !== null
 }
 
 /**

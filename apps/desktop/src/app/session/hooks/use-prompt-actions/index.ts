@@ -36,6 +36,7 @@ import {
   setMessages,
   setTurnStartedAt
 } from '@/store/session'
+import { sessionRouteOwner } from '@/store/session-route-owner'
 import { $sessionStates } from '@/store/session-states'
 import { clearSessionSubagents } from '@/store/subagents'
 import { clearSessionTodos } from '@/store/todos'
@@ -50,6 +51,7 @@ import type {
   ImageAttachResponse,
   SessionRedirectResponse
 } from '../../../types'
+import { resolveSessionProfile } from '../use-session-actions/utils'
 
 import {
   appendMidTurnUserMessage,
@@ -126,11 +128,21 @@ export async function uploadComposerAttachment(
     /** Durable id used to re-register after sleep/wake or a backend restart. */
     storedSessionId?: null | string
     /** Called when the attach recovered onto a fresh live id. */
-    onSessionRecovered?: (sessionId: string) => void
+    onSessionRecovered?: (sessionId: string) => string
+    resolveRecoveryProfile?: (storedSessionId: string) => Promise<string | undefined>
     terminalBackend?: string
   }
 ): Promise<ComposerAttachment> {
-  const { backendCwd, remote, requestGateway, storedSessionId, onSessionRecovered, terminalBackend } = opts
+  const {
+    backendCwd,
+    remote,
+    requestGateway,
+    storedSessionId,
+    onSessionRecovered,
+    resolveRecoveryProfile,
+    terminalBackend
+  } = opts
+
   const path = attachment.path ?? ''
   const label = attachment.label || pathLabel(path)
   const uploadBytes = remote || attachmentPathNeedsUpload(path, backendCwd, terminalBackend)
@@ -209,16 +221,12 @@ export async function uploadComposerAttachment(
   // Attach runs BEFORE prompt.submit, so submit's own recovery never gets a
   // chance: a stale runtime id fails here first and the user sees "session not
   // found" on an image while plain text works.
-  const { result, sessionId: usedSessionId } = await withSessionNotFoundResume(
+  const { result } = await withSessionNotFoundResume(
     opts.sessionId,
     storedSessionId,
     stageForSession,
-    { requestGateway }
+    { onRecovered: onSessionRecovered, requestGateway, resolveProfile: resolveRecoveryProfile }
   )
-
-  if (usedSessionId !== opts.sessionId) {
-    onSessionRecovered?.(usedSessionId)
-  }
 
   return result
 }
@@ -226,18 +234,32 @@ export async function uploadComposerAttachment(
 interface PromptActionsOptions {
   activeSessionId: string | null
   activeSessionIdRef: MutableRefObject<string | null>
+  bindSessionRuntime: (storedSessionId: string, runtimeSessionId: string) => null | string
   busyRef: MutableRefObject<boolean>
   branchCurrentSession: () => Promise<boolean>
+  confirmBackendSessionForSend?: (runtimeSessionId: string) => Promise<boolean>
   createBackendSessionForSend: (preview?: string | null) => Promise<string | null>
   getRoutedStoredSessionId: () => null | string
   getRuntimeIdForStoredSession: (storedSessionId: string) => null | string
   getRouteToken: () => string
   handleSkinCommand: (arg: string) => string
+  invalidateSessionRuntimeBinding: (storedSessionId: string, runtimeSessionId: string) => void
   openMemoryGraph: () => void
   refreshSessions: () => Promise<void>
   requestGateway: <T>(method: string, params?: Record<string, unknown>, timeoutMs?: number) => Promise<T>
+  requestPendingCreatedSession?: <T>(
+    method: string,
+    params?: Record<string, unknown>,
+    timeoutMs?: number
+  ) => Promise<T>
+  requestDurableSession: <T>(
+    storedSessionId: string,
+    method: string,
+    params?: Record<string, unknown>,
+    timeoutMs?: number
+  ) => Promise<T>
+  resolveStoredSessionProfile?: (storedSessionId: string) => Promise<string | undefined>
   resumeStoredSession: (storedSessionId: string) => Promise<void> | void
-  runtimeIdByStoredSessionIdRef: MutableRefObject<Map<string, string>>
   selectedStoredSessionIdRef: MutableRefObject<string | null>
   startFreshSessionDraft: () => void
   sttEnabled: boolean
@@ -258,18 +280,23 @@ interface RestoreMessageTarget {
 export function usePromptActions({
   activeSessionId,
   activeSessionIdRef,
+  bindSessionRuntime,
   busyRef,
   branchCurrentSession,
+  confirmBackendSessionForSend,
   createBackendSessionForSend,
   getRoutedStoredSessionId,
   getRuntimeIdForStoredSession,
   getRouteToken,
   handleSkinCommand,
+  invalidateSessionRuntimeBinding,
   openMemoryGraph,
   refreshSessions,
   requestGateway,
+  requestDurableSession,
+  requestPendingCreatedSession,
+  resolveStoredSessionProfile,
   resumeStoredSession,
-  runtimeIdByStoredSessionIdRef,
   selectedStoredSessionIdRef,
   startFreshSessionDraft,
   sttEnabled,
@@ -331,6 +358,51 @@ export function usePromptActions({
   // file.attach twice and stage duplicate copies on the gateway.
   const eagerUploadInFlight = useRef<Map<string, Promise<void>>>(new Map())
 
+  const requestForStoredSession = useCallback(
+    async <T,>(
+      storedSessionId: null | string,
+      method: string,
+      params: Record<string, unknown> = {},
+      timeoutMs?: number
+    ): Promise<T> => {
+      if (!storedSessionId) {
+        if (activeSessionIdRef.current && requestPendingCreatedSession) {
+          return requestPendingCreatedSession<T>(method, params, timeoutMs)
+        }
+
+        return requestGateway<T>(method, params, timeoutMs)
+      }
+
+      return requestDurableSession<T>(storedSessionId, method, params, timeoutMs)
+    },
+    [activeSessionIdRef, requestDurableSession, requestGateway, requestPendingCreatedSession]
+  )
+
+  const resolveExactStoredSessionProfile = useCallback(
+    (storedSessionId: string) =>
+      resolveStoredSessionProfile
+        ? resolveStoredSessionProfile(storedSessionId)
+        : resolveSessionProfile(storedSessionId, sessionRouteOwner(storedSessionId)),
+    [resolveStoredSessionProfile]
+  )
+
+  const adoptRecoveredRuntime = useCallback(
+    (rawRuntimeId: string): string => {
+      const storedSessionId = selectedStoredSessionIdRef.current ?? getRoutedStoredSessionId()
+      const rendererRuntimeId = storedSessionId ? bindSessionRuntime(storedSessionId, rawRuntimeId) : null
+
+      if (!rendererRuntimeId) {
+        throw new Error('Recovered runtime has no exact durable session owner.')
+      }
+
+      activeSessionIdRef.current = rendererRuntimeId
+      setActiveSessionId(rendererRuntimeId)
+
+      return rendererRuntimeId
+    },
+    [activeSessionIdRef, bindSessionRuntime, getRoutedStoredSessionId, selectedStoredSessionIdRef]
+  )
+
   const syncAttachmentsForSubmit = useCallback(
     async (
       sessionId: string,
@@ -339,14 +411,28 @@ export function usePromptActions({
     ): Promise<{ attachments: ComposerAttachment[]; sessionId: string }> => {
       const updateComposerAttachments = options.updateComposerAttachments ?? true
       const remote = $connection.get()?.mode === 'remote'
-      const storedSessionId = selectedStoredSessionIdRef.current
+      // Selection can lag the URL by one render during an Agent/profile switch.
+      // The durable route is still authoritative for recovery in that window.
+      const storedSessionId = selectedStoredSessionIdRef.current ?? getRoutedStoredSessionId()
+
+      const sessionRequest: GatewayRequest = (method, params, timeoutMs) =>
+        requestForStoredSession(storedSessionId, method, params, timeoutMs)
+
       let liveSessionId = sessionId
       const synced: ComposerAttachment[] = []
 
-      const onSessionRecovered = (recoveredId: string) => {
-        liveSessionId = recoveredId
-        activeSessionIdRef.current = recoveredId
-        setActiveSessionId(recoveredId)
+      const onSessionRecovered = (recoveredId: string): string => {
+        const rendererRuntimeId = storedSessionId ? bindSessionRuntime(storedSessionId, recoveredId) : null
+
+        if (!rendererRuntimeId) {
+          throw new Error('Recovered attachment runtime has no exact durable owner.')
+        }
+
+        liveSessionId = rendererRuntimeId
+        activeSessionIdRef.current = liveSessionId
+        setActiveSessionId(liveSessionId)
+
+        return rendererRuntimeId
       }
 
       for (const original of attachments) {
@@ -379,7 +465,7 @@ export function usePromptActions({
           const nextAttachment = await uploadComposerAttachment(attachment, {
             backendCwd: $currentCwd.get(),
             remote,
-            requestGateway,
+            requestGateway: sessionRequest,
             sessionId: liveSessionId,
             storedSessionId,
             onSessionRecovered,
@@ -413,7 +499,7 @@ export function usePromptActions({
 
       return { attachments: synced, sessionId: liveSessionId }
     },
-    [activeSessionIdRef, requestGateway, selectedStoredSessionIdRef]
+    [activeSessionIdRef, bindSessionRuntime, getRoutedStoredSessionId, requestForStoredSession, selectedStoredSessionIdRef]
   )
 
   // Stage a freshly dropped file as soon as it lands (when a session already
@@ -429,6 +515,12 @@ export function usePromptActions({
   const eagerlyUploadAttachment = useCallback(
     async (sessionId: string, attachment: ComposerAttachment) => {
       const remote = $connection.get()?.mode === 'remote'
+      const storedSessionId = selectedStoredSessionIdRef.current ?? getRoutedStoredSessionId()
+
+      const sessionRequest: GatewayRequest = (method, params, timeoutMs) =>
+        requestForStoredSession(storedSessionId, method, params, timeoutMs)
+
+      let liveSessionId = sessionId
 
       setComposerAttachmentUploadState(attachment.id, 'uploading')
 
@@ -439,8 +531,22 @@ export function usePromptActions({
           await uploadComposerAttachment(attachment, {
             backendCwd: $currentCwd.get(),
             remote,
-            requestGateway,
-            sessionId,
+            requestGateway: sessionRequest,
+            sessionId: liveSessionId,
+            storedSessionId,
+            onSessionRecovered: recoveredId => {
+              const rendererRuntimeId = storedSessionId ? bindSessionRuntime(storedSessionId, recoveredId) : null
+
+              if (!rendererRuntimeId) {
+                throw new Error('Recovered attachment runtime has no exact durable owner.')
+              }
+
+              liveSessionId = rendererRuntimeId
+              activeSessionIdRef.current = liveSessionId
+              setActiveSessionId(liveSessionId)
+
+              return rendererRuntimeId
+            },
             terminalBackend: $terminalBackend.get()
           })
         )
@@ -452,7 +558,14 @@ export function usePromptActions({
         notifyError(err, copy.dropFiles)
       }
     },
-    [copy.dropFiles, requestGateway]
+    [
+      activeSessionIdRef,
+      bindSessionRuntime,
+      copy.dropFiles,
+      getRoutedStoredSessionId,
+      requestForStoredSession,
+      selectedStoredSessionIdRef
+    ]
   )
 
   const composerAttachments = useStore($composerAttachments)
@@ -463,12 +576,21 @@ export function usePromptActions({
     }
 
     for (const attachment of composerAttachments) {
+      const storedSessionId = selectedStoredSessionIdRef.current ?? getRoutedStoredSessionId()
+      const provenRuntimeId = storedSessionId ? getRuntimeIdForStoredSession(storedSessionId) : null
+
       const needsUpload =
         attachment.kind === 'file' &&
         Boolean(attachment.path) &&
         !attachment.attachedSessionId &&
         !attachment.uploadState &&
-        !eagerUploadInFlight.current.has(attachment.id)
+        !eagerUploadInFlight.current.has(attachment.id) &&
+        // A durable Agent session must positively own the live runtime before
+        // drop-time staging. During profile switch/relaunch the route settles
+        // first and the old runtime can linger; submitting already has a
+        // profile-aware resume path, so defer to it instead of firing
+        // file.attach at a dead/cross-profile id and surfacing 4007.
+        (!storedSessionId || provenRuntimeId === activeSessionId)
 
       if (!needsUpload) {
         continue
@@ -480,18 +602,29 @@ export function usePromptActions({
 
       eagerUploadInFlight.current.set(attachment.id, task)
     }
-  }, [activeSessionId, composerAttachments, eagerlyUploadAttachment])
+  }, [
+    activeSessionId,
+    composerAttachments,
+    eagerlyUploadAttachment,
+    getRuntimeIdForStoredSession,
+    getRoutedStoredSessionId,
+    selectedStoredSessionIdRef
+  ])
 
   const submitPromptText = useSubmitPrompt({
     activeSessionIdRef,
     busyRef,
+    bindSessionRuntime,
     copy,
+    confirmBackendSessionForSend,
     createBackendSessionForSend,
     getRoutedStoredSessionId,
     getRuntimeIdForStoredSession,
     getRouteToken,
+    invalidateSessionRuntimeBinding,
     requestGateway,
-    runtimeIdByStoredSessionIdRef,
+    requestForStoredSession,
+    resolveStoredSessionProfile: resolveExactStoredSessionProfile,
     resumeStoredSession,
     selectedStoredSessionIdRef,
     syncAttachmentsForSubmit,
@@ -582,6 +715,7 @@ export function usePromptActions({
 
   const executeSlashCommand = useSlashCommand({
     activeSessionIdRef,
+    bindSessionRuntime,
     appendSessionTextMessage,
     branchCurrentSession,
     busyRef,
@@ -594,6 +728,8 @@ export function usePromptActions({
     openMemoryGraph,
     refreshSessions,
     requestGateway,
+    requestForStoredSession,
+    resolveStoredSessionProfile: resolveExactStoredSessionProfile,
     resumeStoredSession,
     selectedStoredSessionIdRef,
     startFreshSessionDraft,
@@ -645,6 +781,10 @@ export function usePromptActions({
     // The ref is updated via useEffect on every activeSessionId change, so it
     // always reflects the current session — same pattern submitText uses.
     const sessionId = activeSessionIdRef.current
+    const storedSessionId = selectedStoredSessionIdRef.current ?? getRoutedStoredSessionId()
+
+    const requestSession: GatewayRequest = (method, params, timeoutMs) =>
+      requestForStoredSession(storedSessionId, method, params, timeoutMs)
 
     const releaseBusy = () => {
       setMutableRef(busyRef, false)
@@ -697,14 +837,28 @@ export function usePromptActions({
     try {
       await withSessionNotFoundResume(
         sessionId,
-        selectedStoredSessionIdRef.current,
-        liveId => requestGateway('session.interrupt', { session_id: liveId }),
+        storedSessionId,
+        liveId => requestSession('session.interrupt', { session_id: liveId }),
         {
-          requestGateway,
+          driftReason: () =>
+            (selectedStoredSessionIdRef.current ?? getRoutedStoredSessionId()) === storedSessionId
+              ? null
+              : 'session-route-changed',
+          requestGateway: requestSession,
           onRecovered: recoveredId => {
-            activeSessionIdRef.current = recoveredId
-            setActiveSessionId(recoveredId)
-          }
+            const rendererRuntimeId = storedSessionId ? bindSessionRuntime(storedSessionId, recoveredId) : null
+
+            if (!rendererRuntimeId) {
+              throw new Error('Recovered interrupt runtime has no exact durable owner.')
+            }
+
+            markSessionRecentlyInterrupted(rendererRuntimeId)
+            activeSessionIdRef.current = rendererRuntimeId
+            setActiveSessionId(rendererRuntimeId)
+
+            return rendererRuntimeId
+          },
+          resolveProfile: resolveExactStoredSessionProfile
         }
       )
       releaseBusy()
@@ -712,7 +866,17 @@ export function usePromptActions({
       releaseBusy()
       notifyError(err, copy.stopFailed)
     }
-  }, [activeSessionIdRef, busyRef, copy.stopFailed, requestGateway, selectedStoredSessionIdRef, updateSessionState])
+  }, [
+    activeSessionIdRef,
+    bindSessionRuntime,
+    busyRef,
+    copy.stopFailed,
+    getRoutedStoredSessionId,
+    requestForStoredSession,
+    resolveExactStoredSessionProfile,
+    selectedStoredSessionIdRef,
+    updateSessionState
+  ])
 
   // The desktop steering action is an immediate correction: the core cancels
   // model generation and rebuilds the live turn with displayed reasoning and
@@ -725,6 +889,10 @@ export function usePromptActions({
       // reaches the live model mid-turn, so a stale target delivers the user's
       // correction into a conversation they are no longer looking at.
       const sessionId = activeSessionIdRef.current
+      const storedSessionId = selectedStoredSessionIdRef.current ?? getRoutedStoredSessionId()
+
+      const requestSession: GatewayRequest = (method, params, timeoutMs) =>
+        requestForStoredSession(storedSessionId, method, params, timeoutMs)
 
       if (!text || !sessionId) {
         return false
@@ -759,7 +927,7 @@ export function usePromptActions({
           })
 
         try {
-          const result = await requestGateway<SessionRedirectResponse>('session.redirect', { session_id: id, text })
+          const result = await requestSession<SessionRedirectResponse>('session.redirect', { session_id: id, text })
 
           if (result?.status === 'redirected') {
             triggerHaptic('submit')
@@ -789,12 +957,25 @@ export function usePromptActions({
         // A stale runtime id after reconnect 404s ("session not found"): the
         // shared resolver resumes the stored session and retries once, so a
         // correction right after a reconnect isn't lost to the race.
-        const { result } = await withSessionNotFoundResume(sessionId, selectedStoredSessionIdRef.current, send, {
-          requestGateway,
+        const { result } = await withSessionNotFoundResume(sessionId, storedSessionId, send, {
+          driftReason: () =>
+            (selectedStoredSessionIdRef.current ?? getRoutedStoredSessionId()) === storedSessionId
+              ? null
+              : 'session-route-changed',
+          requestGateway: requestSession,
           onRecovered: recoveredId => {
-            activeSessionIdRef.current = recoveredId
-            setActiveSessionId(recoveredId)
-          }
+            const rendererRuntimeId = storedSessionId ? bindSessionRuntime(storedSessionId, recoveredId) : null
+
+            if (!rendererRuntimeId) {
+              throw new Error('Recovered redirect runtime has no exact durable owner.')
+            }
+
+            activeSessionIdRef.current = rendererRuntimeId
+            setActiveSessionId(rendererRuntimeId)
+
+            return rendererRuntimeId
+          },
+          resolveProfile: resolveExactStoredSessionProfile
         })
 
         return result
@@ -804,7 +985,16 @@ export function usePromptActions({
 
       return false
     },
-    [activeSessionIdRef, appendSessionTextMessage, requestGateway, selectedStoredSessionIdRef, updateSessionState]
+    [
+      activeSessionIdRef,
+      appendSessionTextMessage,
+      bindSessionRuntime,
+      getRoutedStoredSessionId,
+      requestForStoredSession,
+      resolveExactStoredSessionProfile,
+      selectedStoredSessionIdRef,
+      updateSessionState
+    ]
   )
 
   // After a durable rewind the surviving bubbles' cached rowIds are stale (the
@@ -835,25 +1025,54 @@ export function usePromptActions({
       interruptFirst: boolean,
       truncateRowId?: number,
       sourceText?: string
-    ) =>
-      runRewindSubmit(
-        requestGateway,
+    ) => {
+      const storedSessionId =
+        $sessionStates.get()[sessionId]?.storedSessionId ??
+        selectedStoredSessionIdRef.current ??
+        getRoutedStoredSessionId()
+
+      const requestSession: GatewayRequest = (method, params, timeoutMs) =>
+        requestForStoredSession(storedSessionId, method, params, timeoutMs)
+
+      return runRewindSubmit(
+        requestSession,
         sessionId,
         text,
         truncateOrdinal,
         truncateMessageId,
         interruptFirst,
         {
-          storedSessionId: selectedStoredSessionIdRef.current,
+          driftReason: () =>
+            (selectedStoredSessionIdRef.current ?? getRoutedStoredSessionId()) === storedSessionId
+              ? null
+              : 'session-route-changed',
+          storedSessionId,
           onSessionRecovered: recoveredId => {
-            activeSessionIdRef.current = recoveredId
-            setActiveSessionId(recoveredId)
-          }
+            const rendererRuntimeId = storedSessionId ? bindSessionRuntime(storedSessionId, recoveredId) : null
+
+            if (!rendererRuntimeId) {
+              throw new Error('Recovered rewind runtime has no exact durable owner.')
+            }
+
+            activeSessionIdRef.current = rendererRuntimeId
+            setActiveSessionId(rendererRuntimeId)
+
+            return rendererRuntimeId
+          },
+          resolveProfile: resolveExactStoredSessionProfile
         },
         truncateRowId,
         sourceText
-      ),
-    [activeSessionIdRef, requestGateway, selectedStoredSessionIdRef]
+      )
+    },
+    [
+      activeSessionIdRef,
+      bindSessionRuntime,
+      getRoutedStoredSessionId,
+      requestForStoredSession,
+      resolveExactStoredSessionProfile,
+      selectedStoredSessionIdRef
+    ]
   )
 
   const reloadFromMessage = useCallback(

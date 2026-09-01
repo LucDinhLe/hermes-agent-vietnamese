@@ -4,11 +4,12 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tip } from '@/components/ui/tooltip'
 import {
-  deleteSession,
+  deleteSessionForOwner,
   getHermesConfigRecord,
   listAllProfileSessions,
   saveHermesConfig,
-  setSessionArchived
+  sessionApiOwner,
+  setSessionArchivedForOwner
 } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { sessionTitle } from '@/lib/chat-runtime'
@@ -19,6 +20,7 @@ import { confirm } from '@/store/confirm'
 import { notify, notifyError } from '@/store/notifications'
 import { untombstoneSessions } from '@/store/projects'
 import { applyConfiguredDefaultProjectDir, ensureDefaultWorkspaceCwd, setSessions } from '@/store/session'
+import { sessionRouteKey } from '@/store/session-route-owner'
 import { forgetSessionUnread } from '@/store/session-unread'
 import type { HermesConfigRecord, SessionInfo } from '@/types/hermes'
 
@@ -55,15 +57,17 @@ export function SessionsSettings() {
 
   const unarchive = useCallback(
     async (session: SessionInfo) => {
-      setBusyId(session.id)
+      const ownerKey = sessionRouteKey(session)
+
+      setBusyId(ownerKey)
 
       try {
-        await setSessionArchived(session.id, false, session.profile)
-        setLocalSessions(prev => prev.filter(s => s.id !== session.id))
+        await setSessionArchivedForOwner(session.id, false, sessionApiOwner(session))
+        setLocalSessions(prev => prev.filter(s => sessionRouteKey(s) !== ownerKey))
         // Surface it again in the sidebar without waiting for a full refresh, and
         // lift any optimistic eviction so the grouped tree shows it again too.
         untombstoneSessions([session.id, session._lineage_root_id])
-        setSessions(prev => [{ ...session, archived: false }, ...prev.filter(s => s.id !== session.id)])
+        setSessions(prev => [{ ...session, archived: false }, ...prev.filter(s => sessionRouteKey(s) !== ownerKey)])
         triggerHaptic('selection')
         notify({ durationMs: 2_000, kind: 'success', message: s.restored })
       } catch (err) {
@@ -87,14 +91,16 @@ export function SessionsSettings() {
         return
       }
 
-      setBusyId(session.id)
+      const ownerKey = sessionRouteKey(session)
+
+      setBusyId(ownerKey)
 
       try {
-        await deleteSession(session.id, session.profile)
+        await deleteSessionForOwner(session.id, sessionApiOwner(session))
         // Permanent delete bypasses removeSession, so retire the persisted
         // unread state here too rather than leaving it to rot.
         forgetSessionUnread([session.id, session._lineage_root_id], session.profile)
-        setLocalSessions(prev => prev.filter(s => s.id !== session.id))
+        setLocalSessions(prev => prev.filter(s => sessionRouteKey(s) !== ownerKey))
         triggerHaptic('warning')
       } catch (err) {
         notifyError(err, s.deleteFailed)
@@ -136,10 +142,11 @@ export function SessionsSettings() {
         <div className="grid gap-1">
           {sessions.map(session => {
             const label = pathLeaf(session.cwd)
-            const busy = busyId === session.id
+            const ownerKey = sessionRouteKey(session)
+            const busy = busyId === ownerKey
 
             return (
-              <div className="scroll-mt-6 rounded-lg" id={`archived-session-${session.id}`} key={session.id}>
+              <div className="scroll-mt-6 rounded-lg" id={`archived-session-${session.id}`} key={ownerKey}>
                 <ListRow
                   action={
                     <div className="flex items-center gap-1.5">

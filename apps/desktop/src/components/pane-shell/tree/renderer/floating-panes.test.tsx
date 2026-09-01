@@ -76,9 +76,9 @@ describe('FloatingPanes (live DOM)', () => {
 
     expect(el).toBeTruthy()
     expect(el.className).toContain('fixed')
-    // 1440 - 224 - 12 margin = 1204; titlebar 34 + 12 = 46.
+    // 1440 - 224 - 12 margin = 1204; V32 titlebar 40 + 12 = 52.
     expect(el.style.left).toBe('1204px')
-    expect(el.style.top).toBe('46px')
+    expect(el.style.top).toBe('52px')
     expect(el.style.width).toBe('224px')
     expect(document.querySelector('[data-testid="hud-body"]')?.textContent).toBe('live')
   })
@@ -101,7 +101,7 @@ describe('FloatingPanes (live DOM)', () => {
     pointer(grab(), 'pointerup', 260, 240)
 
     expect(card()!.style.left).toBe('172px')
-    expect(card()!.style.top).toBe('186px')
+    expect(card()!.style.top).toBe('192px')
   })
 
   it('persists the dragged position across a remount', () => {
@@ -140,7 +140,7 @@ describe('FloatingPanes (live DOM)', () => {
     pointer(grab(), 'pointermove', 100, -900)
     pointer(grab(), 'pointerup', 100, -900)
 
-    expect(Number.parseFloat(card()!.style.top)).toBeGreaterThanOrEqual(34)
+    expect(Number.parseFloat(card()!.style.top)).toBeGreaterThanOrEqual(40)
   })
 
   it('collapses to the header and drops the body, and does not drag from the button', () => {

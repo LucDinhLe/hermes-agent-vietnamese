@@ -36,6 +36,7 @@ import { $bindings } from '@/store/keybinds'
 import {
   $dismissedAutoProjectIds,
   $panesFlipped,
+  $pinnedProjectIds,
   $pinnedSessionIds,
   $sidebarCardRows,
   $sidebarCronOpen,
@@ -49,6 +50,7 @@ import {
   $sidebarProfileFilter,
   $sidebarProjectFilter,
   $sidebarProjectOrderIds,
+  $sidebarProjectsOpen,
   $sidebarRecentsOpen,
   $sidebarSessionOrderIds,
   $sidebarSessionOrderManual,
@@ -59,10 +61,13 @@ import {
   filterVisibleProjects,
   pinSession,
   SESSION_SEARCH_FOCUS_EVENT,
+  setPinnedProjectOrder,
   setPinnedSessionOrder,
   setSidebarCronOpen,
+  setSidebarGrouping,
   setSidebarPinsOpen,
   setSidebarProjectOrderIds,
+  setSidebarProjectsOpen,
   setSidebarRecentsOpen,
   setSidebarSessionOrderIds,
   setSidebarSessionOrderManual,
@@ -170,7 +175,7 @@ import {
   useRepoWorktreeMap
 } from './projects'
 import { WorktreeDialog } from './projects/worktree-dialog'
-import { SidebarBlankState, SidebarPinnedEmptyState, SidebarSessionSkeletons } from './section-states'
+import { SidebarPinnedEmptyState, SidebarSessionSkeletons } from './section-states'
 import { buildSessionByAnyId, resolvePinnedSessions } from './session-index'
 import { SidebarSessionsSection, VIRTUALIZE_THRESHOLD } from './sessions-section'
 import { CONTEXT_SPLIT_KIT, SplitSubmenu } from './split-submenu'
@@ -192,13 +197,22 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
     label: '',
     icon: props => <Codicon name="robot" {...props} />,
     action: 'new-session',
+    order: 10,
     keybindActionId: 'session.new'
+  },
+  {
+    id: 'projects',
+    label: '',
+    icon: props => <Codicon name="root-folder" {...props} />,
+    action: 'projects',
+    order: 20
   },
   {
     id: 'skills',
     label: '',
     icon: props => <Codicon name="symbol-misc" {...props} />,
     route: SKILLS_ROUTE,
+    order: 40,
     keybindActionId: 'nav.skills'
   },
   {
@@ -206,6 +220,7 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
     label: '',
     icon: props => <Codicon name="comment" {...props} />,
     route: MESSAGING_ROUTE,
+    order: 50,
     keybindActionId: 'nav.messaging'
   },
   {
@@ -213,6 +228,7 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
     label: '',
     icon: props => <Codicon name="files" {...props} />,
     route: ARTIFACTS_ROUTE,
+    order: 60,
     keybindActionId: 'nav.artifacts'
   },
   {
@@ -220,6 +236,7 @@ const SIDEBAR_NAV: SidebarNavItem[] = [
     label: '',
     icon: props => <Codicon name="watch" {...props} />,
     route: CRON_ROUTE,
+    order: 70,
     keybindActionId: 'nav.cron'
   }
 ]
@@ -323,7 +340,7 @@ export function ChatSidebar({
 }: ChatSidebarProps) {
   const { t } = useI18n()
   const s = t.sidebar
-  const { pathname } = useLocation()
+  const { pathname, search } = useLocation()
   // Contributed nav rows (plugins pairing a page with a sidebar entry) render
   // below the built-ins with the same chrome; active = at their route.
   const navContributions = useContributions(SIDEBAR_NAV_AREA)
@@ -344,11 +361,17 @@ export function ChatSidebar({
             id: c.id,
             label: data.label,
             icon: (props: { className?: string }) => <Codicon name={codicon} {...props} />,
-            route: data.path
+            route: data.path,
+            order: c.order
           }
         ]
       }),
     [navContributions]
+  )
+
+  const navigationItems = useMemo(
+    () => [...SIDEBAR_NAV, ...contributedNav].sort((a, b) => (a.order ?? 100) - (b.order ?? 100)),
+    [contributedNav]
   )
 
   const panesFlipped = useStore($panesFlipped)
@@ -371,8 +394,10 @@ export function ChatSidebar({
   const sortOrderIds = useStore($sidebarSessionRankIds)
   const agentsGrouped = grouping === 'project'
   const pinnedSessionIds = useStore($pinnedSessionIds)
+  const pinnedProjectIds = useStore($pinnedProjectIds)
   const unconfirmedPinWrites = useStore($unconfirmedPinWrites)
   const pinsOpen = useStore($sidebarPinsOpen)
+  const projectsOpen = useStore($sidebarProjectsOpen)
   const agentsOpen = useStore($sidebarRecentsOpen)
   const cronOpen = useStore($sidebarCronOpen)
   // The sidebar highlight tracks the FOCUSED session — the interacted tile's
@@ -754,6 +779,16 @@ export function ChatSidebar({
       return
     }
 
+    // Pinned project shortcuts must resolve on first paint even while the
+    // sidebar is in its ordinary Sessions view. Fetch the lightweight tree
+    // immediately; repo discovery remains reserved for the full Projects view.
+    if (pinnedProjectIds.length) {
+      void refreshProjects()
+      void refreshProjectTree()
+
+      return
+    }
+
     // Flat view: warm the tree in the background anyway. Fetching it only on
     // the switch meant the first switch of every run paid for the whole round
     // trip behind a skeleton, and the menu's Project filter had nothing to
@@ -761,7 +796,7 @@ export function ChatSidebar({
     const warm = window.setTimeout(() => void refreshProjectTree(), PROJECT_TREE_WARM_MS)
 
     return () => window.clearTimeout(warm)
-  }, [activeConnectionId, worktreeGroupingActive, showAllProfiles, profileScope, gatewayReady])
+  }, [activeConnectionId, worktreeGroupingActive, showAllProfiles, profileScope, gatewayReady, pinnedProjectIds.length])
 
   // Sessions the branch join can't answer for get one look at their own
   // transcript — a `gh pr create` in there names the PR outright. Backfills
@@ -847,7 +882,7 @@ export function ChatSidebar({
   // session regrouping); the heavy disk crawl that surfaces brand-new repos is
   // throttled. Agent-driven changes already refresh via $workspaceChangeTick.
   useEffect(() => {
-    if (!worktreeGroupingActive || !gatewayReady) {
+    if ((!worktreeGroupingActive && !pinnedProjectIds.length) || !gatewayReady) {
       return
     }
 
@@ -864,7 +899,7 @@ export function ChatSidebar({
 
       // Discovery stays off while browsing every profile, for the reason the
       // first fetch leaves it out.
-      if (showAllProfiles) {
+      if (showAllProfiles || !worktreeGroupingActive) {
         return
       }
 
@@ -883,7 +918,7 @@ export function ChatSidebar({
       window.removeEventListener('focus', onActive)
       document.removeEventListener('visibilitychange', onActive)
     }
-  }, [worktreeGroupingActive, showAllProfiles, gatewayReady])
+  }, [worktreeGroupingActive, showAllProfiles, gatewayReady, pinnedProjectIds.length])
 
   // Apply the persisted repo + worktree orders to a project's repo subtrees.
   const orderRepos = useCallback(
@@ -939,6 +974,16 @@ export function ChatSidebar({
   // The overview only renders in grouped mode; the model stays live regardless
   // so scoping is consistent across views.
   const agentProjectTree = worktreeGroupingActive ? projectModel : undefined
+
+  const pinnedProjects = useMemo(() => {
+    const byId = new Map(projectModel.filter(project => !project.isNoProject).map(project => [project.id, project]))
+
+    return pinnedProjectIds.flatMap(id => {
+      const project = byId.get(id)
+
+      return project ? [project] : []
+    })
+  }, [pinnedProjectIds, projectModel])
 
   // ── Project switcher (drill-in) ────────────────────────────────────────────
   // Grouped, single-profile view is a project switcher: ALL_PROJECTS shows the
@@ -1413,11 +1458,6 @@ export function ChatSidebar({
   // every background refresh instead of the empty state.
   const showSessionSkeletons = sessionsLoading && scopedSessions.length === 0
 
-  // Filtered down to nothing still renders the section: the empty state is what
-  // tells you the filter — not an empty account — is why the list is bare.
-  const showSessionSections =
-    showSessionSkeletons || filtersActive || sortedSessions.length > 0 || projectModel.length > 0
-
   // The sidebar's session-area mode — exposed as data-attributes so custom
   // skins can target project mode (overview vs. entered), archived, or search
   // without relying on internal class names. `data-sessions-project` carries
@@ -1442,6 +1482,8 @@ export function ChatSidebar({
   // Persist the new project overview order (drag-to-reorder); orderByIds applies
   // it over the default sort, so stale/new ids reconcile on the next render.
   const reorderProjects = (ids: string[]) => setSidebarProjectOrderIds(ids)
+
+  const reorderPinnedProjects = (ids: string[]) => setPinnedProjectOrder(ids)
 
   // Sortable rows carry live session ids; the pinned store is keyed by durable
   // (lineage-root) ids, so translate before persisting the new order.
@@ -1470,7 +1512,7 @@ export function ChatSidebar({
         <SidebarGroup className="shrink-0 p-0 pb-2 pt-[calc(var(--titlebar-height)+0.375rem)]">
           <SidebarGroupContent>
             <SidebarMenu className="gap-px">
-              {[...SIDEBAR_NAV, ...contributedNav].map(item => {
+              {navigationItems.map(item => {
                 const isInteractive = Boolean(item.action) || Boolean(item.route)
 
                 const active =
@@ -1478,13 +1520,17 @@ export function ChatSidebar({
                   (item.id === 'messaging' && currentView === 'messaging') ||
                   (item.id === 'artifacts' && currentView === 'artifacts') ||
                   (item.id === 'cron' && currentView === 'cron') ||
+                  (item.id === 'projects' && grouping === 'project') ||
                   // Contributed rows light up at their own route.
-                  (Boolean(item.route) && pathname === item.route)
+                  (Boolean(item.route) &&
+                    (item.route?.includes('?') ? `${pathname}${search}` === item.route : pathname === item.route))
 
                 const isNewSession = item.id === 'new-session'
+                const isProjects = item.id === 'projects'
 
                 const button = (
                   <SidebarMenuButton
+                    aria-current={active ? 'page' : undefined}
                     aria-disabled={!isInteractive}
                     className={cn(
                       // no-drag: these rows sit directly under the titlebar's
@@ -1500,6 +1546,8 @@ export function ChatSidebar({
                       !isInteractive &&
                         'cursor-default hover:border-transparent hover:bg-transparent hover:text-inherit'
                     )}
+                    data-sidebar-nav-id={item.id}
+                    isActive={active}
                     onClick={() => {
                       // A plain new session lands in whatever profile the live
                       // gateway is on (= the active switcher context). null →
@@ -1507,6 +1555,13 @@ export function ChatSidebar({
                       // change which profile that is.
                       if (isNewSession) {
                         $newChatProfile.set(null)
+                        setSidebarGrouping('date')
+                      }
+
+                      if (isProjects) {
+                        setSidebarGrouping('project')
+
+                        return
                       }
 
                       onNavigate(item)
@@ -1565,24 +1620,21 @@ export function ChatSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        {showSessionSections && (
-          <div className="shrink-0 px-2 pb-1 pt-1">
-            <SearchField
-              aria-label={s.searchAria}
-              inputRef={searchInputRef}
-              onChange={setSearchQuery}
-              placeholder={s.searchPlaceholder}
-              value={searchQuery}
-            />
-          </div>
-        )}
+        <div className="shrink-0 px-2 pb-1 pt-1">
+          <SearchField
+            aria-label={s.searchAria}
+            inputRef={searchInputRef}
+            onChange={setSearchQuery}
+            placeholder={s.searchPlaceholder}
+            value={searchQuery}
+          />
+        </div>
 
-        {showSessionSections && (
-          <div
-            className={cn('flex min-h-0 flex-1 flex-col pb-1.75', SCROLL_Y, SCROLL_GUTTER)}
-            data-sessions-mode={sessionsMode}
-            data-sessions-project={inProject ? (enteredProjectId ?? undefined) : undefined}
-          >
+        <div
+          className={cn('flex min-h-0 flex-1 flex-col pb-1.75', SCROLL_Y, SCROLL_GUTTER)}
+          data-sessions-mode={sessionsMode}
+          data-sessions-project={inProject ? (enteredProjectId ?? undefined) : undefined}
+        >
             {trimmedQuery && (
               <SidebarSessionsSection
                 activeSessionId={activeSidebarSessionId}
@@ -1633,6 +1685,52 @@ export function ChatSidebar({
                 sessions={pinnedSessions}
                 showProfileTags={showAllProfiles}
                 sortable={pinnedSessions.length > 1}
+              />
+            )}
+
+            {!trimmedQuery && !worktreeGroupingActive && !showArchived && (
+              <SidebarSessionsSection
+                activeProjectId={activeProjectId}
+                activeSessionId={activeSidebarSessionId}
+                contentClassName="flex flex-col gap-px rounded-lg pb-2 pt-1"
+                dndSensors={dndSensors}
+                emptyState={
+                  <div className="wrap-anywhere grid min-h-12 place-items-center rounded-lg px-2 text-center text-xs text-(--ui-text-tertiary)">
+                    {s.projects.pinnedEmpty}
+                  </div>
+                }
+                headerAction={
+                  <Tip label={s.projects.newButton}>
+                    <Button
+                      aria-label={s.projects.newButton}
+                      className={HEADER_ACTION_BTN}
+                      onClick={event => {
+                        event.stopPropagation()
+                        openProjectCreate()
+                      }}
+                      size="icon-xs"
+                      variant="ghost"
+                    >
+                      <Codicon name="add" size="0.75rem" />
+                    </Button>
+                  </Tip>
+                }
+                label={s.projects.pinnedSectionLabel}
+                onArchiveSession={onArchiveSession}
+                onDeleteSession={onDeleteSession}
+                onEnterProject={onEnterProject}
+                onNewSessionInWorkspace={onNewSessionInWorkspace}
+                onReorderProjects={reorderPinnedProjects}
+                onResumeSession={onResumeSession}
+                onToggle={() => setSidebarProjectsOpen(!projectsOpen)}
+                onTogglePin={pinSession}
+                onToggleUnread={toggleUnread}
+                open={projectsOpen}
+                pinned={false}
+                projectOverview={pinnedProjects}
+                projectOverviewCompact
+                rootClassName="shrink-0 p-0 pb-1"
+                sessions={[]}
               />
             )}
 
@@ -1881,10 +1979,7 @@ export function ChatSidebar({
                 open={cronOpen}
               />
             )}
-          </div>
-        )}
-
-        {!showSessionSections && <SidebarBlankState onNewProject={openProjectCreate} />}
+        </div>
 
         <div className="shrink-0 px-0.5 pb-1 pt-0.5">
           <ProfileRail />

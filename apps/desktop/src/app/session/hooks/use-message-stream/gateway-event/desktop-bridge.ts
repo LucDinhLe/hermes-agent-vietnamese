@@ -4,7 +4,6 @@ import { readActiveTerminal } from '@/app/right-sidebar/terminal/buffer'
 import { closeAgentTerminalByProc } from '@/app/right-sidebar/terminal/terminals'
 import type { PreviewActAction } from '@/lib/preview-act/act-in-page'
 import type { TourAction, TourStep } from '@/lib/tour'
-import { $gateway } from '@/store/gateway'
 import { applyDesktopLayoutPreset, revealDesktopPane } from '@/store/pane-focus'
 import { recordAgentReaction } from '@/store/reactions-local'
 import { setMessages } from '@/store/session'
@@ -43,7 +42,7 @@ const loadPreviewEngine = () => {
  *  (terminal/preview/window), agent terminal streaming, pane reveal, and
  *  message reactions. */
 export function handleDesktopBridgeEvent(ctx: GatewayEventContext): boolean {
-  const { event, payload, isActiveEvent } = ctx
+  const { event, payload, isActiveEvent, requestEventSource } = ctx
 
   if (event.type === 'terminal.read.request') {
     // read_terminal tool: serialize the renderer's xterm buffer and answer
@@ -55,10 +54,10 @@ export function handleDesktopBridgeEvent(ctx: GatewayEventContext): boolean {
       const count = typeof payload?.count === 'number' ? payload.count : undefined
       const result = readActiveTerminal({ start, count })
 
-      void $gateway.get()?.request('terminal.read.respond', {
+      void requestEventSource('terminal.read.respond', {
         request_id: requestId,
         text: result ? JSON.stringify(result) : ''
-      })
+      }).catch(() => undefined)
     }
 
     return true
@@ -74,10 +73,10 @@ export function handleDesktopBridgeEvent(ctx: GatewayEventContext): boolean {
       const count = typeof payload?.count === 'number' ? payload.count : undefined
 
       void readActivePreview({ count, start }).then(result => {
-        void $gateway.get()?.request('preview.read.respond', {
+        void requestEventSource('preview.read.respond', {
           request_id: requestId,
           text: result ? JSON.stringify(result) : ''
-        })
+        }).catch(() => undefined)
       })
     }
 
@@ -94,10 +93,10 @@ export function handleDesktopBridgeEvent(ctx: GatewayEventContext): boolean {
 
     if (requestId) {
       const answer = (result: unknown) =>
-        $gateway.get()?.request('preview.act.respond', {
+        requestEventSource('preview.act.respond', {
           request_id: requestId,
           text: result ? JSON.stringify(result) : ''
-        })
+        }).catch(() => undefined)
 
       if (isActiveEvent) {
         void loadPreviewEngine()
@@ -138,10 +137,10 @@ export function handleDesktopBridgeEvent(ctx: GatewayEventContext): boolean {
       const read = window.hermesDesktop?.readWindowBelow
 
       const answer = (result: unknown) =>
-        $gateway.get()?.request('window.read.respond', {
+        requestEventSource('window.read.respond', {
           request_id: requestId,
           text: result ? JSON.stringify(result) : ''
-        })
+        }).catch(() => undefined)
 
       // .catch: ipcRenderer.invoke rejects on an older shell without the
       // handler or a main-side throw — without an empty answer the tool
@@ -178,10 +177,10 @@ export function handleDesktopBridgeEvent(ctx: GatewayEventContext): boolean {
 
     if (requestId) {
       const answer = (result: unknown) =>
-        $gateway.get()?.request('tour.respond', {
+        requestEventSource('tour.respond', {
           request_id: requestId,
           text: result ? JSON.stringify(result) : ''
-        })
+        }).catch(() => undefined)
 
       if (isActiveEvent) {
         void import('@/lib/tour')

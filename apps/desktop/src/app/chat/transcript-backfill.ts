@@ -15,7 +15,7 @@
  * drift on the next page.
  */
 
-import { getOlderSessionMessages } from '@/hermes'
+import { getOlderSessionMessages, getOlderSessionMessagesForOwner } from '@/hermes'
 import { type ChatMessage, toChatMessages } from '@/lib/chat-messages'
 import { recordTranscriptBackfillPage, transcriptTailState } from '@/store/transcript-tail'
 
@@ -135,7 +135,14 @@ export function backfillOlderTranscriptPage(request: BackfillRequest): Promise<b
     let page
 
     try {
-      page = await getOlderSessionMessages(storedSessionId, tail.profile, tail.nextOffset)
+      page =
+        tail.connectionId === undefined
+          ? await getOlderSessionMessages(storedSessionId, tail.profile, tail.nextOffset)
+          : await getOlderSessionMessagesForOwner(
+              storedSessionId,
+              { connectionId: tail.connectionId, profile: tail.profile ?? 'default' },
+              tail.nextOffset
+            )
     } catch {
       // Non-fatal: the action stays available and the next click retries.
       return false

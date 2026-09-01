@@ -1,11 +1,11 @@
 import type { HermesConnection } from '@/global'
 
-export const TITLEBAR_HEIGHT = 34
+export const TITLEBAR_HEIGHT = 40
 export const MACOS_TRAFFIC_LIGHTS_HEIGHT = 14
 /** Titlebar tool hit target (both axes). */
-export const TITLEBAR_CONTROL_SIZE = 24
-/** Codicon glyph box in titlebar clusters — optical match to traffic-light row. */
-export const TITLEBAR_ICON_SIZE = 13.9
+export const TITLEBAR_CONTROL_SIZE = 32
+/** Codicon glyph box in titlebar clusters — readable while still matching the traffic-light row. */
+export const TITLEBAR_ICON_SIZE = 16
 export const TITLEBAR_ICON_BADGE_SCALE = 0.65
 export const TITLEBAR_CONTROL_OFFSET_X = 74
 export const TITLEBAR_CONTROL_HEIGHT = TITLEBAR_CONTROL_SIZE
@@ -68,9 +68,9 @@ export function titlebarToolsRightCss(
 // shared <Button size="icon-titlebar"> (used polymorphically via asChild) —
 // Button is the single source of button styling.
 export const titlebarButtonClass =
-  'text-muted-foreground/85 hover:bg-(--ui-control-hover-background) hover:text-foreground'
+  'text-(--ui-text-secondary) hover:bg-(--ui-control-hover-background) hover:text-(--ui-text-primary)'
 
-/** Shared flex shell for left/right/pane titlebar tool rows — no gap; 24px buttons abut. */
+/** Shared flex shell for left/right/pane titlebar tool rows — no gap; 32px buttons abut. */
 export const titlebarToolClusterClass =
   'fixed z-70 flex flex-row items-center pointer-events-auto select-none [-webkit-app-region:no-drag]'
 

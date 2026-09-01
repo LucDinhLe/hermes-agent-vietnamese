@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { clearClarifyRequest, setClarifyRequest } from './clarify'
 import {
@@ -18,6 +18,10 @@ import {
 } from './prompts'
 import { $activeSessionId } from './session'
 
+const requestEventSource = vi.hoisted(() => vi.fn())
+
+vi.mock('./gateway-event-source', () => ({ requestForGatewayEventSource: requestEventSource }))
+
 // Prompts are parked per-session; the exported $*Request views are scoped to the
 // active session, so each test focuses the session it's asserting on.
 beforeEach(() => {
@@ -28,6 +32,7 @@ afterEach(() => {
   clearAllPrompts()
   clearClarifyRequest()
   $activeSessionId.set(null)
+  requestEventSource.mockReset()
 })
 
 describe('approval prompt store', () => {
@@ -80,15 +85,10 @@ describe('approval prompt store', () => {
   })
 
   it('acknowledges an approval only after parking it', async () => {
-    const calls: Array<[string, Record<string, unknown>]> = []
-
     const gateway = {
-      request: async (method: string, params: Record<string, unknown>) => {
-        calls.push([method, params])
-
-        return { acknowledged: true }
-      }
+      request: vi.fn()
     }
+    requestEventSource.mockResolvedValueOnce({ acknowledged: true })
 
     await receiveApprovalRequest(gateway, {
       command: 'x',
@@ -98,35 +98,26 @@ describe('approval prompt store', () => {
     })
 
     expect($approvalRequest.get()?.requestId).toBe('r1')
-    expect(calls).toEqual([['approval.received', { request_id: 'r1', session_id: 's1' }]])
+    expect(requestEventSource).toHaveBeenCalledWith('s1', 'approval.received', { request_id: 'r1' })
   })
 
   it('replays and acknowledges the oldest unresolved approval after reconnect', async () => {
-    const calls: Array<[string, Record<string, unknown>]> = []
-
-    const gateway = {
-      request: async (method: string, params: Record<string, unknown>) => {
-        calls.push([method, params])
-
-        if (method === 'approval.pending') {
-          return {
-            approvals: [
-              { command: 'first', description: 'd1', request_id: 'r1' },
-              { command: 'second', description: 'd2', request_id: 'r2' }
-            ]
-          }
-        }
-
-        return { acknowledged: true }
-      }
-    }
+    const gateway = { request: vi.fn() }
+    requestEventSource
+      .mockResolvedValueOnce({
+        approvals: [
+          { command: 'first', description: 'd1', request_id: 'r1' },
+          { command: 'second', description: 'd2', request_id: 'r2' }
+        ]
+      })
+      .mockResolvedValueOnce({ acknowledged: true })
 
     await replayPendingApproval(gateway, 's1')
 
     expect($approvalRequest.get()?.requestId).toBe('r1')
-    expect(calls).toEqual([
-      ['approval.pending', { session_id: 's1' }],
-      ['approval.received', { request_id: 'r1', session_id: 's1' }]
+    expect(requestEventSource.mock.calls).toEqual([
+      ['s1', 'approval.pending'],
+      ['s1', 'approval.received', { request_id: 'r1' }]
     ])
   })
 })

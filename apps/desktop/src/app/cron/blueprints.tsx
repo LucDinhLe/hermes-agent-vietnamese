@@ -1,6 +1,9 @@
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { AutomationBlueprint, AutomationBlueprintField } from '@/hermes'
+import { useI18n } from '@/i18n'
+
+import { blueprintOptionLabel } from './blueprint-localization'
 
 // The blueprint catalog is shared with the dashboard, so its deliver slot
 // defaults to "origin" (the chat/home-channel a dashboard or gateway job was
@@ -58,6 +61,8 @@ export function BlueprintSlotControl({
   onChange: (next: string) => void
   value: string
 }) {
+  const { locale } = useI18n()
+
   if (field.type === 'enum' || field.type === 'weekdays') {
     return (
       <Select onValueChange={onChange} value={value}>
@@ -67,7 +72,7 @@ export function BlueprintSlotControl({
         <SelectContent>
           {field.options.map(option => (
             <SelectItem key={option} value={option}>
-              {option}
+              {blueprintOptionLabel(option, locale)}
             </SelectItem>
           ))}
         </SelectContent>

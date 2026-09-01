@@ -21,6 +21,7 @@ import {
   disposeSecondariesForConnection,
   ensureGatewayForProfile,
   gatewayActivationEpoch,
+  gatewayEpochForAgent,
   isActivePrimary,
   pruneSecondaryGateways,
   reconnectSecondaryGateways,
@@ -89,6 +90,10 @@ const BOOT_RETRY_BASE_DELAY_MS = 2_000
 interface GatewayBootOptions {
   beforeConnectionSwitch: () => void
   handleGatewayEvent: (event: RpcEvent) => void
+  onBackendStateChanged?: (
+    backend: { connectionId: null | string; gatewayEpoch: number; profile: string },
+    state: 'closed' | 'connecting' | 'error' | 'idle' | 'open'
+  ) => void
   onConnectionReady: (
     connection: Awaited<ReturnType<NonNullable<typeof window.hermesDesktop>['getConnection']>> | null
   ) => void
@@ -100,6 +105,7 @@ interface GatewayBootOptions {
 export function useGatewayBoot({
   beforeConnectionSwitch,
   handleGatewayEvent,
+  onBackendStateChanged,
   onConnectionReady,
   onGatewayReady,
   refreshHermesConfig,
@@ -108,6 +114,7 @@ export function useGatewayBoot({
   const callbacksRef = useRef({
     beforeConnectionSwitch,
     handleGatewayEvent,
+    onBackendStateChanged,
     onConnectionReady,
     onGatewayReady,
     refreshHermesConfig,
@@ -117,6 +124,7 @@ export function useGatewayBoot({
   callbacksRef.current = {
     beforeConnectionSwitch,
     handleGatewayEvent,
+    onBackendStateChanged,
     onConnectionReady,
     onGatewayReady,
     refreshHermesConfig,
@@ -500,6 +508,7 @@ export function useGatewayBoot({
         recordSessionEventScope(event)
         callbacksRef.current.handleGatewayEvent(event)
       },
+      onBackendStateChanged: (backend, state) => callbacksRef.current.onBackendStateChanged?.(backend, state),
       onActiveConnectionInvalidated: (fallbackProfile, invalidationEpoch) => {
         $activeGatewayProfile.set(fallbackProfile)
         void desktop
@@ -546,9 +555,18 @@ export function useGatewayBoot({
 
     const sourceProfile = normalizeProfileKey($activeGatewayProfile.get())
 
-    const offEvent = gateway.onEvent(event =>
-      callbacksRef.current.handleGatewayEvent({ ...event, profile: sourceProfile })
-    )
+    const offEvent = gateway.onEvent(event => {
+      // Shared-primary backends can multiplex several Agent profiles on one
+      // socket. Preserve an explicit backend profile; only profile-less legacy
+      // events inherit the profile captured when this physical socket booted.
+      const eventProfile = event.profile?.trim() ? normalizeProfileKey(event.profile) : sourceProfile
+
+      callbacksRef.current.handleGatewayEvent({
+        ...event,
+        gatewayEpoch: gatewayEpochForAgent(null, eventProfile),
+        profile: eventProfile
+      })
+    })
 
     // Wake signals: power resume (macOS/Windows), network coming back, and the
     // window regaining focus/visibility. Each nudges an immediate reconnect.

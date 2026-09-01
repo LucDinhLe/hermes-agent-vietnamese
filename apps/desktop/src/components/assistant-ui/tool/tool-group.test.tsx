@@ -403,14 +403,14 @@ describe('settled tool run', () => {
   it('collapses to a summary line naming the work', async () => {
     const { container } = render(<GroupHarness message={settledRunMessage()} />)
 
-    expect(await screen.findByText('Explored wiring.tsx, ran 1 command')).toBeTruthy()
+    expect(await screen.findByText('Đã xem wiring.tsx, đã chạy 1 lệnh')).toBeTruthy()
     expect(container.querySelectorAll('[data-tool-row]')).toHaveLength(0)
   })
 
   it('expands to the underlying rows when the summary is clicked', async () => {
     const { container } = render(<GroupHarness message={settledRunMessage()} />)
 
-    fireEvent.click(await screen.findByText('Explored wiring.tsx, ran 1 command'))
+    fireEvent.click(await screen.findByText('Đã xem wiring.tsx, đã chạy 1 lệnh'))
 
     await waitFor(() => {
       expect(container.querySelectorAll('[data-tool-row]').length).toBeGreaterThan(0)
@@ -434,7 +434,7 @@ describe('a file edit among ordinary activity', () => {
   it('stays visible between the two runs it interrupted', async () => {
     const { container } = render(<GroupHarness message={editBetweenRunsMessage()} />)
 
-    await screen.findByText('Explored 2 files')
+    await screen.findByText('Đã xem 2 tệp')
 
     const shape = [...container.querySelectorAll('[data-tool-summary],[data-tool-row]')].map(node =>
       node.hasAttribute('data-tool-summary') ? 'summary' : 'row'
@@ -459,7 +459,7 @@ describe('transcript fade', () => {
   it('marks every row and summary as scaffolding', async () => {
     const { container } = render(<GroupHarness message={editBetweenRunsMessage()} />)
 
-    await screen.findByText('Explored 2 files')
+    await screen.findByText('Đã xem 2 tệp')
 
     const unmarked = [...container.querySelectorAll('[data-tool-summary],[data-tool-row]')].filter(
       node => !node.hasAttribute('data-conversation-scaffold')
@@ -495,7 +495,7 @@ describe('live tool run', () => {
   it('stays live in the gap between two sequential calls', async () => {
     const { container } = render(<GroupHarness message={betweenSequentialCallsMessage()} />)
 
-    expect(await screen.findByText('Running 2 commands')).toBeTruthy()
+    expect(await screen.findByText('Đang chạy 2 lệnh')).toBeTruthy()
     expect(container.querySelector('[data-tool-ticker]')).not.toBeNull()
     expect(container.querySelector('[data-tool-summary] button[aria-expanded]')).toBeNull()
   })
@@ -506,7 +506,7 @@ describe('live tool run', () => {
   it('drops the one-line window when a row inside it is opened', async () => {
     const { container } = render(<GroupHarness message={betweenSequentialCallsMessage()} />)
 
-    await screen.findByText('Running 2 commands')
+    await screen.findByText('Đang chạy 2 lệnh')
 
     const row = container.querySelector('[data-tool-ticker] [data-tool-row] button[aria-expanded="false"]')
 
@@ -530,7 +530,7 @@ describe('tool run left unresolved', () => {
   it('settles with the turn rather than narrating work that stopped', async () => {
     const { container } = render(<GroupHarness message={abandonedRunMessage()} />)
 
-    expect(await screen.findByText('Explored 2 files')).toBeTruthy()
+    expect(await screen.findByText('Đã xem 2 tệp')).toBeTruthy()
     expect(container.querySelectorAll('[data-tool-row]')).toHaveLength(0)
     expect(container.querySelector('[data-tool-summary] button[aria-expanded]')).not.toBeNull()
   })
@@ -538,7 +538,7 @@ describe('tool run left unresolved', () => {
   it('settles once the agent moves on, even mid-turn', async () => {
     const { container } = render(<GroupHarness message={movedOnMessage()} />)
 
-    expect(await screen.findByText('Explored 2 files')).toBeTruthy()
+    expect(await screen.findByText('Đã xem 2 tệp')).toBeTruthy()
     expect(container.querySelector('[data-tool-summary] button[aria-expanded]')).not.toBeNull()
   })
 })

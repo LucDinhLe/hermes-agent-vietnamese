@@ -203,8 +203,8 @@ test('shape: revealed hidden rows are dimmed and flagged with the eye-closed gly
   const botRow = pluginSource.slice(pluginSource.indexOf('function BotRow('), pluginSource.indexOf('// ── model picker'))
   assert.match(botRow, /meta\?\.hidden && 'opacity-60'/)
   assert.match(botRow, /name: 'eye-closed'/)
-  assert.match(botRow, /children: meta\?\.hidden \? 'Unhide Bot' : 'Hide Bot'/)
-  assert.match(botRow, /saveBotMeta\(bot\.name, \{ hidden: !hidden \}\)/)
+  assert.match(botRow, /children: meta\?\.hidden \? 'Hiện tác nhân' : 'Ẩn tác nhân'/)
+  assert.match(botRow, /saveBotMeta\(bot\.name, \{ hidden: !hidden \}, bot\)/)
 })
 
 test('shape: hiding never filters mentions, group flows, or the meta/activity sweeps', () => {
