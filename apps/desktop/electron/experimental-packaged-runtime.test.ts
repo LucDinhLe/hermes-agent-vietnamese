@@ -12,8 +12,8 @@ import {
 } from './experimental-packaged-runtime'
 
 const roots: string[] = []
-const APP_VERSION = '0.33.0-dev.11-advisor-exp.9'
-const CANDIDATE = `d11e9-${'c'.repeat(8)}-${'d'.repeat(8)}`
+const APP_VERSION = '0.33.0-dev.11-advisor-exp.10'
+const CANDIDATE = `d11e10-${'c'.repeat(8)}-${'d'.repeat(8)}`
 const OFFICIAL_ENGINE_BASE = 'a'.repeat(40)
 const BASE_EDITION_SHELL = 'b'.repeat(40)
 const EXPERIMENTAL_ENGINE_SOURCE = 'c'.repeat(40)
@@ -580,6 +580,27 @@ describe('packaged Experimental runtime', () => {
         resourcesPath: f.resourcesPath
       })
     ).toThrow(/candidate publicDistributionAllowed must be boolean/)
+  })
+
+  it('does not package a composition with an omitted local-distribution flag', () => {
+    const f = fixture()
+
+    rewriteReceiptedComponent(
+      f.resourcesPath,
+      'experimentalComposition',
+      'experimental-composition.json',
+      (composition: any) => {
+        delete composition.publicDistributionAllowed
+      }
+    )
+
+    expect(() =>
+      verifyExperimentalRuntimeBundle({
+        appVersion: APP_VERSION,
+        experimentRoot: f.experimentRoot,
+        resourcesPath: f.resourcesPath
+      })
+    ).toThrow(/composition publicDistributionAllowed must be boolean/)
   })
 
   it('fails closed when a materialized candidate contains an unreceipted source file', () => {
