@@ -3,7 +3,7 @@ import { type MutableRefObject, useCallback, useEffect, useRef } from 'react'
 import type { NavigateFunction } from 'react-router'
 
 import { graftRefreshedTailOntoBackfill } from '@/app/chat/transcript-backfill'
-import { revealTreePane } from '@/components/pane-shell/tree/store'
+import { focusedSessionTabAnchor, revealTreePane } from '@/components/pane-shell/tree/store'
 import {
   deleteSessionForOwner,
   getAllSessionMessagesForOwner,
@@ -928,6 +928,9 @@ export function useSessionActions({
    *  first message persists a turn. "Open in split" keeps the listed behavior. */
   const openNewSessionTile = useCallback(
     async (dir: TileDock = 'right', options?: { cwd?: null | string; listed?: boolean }) => {
+      // Capture the clicked tab group before profile/create awaits can move focus.
+      const anchor = focusedSessionTabAnchor() ?? undefined
+
       try {
         // Fresh tile → the caller's workspace when one was named (the sidebar
         // "+" on a project/worktree lane), else the resolved new-session cwd
@@ -977,6 +980,7 @@ export function useSessionActions({
         updateSessionState(rendererRuntimeId, state => (runtimeInfo ? { ...state, ...runtimeInfo } : state), null)
 
         openProvisionalSessionTile({
+          anchor,
           dir,
           draftId,
           owner: target.owner,

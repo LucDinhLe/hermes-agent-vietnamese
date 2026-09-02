@@ -7,6 +7,41 @@ provider/base_url/api_key empty in AIAgent, causing HTTP 404.
 
 import os
 from unittest.mock import MagicMock, patch
+import pytest
+
+
+@pytest.mark.parametrize('provider,url,blocked', [
+    ('anthropic', 'https://api.anthropic.com', True),
+    ('openai-codex', 'https://chatgpt.com/backend-api/codex', False),
+    ('anthropic', 'https://proxy.example/anthropic', False),
+])
+def test_luna_create_checks_final_provider_pair_before_agent_construction(provider, url, blocked):
+    from tui_gateway.server import _make_agent
+
+    with (
+        patch('tui_gateway.server._load_cfg', return_value={'agent': {}}),
+        patch('tui_gateway.server._get_db', return_value=MagicMock()),
+        patch('tui_gateway.server._load_tool_progress_mode', return_value='compact'),
+        patch('tui_gateway.server._load_reasoning_config', return_value=None),
+        patch('tui_gateway.server._load_service_tier', return_value=None),
+        patch('tui_gateway.server._load_enabled_toolsets', return_value=None),
+        patch('tui_gateway.server._load_provider_routing', return_value={}),
+        patch('hermes_cli.runtime_provider.resolve_runtime_provider', return_value={
+            'provider': provider, 'base_url': url, 'api_key': 'test-only',
+        }) as resolve,
+        patch('tui_gateway.review_settings.apply_review_settings'),
+        patch('run_agent.AIAgent') as build,
+    ):
+        if blocked:
+            with pytest.raises(ValueError, match='openai-codex'):
+                _make_agent('luna-test', 'luna-key', model_override={'model': 'gpt-5.6-luna', 'provider': provider})
+            build.assert_not_called()
+        else:
+            _make_agent('luna-test', 'luna-key', model_override={'model': 'gpt-5.6-luna', 'provider': provider})
+            assert build.call_args.kwargs['model'] == 'gpt-5.6-luna'
+            assert build.call_args.kwargs['provider'] == provider
+        assert resolve.call_args.kwargs['target_model'] == 'gpt-5.6-luna'
+        assert resolve.call_args.kwargs['requested'] == provider
 
 
 def test_make_agent_passes_resolved_provider():

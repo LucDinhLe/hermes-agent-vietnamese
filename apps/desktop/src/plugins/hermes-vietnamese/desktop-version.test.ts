@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { adaptVietnameseDesktopVersion } from './desktop-version'
+import productMetadata from './product-metadata.json'
 
 interface DesktopVersionFixture {
   appVersion: string
@@ -23,7 +24,7 @@ const rawVersion = (overrides: Partial<DesktopVersionFixture> = {}): DesktopVers
 describe('adaptVietnameseDesktopVersion', () => {
   it('shows the edition version while preserving the exact engine version', () => {
     expect(adaptVietnameseDesktopVersion(rawVersion())).toEqual({
-      appVersion: '0.33.0-dev.11-advisor-exp.9',
+      appVersion: productMetadata.technicalVersion,
       electronVersion: '40.0.0',
       engineVersion: '0.20.5',
       hermesRoot: 'C:/isolated/hermes',
@@ -37,5 +38,11 @@ describe('adaptVietnameseDesktopVersion', () => {
 
     expect(adapted.appVersion).toBe('0.32.1-vi.18')
     expect(adapted.engineVersion).toBe('0.20.5')
+  })
+
+  it('keeps the actual application version when the modern bridge reports an unknown engine', () => {
+    const adapted = adaptVietnameseDesktopVersion(rawVersion({ appVersion: 'installed-version', engineVersion: '' }))
+    expect(adapted.appVersion).toBe('installed-version')
+    expect(adapted.engineVersion).toBe('')
   })
 })

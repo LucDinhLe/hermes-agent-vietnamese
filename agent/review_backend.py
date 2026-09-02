@@ -201,7 +201,7 @@ def complete_subscription_review(
     credential_handle: object,
     provider: str,
     model: str,
-    messages: list[dict[str, str]],
+    messages: list[dict[str, Any]],
     tools: list[Any],
     tool_choice: str,
     timeout: float,

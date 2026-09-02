@@ -167,6 +167,10 @@ def test_final_revise_holds_first_candidate_and_publishes_main_model_rewrite(age
     )
     assert "Use the verified product identity" in revision_prompt["content"]
     assert "Do not mention Advisor" in revision_prompt["content"]
+    assert all(
+        not any('Advisor reviewed the previous candidate' in text for text in request.candidate.get('user_context', []))
+        for request in review_calls
+    )
     assert not any(
         message.get("_review_revision_candidate") or message.get("_review_revision_synthetic")
         for message in result["messages"]

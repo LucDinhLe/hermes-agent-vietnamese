@@ -263,6 +263,7 @@ import {
 } from './remote-liveness'
 import { missingRendererAssets } from './renderer-bundle'
 import { attachRendererConsoleCapture, formatRendererBoundaryReport } from './renderer-log'
+import { runtimeMetadataRoot } from './runtime-metadata-root'
 import {
   buildInstanceWindowUrl,
   buildSessionWindowUrl,
@@ -14671,11 +14672,20 @@ ipcMain.handle('hermes:updates:branch:set', async (_event, name) => {
 // Resolve the canonical Hermes version (the one `release.py` bumps in
 // hermes_cli/__init__.py + pyproject.toml) so the desktop About panel shows the
 // real Hermes version instead of the Electron app's own package.json version,
-// which historically drifted (stuck at 0.0.2). Falls back to app.getVersion()
-// when the source tree can't be read (e.g. a packaged build without the repo).
+// which historically drifted (stuck at 0.0.2). An unreadable/unready runtime
+// stays unknown; the Electron version is not evidence of an engine version.
+function resolveRunningRuntimeRoot() {
+  return runtimeMetadataRoot(Boolean(EXPERIMENTAL_RUNTIME_BUNDLE), experimentalRuntimeResult, resolveUpdateRoot())
+}
+
 function resolveHermesVersion() {
   try {
-    const root = resolveUpdateRoot()
+    const root = resolveRunningRuntimeRoot()
+
+    if (!root) {
+      return ''
+    }
+
     const initPath = path.join(root, 'hermes_cli', '__init__.py')
 
     if (fileExists(initPath)) {
@@ -14687,15 +14697,21 @@ function resolveHermesVersion() {
       }
     }
   } catch {
-    // Fall through to the Electron app version below.
+    // Leave runtime provenance unknown when it cannot be read.
   }
 
-  return app.getVersion()
+  return ''
 }
 
 function resolveAdvisorRuntimeReceipt() {
   try {
-    const receiptPath = path.join(resolveUpdateRoot(), 'advisor-runtime-receipt.json')
+    const root = resolveRunningRuntimeRoot()
+
+    if (!root) {
+      return null
+    }
+
+    const receiptPath = path.join(root, 'advisor-runtime-receipt.json')
 
     if (!fileExists(receiptPath)) {
       return null
@@ -14752,7 +14768,7 @@ ipcMain.handle('hermes:version', async () => {
     electronVersion: process.versions.electron,
     nodeVersion: process.versions.node,
     platform: process.platform,
-    hermesRoot: resolveUpdateRoot(),
+    hermesRoot: resolveRunningRuntimeRoot() ?? '',
     bundleOutOfSync: skew.outOfSync,
     bundleCommitsBehind: skew.desktopCommitsBehind,
     runtimeCandidateId: runtime?.candidateId || null,

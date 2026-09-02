@@ -269,6 +269,23 @@ describe('useModelControls', () => {
     expect(requestGateway).not.toHaveBeenCalledWith('slash.exec', expect.anything())
   })
 
+  it('switches both parts of a stale Claude/Luna pair to the selected Codex Luna row', async () => {
+    $activeSessionId.set('session-luna')
+    setCurrentModel('gpt-5-6-luna')
+    setCurrentProvider('claude-code')
+    const requestGateway = vi.fn(async () => ({}) as never)
+    let controls!: Controls
+    render(<Harness onReady={value => (controls = value)} requestGateway={requestGateway} />)
+    await expect(controls.selectModel({ model: 'gpt-5.6-luna', provider: 'openai-codex' })).resolves.toBe(true)
+    expect($currentModel.get()).toBe('gpt-5.6-luna')
+    expect($currentProvider.get()).toBe('openai-codex')
+    expect(requestGateway).toHaveBeenCalledWith('config.set', {
+      session_id: 'session-luna',
+      key: 'model',
+      value: 'gpt-5.6-luna --provider openai-codex --global'
+    })
+  })
+
   it('keeps a mid-turn pick painted and skips the refetch that would repaint the old model', async () => {
     // The gateway queues a switch made during a turn and applies it at the next
     // turn start. Invalidating now would answer with the still-running model

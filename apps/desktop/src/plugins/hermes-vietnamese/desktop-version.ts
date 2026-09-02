@@ -7,7 +7,7 @@ export function adaptVietnameseDesktopVersion<
 >(raw: VersionInfo): VersionInfo & { engineVersion: string } {
   return {
     ...raw,
-    appVersion: raw.engineVersion ? raw.appVersion : productMetadata.technicalVersion,
+    appVersion: raw.engineVersion !== undefined ? raw.appVersion : productMetadata.technicalVersion,
     engineVersion: raw.engineVersion ?? raw.appVersion
   }
 }

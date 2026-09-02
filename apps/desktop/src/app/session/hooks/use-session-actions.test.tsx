@@ -5,7 +5,7 @@ import { useEffect, useRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { $terminalTakeover, setTerminalTakeover } from '@/app/right-sidebar/store'
-import { noteActiveTreeGroup, revealTreePane } from '@/components/pane-shell/tree/store'
+import { focusedSessionTabAnchor, noteActiveTreeGroup, revealTreePane } from '@/components/pane-shell/tree/store'
 import {
   deleteSessionForOwner as deleteSession,
   getAllSessionMessagesForOwner as getAllSessionMessages,
@@ -97,6 +97,7 @@ vi.mock('@/store/gateway', async importOriginal => ({
 
 vi.mock('@/components/pane-shell/tree/store', async importOriginal => ({
   ...(await importOriginal<Record<string, unknown>>()),
+  focusedSessionTabAnchor: vi.fn(),
   noteActiveTreeGroup: vi.fn(),
   revealTreePane: vi.fn()
 }))
@@ -111,6 +112,7 @@ type HarnessHandle = Pick<
   | 'confirmBackendSessionForSend'
   | 'createBackendSessionForSend'
   | 'createProvisionalTileRuntime'
+  | 'openNewSessionTile'
   | 'removeSession'
   | 'requestPendingCreatedSession'
   | 'selectSidebarItem'
@@ -509,6 +511,32 @@ describe('startFreshSessionDraft', () => {
 describe('createBackendSessionForSend profile routing', () => {
   beforeEach(() => {
     vi.mocked(activeGatewayConnectionId).mockReturnValue(null)
+  })
+
+  it('opens tab-plus in the clicked session group even if focus changes during creation', async () => {
+    $activeGatewayProfile.set('default')
+    $newChatProfile.set(null)
+    activateSessionTileOwner({ connectionId: null, profile: 'default' })
+    const created = deferred<never>()
+    const requestGateway = vi.fn(() => created.promise)
+    vi.mocked(focusedSessionTabAnchor).mockReturnValue('session-tile:clicked')
+    let handle: HarnessHandle | null = null
+    render(<Harness onReady={next => (handle = next)} requestGateway={requestGateway} />)
+    await waitFor(() => expect(handle).not.toBeNull())
+    let opening!: Promise<void>
+    act(() => {
+      opening = handle!.openNewSessionTile('center', { listed: false })
+    })
+    await waitFor(() => expect(requestGateway).toHaveBeenCalled())
+    vi.mocked(focusedSessionTabAnchor).mockReturnValue('workspace')
+    await act(async () => {
+      created.resolve({ session_id: 'plus-runtime', stored_session_id: 'plus-candidate', info: {} } as never)
+      await opening
+    })
+    const tile = $sessionTiles.get().find(item => item.runtimeId === runtimeKey('plus-runtime'))
+    expect(tile).toMatchObject({ anchor: 'session-tile:clicked', dir: 'center', kind: 'provisional' })
+    expect(revealTreePane).toHaveBeenCalledWith(`session-tile:${tile!.storedSessionId}`)
+    discardSessionTile(tile!.storedSessionId)
   })
 
   afterEach(() => {

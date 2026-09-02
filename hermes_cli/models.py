@@ -6252,6 +6252,11 @@ def validate_requested_model(
     """
     requested = (model_name or "").strip()
     normalized = normalize_provider(provider)
+    from hermes_cli.model_normalize import native_model_provider_error
+
+    mismatch = native_model_provider_error(requested, normalized, base_url or "")
+    if mismatch:
+        return {"accepted": False, "persist": False, "recognized": False, "message": mismatch}
     if normalized == "openrouter" and base_url and not base_url_host_matches(base_url, "openrouter.ai"):
         normalized = "custom"
     requested_for_lookup = requested

@@ -13,6 +13,30 @@ from hermes_cli.model_normalize import (
 )
 
 
+@pytest.mark.parametrize('provider', ['anthropic', 'claude-code'])
+def test_non_claude_model_is_not_corrupted_by_anthropic_normalization(provider):
+    assert normalize_model_for_provider('gpt-5.6-luna', provider) == 'gpt-5.6-luna'
+
+
+def test_luna_native_anthropic_pair_is_rejected_without_network():
+    from hermes_cli.models import validate_requested_model
+
+    result = validate_requested_model('gpt-5.6-luna', 'claude-code', base_url='https://api.anthropic.com')
+    assert result['accepted'] is False
+    assert result['persist'] is False
+    assert 'openai-codex' in result['message']
+
+
+@pytest.mark.parametrize('provider,url', [
+    ('openai-codex', 'https://chatgpt.com/backend-api/codex'),
+    ('anthropic', 'https://proxy.example/anthropic'),
+    ('custom:local', 'http://localhost:1234/v1'),
+])
+def test_native_pair_guard_preserves_explicit_codex_and_custom_routes(provider, url):
+    from hermes_cli.model_normalize import native_model_provider_error
+    assert native_model_provider_error('gpt-5.6-luna', provider, url) is None
+
+
 # ── Regression: issue #5211 ────────────────────────────────────────────
 
 class TestIssue5211OpenCodeGoDotPreservation:
@@ -186,4 +210,3 @@ class TestIssue78796NvidiaPrefixRepair:
             normalize_model_for_provider("claude-sonnet-4.6", "openrouter")
             == "anthropic/claude-sonnet-4.6"
         )
-

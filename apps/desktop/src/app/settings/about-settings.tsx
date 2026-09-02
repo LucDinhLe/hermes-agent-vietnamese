@@ -26,7 +26,9 @@ export function AboutSettings() {
   const runningEngineVersion = runtime?.engineVersion
   const expectedEngineVersion = productMetadata.upstream.version
   const engineMismatch = Boolean(runningEngineVersion && runningEngineVersion !== expectedEngineVersion)
-  const runtimeMismatch = runtime?.runtimeProductVersion !== productMetadata.technicalVersion
+  const runtimeMismatch = Boolean(runtime && runtime.runtimeProductVersion !== productMetadata.technicalVersion)
+  const localStable = productMetadata.releaseChannel === 'local-stable'
+  const channelLabel = localStable ? 'Local Stable' : 'Experimental'
 
   return (
     <SettingsContent>
@@ -51,7 +53,10 @@ export function AboutSettings() {
           title={`${productMetadata.upstream.productName} ${expectedEngineVersion}`}
         />
         <ListRow
-          description={runtime?.runtimeCandidateId ?? 'Chưa có biên nhận runtime đã xác minh'}
+          description={
+            runtime?.runtimeCandidateId ??
+            (runtime ? 'Chưa có biên nhận runtime đã xác minh' : 'Đang kiểm tra bộ chạy…')
+          }
           hint={runtime?.runtimeSourceCommit?.slice(0, 12) ?? 'Không xác định'}
           title={`Runtime Advisor đang chạy · ${runtime?.runtimeProductVersion ?? 'không xác định'}`}
         />
@@ -63,9 +68,9 @@ export function AboutSettings() {
               <div>
                 <p className="font-medium">Lõi đang chạy chưa khớp với bản phát hành</p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  Hồ sơ cũ đang dùng Hermes Agent {runningEngineVersion}; bản này khóa {expectedEngineVersion}. Không
-                  cập nhật trực tiếp checkout lõi. Hãy chọn “Gỡ GUI + agent, giữ dữ liệu”, rồi chạy lại bộ cài Hermes
-                  Vietnamese mới nhất.
+                  Bộ chạy hiện tại báo Hermes Agent {runningEngineVersion}; giao diện yêu cầu {expectedEngineVersion}.
+                  Hãy đóng rồi mở lại Hermes. Nếu cảnh báo còn xuất hiện, giữ nguyên dữ liệu và gửi nhật ký để kiểm tra
+                  bộ cài.
                 </p>
               </div>
             </div>
@@ -77,10 +82,11 @@ export function AboutSettings() {
             <div className="flex items-start gap-2">
               <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-500" />
               <div>
-                <p className="font-medium">Runtime Advisor không khớp giao diện Experimental</p>
+                <p className="font-medium">Runtime Advisor chưa được xác minh khớp giao diện {channelLabel}</p>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   Ứng dụng sẽ không được coi là đạt kiểm thử cho đến khi runtime {productMetadata.technicalVersion} có
-                  biên nhận và hash hợp lệ. Hãy đóng ứng dụng rồi mở bằng lối tắt Experimental để đồng bộ lại.
+                  biên nhận và hash hợp lệ. Hãy đóng ứng dụng rồi mở bằng lối tắt{' '}
+                  {localStable ? 'Hermes' : 'Experimental'} để đồng bộ lại.
                 </p>
               </div>
             </div>
@@ -92,9 +98,11 @@ export function AboutSettings() {
           <div className="flex items-start gap-2">
             <Package className="mt-0.5 size-4 shrink-0 text-primary" />
             <div className="min-w-0">
-              <p className="font-medium">Kênh Experimental riêng · cập nhật bằng bộ cài thử nghiệm</p>
+              <p className="font-medium">Kênh {channelLabel} · cập nhật bằng bộ cài đã kiểm thử</p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                Bản này dùng runtime Advisor cô lập từ mã PR chưa hợp nhất và không thay Hermes Vietnamese ổn định.
+                {localStable
+                  ? 'Bản cài cục bộ dùng hồ sơ Hermes hiện có; chưa phải bản phát hành công khai. '
+                  : 'Bản thử nghiệm dùng hồ sơ riêng, không thay bản Stable. '}
                 Mỗi lần mở đều xác minh candidate trước khi khởi chạy.
               </p>
             </div>
@@ -104,7 +112,7 @@ export function AboutSettings() {
               <ExternalLink className="size-3" />
               Xem kho Hermes Vietnamese
             </Button>
-            <span className="text-xs text-muted-foreground">Tự động cập nhật: tắt ở kênh Experimental</span>
+            <span className="text-xs text-muted-foreground">Tự động cập nhật: tắt ở kênh {channelLabel}</span>
           </div>
         </div>
 

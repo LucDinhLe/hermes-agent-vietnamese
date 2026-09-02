@@ -97,6 +97,27 @@ def _complete_ok(**payload_overrides: object) -> _RecordingCompletion:
     return _RecordingCompletion(payload)
 
 
+def test_image_review_sends_pixels_as_content_parts_not_json_text():
+    import json
+    image = {"type": "image_url", "image_url": {"url": "data:image/png;base64,aGVsbG8="}}
+    complete = _complete_ok()
+    result = run_review(_request(image_parts=(image,)), resolve_route=lambda **_: _route(), complete=complete)
+    assert result.status == "completed"
+    content = complete.calls[0].messages[1]["content"]
+    assert json.loads(content[0]["text"])["objective"] == "Ship the reviewed change"
+    assert content[1] == image
+    assert complete.calls[0].tools == []
+
+
+def test_oversized_or_external_image_context_never_reaches_provider():
+    for url in ("https://example.test/private.png", "data:image/png;base64," + "A" * (9 * 1024 * 1024)):
+        complete = _complete_ok()
+        result = run_review(_request(image_parts=({"type": "image_url", "image_url": {"url": url}},)),
+                            resolve_route=lambda **_: _route(), complete=complete)
+        assert result.status == "unavailable"
+        assert complete.calls == []
+
+
 def test_subscription_route_runs_once_without_tools_and_attests_actual_route():
     complete = _complete_ok()
     resolve_calls = []

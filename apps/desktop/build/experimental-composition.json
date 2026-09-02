@@ -15,9 +15,9 @@
     "protocol": "hermes"
   },
   "runtimeIsolation": {
-    "hermesHome": "%LOCALAPPDATA%\\HermesVietnameseAdvisorExperimental\\profile",
-    "userData": "%LOCALAPPDATA%\\HermesVietnameseAdvisorExperimental\\user-data",
-    "stableProfileShared": false,
+    "hermesHome": "%LOCALAPPDATA%\\hermes",
+    "userData": "%APPDATA%\\Hermes",
+    "stableProfileShared": true,
     "strategy": "versioned-candidate-runtime",
     "candidateId": "d11e11-f5379d57-<build-commit>",
     "failClosedOnHashMismatch": true
@@ -54,6 +54,6 @@
     "sameRawRuntimeAcrossBackends": "isolated"
   },
   "verified": {
-    "status": "pending-clean-exp9-replay-and-final-gates"
+    "status": "pending-d12-product-acceptance"
   }
 }

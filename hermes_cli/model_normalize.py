@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import re
 from typing import Optional
+from urllib.parse import urlsplit
 
 # ---------------------------------------------------------------------------
 # Vendor prefix mapping
@@ -424,6 +425,23 @@ def suggest_prefixed_model_id(provider: str, model_name: str) -> Optional[str]:
 # Main normalisation entry point
 # ---------------------------------------------------------------------------
 
+def native_model_provider_error(model: str, provider: str, base_url: str = "") -> Optional[str]:
+    """Reject a known wrong native route without guessing another billing route.
+
+    Anthropic-compatible proxies/custom endpoints may serve GPT; do not apply
+    the vendor check to them. This is deliberately not a changing model catalog.
+    """
+    if _normalize_provider_alias(provider) != "anthropic" or detect_vendor(model) != "openai":
+        return None
+    if base_url and urlsplit(base_url).hostname != "api.anthropic.com":
+        return None
+    return (
+        f"Model `{model}` cannot use the native Anthropic provider. "
+        "Select this model under its configured provider (for a ChatGPT subscription, "
+        "openai-codex). Hermes has not changed the provider or sent your prompt."
+    )
+
+
 def normalize_model_for_provider(model_input: str, target_provider: str) -> str:
     """Translate a model name into the format the target provider's API expects.
 
@@ -520,7 +538,9 @@ def normalize_model_for_provider(model_input: str, target_provider: str) -> str:
         bare = _strip_matching_provider_prefix(name, provider)
         if "/" in bare:
             return bare
-        return _dots_to_hyphens(bare)
+        # Only Claude has Anthropic's dotted-to-hyphen naming convention.
+        # A stale provider must not destroy a GPT ID before route validation.
+        return _dots_to_hyphens(bare) if bare.lower().startswith("claude-") else bare
 
     # --- Copilot / Copilot ACP: delegate to the Copilot-specific
     #     normalizer.  It knows about the alias table (vendor-prefix
@@ -582,4 +602,3 @@ def normalize_model_for_provider(model_input: str, target_provider: str) -> str:
 # ---------------------------------------------------------------------------
 # Batch / convenience helpers
 # ---------------------------------------------------------------------------
-

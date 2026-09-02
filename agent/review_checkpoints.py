@@ -299,6 +299,7 @@ class ReviewCheckpointRuntime:
         candidate: dict[str, Any],
         main_provider: str,
         main_model: str,
+        image_parts: tuple[dict[str, Any], ...] = (),
     ) -> ReviewCheckpointDecision:
         request = ReviewRequest(
             checkpoint_id=checkpoint_id,
@@ -314,6 +315,7 @@ class ReviewCheckpointRuntime:
             main_model=main_model,
             require_distinct_from_main=self.route.require_distinct_from_main,
             timeout_seconds=self.route.timeout_seconds,
+            image_parts=image_parts,
         )
         return self.controller.evaluate(request)
 
@@ -374,6 +376,11 @@ def create_review_checkpoint_runtime(
 
 
 def _objective_text(value: Any) -> str:
+    if isinstance(value, list):
+        value = "\n".join(
+            str(part.get("text") or "") for part in value
+            if isinstance(part, dict) and part.get("type") in {"text", "input_text"}
+        )
     if isinstance(value, str):
         return value.strip()[:8_000] or "Review the current turn"
     return "Review the current turn"
@@ -444,25 +451,66 @@ def review_final_checkpoint(
     user_message: Any,
     final_response: str,
     evidence: list[str] | None = None,
+    messages: list[Any] | None = None,
 ) -> ReviewCheckpointDecision:
     """Review a candidate answer before any final-response surface receives it."""
 
     runtime = getattr(agent, "review_checkpoint_runtime", None)
     if not isinstance(runtime, ReviewCheckpointRuntime) or not runtime.enabled:
         return ReviewCheckpointDecision(action="continue")
+    user_context, image_parts = bounded_review_user_context(messages or [], user_message)
     return runtime.evaluate(
         checkpoint_id=f"{turn_id}:final:{attempt}",
         phase="final",
         attempt=attempt,
         objective=_objective_text(user_message),
-        constraints=("Review only the candidate answer and bounded evidence.",),
+        constraints=(
+            "Review only the candidate answer and bounded evidence.",
+            "An image reference means the user already attached it. If pixels are absent, "
+            "ask the main model to inspect the existing attachment, not the user to resend it.",
+            "Context is limited to four recent user messages and four images; "
+            "absence from this packet does not prove absence from the conversation.",
+        ),
         candidate={
             "summary": str(final_response or "")[:32_000],
             "evidence": [str(item)[:2_000] for item in (evidence or [])[:20]],
+            **({"user_context": user_context} if messages is not None else {}),
         },
         main_provider=str(getattr(agent, "provider", "") or ""),
         main_model=str(getattr(agent, "model", "") or ""),
+        image_parts=image_parts,
     )
+
+
+def bounded_review_user_context(messages: list[Any], user_message: Any) -> tuple[list[str], tuple[dict, ...]]:
+    """Keep recent user context and native pixels; never fetch/read image refs."""
+    contents = [
+        m.get("content") for m in messages[-80:]
+        if isinstance(m, dict) and m.get("role") == "user"
+        and not m.get("_review_revision_synthetic")
+    ][-4:]
+    if not contents or contents[-1] != user_message:
+        contents.append(user_message)
+    texts: list[str] = []
+    image_groups: list[list[dict]] = []
+    seen_urls: set[str] = set()
+    # Prefer the latest attachments when the conversation has more than four.
+    for content in reversed(contents[-4:]):
+        text = _objective_text(content)
+        if text != "Review the current turn":
+            texts.append(text[:2_000])
+        group: list[dict] = []
+        for part in content if isinstance(content, list) else []:
+            if not isinstance(part, dict) or part.get("type") != "image_url":
+                continue
+            ref = part.get("image_url")
+            url = ref.get("url") if isinstance(ref, dict) else None
+            if isinstance(url, str) and url not in seen_urls and len(seen_urls) < 4:
+                seen_urls.add(url)
+                group.append({"type": "image_url", "image_url": {"url": url}})
+        image_groups.append(group)
+    # Preserve chronology and within-message image order ("the first image").
+    return list(reversed(texts)), tuple(image for group in reversed(image_groups) for image in group)
 
 
 def bounded_review_evidence(messages: list[Any]) -> list[str]:

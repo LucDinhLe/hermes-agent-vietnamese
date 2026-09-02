@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from agent.review_checkpoints import (
     bounded_review_evidence,
+    bounded_review_user_context,
     create_review_checkpoint_runtime,
     review_final_checkpoint,
     review_tool_checkpoint,
@@ -117,6 +118,48 @@ def test_final_checkpoint_holds_bounded_candidate_and_evidence():
         "summary": "Completed safely.",
         "evidence": ["36 tests passed"],
     }
+
+
+def test_final_review_keeps_multimodal_objective_and_recent_attachment_context():
+    calls = []
+    image = {"type": "image_url", "image_url": {"url": "data:image/png;base64,aGVsbG8="}}
+    earlier = [{"type": "text", "text": "lỗi trong ảnh này là gì?"}, image]
+    review_final_checkpoint(
+        _agent(_runtime(calls)), turn_id="image-turn", attempt=0,
+        user_message=[{"type": "text", "text": "ảnh ở trên đó"}],
+        final_response="Lỗi model.",
+        messages=[{"role": "user", "content": earlier},
+                  {"role": "assistant", "content": "private assistant reasoning"}],
+    )
+    request = calls[0]
+    assert request.objective == "ảnh ở trên đó"
+    assert request.image_parts == (image,)
+    assert request.candidate["user_context"] == ["lỗi trong ảnh này là gì?", "ảnh ở trên đó"]
+    assert "private assistant reasoning" not in str(request.candidate)
+
+
+def test_review_retains_image_reference_without_reading_arbitrary_files():
+    calls = []
+    review_final_checkpoint(
+        _agent(_runtime(calls)), turn_id="refs", attempt=0,
+        user_message='lỗi gì?\n@image:"C:/uploads/error.png"', final_response="Lỗi model.",
+        messages=[],
+    )
+    assert '@image:' in calls[0].candidate["user_context"][0]
+    assert any("already attached" in c for c in calls[0].constraints)
+
+
+def test_review_context_bounds_images_and_preserves_chronology_without_synthetic_feedback():
+    def image(number):
+        return {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{number}"}}
+    messages = [
+        {"role": "user", "content": [{"type": "text", "text": "older"}, image(1), image(2)]},
+        {"role": "user", "content": [{"type": "text", "text": "newer"}, image(3), image(4), image(5)]},
+        {"role": "user", "content": "review feedback", "_review_revision_synthetic": True},
+    ]
+    texts, images = bounded_review_user_context(messages, "compare")
+    assert texts == ["older", "newer", "compare"]
+    assert images == (image(1), image(3), image(4), image(5))
 
 
 def test_bounded_evidence_uses_recent_tool_results_not_full_history():

@@ -8414,6 +8414,7 @@ def run_conversation(
                     user_message=original_user_message or user_message,
                     final_response=final_response,
                     evidence=bounded_review_evidence(messages),
+                    messages=messages,
                 )
                 _review_result = _review_decision.result
                 _review_action = _review_decision.action

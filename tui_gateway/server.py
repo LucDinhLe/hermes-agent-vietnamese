@@ -7187,6 +7187,13 @@ def _make_agent(
             if not resolution.selected_model:
                 raise RuntimeError("Auth fallback resolved without a model")
             model = resolution.selected_model
+    from hermes_cli.model_normalize import native_model_provider_error
+
+    mismatch = native_model_provider_error(
+        str(model or ""), str(runtime.get("provider") or ""), str(runtime.get("base_url") or "")
+    )
+    if mismatch:
+        raise ValueError(mismatch)
     _pr = _load_provider_routing()
     agent = AIAgent(
         model=model,
