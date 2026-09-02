@@ -12,8 +12,8 @@ import {
 } from './experimental-packaged-runtime'
 
 const roots: string[] = []
-const APP_VERSION = '0.33.0-dev.11-advisor-exp.10'
-const CANDIDATE = `d11e10-${'c'.repeat(8)}-${'d'.repeat(8)}`
+const APP_VERSION = '0.33.0-dev.11-advisor-exp.11'
+const CANDIDATE = `d11e11-${'c'.repeat(8)}-${'d'.repeat(8)}`
 const OFFICIAL_ENGINE_BASE = 'a'.repeat(40)
 const BASE_EDITION_SHELL = 'b'.repeat(40)
 const EXPERIMENTAL_ENGINE_SOURCE = 'c'.repeat(40)
@@ -714,6 +714,42 @@ describe('packaged Experimental runtime', () => {
       })
     ).toThrow(/bootstrap interpreter or dependency inventory changed/)
     expect(executed).toBe(false)
+  })
+
+  it('adopts a launcher-materialized candidate only after full verification', () => {
+    const f = fixture()
+
+    createBootstrapVenv(f.profileRoot)
+
+    const bundle = verifyExperimentalRuntimeBundle({
+      appVersion: APP_VERSION,
+      experimentRoot: f.experimentRoot,
+      resourcesPath: f.resourcesPath
+    })
+
+    const sync = successfulSync(bundle)
+
+    sync({
+      bundleRoot: bundle.bundleRoot,
+      experimentRoot: f.experimentRoot,
+      profileRoot: f.profileRoot
+    })
+    expect(fs.existsSync(path.join(bundle.expectedTargetRoot, 'advisor-runtime-receipt.json'))).toBe(true)
+    expect(fs.existsSync(path.join(f.experimentRoot, 'bootstrap-python-inventory-receipt.json'))).toBe(false)
+
+    const result = materializeExperimentalPackagedRuntime({
+      bundle,
+      experimentRoot: f.experimentRoot,
+      profileRoot: f.profileRoot,
+      runSync: sync
+    })
+
+    expect(result).toEqual({
+      status: 'ready',
+      candidateId: CANDIDATE,
+      targetRoot: bundle.expectedTargetRoot
+    })
+    expect(fs.existsSync(path.join(f.experimentRoot, 'bootstrap-python-inventory-receipt.json'))).toBe(true)
   })
 
   it.each([

@@ -13,7 +13,7 @@ test('Experimental product identity has one name and one technical version', () 
 
   assert.equal(metadata.displayName, 'Hermes Vietnamese Advisor Experimental')
   assert.equal(metadata.productVersion, 'V33 Experimental')
-  assert.equal(metadata.technicalVersion, '0.33.0-dev.11-advisor-exp.10')
+assert.equal(metadata.technicalVersion, '0.33.0-dev.11-advisor-exp.11')
   assert.equal(pkg.productName, metadata.displayName)
   assert.equal(pkg.version, metadata.technicalVersion)
   assert.equal(composition.productVersion, metadata.technicalVersion)

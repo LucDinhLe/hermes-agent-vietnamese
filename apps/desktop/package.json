@@ -2,7 +2,7 @@
   "name": "hermes-vietnamese-advisor-experimental",
   "productName": "Hermes Vietnamese Advisor Experimental",
   "private": true,
-  "version": "0.33.0-dev.11-advisor-exp.10",
+  "version": "0.33.0-dev.11-advisor-exp.11",
   "description": "Isolated experimental Hermes Vietnamese build with the unmerged Advisor review runner.",
   "author": {
     "name": "Lê Đình Lực",

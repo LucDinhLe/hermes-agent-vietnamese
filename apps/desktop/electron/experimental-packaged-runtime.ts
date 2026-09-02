@@ -873,16 +873,16 @@ export function materializeExperimentalPackagedRuntime({
   invariant(bootstrapVenvRoot, 'the materialized candidate has no bootstrap Python environment to verify')
   const beforeSync = createBootstrapSnapshot(profileRoot, bootstrapVenvRoot)
 
-  invariant(
-    !hadMaterializedReceipt || hadBootstrapReceipt,
-    'materialized candidate is missing its persistent bootstrap inventory receipt'
-  )
-
   if (hadBootstrapReceipt) {
     verifyBootstrapReceipt(experimentRoot, beforeSync)
   }
 
   if (hadMaterializedReceipt) {
+    // The external Experimental launcher may materialize the packaged
+    // candidate before Electron starts. Adopt that runtime only after the
+    // complete candidate and bootstrap snapshot pass the same verification
+    // used for an Electron-created candidate. The receipt is written below,
+    // after the sync rerun proves the bootstrap environment stayed unchanged.
     verifyMaterializedCandidate(bundle, targetRoot, beforeSync)
   }
 
