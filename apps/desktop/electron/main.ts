@@ -833,7 +833,7 @@ const BOOT_FAKE_STEP_MS = (() => {
   return Math.max(120, raw)
 })()
 
-const APP_NAME = process.env.HERMES_DESKTOP_APP_NAME || 'Hermes Vietnamese Advisor Experimental'
+const APP_NAME = process.env.HERMES_DESKTOP_APP_NAME || 'Hermes'
 const HUD_WINDOW_TITLE = `${APP_NAME} HUD`
 const TITLEBAR_HEIGHT = 34
 const MACOS_TRAFFIC_LIGHTS_HEIGHT = 14
@@ -1245,7 +1245,7 @@ app.setName(APP_NAME)
 // need this, so gate it on Windows. (Fixes: desktop approval/turn notifications
 // never firing on Windows.)
 if (IS_WINDOWS) {
-  app.setAppUserModelId('vn.lucledinh.hermes-vietnamese.advisor-experimental')
+  app.setAppUserModelId('com.nousresearch.hermes')
 }
 
 // Seed the native About panel with the live Hermes version. This is refreshed
@@ -14996,10 +14996,8 @@ ipcMain.handle('hermes:vscode-theme:search', async (_event, query) => searchMark
 // running app. Three delivery paths: macOS 'open-url',
 // Win/Linux running-app 'second-instance' (argv), Win/Linux cold-start argv.
 // ---------------------------------------------------------------------------
-// This binary is deliberately isolated from the stable Hermes protocol. Keep
-// it hard-coded so even launching the executable without our wrapper cannot
-// claim hermes:// on the same machine.
-const HERMES_PROTOCOL = 'hermes-advisor-experimental'
+// Local Stable owns the normal Hermes protocol on this machine.
+const HERMES_PROTOCOL = 'hermes'
 const DEEPLINK_SCHEMES = [HERMES_PROTOCOL]
 let _pendingDeepLink = null
 let _rendererReadyForDeepLink = false

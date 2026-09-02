@@ -5,22 +5,22 @@ import test from 'node:test'
 
 const read = path => readFileSync(join(import.meta.dirname, path), 'utf8')
 
-test('Experimental product identity has one name and one technical version', () => {
+test('local Stable product identity has one technical version', () => {
   const metadata = JSON.parse(read('../product-metadata.json'))
   const pkg = JSON.parse(read('../../../../package.json'))
   const composition = JSON.parse(read('../../../../build/experimental-composition.json'))
   const main = read('../../../../electron/main.ts')
 
-  assert.equal(metadata.displayName, 'Hermes Vietnamese Advisor Experimental')
-  assert.equal(metadata.productVersion, 'V33 Experimental')
-assert.equal(metadata.technicalVersion, '0.33.0-dev.11-advisor-exp.11')
-  assert.equal(pkg.productName, metadata.displayName)
+  assert.equal(metadata.displayName, 'Hermes Vietnamese')
+  assert.equal(metadata.productVersion, 'V33 Local Stable')
+  assert.equal(metadata.technicalVersion, '0.33.0-dev.11-advisor-exp.11')
+  assert.equal(pkg.productName, 'Hermes')
   assert.equal(pkg.version, metadata.technicalVersion)
   assert.equal(composition.productVersion, metadata.technicalVersion)
-  assert.match(composition.runtimeIsolation.candidateId, /^d11e9-f5379d57-/)
+  assert.match(composition.runtimeIsolation.candidateId, /^d11e11-f5379d57-/)
   assert.equal(composition.agentSurface.sessionStripPurpose, 'select_persistent_agent')
   assert.equal(composition.agentSurface.temporarySubagentRouteExposed, false)
-  assert.match(main, /HERMES_DESKTOP_APP_NAME \|\| 'Hermes Vietnamese Advisor Experimental'/)
+  assert.match(main, /HERMES_DESKTOP_APP_NAME \|\| 'Hermes'/)
 })
 
 test('Experimental runtime id stays inside the Windows path budget', () => {

@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "displayName": "Hermes Vietnamese Advisor Experimental",
-  "productVersion": "V33 Experimental",
+  "displayName": "Hermes Vietnamese",
+  "productVersion": "V33 Local Stable",
   "technicalVersion": "0.33.0-dev.11-advisor-exp.11",
-  "releaseChannel": "experimental-private",
+  "releaseChannel": "local-stable",
   "communityMaintainer": {
     "name": "Lê Đình Lực",
     "handle": "LucDinhLe",
@@ -24,10 +24,10 @@
     "url": "https://github.com/NousResearch/hermes-agent/blob/fcbd1076a93841fa88855acce810e342a5b78101/LICENSE"
   },
   "identity": {
-    "status": "active-experimental-isolated",
-    "appId": "vn.lucledinh.hermes-vietnamese.advisor-experimental",
-    "executableName": "HermesVietnameseAdvisorExperimental",
-    "protocol": "hermes-advisor-experimental"
+    "status": "active-local-stable",
+    "appId": "com.nousresearch.hermes",
+    "executableName": "Hermes",
+    "protocol": "hermes"
   },
   "communityLinks": {
     "repository": "https://github.com/LucDinhLe/hermes-agent-vietnamese",

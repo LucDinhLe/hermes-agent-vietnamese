@@ -57,9 +57,9 @@ function fixture() {
     officialEngineBase: OFFICIAL_ENGINE_BASE,
     experimentalEngineHead: EXPERIMENTAL_ENGINE_SOURCE,
     identity: {
-      appId: 'vn.lucledinh.hermes-vietnamese.advisor-experimental',
-      executableName: 'HermesVietnameseAdvisorExperimental',
-      protocol: 'hermes-advisor-experimental'
+      appId: 'com.nousresearch.hermes',
+      executableName: 'Hermes',
+      protocol: 'hermes'
     }
   }
 
@@ -104,8 +104,8 @@ function fixture() {
     releaseCandidate: composition.releaseCandidate,
     publicDistributionAllowed: composition.publicDistributionAllowed,
     product: {
-      packageName: 'hermes-vietnamese-advisor-experimental',
-      productName: 'Hermes Vietnamese Advisor Experimental',
+      packageName: 'hermes',
+      productName: 'Hermes',
       version: APP_VERSION,
       appId: composition.identity.appId,
       executableName: composition.identity.executableName,
@@ -244,76 +244,47 @@ afterEach(() => {
   }
 })
 
-describe('packaged Experimental environment', () => {
-  it('turns a direct packaged EXE launch into isolated profile and userData roots', () => {
+describe('packaged local Stable environment', () => {
+  it('pins a direct packaged EXE launch to the existing Stable profile and userData roots', () => {
     const localAppData = tempRoot()
     const stableRoot = path.join(localAppData, 'hermes')
+    const roamingRoot = path.join(localAppData, 'Roaming')
 
     const env: Record<string, string | undefined> = {
       LOCALAPPDATA: localAppData,
+      APPDATA: roamingRoot,
       HERMES_HOME: stableRoot,
-      HERMES_DESKTOP_HERMES_ROOT: path.join(stableRoot, 'hermes-agent')
+      HERMES_DESKTOP_HERMES_ROOT: path.join(stableRoot, 'hermes-agent'),
+      HERMES_DESKTOP_IGNORE_EXISTING: '1'
     }
 
     const configured = configureExperimentalPackagedEnvironment({ env, isPackaged: true, isWindows: true })
 
-    expect(configured.experimentRoot).toBe(path.join(localAppData, 'HermesVietnameseAdvisorExperimental'))
-    expect(env.HERMES_HOME).toBe(path.join(configured.experimentRoot!, 'profile'))
-    expect(env.HERMES_DESKTOP_USER_DATA_DIR).toBe(path.join(configured.experimentRoot!, 'user-data'))
+    expect(configured.experimentRoot).toBe(stableRoot)
+    expect(configured.profileRoot).toBe(stableRoot)
+    expect(configured.userDataRoot).toBe(path.join(roamingRoot, 'Hermes'))
+    expect(env.HERMES_HOME).toBe(stableRoot)
+    expect(env.HERMES_DESKTOP_USER_DATA_DIR).toBeUndefined()
     expect(env.HERMES_DESKTOP_HERMES_ROOT).toBeUndefined()
-    expect(env.HERMES_HOME).not.toBe(stableRoot)
-    expect(env.HERMES_DESKTOP_IGNORE_EXISTING).toBe('1')
+    expect(env.HERMES_DESKTOP_IGNORE_EXISTING).toBeUndefined()
   })
 
-  it('rejects explicit roots in or outside the isolated Experimental tree', () => {
+  it('ignores stale Experimental overrides and keeps Stable authoritative', () => {
     const localAppData = tempRoot()
     const stableRoot = path.join(localAppData, 'hermes')
+    const env: Record<string, string | undefined> = {
+      LOCALAPPDATA: localAppData,
+      HERMES_ADVISOR_EXPERIMENT_ROOT: path.join(localAppData, 'isolated'),
+      HERMES_DESKTOP_USER_DATA_DIR: path.join(localAppData, 'elsewhere', 'user-data'),
+      HERMES_HOME: path.join(localAppData, 'isolated', 'profile')
+    }
 
-    expect(() =>
-      configureExperimentalPackagedEnvironment({
-        env: {
-          LOCALAPPDATA: localAppData,
-          HERMES_ADVISOR_EXPERIMENT_ROOT: path.join(stableRoot, 'experimental')
-        },
-        isPackaged: true,
-        isWindows: true
-      })
-    ).toThrow(/stable Hermes tree/)
+    const configured = configureExperimentalPackagedEnvironment({ env, isPackaged: true, isWindows: true })
 
-    expect(() =>
-      configureExperimentalPackagedEnvironment({
-        env: {
-          LOCALAPPDATA: localAppData,
-          HERMES_ADVISOR_EXPERIMENT_ROOT: localAppData
-        },
-        isPackaged: true,
-        isWindows: true
-      })
-    ).toThrow(/stable Hermes tree/)
-
-    expect(() =>
-      configureExperimentalPackagedEnvironment({
-        env: {
-          LOCALAPPDATA: localAppData,
-          HERMES_ADVISOR_EXPERIMENT_ROOT: path.join(localAppData, 'isolated'),
-          HERMES_DESKTOP_USER_DATA_DIR: path.join(localAppData, 'elsewhere', 'user-data')
-        },
-        isPackaged: true,
-        isWindows: true
-      })
-    ).toThrow(/userData root must stay inside/)
-
-    expect(() =>
-      configureExperimentalPackagedEnvironment({
-        env: {
-          LOCALAPPDATA: localAppData,
-          HERMES_DESKTOP_USER_DATA_DIR: path.join(localAppData, 'isolated', 'state'),
-          HERMES_HOME: path.join(localAppData, 'isolated', 'state', 'profile')
-        },
-        isPackaged: true,
-        isWindows: true
-      })
-    ).toThrow(/profile and userData roots must be separate/)
+    expect(configured.experimentRoot).toBe(stableRoot)
+    expect(env.HERMES_HOME).toBe(stableRoot)
+    expect(env.HERMES_ADVISOR_EXPERIMENT_ROOT).toBeUndefined()
+    expect(env.HERMES_DESKTOP_USER_DATA_DIR).toBeUndefined()
   })
 
   it('does not change non-packaged development environments', () => {
@@ -554,7 +525,7 @@ describe('packaged Experimental runtime', () => {
     const f = fixture()
     const receiptPath = path.join(f.resourcesPath, 'experimental-candidate-receipt.json')
     const receipt = JSON.parse(fs.readFileSync(receiptPath, 'utf8'))
-    receipt.product.protocol = 'hermes'
+    receipt.product.protocol = 'hermes-dev'
     writeJson(receiptPath, receipt)
 
     expect(() =>

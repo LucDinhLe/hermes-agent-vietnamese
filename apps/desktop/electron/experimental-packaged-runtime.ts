@@ -3,7 +3,6 @@ import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
-const EXPERIMENT_DIRECTORY = 'HermesVietnameseAdvisorExperimental'
 const CANDIDATE_PATTERN = /^d\d+e\d+-[0-9a-f]{8}-[0-9a-f]{8}$/
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/
 const SHA256_PATTERN = /^[0-9a-f]{64}$/
@@ -12,11 +11,11 @@ const BOOTSTRAP_RECEIPT_FILE = 'bootstrap-python-inventory-receipt.json'
 const SITE_PACKAGES_BRIDGE = '_hermes_legacy_site_packages.pth'
 
 const EXPERIMENTAL_PRODUCT = Object.freeze({
-  appId: 'vn.lucledinh.hermes-vietnamese.advisor-experimental',
-  executableName: 'HermesVietnameseAdvisorExperimental',
-  packageName: 'hermes-vietnamese-advisor-experimental',
-  productName: 'Hermes Vietnamese Advisor Experimental',
-  protocol: 'hermes-advisor-experimental'
+  appId: 'com.nousresearch.hermes',
+  executableName: 'Hermes',
+  packageName: 'hermes',
+  productName: 'Hermes',
+  protocol: 'hermes'
 })
 
 type Environment = Record<string, string | undefined>
@@ -447,39 +446,24 @@ export function configureExperimentalPackagedEnvironment({
     return { enabled: false, experimentRoot: null, profileRoot: null, stableHermesRoot: null, userDataRoot: null }
   }
 
-  invariant(localAppData, 'LOCALAPPDATA is required for the packaged Experimental app')
+  invariant(localAppData, 'LOCALAPPDATA is required for the packaged local Stable app')
   const stableHermesRoot = path.resolve(localAppData, 'hermes')
-  const explicitUserData = env.HERMES_DESKTOP_USER_DATA_DIR?.trim()
-  const explicitExperimentRoot = env.HERMES_ADVISOR_EXPERIMENT_ROOT?.trim()
+  const roamingRoot = env.APPDATA?.trim() || path.resolve(localAppData, '..', 'Roaming')
+  const userDataRoot = path.resolve(roamingRoot, 'Hermes')
 
-  const experimentRoot = path.resolve(
-    explicitExperimentRoot ||
-      (explicitUserData ? path.dirname(explicitUserData) : path.join(localAppData, EXPERIMENT_DIRECTORY))
-  )
-
-  const userDataRoot = path.resolve(explicitUserData || path.join(experimentRoot, 'user-data'))
-  const requestedHome = explicitUserData ? env.HERMES_HOME?.trim() : null
-  const profileRoot = path.resolve(requestedHome || path.join(experimentRoot, 'profile'))
-
-  for (const [label, root] of [
-    ['experiment root', experimentRoot],
-    ['profile root', profileRoot],
-    ['userData root', userDataRoot]
-  ] as const) {
-    invariant(!pathsOverlap(root, stableHermesRoot), `refusing to overlap the ${label} with the stable Hermes tree`)
-  }
-
-  invariant(sameOrDescendant(profileRoot, experimentRoot), 'profile root must stay inside the experiment root')
-  invariant(sameOrDescendant(userDataRoot, experimentRoot), 'userData root must stay inside the experiment root')
-  invariant(!pathsOverlap(profileRoot, userDataRoot), 'profile and userData roots must be separate siblings')
-
-  env.HERMES_ADVISOR_EXPERIMENT_ROOT = experimentRoot
-  env.HERMES_HOME = profileRoot
-  env.HERMES_DESKTOP_USER_DATA_DIR = userDataRoot
-  env.HERMES_DESKTOP_IGNORE_EXISTING = '1'
+  env.HERMES_HOME = stableHermesRoot
+  delete env.HERMES_ADVISOR_EXPERIMENT_ROOT
+  delete env.HERMES_DESKTOP_USER_DATA_DIR
+  delete env.HERMES_DESKTOP_IGNORE_EXISTING
   delete env.HERMES_DESKTOP_HERMES_ROOT
 
-  return { enabled: true, experimentRoot, profileRoot, stableHermesRoot, userDataRoot }
+  return {
+    enabled: true,
+    experimentRoot: stableHermesRoot,
+    profileRoot: stableHermesRoot,
+    stableHermesRoot,
+    userDataRoot
+  }
 }
 
 export function verifyExperimentalRuntimeBundle({

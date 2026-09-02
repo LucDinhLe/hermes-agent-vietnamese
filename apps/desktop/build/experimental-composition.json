@@ -10,16 +10,16 @@
   "upstreamPullRequestHead": "4116137ffb48e89f107c9abd6ddfa3f1f872f398",
   "experimentalEngineHead": "f5379d57acebd7d4cfa8202cdb159a9c07acaa21",
   "identity": {
-    "appId": "vn.lucledinh.hermes-vietnamese.advisor-experimental",
-    "executableName": "HermesVietnameseAdvisorExperimental",
-    "protocol": "hermes-advisor-experimental"
+    "appId": "com.nousresearch.hermes",
+    "executableName": "Hermes",
+    "protocol": "hermes"
   },
   "runtimeIsolation": {
     "hermesHome": "%LOCALAPPDATA%\\HermesVietnameseAdvisorExperimental\\profile",
     "userData": "%LOCALAPPDATA%\\HermesVietnameseAdvisorExperimental\\user-data",
     "stableProfileShared": false,
     "strategy": "versioned-candidate-runtime",
-    "candidateId": "d11e9-f5379d57-<build-commit>",
+    "candidateId": "d11e11-f5379d57-<build-commit>",
     "failClosedOnHashMismatch": true
   },
   "advisor": {
