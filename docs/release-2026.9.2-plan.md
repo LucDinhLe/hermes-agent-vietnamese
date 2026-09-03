@@ -128,3 +128,25 @@ get full tamper/inventory checks at every launch. A regression proves one fresh
 verification and another at relaunch. 88 focused tests and two distribution
 policy tests passed. C1 remains rejected; C2 must be built in a separate output
 directory and staged separately before actual installed acceptance.
+
+## C2 NO-GO: preserve the existing Windows installation scope
+
+Run33788510633 passed exact C2 fresh installation, offline chat/tools/relaunch,
+and real history creation/relaunch in the previous public vi-v0.32.1-18.
+Upgrading that per-user installation with C2 exited the isolated installation
+directory: C2 forced perMachine=true. The pinned electron-builder assisted NSIS
+template consequently uses HKLM instead of detecting the existing HKCU location.
+
+C3 uses assisted NSIS with perMachine=false, enabling the builder's existing
+HKCU/HKLM detection and preserving both scope and installation directory on
+upgrade. Do not work around the defect by forcing /D or /allusers on upgrade.
+For new installations the user can choose scope; existing all-user installs
+remain all-user. A static policy regression prevents restoring the forced mode.
+
+Permanent acceptance rule: run the whole installed lifecycle independently for
+both /currentuser and /allusers baselines. Explicit scope and /D are allowed only
+for each fresh installation. Upgrade and repair must use /S alone and retain
+the registration hive, installation path and user database. Keep the path guard;
+record mismatched registration metadata before stopping, never follow a changed
+path to delete files. Do not publish C2. Preserve its bytes/evidence and stage a
+new immutable C3, with all affected exact-installer gates rerun.

@@ -318,7 +318,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "perMachine": true,
+      "perMachine": false,
       "shortcutName": "Hermes Vietnamese",
       "uninstallDisplayName": "Hermes Vietnamese",
       "warningsAsErrors": false
