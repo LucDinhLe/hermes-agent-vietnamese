@@ -65,13 +65,26 @@ test('exact installed calendar lifecycle', async ({}, testInfo) => {
     Object.entries(env).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
   )
   const launch = async () => {
-    app = await _electron.launch({
+    const diagnostics = setInterval(() => {
+      const runtimeDir = path.join(profile, 'runtimes')
+      console.log('Startup progress:', fs.existsSync(runtimeDir)
+        ? fs.readdirSync(runtimeDir).map(name => ({ name, files: fs.readdirSync(path.join(runtimeDir, name), { recursive: true }).length }))
+        : 'runtime not materialized')
+      console.log(execFileSync(path.join(process.env.SystemRoot!, 'System32/WindowsPowerShell/v1.0/powershell.exe'),
+        ['-NoProfile', '-NonInteractive', '-Command', "Get-Process Hermes -ErrorAction SilentlyContinue | Select-Object Id,CPU,MainWindowTitle,Responding | ConvertTo-Json"],
+        { encoding: 'utf8', windowsHide: true, timeout: 10_000 }))
+    }, 30_000)
+    try {
+      app = await _electron.launch({
       executablePath: binary,
       cwd: workspace,
       env: launchEnv,
       args: ['--disable-gpu', '--no-sandbox', `--user-data-dir=${path.join(roaming, 'Hermes')}`],
       timeout: 300_000
-    })
+      })
+    } finally {
+      clearInterval(diagnostics)
+    }
     expect(await app.evaluate(({ app }) => app.getPath('userData'))).toBe(path.join(roaming, 'Hermes'))
     const page = await app.firstWindow()
     await page.locator('[data-session-tab-plus] button').first().waitFor({ state: 'visible', timeout: 300_000 })

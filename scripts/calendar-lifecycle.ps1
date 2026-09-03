@@ -150,6 +150,13 @@ try {
   if ($residual.Count -gt 0) { throw 'An isolated product process remained after lifecycle' }
   Event 'complete' @{ candidateSha256=$Sha256; sourceCommit=$SourceCommit }
 } finally {
+  # Test-owned logs only: never upload config, auth, databases or inherited profiles.
+  Get-ChildItem -LiteralPath $state -Recurse -File -Filter '*.log' -ErrorAction SilentlyContinue | ForEach-Object {
+    $relative = [IO.Path]::GetRelativePath($state, $_.FullName)
+    $destination = Join-Path $evidence "product-logs\$relative"
+    New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+    Copy-Item -LiteralPath $_.FullName -Destination $destination
+  }
   $events | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath (Join-Path $evidence 'events.json') -Encoding utf8
   Get-NetFirewallRule -Group $firewallGroup -ErrorAction SilentlyContinue | Remove-NetFirewallRule
 }
