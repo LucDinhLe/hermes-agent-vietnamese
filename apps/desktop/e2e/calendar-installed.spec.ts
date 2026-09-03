@@ -93,9 +93,15 @@ test('exact installed calendar lifecycle', async ({}, testInfo) => {
     expect(await app.evaluate(({ app }) => app.getPath('userData'))).toBe(path.join(roaming, 'Hermes'))
     const page = await app.firstWindow()
     await page.locator('[data-session-tab-plus] button').first().waitFor({ state: 'visible', timeout: 300_000 })
-    await page
-      .getByRole('button', { name: 'Gateway: Đã kết nối', exact: true })
-      .waitFor({ state: 'visible', timeout: 300_000 })
+    if (legacy) {
+      // vi-v0.32.1-18 reports readiness in the footer, not C2's accessible
+      // Gateway button label. Real send/reply and persistence remain required.
+      await page.getByText(/cổng kết nối sẵn sàng/i).waitFor({ state: 'visible', timeout: 300_000 })
+    } else {
+      await page
+        .getByRole('button', { name: 'Gateway: Đã kết nối', exact: true })
+        .waitFor({ state: 'visible', timeout: 300_000 })
+    }
     return page
   }
   try {
@@ -138,7 +144,9 @@ test('exact installed calendar lifecycle', async ({}, testInfo) => {
       .first()
     const tabs = group.locator('[data-tree-tab]')
     const initial = await tabs.count()
-    for (let i = 1; i <= 3; i++) {
+    // The old release seeds real history; it need not implement C2's tab-plus
+    // regression fix. Every C2 smoke still requires all three new tabs.
+    for (let i = 1; i <= (legacy ? 0 : 3); i++) {
       await group.locator('[data-session-tab-plus] button').click()
       await expect(tabs).toHaveCount(initial + i, { timeout: 30_000 })
     }
