@@ -72,6 +72,25 @@ These are source/integration results, not packaged lifecycle acceptance yet.
 
 No existing artifact may be patched in place. Python diagnostics use -B.
 
+## d14 follow-up: provisional composer first-send guard
+
+The frozen d13 packaged app opens three distinct editable tabs via the real
+plus button. Its first send fails: the shared drift guard compares the real
+draft composer scope with null because the provisional tile has no durable
+DB row yet. Reproduced with the actual tile action/shared submit pipeline:
+`composer:draft-local-stable->null`, false return, no prompt.submit.
+
+Add an explicit provisional draft-scope seam without inventing a durable id
+or weakening cross-session protection. Durable lineage-root resolution stays
+unchanged. Correct draft scope sends once through the captured owner and
+promotes after DB confirmation; another draft scope must still reject.
+192 focused tests passed including existing durable scope/lineage coverage.
+
+d13 is NO-GO for installation, and its immutable bytes remain preserved.
+Freeze d14 only from clean remote-reachable source. The same packaged harness
+must pass plus x3, first send with local mock inference, and restored history
+on relaunch before any replacement of the user's current d12 installation.
+
 ## Authority / acceptance boundaries
 
 - Owner approved source repairs, isolated tests and eventual local installation.

@@ -79,6 +79,8 @@ interface SubmitPromptDeps {
   resolveStoredSessionProfile?: (storedSessionId: string) => Promise<string | undefined>
   resumeStoredSession: (storedSessionId: string) => Promise<void> | void
   selectedStoredSessionIdRef: MutableRefObject<string | null>
+  /** A new tile has a real draft scope before it has any durable DB row. */
+  provisionalComposerScope?: string
   syncAttachmentsForSubmit: (
     sessionId: string,
     attachments: ComposerAttachment[],
@@ -129,6 +131,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
     resolveStoredSessionProfile,
     resumeStoredSession,
     selectedStoredSessionIdRef,
+    provisionalComposerScope,
     syncAttachmentsForSubmit,
     updateSessionState,
     scope = MAIN_SUBMIT_SCOPE
@@ -232,7 +235,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
       // must never inherit the currently selected session after the user moves
       // to another chat.
       const targetStoredSessionId = options?.storedSessionId ?? selectedStoredSessionIdRef.current
-      const requestTargetGateway: GatewayRequest = <T,>(method: string, params = {}, timeoutMs?: number) =>
+      const requestTargetGateway: GatewayRequest = <T>(method: string, params = {}, timeoutMs?: number) =>
         requestForStoredSession(
           targetStoredSessionId ?? selectedStoredSessionIdRef.current,
           method,
@@ -338,7 +341,9 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
               // into the same lineage-root domain before comparing, or every
               // submit into a session that has ever compressed would
               // false-positive-abort.
-              submitTargetComposerScope: resolveComposerSessionKey(startingStoredSessionId, $sessions.get())
+              submitTargetComposerScope: startingStoredSessionId
+                ? resolveComposerSessionKey(startingStoredSessionId, $sessions.get())
+                : (provisionalComposerScope ?? null)
             })
           : null
 
@@ -910,6 +915,7 @@ export function useSubmitPrompt(deps: SubmitPromptDeps) {
       resumeStoredSession,
       scope,
       selectedStoredSessionIdRef,
+      provisionalComposerScope,
       syncAttachmentsForSubmit,
       updateSessionState
     ]

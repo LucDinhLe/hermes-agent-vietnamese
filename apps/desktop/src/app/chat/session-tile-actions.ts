@@ -184,7 +184,7 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId, tile 
   useEffect(() => clearConfirmationRetry, [clearConfirmationRetry])
 
   const requestGateway = useCallback(
-    async <T,>(method: string, params: Record<string, unknown> = {}, timeoutMs?: number): Promise<T> => {
+    async <T>(method: string, params: Record<string, unknown> = {}, timeoutMs?: number): Promise<T> => {
       const currentTile = $sessionTiles.get().find(candidate => candidate.storedSessionId === storedSessionId) ?? tile
       const owner = currentTile.owner
 
@@ -249,7 +249,8 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId, tile 
         ? $sessions.get().find(session => sessionMatchesStoredId(session, durableSessionId))
         : null
       const currentTile = $sessionTiles.get().find(candidate => candidate.storedSessionId === storedSessionId) ?? tile
-      const owner = currentTile.owner ??
+      const owner =
+        currentTile.owner ??
         (stored?.profile?.trim()
           ? normalizeSessionTileOwner({
               connectionId: stored.connection_id?.trim() || null,
@@ -257,7 +258,7 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId, tile 
             })
           : null)
       const rendererRuntimeId = durableSessionId
-        ? sessionTileDelegate()?.bindSessionRuntime?.(durableSessionId, rawRuntimeId) ?? null
+        ? (sessionTileDelegate()?.bindSessionRuntime?.(durableSessionId, rawRuntimeId) ?? null)
         : null
 
       if (!durableSessionId || !owner || !rendererRuntimeId) {
@@ -511,6 +512,7 @@ export function useSessionTileActions({ runtimeId, scope, storedSessionId, tile 
     // unreachable here; keep the shared submit contract explicit.
     resumeStoredSession: () => undefined,
     selectedStoredSessionIdRef: storedIdRef,
+    provisionalComposerScope: isProvisionalSessionTile(tile) ? tile.draftId : undefined,
     syncAttachmentsForSubmit,
     updateSessionState: (sessionId, updater) => sessionTileDelegate()!.updateSession(sessionId, updater),
     scope: {

@@ -2,7 +2,7 @@
   "name": "hermes",
   "productName": "Hermes",
   "private": true,
-  "version": "0.33.0-dev.13-advisor-exp.13",
+  "version": "0.33.0-dev.14-advisor-exp.14",
   "description": "Hermes Vietnamese local Stable build with the Advisor review runner.",
   "author": {
     "name": "Lê Đình Lực",

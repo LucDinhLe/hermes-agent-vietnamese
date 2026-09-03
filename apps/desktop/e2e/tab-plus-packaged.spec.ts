@@ -18,6 +18,8 @@ test('packaged plus creates distinct tabs, sends once, and restores history on r
   const local = path.join(root, 'local')
   const roaming = path.join(root, 'roaming')
   const profile = path.join(local, 'hermes')
+  const workspace = path.join(root, 'workspace')
+  fs.mkdirSync(workspace, { recursive: true })
   expect(fs.existsSync(path.join(profile, 'hermes-agent', '.venv', 'Scripts', 'python.exe'))).toBe(true)
   expect(fs.existsSync(path.join(profile, 'auth.json'))).toBe(false)
   fs.mkdirSync(path.join(roaming, 'Hermes'), { recursive: true })
@@ -31,6 +33,7 @@ test('packaged plus creates distinct tabs, sends once, and restores history on r
     APPDATA: roaming,
     HERMES_DESKTOP_APP_NAME: 'HermesTabPlusAcceptance',
     HERMES_DESKTOP_SKIP_QUIT_CONFIRM: '1',
+    HERMES_DESKTOP_CWD: workspace,
     PYTHONDONTWRITEBYTECODE: '1',
     NO_PROXY: '127.0.0.1,localhost',
     no_proxy: '127.0.0.1,localhost'
@@ -46,10 +49,15 @@ test('packaged plus creates distinct tabs, sends once, and restores history on r
   const launch = async () => {
     app = await _electron.launch({
       executablePath: PACKAGED_BINARY_PATH,
-      args: ['--disable-gpu', '--no-sandbox'],
+      // Electron resolves OS userData independently of the APPDATA env var.
+      // Pin Chromium's path too so the real app's single-instance lock and
+      // localStorage are never reused by this packaged acceptance process.
+      args: ['--disable-gpu', '--no-sandbox', `--user-data-dir=${path.join(roaming, 'Hermes')}`],
       env,
+      cwd: workspace,
       timeout: 300_000
     })
+    expect(await app.evaluate(({ app }) => app.getPath('userData'))).toBe(path.join(roaming, 'Hermes'))
     const page = await app.firstWindow()
     await page.locator('[data-session-tab-plus] button').first().waitFor({ state: 'visible', timeout: 300_000 })
     return page
@@ -69,8 +77,10 @@ test('packaged plus creates distinct tabs, sends once, and restores history on r
     }
     const message = 'Tab plus persistence acceptance 7319'
     const composer = group.locator('[contenteditable="true"]:visible').first()
-    await composer.fill(message)
-    await composer.press('Enter')
+    await composer.click()
+    await composer.pressSequentially(message, { delay: 20 })
+    await group.locator('button[type="submit"]:visible').click()
+    await expect(composer).toHaveText('', { timeout: 15_000 })
     await expect(group.getByText(/Hello from the mock inference server/)).toBeVisible({ timeout: 90_000 })
     await page.screenshot({ path: testInfo.outputPath('three-tabs-first-send.png') })
     await app!.close()

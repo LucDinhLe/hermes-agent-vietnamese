@@ -126,13 +126,15 @@ describe('provisional tile promotion transaction', () => {
         runtimeId: RUNTIME_SESSION_ID
       })
     ).toBeNull()
-    expect($sessionTiles.get()).toEqual([expect.objectContaining({ draftId: provisional.draftId, kind: 'provisional' })])
+    expect($sessionTiles.get()).toEqual([
+      expect.objectContaining({ draftId: provisional.draftId, kind: 'provisional' })
+    ])
 
     $layoutTree.set(
-      group(
-        [`session-tile:${provisional.draftId}`, 'session-tile:durable-confirmed'],
-        { active: `session-tile:${provisional.draftId}`, id: 'main' }
-      )
+      group([`session-tile:${provisional.draftId}`, 'session-tile:durable-confirmed'], {
+        active: `session-tile:${provisional.draftId}`,
+        id: 'main'
+      })
     )
 
     expect(
@@ -142,7 +144,9 @@ describe('provisional tile promotion transaction', () => {
         runtimeId: RUNTIME_SESSION_ID
       })
     ).toBeNull()
-    expect($sessionTiles.get()).toEqual([expect.objectContaining({ draftId: provisional.draftId, kind: 'provisional' })])
+    expect($sessionTiles.get()).toEqual([
+      expect.objectContaining({ draftId: provisional.draftId, kind: 'provisional' })
+    ])
   })
 
   it('rekeys layout and tile together, and rolls the tile back if layout changes during the transition', () => {
@@ -168,7 +172,9 @@ describe('provisional tile promotion transaction', () => {
     ).toBeNull()
     unsubscribe()
 
-    expect($sessionTiles.get()).toEqual([expect.objectContaining({ draftId: provisional.draftId, kind: 'provisional' })])
+    expect($sessionTiles.get()).toEqual([
+      expect.objectContaining({ draftId: provisional.draftId, kind: 'provisional' })
+    ])
 
     $layoutTree.set(
       group([`session-tile:${provisional.draftId}`], {
@@ -232,6 +238,66 @@ describe('useSessionTileActions sleep/wake session recovery', () => {
     getSessionForOwnerMock.mockReset()
     vi.restoreAllMocks()
   })
+
+  it.each(['draft-local-stable', 'draft-another-tile'])(
+    'validates the actual composer scope on a provisional first send: %s',
+    async composerScope => {
+      const owner = { connectionId: 'mbc-source', profile: 'mbc' } as const
+
+      activateSessionTileOwner(owner)
+      $sessionTiles.set([])
+      openProvisionalSessionTile({
+        draftId: 'draft-local-stable',
+        owner,
+        provisionalStoredSessionId: 'candidate-never-durable',
+        runtimeId: RUNTIME_SESSION_ID
+      })
+      $layoutTree.set(
+        group(['session-tile:draft-local-stable'], {
+          active: 'session-tile:draft-local-stable',
+          id: 'main'
+        })
+      )
+      requestGatewayMock.mockResolvedValue({})
+      getSessionForOwnerMock.mockResolvedValue({
+        id: 'candidate-never-durable',
+        profile: 'mbc',
+        source: 'desktop',
+        title: 'first send',
+        message_count: 1,
+        started_at: 1,
+        last_active: 1
+      })
+      const { result, unmount } = renderProvisionalTileActions()
+
+      try {
+        const ok = await act(async () => result.current.submitText('first send', { composerScope }))
+
+        expect(ok).toBe(composerScope === 'draft-local-stable')
+        const submits = requestOwnerMock.mock.calls.filter(([, method]) => method === 'prompt.submit')
+
+        if (composerScope === 'draft-local-stable') {
+          expect(submits).toHaveLength(1)
+          expect(submits[0]).toEqual([
+            owner,
+            'prompt.submit',
+            expect.objectContaining({ session_id: RUNTIME_SESSION_ID }),
+            expect.any(Number)
+          ])
+          expect($sessionTiles.get()).toEqual([
+            expect.objectContaining({ kind: 'durable', storedSessionId: 'candidate-never-durable' })
+          ])
+        } else {
+          expect(submits).toEqual([])
+          expect(getSessionForOwnerMock).not.toHaveBeenCalled()
+        }
+      } finally {
+        unmount()
+        $sessionTiles.set([])
+        $layoutTree.set(null)
+      }
+    }
+  )
 
   it('routes a duplicate durable id through the owner captured by the tile', async () => {
     const ownerA = { connectionId: 'source-a', profile: 'mbc' } as const
