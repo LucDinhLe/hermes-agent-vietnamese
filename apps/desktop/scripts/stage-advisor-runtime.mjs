@@ -5,6 +5,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { dirname, join, relative, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { expectedRuntimeCandidateId } from '../electron/runtime-candidate-id.ts'
+import { isExcludedWindowsPythonTemplate } from './windows-python-distribution.mjs'
 
 const desktopRoot = resolve(import.meta.dirname, '..')
 const repoRoot = resolve(desktopRoot, '..', '..')
@@ -66,13 +67,18 @@ if (/^[1-9]\d{3}\./.test(pkg.version)) {
     }
     const bytes = readFileSync(join(pythonRoot, 'payload', entry.path))
     if (bytes.length !== entry.size || digest(bytes) !== entry.sha256) throw new Error(`Prepared Python changed: ${entry.path}`)
+    // Also support the already verified, immutable C1 preparation cache. All
+    // entries still pass their original hashes; only these unneeded templates
+    // are excluded from the new candidate's exact manifest and payload.
+    if (isExcludedWindowsPythonTemplate(entry.path)) continue
     const target = join(payloadRoot, '.python', entry.path)
     mkdirSync(dirname(target), { recursive: true })
     writeFileSync(target, bytes)
     files.push({ ...entry, path: `.python/${entry.path}` })
   }
   python = { layout: receipt.layout, version: receipt.version, lockSha256: receipt.lockSha256,
-    preparationManifestSha256: digest(readFileSync(join(pythonRoot, 'python-manifest.json'))) }
+    preparationManifestSha256: digest(readFileSync(join(pythonRoot, 'python-manifest.json'))),
+    excludedInstallerTemplates: receipt.files.map(entry => entry.path).filter(isExcludedWindowsPythonTemplate) }
 }
 
 const manifest = {

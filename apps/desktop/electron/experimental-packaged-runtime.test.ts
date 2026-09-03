@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
   configureExperimentalPackagedEnvironment,
@@ -402,6 +402,24 @@ describe('packaged Experimental runtime', () => {
     expect(() => verifyExperimentalRuntimeBundle({
       appVersion: APP_VERSION, experimentRoot: f.experimentRoot, resourcesPath: f.resourcesPath
     })).toThrow(/missing \(1\): \.python\/Lib\/os.py; unexpected \(1\): unexpected-runtime-file.txt/)
+  })
+
+  it('hashes the new tree once before atomic promotion and rechecks it on relaunch', () => {
+    const f = portableFixture()
+    const reads = vi.spyOn(fs, 'readFileSync')
+    const options = { bundle: f.bundle, experimentRoot: f.experimentRoot, profileRoot: f.profileRoot }
+
+    const interpreterReads = () => reads.mock.calls.filter(([file]) =>
+      String(file).endsWith(path.join('.python', 'python312.dll'))).length
+
+    try {
+      materializeExperimentalPackagedRuntime(options)
+      expect(interpreterReads()).toBe(1)
+      materializeExperimentalPackagedRuntime(options)
+      expect(interpreterReads()).toBe(2)
+    } finally {
+      reads.mockRestore()
+    }
   })
 
   it.each(['.python/python312.dll', '.python/Lib/site-packages/injected.py', '.venv/injected.py'])(

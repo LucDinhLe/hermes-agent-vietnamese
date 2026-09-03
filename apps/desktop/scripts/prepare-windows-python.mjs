@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
+import { isExcludedWindowsPythonTemplate } from './windows-python-distribution.mjs'
 
 const repo = resolve(import.meta.dirname, '../../..')
 const output = join(repo, 'apps/desktop/build/python-runtime')
@@ -36,7 +37,8 @@ cpSync(prefix, join(output, 'payload'), { recursive: true, filter: source => {
   // Console launchers embed a build-machine interpreter path. Hermes uses
   // python -m entrypoints; do not ship those non-relocatable launchers or pyc.
   return !name.split('/').some(part => part === '__pycache__' || part === 'Scripts') && !name.endsWith('.pyc') &&
-    name !== 'Lib/site-packages/bin' && !name.startsWith('Lib/site-packages/bin/')
+    name !== 'Lib/site-packages/bin' && !name.startsWith('Lib/site-packages/bin/') &&
+    !isExcludedWindowsPythonTemplate(name)
 } })
 const files = []
 console.log('Hashing the prepared Python inventory...')

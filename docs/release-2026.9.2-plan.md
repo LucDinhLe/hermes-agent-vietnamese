@@ -109,3 +109,22 @@ Separate native Node-only materialization took7m19.912s; this is not gateway
 acceptance and not the cause of the early CI inventory failure. Investigate the
 startup cost independently. Neither an increased timeout nor suppressed integrity
 checks can turn C1 into an accepted candidate.
+
+## C2 source correction and freeze
+
+Run33781663838 identified exactly four missing ARM64 launcher templates from
+pip/distlib and setuptools. They are present in the frozen 7z archive but absent
+after NSIS extraction on Windows x64. These are not required runtime libraries
+for this x64 product. Exclude only these four explicit paths during preparation
+and staging, before generating the new exact inventory. The unchanged clean
+preparation cache may be reused: verify every cached file hash first and record
+the excluded template paths in the runtime manifest. Never omit an actual x64
+interpreter/library or ignore missing files during startup verification.
+
+Retain the exact installed-file gate as a permanent prerequisite to UI smoke.
+The C2 source also avoids a duplicate full hash pass immediately after atomically
+renaming an already fully verified fresh runtime tree; existing runtimes still
+get full tamper/inventory checks at every launch. A regression proves one fresh
+verification and another at relaunch. 88 focused tests and two distribution
+policy tests passed. C1 remains rejected; C2 must be built in a separate output
+directory and staged separately before actual installed acceptance.

@@ -916,9 +916,12 @@ export function materializeExperimentalPackagedRuntime({
           fs.rmSync(stagingRoot, { recursive: true })
         }
       }
+    } else {
+      // A new tree was fully verified before its atomic rename above. Existing
+      // trees must still be reverified on every launch, including tamper checks.
+      verifyMaterializedCandidate(bundle, targetRoot, null)
     }
 
-    verifyMaterializedCandidate(bundle, targetRoot, null)
     fs.writeFileSync(path.join(experimentRoot, 'runtime-current.txt'), `${targetRoot}\n`)
     env.HERMES_DESKTOP_HERMES_ROOT = targetRoot
     env.PYTHONDONTWRITEBYTECODE = '1'
