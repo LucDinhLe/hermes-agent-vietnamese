@@ -30,6 +30,7 @@ test('exact installed calendar lifecycle', async ({}, testInfo) => {
   const profile = path.join(local, 'hermes')
   const workspace = path.join(root, 'workspace')
   fs.mkdirSync(workspace, { recursive: true })
+  fs.mkdirSync(profile, { recursive: true })
   fs.mkdirSync(path.join(roaming, 'Hermes'), { recursive: true })
   fs.writeFileSync(path.join(roaming, 'Hermes', 'zoom-state.json'), '{"zoomLevel":0}')
   const mock = await startMockServer()
@@ -46,7 +47,7 @@ test('exact installed calendar lifecycle', async ({}, testInfo) => {
     HERMES_DESKTOP_CWD: workspace,
     PYTHONDONTWRITEBYTECODE: '1',
     PYTHONNOUSERSITE: '1',
-    PATH: `${process.env.SystemRoot}\\System32;${process.env.SystemRoot}`,
+    PATH: `${process.env.SystemRoot}\\System32;${process.env.SystemRoot};${process.env.SystemRoot}\\System32\\WindowsPowerShell\\v1.0`,
     NO_PROXY: '127.0.0.1,localhost',
     no_proxy: '127.0.0.1,localhost'
   }

@@ -31,6 +31,7 @@ function Under([string]$Path, [string]$Parent) {
 }
 function Event([string]$Stage, [hashtable]$Detail=@{}) {
   $script:events += [ordered]@{ stage=$Stage; at=[DateTime]::UtcNow.ToString('o'); status='passed'; detail=$Detail }
+  Write-Host "Lifecycle gate passed: $Stage"
 }
 function Installed {
   $found = @($keys | Where-Object { Test-Path -LiteralPath $_ })
