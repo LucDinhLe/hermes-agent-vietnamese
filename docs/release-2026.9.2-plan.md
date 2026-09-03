@@ -34,8 +34,17 @@ materialized repo but were located and read in the parent v32.1 integrated
 checkout. That contract requires native builds, immutable artifacts, lifecycle
 acceptance and truthful unsigned community-pilot limitations. The old six-target
 contract must not be claimed satisfied by this Windows-only preparation.
-Owner confirmation of Windows-x64-only unsigned Latest scope was requested;
-public promotion remains closed. Native build host is Node 26.7.0.
+Owner explicitly approved the unsigned Windows x64 Latest release on 2026-09-03.
+No further signing approval is needed. Native build host is Node 26.7.0.
+Promotion remains gated on exact-installer acceptance, not signing.
+
+The native pilot records the actual public branch/commit verified with live
+git ls-remote, clean materialized source, engine ancestry, host OS/architecture
+and Node version in the hashed install stamp. Historical edition receipt remains
+unchanged and releaseMode=false; this build is local, never represented as CI.
+Both build-time and startup validators enforce this explicit native pilot path.
+It does not claim completion of the historical six-platform release contract.
+No automatic update feed is published for the unsigned pilot.
 
 ## Evidence
 

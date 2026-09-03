@@ -26,9 +26,10 @@
  * commit as unpinned and follows the branch instead of fetching a fake SHA.
  */
 
-import { mkdirSync, writeFileSync } from "fs"
+import { mkdirSync, readFileSync, writeFileSync } from "fs"
 import { resolve, join, relative } from "path"
-import { execSync } from "child_process"
+import { execFileSync, execSync } from "child_process"
+import { RELEASE_REPOSITORY } from '../electron/native-release-provenance.ts'
 
 import { isMain } from "./utils.mjs"
 
@@ -156,6 +157,25 @@ function main() {
     builtAt: new Date().toISOString(),
     dirty: stamp.dirty,
     source: stamp.source
+  }
+
+  const composition = JSON.parse(readFileSync(join(OUT_DIR, 'experimental-composition.json'), 'utf8'))
+  if (composition.releaseCandidate && composition.distribution?.kind === 'community-pilot') {
+    if (stamp.source !== 'local' || stamp.dirty || !stamp.branch || process.platform !== 'win32' ||
+        process.arch !== 'x64' || !process.version.startsWith('v26.')) {
+      throw new Error('Native pilot requires a clean local Windows x64 Node 26 build')
+    }
+    const ref = `refs/heads/${stamp.branch}`
+    const git = args => execFileSync('git', args, { cwd: REPO_ROOT, encoding: 'utf8' }).trim()
+    git(['check-ref-format', ref])
+    const remote = git(['ls-remote', '--exit-code', RELEASE_REPOSITORY, ref]).split(/\s+/)
+    if (remote[0] !== stamp.commit || remote[1] !== ref) throw new Error('Public source ref does not match HEAD')
+    git(['merge-base', '--is-ancestor', composition.experimentalEngineHead, stamp.commit])
+    payload.nativeRelease = {
+      schemaVersion: 1, repository: RELEASE_REPOSITORY, ref, commit: stamp.commit,
+      engineCommit: composition.experimentalEngineHead,
+      platform: process.platform, arch: process.arch, nodeVersion: process.version
+    }
   }
 
   mkdirSync(OUT_DIR, { recursive: true })

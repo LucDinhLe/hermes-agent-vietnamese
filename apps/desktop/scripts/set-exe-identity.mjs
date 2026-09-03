@@ -32,8 +32,7 @@
 //
 // Exits 0 on success, non-zero on failure when run as a CLI. As a hook,
 // stampExeIdentity() resolves on success and rejects on failure; the caller
-// (after-pack.mjs) swallows the rejection so a stamp failure never fails an
-// otherwise-good build (worst case: stock icon, not a broken app).
+// (after-pack.mjs) propagates rejection so incorrect identity fails the build.
 
 import { resolve, join } from 'node:path'
 import { existsSync, readFileSync } from 'node:fs'
@@ -56,7 +55,7 @@ async function stampExeIdentity(exe, desktopRoot = resolve(import.meta.dirname, 
     throw new Error(`icon not found: ${icon}`)
   }
   const pkg = JSON.parse(readFileSync(join(desktopRoot, 'package.json'), 'utf8'))
-  const numericVersion = '0.33.0.11'
+  const numericVersion = windowsNumericVersion(pkg.version)
 
   console.log(`[set-exe-identity] stamping ${exe}`)
   console.log(`[set-exe-identity] icon: ${icon}`)
@@ -80,6 +79,14 @@ async function stampExeIdentity(exe, desktopRoot = resolve(import.meta.dirname, 
 }
 
 export { stampExeIdentity }
+
+export function windowsNumericVersion(version) {
+  const parts = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-dev\.(\d+)-advisor-exp\.\d+)?$/)
+  if (!parts) throw new Error(`Unsupported Windows version: ${version}`)
+  const numbers = [parts[1], parts[2], parts[3], parts[4] ?? '0'].map(Number)
+  if (numbers.some(value => value > 65535)) throw new Error('Windows version component exceeds 65535')
+  return numbers.join('.')
+}
 
 // CLI entry point: `node scripts/set-exe-identity.mjs <exe>`.
 if (isMain(import.meta.url)) {

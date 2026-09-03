@@ -3,7 +3,7 @@
   "productName": "Hermes",
   "private": true,
   "version": "2026.9.2",
-  "description": "Hermes Vietnamese local Stable build with the Advisor review runner.",
+  "description": "Hermes Vietnamese Windows community pilot with bundled Advisor runtime.",
   "author": {
     "name": "Lê Đình Lực",
     "url": "https://github.com/LucDinhLe"

@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expectedRuntimeCandidateId as expectedCandidateId } from '../electron/runtime-candidate-id.ts'
+import { assertNativeReleaseProvenance } from '../electron/native-release-provenance.ts'
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_DESKTOP_ROOT = path.resolve(SCRIPT_DIR, '..')
@@ -163,13 +164,17 @@ function validateSourceGraph({
 
   if (releaseCandidate) {
     invariant(composition.status === 'release-candidate', 'Release candidate composition status mismatch')
-    invariant(editionReceipt.releaseMode === true, 'Release candidate requires a release-mode base edition receipt')
-    invariant(
-      Array.isArray(editionReceipt.edition?.shellLiveRemoteRefs) &&
-        editionReceipt.edition.shellLiveRemoteRefs.length > 0,
-      'Release candidate requires live base edition remote evidence'
-    )
-    invariant(installStamp.source === 'ci', 'Release candidate install stamp must come from ci')
+    if (composition.distribution?.kind === 'community-pilot') {
+      assertNativeReleaseProvenance(installStamp, composition, runtimeManifest)
+    } else {
+      invariant(editionReceipt.releaseMode === true, 'Release candidate requires a release-mode base edition receipt')
+      invariant(
+        Array.isArray(editionReceipt.edition?.shellLiveRemoteRefs) &&
+          editionReceipt.edition.shellLiveRemoteRefs.length > 0,
+        'Release candidate requires live base edition remote evidence'
+      )
+      invariant(installStamp.source === 'ci', 'Release candidate install stamp must come from ci')
+    }
   } else {
     invariant(composition.status === 'local-experimental-only', 'Local Experimental composition status mismatch')
     invariant(publicDistributionAllowed === false, 'Local Experimental candidate cannot allow public distribution')

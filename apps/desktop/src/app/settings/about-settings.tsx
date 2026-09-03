@@ -28,7 +28,8 @@ export function AboutSettings() {
   const engineMismatch = Boolean(runningEngineVersion && runningEngineVersion !== expectedEngineVersion)
   const runtimeMismatch = Boolean(runtime && runtime.runtimeProductVersion !== productMetadata.technicalVersion)
   const localStable = productMetadata.releaseChannel === 'local-stable'
-  const channelLabel = localStable ? 'Local Stable' : 'Experimental'
+  const communityPilot = productMetadata.releaseChannel === 'community-pilot'
+  const channelLabel = communityPilot ? 'Community Pilot' : localStable ? 'Local Stable' : 'Experimental'
 
   return (
     <SettingsContent>
@@ -86,7 +87,7 @@ export function AboutSettings() {
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   Ứng dụng sẽ không được coi là đạt kiểm thử cho đến khi runtime {productMetadata.technicalVersion} có
                   biên nhận và hash hợp lệ. Hãy đóng ứng dụng rồi mở bằng lối tắt{' '}
-                  {localStable ? 'Hermes' : 'Experimental'} để đồng bộ lại.
+                  {localStable || communityPilot ? 'Hermes' : 'Experimental'} để đồng bộ lại.
                 </p>
               </div>
             </div>
@@ -100,7 +101,9 @@ export function AboutSettings() {
             <div className="min-w-0">
               <p className="font-medium">Kênh {channelLabel} · cập nhật bằng bộ cài đã kiểm thử</p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {localStable
+                {communityPilot
+                  ? 'Bản cộng đồng Windows x64 chưa ký số; cài đè và dùng hồ sơ Hermes hiện có. '
+                  : localStable
                   ? 'Bản cài cục bộ dùng hồ sơ Hermes hiện có; chưa phải bản phát hành công khai. '
                   : 'Bản thử nghiệm dùng hồ sơ riêng, không thay bản Stable. '}
                 Mỗi lần mở đều xác minh candidate trước khi khởi chạy.

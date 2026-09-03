@@ -26,7 +26,7 @@ describe('About runtime provenance', () => {
     expect(screen.queryByText(/Runtime Advisor chưa được xác minh/)).toBeNull()
   })
 
-  it('describes the installed local Stable identity without Experimental recovery or uninstall advice', () => {
+  it('describes the unsigned community pilot without Experimental recovery or uninstall advice', () => {
     $desktopVersion.set({
       appVersion: productMetadata.technicalVersion,
       engineVersion: productMetadata.upstream.version,
@@ -40,7 +40,8 @@ describe('About runtime provenance', () => {
     } as DesktopVersionInfo)
     render(<AboutSettings />)
     expect(screen.getByText('verified-candidate')).toBeTruthy()
-    expect(screen.getByText('Kênh Local Stable · cập nhật bằng bộ cài đã kiểm thử')).toBeTruthy()
+    expect(screen.getByText('Kênh Community Pilot · cập nhật bằng bộ cài đã kiểm thử')).toBeTruthy()
+    expect(screen.getByText(/Windows x64 chưa ký số; cài đè và dùng hồ sơ Hermes hiện có/)).toBeTruthy()
     expect(screen.queryByText(/chưa khớp|chưa được xác minh|lối tắt Experimental|Gỡ GUI/)).toBeNull()
   })
 })

@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import { assertNativeReleaseProvenance } from './native-release-provenance'
 
 import {
   RUNTIME_CANDIDATE_PATTERN as CANDIDATE_PATTERN,
@@ -703,13 +704,17 @@ export function verifyExperimentalRuntimeBundle({
   )
 
   if (releaseCandidate) {
-    invariant(editionReceipt.releaseMode === true, 'release candidate requires a release-mode edition receipt')
-    invariant(
-      Array.isArray(editionReceipt.edition?.shellLiveRemoteRefs) &&
-        editionReceipt.edition.shellLiveRemoteRefs.length > 0,
-      'release candidate requires live edition remote evidence'
-    )
-    invariant(installStamp.source === 'ci', 'release candidate install stamp must come from ci')
+    if (composition.distribution?.kind === 'community-pilot') {
+      assertNativeReleaseProvenance(installStamp, composition, manifest)
+    } else {
+      invariant(editionReceipt.releaseMode === true, 'release candidate requires a release-mode edition receipt')
+      invariant(
+        Array.isArray(editionReceipt.edition?.shellLiveRemoteRefs) &&
+          editionReceipt.edition.shellLiveRemoteRefs.length > 0,
+        'release candidate requires live edition remote evidence'
+      )
+      invariant(installStamp.source === 'ci', 'release candidate install stamp must come from ci')
+    }
   }
 
   invariant(

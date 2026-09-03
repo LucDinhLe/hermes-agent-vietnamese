@@ -111,6 +111,35 @@ function inputs(f) {
   }
 }
 
+test('native calendar pilot preserves truthful historical local receipt', () => {
+  const f = fixture()
+  f.packageJson.version = f.composition.productVersion = f.runtimeManifest.productVersion = '2026.9.2'
+  f.runtimeManifest.candidateId = 'c2026m9r2-eeeeeeee-dddddddd'
+  f.runtimeManifest.python = { layout: 'portable-cpython-win-x64-v1' }
+  Object.assign(f.composition, {
+    status: 'release-candidate',
+    releaseCandidate: true,
+    publicDistributionAllowed: true,
+    distribution: { kind: 'community-pilot', signed: false, updateFeed: false, target: 'win-x64' }
+  })
+  f.installStamp.nativeRelease = {
+    schemaVersion: 1,
+    repository: 'https://github.com/LucDinhLe/hermes-agent-vietnamese.git',
+    ref: `refs/heads/${f.installStamp.branch}`,
+    commit: f.installStamp.commit,
+    engineCommit: f.composition.experimentalEngineHead,
+    platform: 'win32',
+    arch: 'x64',
+    nodeVersion: 'v26.7.0'
+  }
+  const receipt = composeExperimentalCandidateReceipt(inputs(f))
+  assert.equal(receipt.publicDistributionAllowed, true)
+  assert.equal(receipt.sources.baseEditionReleaseMode, false)
+  assert.equal(receipt.sources.installStampSource, 'local')
+  delete f.installStamp.nativeRelease
+  assert.throws(() => composeExperimentalCandidateReceipt(inputs(f)), /missing native proof/)
+})
+
 afterEach(() => {
   while (roots.length) rmSync(roots.pop(), { recursive: true, force: true })
 })
