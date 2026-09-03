@@ -1,7 +1,7 @@
 // Stage into apps/desktop/e2e only after freezing the candidate bytes.
 import fs from 'node:fs'
 import path from 'node:path'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { _electron, expect, test, type ElectronApplication } from '@playwright/test'
 import { stripCredentials, writeEnvFile, writeMockProviderConfig } from './fixtures'
 import { startMockServer } from './mock-server'
@@ -151,6 +151,22 @@ test('exact installed calendar lifecycle', async ({}, testInfo) => {
           }
           return fs.existsSync(cleanupLog) ? fs.readFileSync(cleanupLog, 'utf8') : ''
         }, { timeout: 300_000, intervals: [1000] }).toContain(`Completed packaged Hermes uninstall: ${mode}`)
+      } catch (acceptanceError) {
+        // Diagnostic replay only on this disposable VM, after the product
+        // launch has already FAILED acceptance. Never count replay as a pass.
+        expect(plan.executable).toBe(binary)
+        expect(plan.hermesHome).toBe(profile)
+        expect(plan.userData).toBe(path.join(roaming, 'Hermes'))
+        const replay = spawnSync(path.join(process.env.SystemRoot!, 'System32/WindowsPowerShell/v1.0/powershell.exe'),
+          ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
+          { env: launchEnv, encoding: 'utf8', windowsHide: true, timeout: 180_000 })
+        await testInfo.attach('diagnostic-replay-not-acceptance', {
+          body: JSON.stringify({ status: replay.status, error: replay.error?.message,
+            stdout: replay.stdout, stderr: replay.stderr, appExists: fs.existsSync(binary) }, null, 2),
+          contentType: 'text/plain'
+        })
+        console.log('Diagnostic replay (original acceptance still FAILED):', replay.status, replay.stderr)
+        throw acceptanceError
       } finally {
         if (fs.existsSync(cleanupLog)) {
           await testInfo.attach('native-uninstall-log', { path: cleanupLog, contentType: 'text/plain' })
