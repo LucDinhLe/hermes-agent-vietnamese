@@ -166,7 +166,8 @@ try {
   Event 'complete' @{ candidateSha256=$Sha256; sourceCommit=$SourceCommit }
 } finally {
   # Test-owned logs only: never upload config, auth, databases or inherited profiles.
-  Get-ChildItem -LiteralPath $state -Recurse -File -Filter '*.log' -ErrorAction SilentlyContinue | ForEach-Object {
+  Get-ChildItem -LiteralPath $state -Recurse -File -Filter '*.log' -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -notmatch '\\(leveldb|Local Storage|Session Storage)\\' } | ForEach-Object {
     $relative = [IO.Path]::GetRelativePath($state, $_.FullName)
     $destination = Join-Path $evidence "product-logs\$relative"
     New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
