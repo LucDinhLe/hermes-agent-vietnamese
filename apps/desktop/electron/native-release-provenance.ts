@@ -8,9 +8,11 @@ export function assertNativeReleaseProvenance(
   manifest: Record<string, any>
 ): void {
   const proof = stamp.nativeRelease
+
   const require = (ok: boolean, label: string) => {
-    if (!ok) throw new Error(`Native release provenance: ${label}`)
+    if (!ok) {throw new Error(`Native release provenance: ${label}`)}
   }
+
   require(/^20\d{2}\.(?:[1-9]|1[0-2])\.[1-9]\d*$/.test(composition.productVersion), 'calendar version required')
   require(stamp.source === 'local' && stamp.dirty === false, 'clean local source required')
   require(proof?.schemaVersion === 1, 'missing native proof')

@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'vitest'
+
 import { assertNativeReleaseProvenance, RELEASE_REPOSITORY } from './native-release-provenance'
 
 function fixture() {
   const commit = 'd'.repeat(40)
   const engineCommit = 'e'.repeat(40)
+
   return {
     stamp: {
       source: 'local',

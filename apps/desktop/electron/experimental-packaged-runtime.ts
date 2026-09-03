@@ -2,8 +2,8 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
-import { assertNativeReleaseProvenance } from './native-release-provenance'
 
+import { assertNativeReleaseProvenance } from './native-release-provenance'
 import {
   RUNTIME_CANDIDATE_PATTERN as CANDIDATE_PATTERN,
   expectedRuntimeCandidateId as expectedCandidateId
