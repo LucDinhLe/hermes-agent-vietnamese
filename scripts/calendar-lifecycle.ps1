@@ -133,7 +133,8 @@ try {
   $env:HERMES_TAB_PLUS_SANDBOX = Join-Path $state 'hermes-tab-plus-fresh'
   Install $Installer 'fresh-install' $false $true
   Smoke 'fresh-offline-tabs-tools-relaunch'
-  Nsis-Uninstall
+  Smoke 'fresh-uninstall-keep-data' $false $false 'uninstall-lite'
+  Wait-Uninstalled
   $env:HERMES_TAB_PLUS_SANDBOX = Join-Path $state 'hermes-tab-plus-upgrade'
   Install $PreviousInstaller 'previous-latest-install' $true $true
   Smoke 'previous-latest-history' $true

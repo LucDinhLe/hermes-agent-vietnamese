@@ -124,14 +124,38 @@ test('exact installed calendar lifecycle', async ({}, testInfo) => {
         mode
       )
       expect(result.ok).toBe(true)
+      expect(result.scriptPath).toBeTruthy()
+      const scriptPath = result.scriptPath!
+      expect(path.basename(scriptPath)).toMatch(/^hermes-uninstall-\d+\.ps1$/)
+      const script = fs.readFileSync(scriptPath, 'utf8')
+      await testInfo.attach('native-uninstall-script', { body: script, contentType: 'text/plain' })
+      const encodedPlan = script.match(/FromBase64String\('([^']+)'\)/)![1]
+      const plan = JSON.parse(Buffer.from(encodedPlan, 'base64').toString('utf8'))
+      const cleanupLog = scriptPath.replace(/\.ps1$/, '.log')
+      expect(plan.logPath).toBe(cleanupLog)
       const child = app!.process()
       if (child.exitCode === null) await new Promise<void>(resolve => child.once('exit', () => resolve()))
       app = undefined
-      expect(result.scriptPath).toBeTruthy()
-      const cleanupLog = result.scriptPath!.replace(/\.ps1$/, '.log')
-      await expect.poll(() => fs.existsSync(cleanupLog) ? fs.readFileSync(cleanupLog, 'utf8') : '',
-        { timeout: 300_000, intervals: [1000] }).toContain(`Completed packaged Hermes uninstall: ${mode}`)
-      await testInfo.attach('native-uninstall-log', { path: cleanupLog, contentType: 'text/plain' })
+      let nextDiagnosticAt = 0
+      try {
+        await expect.poll(() => {
+          if (Date.now() >= nextDiagnosticAt) {
+            nextDiagnosticAt = Date.now() + 30_000
+            console.log('Cleanup state:', { scriptExists: fs.existsSync(scriptPath),
+              logExists: fs.existsSync(cleanupLog), appExists: fs.existsSync(binary),
+              runtimeExists: fs.existsSync(path.join(profile, 'runtimes')) })
+            console.log(execFileSync(path.join(process.env.SystemRoot!, 'System32/WindowsPowerShell/v1.0/powershell.exe'),
+              ['-NoProfile', '-NonInteractive', '-Command',
+                "Get-CimInstance Win32_Process | Where-Object { ($_.CommandLine -and $_.CommandLine.Contains($env:HERMES_DIAGNOSTIC_SCRIPT)) -or $_.Name -like '*Hermes*.exe' } | ForEach-Object { $p=Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue; [pscustomobject]@{Id=$_.ProcessId;Parent=$_.ParentProcessId;Name=$_.Name;CPU=$p.CPU;Title=$p.MainWindowTitle;Command=$_.CommandLine} } | ConvertTo-Json -Depth 4"],
+              { env: { ...launchEnv, HERMES_DIAGNOSTIC_SCRIPT: scriptPath }, encoding: 'utf8', windowsHide: true, timeout: 10_000 }))
+          }
+          return fs.existsSync(cleanupLog) ? fs.readFileSync(cleanupLog, 'utf8') : ''
+        }, { timeout: 300_000, intervals: [1000] }).toContain(`Completed packaged Hermes uninstall: ${mode}`)
+      } finally {
+        if (fs.existsSync(cleanupLog)) {
+          await testInfo.attach('native-uninstall-log', { path: cleanupLog, contentType: 'text/plain' })
+        }
+      }
       return
     }
     if (process.env.HERMES_EXPECT_OLD_HISTORY === '1') {
