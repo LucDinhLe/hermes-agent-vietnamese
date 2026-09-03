@@ -66,13 +66,18 @@ test('exact installed calendar lifecycle', async ({}, testInfo) => {
   )
   const launch = async () => {
     const diagnostics = setInterval(() => {
+      try {
       const runtimeDir = path.join(profile, 'runtimes')
       console.log('Startup progress:', fs.existsSync(runtimeDir)
         ? fs.readdirSync(runtimeDir).map(name => ({ name, files: fs.readdirSync(path.join(runtimeDir, name), { recursive: true }).length }))
         : 'runtime not materialized')
       console.log(execFileSync(path.join(process.env.SystemRoot!, 'System32/WindowsPowerShell/v1.0/powershell.exe'),
-        ['-NoProfile', '-NonInteractive', '-Command', "Get-Process Hermes -ErrorAction SilentlyContinue | Select-Object Id,CPU,MainWindowTitle,Responding | ConvertTo-Json"],
+        ['-NoProfile', '-NonInteractive', '-Command',
+          "Add-Type -AssemblyName UIAutomationClient; Add-Type -AssemblyName UIAutomationTypes; Get-Process Hermes -ErrorAction SilentlyContinue | ForEach-Object { $text=@(); if ($_.MainWindowHandle -ne 0) { $window=[System.Windows.Automation.AutomationElement]::FromHandle($_.MainWindowHandle); $text=@($window.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition) | ForEach-Object { $_.Current.Name }) }; [pscustomobject]@{Id=$_.Id;CPU=$_.CPU;Title=$_.MainWindowTitle;Text=$text} } | ConvertTo-Json -Depth 5; exit 0"],
         { encoding: 'utf8', windowsHide: true, timeout: 10_000 }))
+      } catch (error) {
+        console.log('Startup diagnostics unavailable:', String(error))
+      }
     }, 30_000)
     try {
       app = await _electron.launch({
