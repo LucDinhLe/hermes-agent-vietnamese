@@ -395,6 +395,15 @@ describe('packaged Experimental runtime', () => {
     expect(fs.existsSync(path.join(f.profileRoot, 'hermes-agent'))).toBe(false)
   })
 
+  it('names missing and unexpected packaged files instead of hiding the installer mismatch', () => {
+    const f = portableFixture()
+    fs.unlinkSync(path.join(f.payloadRoot, '.python/Lib/os.py'))
+    fs.writeFileSync(path.join(f.payloadRoot, 'unexpected-runtime-file.txt'), 'unexpected')
+    expect(() => verifyExperimentalRuntimeBundle({
+      appVersion: APP_VERSION, experimentRoot: f.experimentRoot, resourcesPath: f.resourcesPath
+    })).toThrow(/missing \(1\): \.python\/Lib\/os.py; unexpected \(1\): unexpected-runtime-file.txt/)
+  })
+
   it.each(['.python/python312.dll', '.python/Lib/site-packages/injected.py', '.venv/injected.py'])(
     'rejects a modified or injected bundled runtime file: %s',
     name => {

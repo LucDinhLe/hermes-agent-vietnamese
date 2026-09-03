@@ -97,3 +97,15 @@ hermes-uninstall-*.log in OS temp and report the failure instead of deleting mor
 Current correction evidence: 86 focused tests passed, including six portable
 uninstall cases and a Windows PowerShell syntax-only parse. Electron typecheck
 and scoped lint passed. Real C2 install/uninstall acceptance remains pending.
+
+Installed run33780535935 isolated the startup exception: runtime payload inventory
+differs from the manifest before materialization. The frozen NSIS archive itself
+has exactly14842 manifest files, no extras/missing entries. Add an installed-file
+inventory gate before Electron launch; retain its missing/extra paths. Runtime
+errors now name bounded missing/unexpected file lists instead of only saying
+"inventory mismatch". A regression removes one file and injects another.
+
+Separate native Node-only materialization took7m19.912s; this is not gateway
+acceptance and not the cause of the early CI inventory failure. Investigate the
+startup cost independently. Neither an increased timeout nor suppressed integrity
+checks can turn C1 into an accepted candidate.

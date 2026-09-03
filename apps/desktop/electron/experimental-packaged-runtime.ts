@@ -717,11 +717,16 @@ export function verifyExperimentalRuntimeBundle({
     }
   }
 
-  invariant(
-    payloadFiles.length === expectedPayloadFiles.length &&
-      payloadFiles.every((file, index) => file === expectedPayloadFiles[index]),
-    'runtime payload file inventory does not exactly match the manifest'
-  )
+  if (payloadFiles.length !== expectedPayloadFiles.length ||
+    !payloadFiles.every((file, index) => file === expectedPayloadFiles[index])) {
+    const actual = new Set(payloadFiles)
+    const missing = expectedPayloadFiles.filter(file => !actual.has(file))
+    const unexpected = payloadFiles.filter(file => !seen.has(file))
+    invariant(false, `runtime payload file inventory does not exactly match the manifest; ` +
+      `missing (${missing.length}): ${missing.slice(0, 8).join(', ')}; ` +
+      `unexpected (${unexpected.length}): ${unexpected.slice(0, 8).join(', ')}`)
+  }
+
   verifyManifestFiles(payloadRoot, files)
 
   return {
