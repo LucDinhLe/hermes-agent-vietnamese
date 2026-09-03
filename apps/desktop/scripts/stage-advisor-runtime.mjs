@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto'
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
 import { execFileSync } from 'node:child_process'
+import { expectedRuntimeCandidateId } from '../electron/runtime-candidate-id.ts'
 
 const desktopRoot = resolve(import.meta.dirname, '..')
 const repoRoot = resolve(desktopRoot, '..', '..')
@@ -19,14 +20,7 @@ if (dirty) {
   throw new Error('Advisor runtime staging requires a clean committed source tree')
 }
 
-const versionMatch = pkg.version.match(/-dev\.(\d+)-advisor-exp\.(\d+)$/)
-if (!versionMatch) {
-  throw new Error(`Unsupported Experimental version for runtime id: ${pkg.version}`)
-}
-const candidateId = `d${versionMatch[1]}e${versionMatch[2]}-${sourceCommit.slice(0, 8)}-${buildCommit.slice(0, 8)}`
-if (candidateId.length > 32) {
-  throw new Error(`Advisor runtime id exceeds the Windows path budget: ${candidateId}`)
-}
+const candidateId = expectedRuntimeCandidateId(pkg.version, sourceCommit, buildCommit)
 const tracked = execFileSync('git', ['ls-files', '-z'], { cwd: repoRoot, encoding: 'buffer' })
   .toString('utf8')
   .split('\0')
@@ -56,12 +50,38 @@ for (const path of tracked) {
   files.push({ path: path.replaceAll('\\', '/'), sha256: createHash('sha256').update(bytes).digest('hex'), size: bytes.length })
 }
 
+let python
+if (/^[1-9]\d{3}\./.test(pkg.version)) {
+  const pythonRoot = join(desktopRoot, 'build', 'python-runtime')
+  const receipt = JSON.parse(readFileSync(join(pythonRoot, 'python-manifest.json'), 'utf8'))
+  const digest = bytes => createHash('sha256').update(bytes).digest('hex')
+  if (receipt.layout !== 'portable-cpython-win-x64-v1' || receipt.version !== '3.12.10' ||
+      receipt.lockSha256 !== digest(readFileSync(join(repoRoot, 'uv.lock')))) {
+    throw new Error('Prepare a clean Windows Python bundle against this exact dependency lock')
+  }
+  for (const entry of receipt.files) {
+    if (typeof entry.path !== 'string' || entry.path.startsWith('/') || entry.path.includes('\\') ||
+        entry.path.includes(':') || entry.path.split('/').some(part => !part || part === '.' || part === '..')) {
+      throw new Error('Unsafe prepared Python path')
+    }
+    const bytes = readFileSync(join(pythonRoot, 'payload', entry.path))
+    if (bytes.length !== entry.size || digest(bytes) !== entry.sha256) throw new Error(`Prepared Python changed: ${entry.path}`)
+    const target = join(payloadRoot, '.python', entry.path)
+    mkdirSync(dirname(target), { recursive: true })
+    writeFileSync(target, bytes)
+    files.push({ ...entry, path: `.python/${entry.path}` })
+  }
+  python = { layout: receipt.layout, version: receipt.version, lockSha256: receipt.lockSha256,
+    preparationManifestSha256: digest(readFileSync(join(pythonRoot, 'python-manifest.json'))) }
+}
+
 const manifest = {
   schemaVersion: 1,
   candidateId,
   productVersion: pkg.version,
   sourceCommit,
   buildCommit,
+  ...(python ? { python } : {}),
   fileCount: files.length,
   files
 }

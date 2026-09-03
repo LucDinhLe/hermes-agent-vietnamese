@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { expectedRuntimeCandidateId as expectedCandidateId } from '../electron/runtime-candidate-id.ts'
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url))
 const DEFAULT_DESKTOP_ROOT = path.resolve(SCRIPT_DIR, '..')
@@ -85,12 +86,6 @@ function loadInputs(paths) {
       advisorRuntimeSyncScript: sha256(runtimeSyncScript)
     }
   }
-}
-
-function expectedCandidateId(version, sourceCommit, buildCommit) {
-  const match = String(version).match(/-dev\.(\d+)-advisor-exp\.(\d+)$/)
-  invariant(match, `Unsupported Experimental product version: ${version}`)
-  return `d${match[1]}e${match[2]}-${sourceCommit.slice(0, 8)}-${buildCommit.slice(0, 8)}`
 }
 
 function productProtocol(packageJson, composition) {

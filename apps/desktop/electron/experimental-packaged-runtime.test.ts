@@ -264,6 +264,8 @@ describe('packaged local Stable environment', () => {
     expect(configured.profileRoot).toBe(stableRoot)
     expect(configured.userDataRoot).toBe(path.join(roamingRoot, 'Hermes'))
     expect(env.HERMES_HOME).toBe(stableRoot)
+    expect(env.HERMES_DISABLE_LAZY_INSTALLS).toBe('1')
+    expect(env.HERMES_LAZY_INSTALL_TARGET).toBe(path.join(stableRoot, 'optional-python-packages'))
     expect(env.HERMES_DESKTOP_USER_DATA_DIR).toBeUndefined()
     expect(env.HERMES_DESKTOP_HERMES_ROOT).toBeUndefined()
     expect(env.HERMES_DESKTOP_IGNORE_EXISTING).toBeUndefined()
@@ -272,6 +274,7 @@ describe('packaged local Stable environment', () => {
   it('ignores stale Experimental overrides and keeps Stable authoritative', () => {
     const localAppData = tempRoot()
     const stableRoot = path.join(localAppData, 'hermes')
+
     const env: Record<string, string | undefined> = {
       LOCALAPPDATA: localAppData,
       HERMES_ADVISOR_EXPERIMENT_ROOT: path.join(localAppData, 'isolated'),
@@ -296,6 +299,115 @@ describe('packaged local Stable environment', () => {
 })
 
 describe('packaged Experimental runtime', () => {
+  it('rejects calendar releases without bundled Python instead of requesting bootstrap', () => {
+    const f = fixture()
+    const version = '2026.9.2'
+    const candidateId = CANDIDATE.replace(/^d\d+e\d+/, 'c2026m9r2')
+
+    rewriteReceiptedComponent(
+      f.resourcesPath,
+      'advisorRuntimeManifest',
+      'advisor-runtime/runtime-manifest.json',
+      value => {
+        value.productVersion = version
+        value.candidateId = candidateId
+      }
+    )
+    rewriteReceiptedComponent(f.resourcesPath, 'experimentalComposition', 'experimental-composition.json', value => {
+      value.productVersion = version
+    })
+    const receiptPath = path.join(f.resourcesPath, 'experimental-candidate-receipt.json')
+    const receipt = JSON.parse(fs.readFileSync(receiptPath, 'utf8'))
+
+    receipt.product.version = version
+    receipt.runtime.candidateId = candidateId
+    writeJson(receiptPath, receipt)
+    expect(() =>
+      verifyExperimentalRuntimeBundle({
+        appVersion: version,
+        experimentRoot: f.experimentRoot,
+        resourcesPath: f.resourcesPath
+      })
+    ).toThrow(/calendar releases require bundled Python/)
+  })
+
+  function portableFixture() {
+    const f = fixture()
+
+    const names = [
+      '.python/python.exe',
+      '.python/python312.dll',
+      '.python/Lib/os.py',
+      '.python/Lib/site-packages/fastapi/__init__.py'
+    ]
+
+    const files = names.map(name => {
+      const file = path.join(f.payloadRoot, name)
+      fs.mkdirSync(path.dirname(file), { recursive: true })
+      fs.writeFileSync(file, 'bundled')
+
+      return { path: name, sha256: digest(file), size: 7 }
+    })
+
+    rewriteReceiptedComponent(
+      f.resourcesPath,
+      'advisorRuntimeManifest',
+      'advisor-runtime/runtime-manifest.json',
+      value => {
+        value.python = { layout: 'portable-cpython-win-x64-v1', version: '3.12.10' }
+        value.files.push(...files)
+        value.fileCount = value.files.length
+      }
+    )
+    const receiptPath = path.join(f.resourcesPath, 'experimental-candidate-receipt.json')
+    const receipt = JSON.parse(fs.readFileSync(receiptPath, 'utf8'))
+    receipt.runtime.fileCount += files.length
+    writeJson(receiptPath, receipt)
+
+    const bundle = verifyExperimentalRuntimeBundle({
+      appVersion: APP_VERSION,
+      experimentRoot: f.experimentRoot,
+      resourcesPath: f.resourcesPath
+    })
+
+    return { ...f, bundle }
+  }
+
+  it('installs and relaunches a bundled runtime without any bootstrap or ambient Python', () => {
+    const f = portableFixture()
+    const env: Record<string, string | undefined> = { PYTHONHOME: 'ambient', PYTHONPATH: 'ambient' }
+
+    const options = {
+      bundle: f.bundle,
+      env,
+      experimentRoot: f.experimentRoot,
+      profileRoot: f.profileRoot,
+      runSync: () => {
+        throw new Error('must not run a bootstrap script')
+      }
+    }
+
+    expect(materializeExperimentalPackagedRuntime(options).status).toBe('ready')
+    expect(materializeExperimentalPackagedRuntime(options).status).toBe('ready')
+    expect(env.PYTHONHOME).toBeUndefined()
+    expect(env.PYTHONPATH).toBeUndefined()
+    expect(env.PYTHONNOUSERSITE).toBe('1')
+    expect(fs.existsSync(path.join(f.profileRoot, 'hermes-agent'))).toBe(false)
+  })
+
+  it.each(['.python/python312.dll', '.python/Lib/site-packages/injected.py', '.venv/injected.py'])(
+    'rejects a modified or injected bundled runtime file: %s',
+    name => {
+      const f = portableFixture()
+      const options = { bundle: f.bundle, experimentRoot: f.experimentRoot, profileRoot: f.profileRoot }
+      materializeExperimentalPackagedRuntime(options)
+      const file = path.join(f.bundle.expectedTargetRoot, name)
+      fs.mkdirSync(path.dirname(file), { recursive: true })
+      fs.writeFileSync(file, 'tampered')
+      expect(() => materializeExperimentalPackagedRuntime(options)).toThrow(/inventory|mismatch/)
+    }
+  )
+
   it('materializes and pins the exact candidate before backend selection', () => {
     const f = fixture()
     createBootstrapVenv(f.profileRoot)

@@ -7,12 +7,12 @@ import { PACKAGED_BINARY_PATH, stripCredentials, writeEnvFile, writeMockProvider
 import { startMockServer } from './mock-server'
 
 // Opt-in: this Windows packaged candidate forces profile paths from APPDATA.
-// The caller must seed ONLY Python dependencies in this isolated sandbox and
-// preserve/restore the OS protocol registration around the test invocation.
+// Legacy candidates need isolated dependency seeding; portable candidates must
+// prove a fresh unseeded profile. Preserve/restore OS protocol registration.
 test('packaged plus creates distinct tabs, sends once, and restores history on relaunch', async ({}, testInfo) => {
   test.setTimeout(600_000)
   const sandbox = process.env.HERMES_TAB_PLUS_SANDBOX
-  test.skip(!sandbox || process.platform !== 'win32', 'Requires an isolated, dependency-seeded Windows sandbox')
+  test.skip(!sandbox || process.platform !== 'win32', 'Requires an isolated Windows sandbox')
   const root = path.resolve(sandbox!)
   expect(path.basename(root)).toMatch(/^hermes-tab-plus-/)
   const local = path.join(root, 'local')
@@ -20,8 +20,26 @@ test('packaged plus creates distinct tabs, sends once, and restores history on r
   const profile = path.join(local, 'hermes')
   const workspace = path.join(root, 'workspace')
   fs.mkdirSync(workspace, { recursive: true })
-  expect(fs.existsSync(path.join(profile, 'hermes-agent', '.venv', 'Scripts', 'python.exe'))).toBe(true)
-  expect(fs.existsSync(path.join(profile, 'auth.json'))).toBe(false)
+  const binary = process.env.HERMES_ACCEPTANCE_BINARY || PACKAGED_BINARY_PATH
+  const manifest = JSON.parse(fs.readFileSync(path.join(path.dirname(binary), 'resources', 'advisor-runtime', 'runtime-manifest.json'), 'utf8'))
+  if (manifest.python) {
+    expect(manifest.python.layout).toBe('portable-cpython-win-x64-v1')
+    expect(fs.existsSync(path.join(profile, 'hermes-agent'))).toBe(false)
+  } else {
+    expect(fs.existsSync(path.join(profile, 'hermes-agent', '.venv', 'Scripts', 'python.exe'))).toBe(true)
+  }
+  const authPath = path.join(profile, 'auth.json')
+  if (fs.existsSync(authPath)) {
+    // A previous mock run can leave credential-pool discovery metadata.
+    // Reuse only if no persisted provider credentials or secret fields exist.
+    const auth = JSON.parse(fs.readFileSync(authPath, 'utf8'))
+    expect(auth.providers ?? {}).toEqual({})
+    for (const entries of Object.values(auth.credential_pool ?? {}) as Record<string, unknown>[][]) {
+      for (const entry of entries) {
+        expect(Object.keys(entry).filter(key => /^(?:api_key|access_token|refresh_token|token|secret|password)$/i.test(key))).toEqual([])
+      }
+    }
+  }
   fs.mkdirSync(path.join(roaming, 'Hermes'), { recursive: true })
   fs.writeFileSync(path.join(roaming, 'Hermes', 'zoom-state.json'), '{"zoomLevel":0}')
   const mock = await startMockServer()
@@ -48,7 +66,7 @@ test('packaged plus creates distinct tabs, sends once, and restores history on r
   let app: ElectronApplication | undefined
   const launch = async () => {
     app = await _electron.launch({
-      executablePath: PACKAGED_BINARY_PATH,
+      executablePath: binary,
       // Electron resolves OS userData independently of the APPDATA env var.
       // Pin Chromium's path too so the real app's single-instance lock and
       // localStorage are never reused by this packaged acceptance process.
@@ -60,6 +78,7 @@ test('packaged plus creates distinct tabs, sends once, and restores history on r
     expect(await app.evaluate(({ app }) => app.getPath('userData'))).toBe(path.join(roaming, 'Hermes'))
     const page = await app.firstWindow()
     await page.locator('[data-session-tab-plus] button').first().waitFor({ state: 'visible', timeout: 300_000 })
+    await page.getByRole('button', { name: 'Gateway: Đã kết nối', exact: true }).waitFor({ state: 'visible', timeout: 300_000 })
     return page
   }
   try {
@@ -86,6 +105,9 @@ test('packaged plus creates distinct tabs, sends once, and restores history on r
     await app!.close()
     app = undefined
     const reopened = await launch()
+    // Relaunch selects the primary/new-session pane. Open the persisted
+    // conversation from the sidebar before asserting its transcript.
+    await reopened.getByText(/Hello from the mock inference server/).first().click({ timeout: 90_000 })
     await expect(reopened.getByText(message, { exact: true }).first()).toBeVisible({ timeout: 90_000 })
     await expect(reopened.getByText(/Hello from the mock inference server/).first()).toBeVisible({ timeout: 30_000 })
     await reopened.screenshot({ path: testInfo.outputPath('tab-history-after-relaunch.png') })

@@ -2328,7 +2328,7 @@ function findPythonForRoot(root) {
   }
 
   const relativePaths = IS_WINDOWS
-    ? [path.join('.venv', 'Scripts', 'python.exe'), path.join('venv', 'Scripts', 'python.exe')]
+    ? [path.join('.python', 'python.exe'), path.join('.venv', 'Scripts', 'python.exe'), path.join('venv', 'Scripts', 'python.exe')]
     : [path.join('.venv', 'bin', 'python'), path.join('venv', 'bin', 'python')]
 
   for (const relativePath of relativePaths) {

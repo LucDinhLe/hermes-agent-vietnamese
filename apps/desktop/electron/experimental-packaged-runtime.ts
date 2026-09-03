@@ -3,7 +3,11 @@ import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 
-const CANDIDATE_PATTERN = /^d\d+e\d+-[0-9a-f]{8}-[0-9a-f]{8}$/
+import {
+  RUNTIME_CANDIDATE_PATTERN as CANDIDATE_PATTERN,
+  expectedRuntimeCandidateId as expectedCandidateId
+} from './runtime-candidate-id'
+
 const COMMIT_PATTERN = /^[0-9a-f]{40}$/
 const SHA256_PATTERN = /^[0-9a-f]{64}$/
 const VENV_LAYOUT = 'copied-scripts-pth-lib-v2'
@@ -222,14 +226,6 @@ function exactSha256(value: unknown, label: string): string {
   return value
 }
 
-function expectedCandidateId(version: string, sourceCommit: string, buildCommit: string): string {
-  const match = version.match(/-dev\.(\d+)-advisor-exp\.(\d+)$/)
-
-  invariant(match, `unsupported Experimental product version: ${version}`)
-
-  return `d${match[1]}e${match[2]}-${sourceCommit.slice(0, 8)}-${buildCommit.slice(0, 8)}`
-}
-
 function findBootstrapVenvRoot(profileRoot: string): string | null {
   const legacyRoot = path.join(profileRoot, 'hermes-agent')
 
@@ -389,7 +385,7 @@ function listPayloadFiles(root: string): string[] {
   return files.sort()
 }
 
-function listMaterializedSourceFiles(root: string): string[] {
+function listMaterializedSourceFiles(root: string, bundledPython = false): string[] {
   const files: string[] = []
 
   function visit(directory: string, prefix: string) {
@@ -397,7 +393,7 @@ function listMaterializedSourceFiles(root: string): string[] {
       const relative = prefix ? `${prefix}/${entry.name}` : entry.name
       const absolute = path.join(directory, entry.name)
 
-      if (relative === '.venv' && entry.isDirectory()) {
+      if (!bundledPython && relative === '.venv' && entry.isDirectory()) {
         continue
       }
 
@@ -452,6 +448,10 @@ export function configureExperimentalPackagedEnvironment({
   const userDataRoot = path.resolve(roamingRoot, 'Hermes')
 
   env.HERMES_HOME = stableHermesRoot
+  // Optional tools use the existing durable-target installer. Never mutate the
+  // sealed candidate: its complete inventory must still verify on next launch.
+  env.HERMES_DISABLE_LAZY_INSTALLS = '1'
+  env.HERMES_LAZY_INSTALL_TARGET = path.join(stableHermesRoot, 'optional-python-packages')
   delete env.HERMES_ADVISOR_EXPERIMENT_ROOT
   delete env.HERMES_DESKTOP_USER_DATA_DIR
   delete env.HERMES_DESKTOP_IGNORE_EXISTING
@@ -553,6 +553,26 @@ export function verifyExperimentalRuntimeBundle({
 
   const payloadFiles = listPayloadFiles(payloadRoot)
   const expectedPayloadFiles = [...seen].sort()
+
+  if (/^[1-9]\d{3}\./.test(appVersion)) {
+    invariant(manifest.python !== undefined, 'calendar releases require bundled Python; remote bootstrap is forbidden')
+  }
+
+  if (manifest.python !== undefined) {
+    invariant(manifest.python.layout === 'portable-cpython-win-x64-v1', 'unsupported bundled Python layout')
+    invariant(manifest.python.version === '3.12.10', 'unsupported bundled Python version')
+
+    for (const required of [
+      '.python/python.exe',
+      '.python/python312.dll',
+      '.python/Lib/os.py',
+      '.python/Lib/site-packages/fastapi/__init__.py'
+    ]) {
+      invariant(seen.has(required), `missing bundled Python component: ${required}`)
+    }
+
+    invariant(!files.some(entry => entry.path.startsWith('.venv/')), 'bundled Python cannot borrow a legacy venv')
+  }
 
   const expectedComponentFiles = {
     advisorRuntimeManifest: 'advisor-runtime/runtime-manifest.json',
@@ -767,11 +787,11 @@ function verifyMaterializedVenv(targetRoot: string, snapshot: BootstrapSnapshot)
 function verifyMaterializedCandidate(
   bundle: ExperimentalRuntimeBundle,
   targetRoot: string,
-  snapshot: BootstrapSnapshot
+  snapshot: BootstrapSnapshot | null
 ) {
   assertNoReparsePath(path.dirname(path.dirname(targetRoot)), targetRoot, 'materialized runtime')
   const files: RuntimeManifestFile[] = bundle.manifest.files
-  const sourceFiles = listMaterializedSourceFiles(targetRoot)
+  const sourceFiles = listMaterializedSourceFiles(targetRoot, snapshot === null)
   const expectedFiles = files.map(entry => entry.path).sort()
 
   invariant(
@@ -786,6 +806,14 @@ function verifyMaterializedCandidate(
   invariant(receipt.productVersion === bundle.manifest.productVersion, 'materialized runtime receipt version mismatch')
   invariant(receipt.sourceCommit === bundle.manifest.sourceCommit, 'materialized runtime receipt source mismatch')
   invariant(receipt.manifestSha256 === bundle.manifestSha256, 'materialized runtime receipt manifest digest mismatch')
+
+  if (snapshot === null) {
+    invariant(receipt.venvLayout === 'portable-cpython-win-x64-v1', 'materialized bundled Python layout mismatch')
+    invariant(receipt.venvSource === 'bundled', 'bundled runtime must not borrow installed dependencies')
+
+    return
+  }
+
   invariant(receipt.venvLayout === VENV_LAYOUT, 'materialized runtime venv layout mismatch')
   invariant(
     typeof receipt.venvSource === 'string' && sameNativePath(receipt.venvSource, snapshot.venvRoot),
@@ -847,6 +875,51 @@ export function materializeExperimentalPackagedRuntime({
   )
   const existingReceipt = path.join(targetRoot, 'advisor-runtime-receipt.json')
   const hadMaterializedReceipt = fs.existsSync(existingReceipt)
+
+  if (bundle.manifest.python?.layout === 'portable-cpython-win-x64-v1') {
+    // Required source, Python and dependencies are all sealed by the same
+    // manifest. No bootstrap script, network, system Python or old venv is used.
+    if (!hadMaterializedReceipt) {
+      invariant(!fs.existsSync(targetRoot), 'partial bundled candidate exists; refusing to overwrite it')
+      fs.mkdirSync(runtimesRoot, { recursive: true })
+      assertNoReparsePath(experimentRoot, runtimesRoot, 'runtime staging root')
+      const stagingRoot = fs.mkdtempSync(path.join(runtimesRoot, '.s-'))
+
+      try {
+        fs.cpSync(bundle.payloadRoot, stagingRoot, { recursive: true, errorOnExist: true, force: false })
+        fs.writeFileSync(
+          path.join(stagingRoot, 'advisor-runtime-receipt.json'),
+          JSON.stringify({
+            schemaVersion: 2,
+            candidateId: bundle.candidateId,
+            productVersion: bundle.manifest.productVersion,
+            sourceCommit: bundle.manifest.sourceCommit,
+            manifestSha256: bundle.manifestSha256,
+            venvSource: 'bundled',
+            venvLayout: bundle.manifest.python.layout
+          })
+        )
+        verifyMaterializedCandidate(bundle, stagingRoot, null)
+        fs.renameSync(stagingRoot, targetRoot)
+      } finally {
+        if (fs.existsSync(stagingRoot)) {
+          fs.rmSync(stagingRoot, { recursive: true })
+        }
+      }
+    }
+
+    verifyMaterializedCandidate(bundle, targetRoot, null)
+    fs.writeFileSync(path.join(experimentRoot, 'runtime-current.txt'), `${targetRoot}\n`)
+    env.HERMES_DESKTOP_HERMES_ROOT = targetRoot
+    env.PYTHONDONTWRITEBYTECODE = '1'
+    env.PYTHONNOUSERSITE = '1'
+    delete env.PYTHONHOME
+    delete env.PYTHONPATH
+    delete env.HERMES_DESKTOP_PYTHON
+
+    return { status: 'ready', candidateId: bundle.candidateId, targetRoot }
+  }
+
   const hadBootstrapReceipt = fs.existsSync(bootstrapReceiptPath(experimentRoot))
   const bootstrapVenvRoot = findBootstrapVenvRoot(profileRoot)
 

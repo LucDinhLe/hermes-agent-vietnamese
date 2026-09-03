@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "displayName": "Hermes Vietnamese",
-  "productVersion": "V33 Local Stable",
-  "technicalVersion": "0.33.0-dev.14-advisor-exp.14",
+  "productVersion": "2026.9.2",
+  "technicalVersion": "2026.9.2",
   "releaseChannel": "local-stable",
   "communityMaintainer": {
     "name": "Lê Đình Lực",
