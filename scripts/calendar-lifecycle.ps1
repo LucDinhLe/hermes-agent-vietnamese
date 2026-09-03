@@ -66,6 +66,14 @@ function Install([string]$File, [string]$Stage, [bool]$Legacy=$false, [bool]$Fir
     $manifest = Get-Content -Raw -LiteralPath (Join-Path $current.directory 'resources\advisor-runtime\runtime-manifest.json') | ConvertFrom-Json
     if ($manifest.buildCommit -ne $SourceCommit -or $manifest.productVersion -ne '2026.9.2') { throw 'Installed provenance mismatch' }
     if ($manifest.python.layout -ne 'portable-cpython-win-x64-v1') { throw 'Bundled Python absent' }
+    $payloadRoot = Join-Path $current.directory 'resources\advisor-runtime\payload'
+    $actualFiles = @(Get-ChildItem -LiteralPath $payloadRoot -Recurse -File -Force | ForEach-Object { [IO.Path]::GetRelativePath($payloadRoot, $_.FullName).Replace('\','/') })
+    $difference = @(Compare-Object -ReferenceObject @($manifest.files.path) -DifferenceObject $actualFiles -CaseSensitive)
+    $difference | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $evidence "$Stage-inventory-difference.json") -Encoding utf8
+    if ($difference.Count -gt 0) {
+      $difference | Format-Table -AutoSize | Out-String -Width 300 | Write-Host
+      throw 'Installed payload file inventory differs from the frozen manifest'
+    }
   }
   $env:HERMES_ACCEPTANCE_BINARY = $current.binary
   Event $Stage @{ sha256=(Hash $File); location=$current.directory }

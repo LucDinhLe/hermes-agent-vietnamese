@@ -10,7 +10,7 @@ type UninstallWindow = Window & {
   hermesDesktop: {
     uninstall: {
       summary(): Promise<{ agent_installed: boolean }>
-      run(mode: 'lite' | 'full'): Promise<{ ok: boolean }>
+      run(mode: 'lite' | 'full'): Promise<{ ok: boolean; scriptPath?: string }>
     }
   }
 }
@@ -116,6 +116,11 @@ test('exact installed calendar lifecycle', async ({}, testInfo) => {
       const child = app!.process()
       if (child.exitCode === null) await new Promise<void>(resolve => child.once('exit', () => resolve()))
       app = undefined
+      expect(result.scriptPath).toBeTruthy()
+      const cleanupLog = result.scriptPath!.replace(/\.ps1$/, '.log')
+      await expect.poll(() => fs.existsSync(cleanupLog) ? fs.readFileSync(cleanupLog, 'utf8') : '',
+        { timeout: 300_000, intervals: [1000] }).toContain(`Completed packaged Hermes uninstall: ${mode}`)
+      await testInfo.attach('native-uninstall-log', { path: cleanupLog, contentType: 'text/plain' })
       return
     }
     if (process.env.HERMES_EXPECT_OLD_HISTORY === '1') {
