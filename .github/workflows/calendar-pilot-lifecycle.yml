@@ -1,0 +1,53 @@
+name: Calendar pilot exact installer lifecycle
+on:
+  push:
+    branches: [fix/local-stable-d12-product-regressions]
+    paths:
+      - .github/workflows/calendar-pilot-lifecycle.yml
+      - scripts/calendar-lifecycle.ps1
+      - apps/desktop/e2e/calendar-installed.spec.ts
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: calendar-pilot-lifecycle
+  cancel-in-progress: false
+jobs:
+  exact-windows-installer:
+    runs-on: windows-2025
+    timeout-minutes: 90
+    env:
+      CANDIDATE_COMMIT: 04983abde69d88748541e3c88900fced4adcb500
+      CANDIDATE_SHA256: f96a6c30c549cb4680b908e2ba72784b174180569dd27970a5dcd87f2b151595
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 26.7.0
+      - name: Install test harness dependencies only
+        shell: pwsh
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Download frozen inputs
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Path candidate-inputs | Out-Null
+          gh release download v2026.9.2 --repo LucDinhLe/hermes-agent-vietnamese --pattern Hermes-2026.9.2-win-x64.exe --dir candidate-inputs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gh release download vi-v0.32.1-18 --repo LucDinhLe/hermes-agent-vietnamese --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir candidate-inputs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Test exact NSIS without inherited developer tools or production credentials
+        shell: pwsh
+        run: |
+          ./scripts/calendar-lifecycle.ps1 -Installer "$env:GITHUB_WORKSPACE/candidate-inputs/Hermes-2026.9.2-win-x64.exe" -Sha256 $env:CANDIDATE_SHA256 -SourceCommit $env:CANDIDATE_COMMIT -PreviousInstaller "$env:GITHUB_WORKSPACE/candidate-inputs/Hermes-Vietnamese-Windows-x64-Setup.exe" -RepoRoot $env:GITHUB_WORKSPACE
+      - name: Preserve lifecycle evidence, including failed gates
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: calendar-2026.9.2-lifecycle-${{ github.run_id }}
+          path: calendar-lifecycle-evidence/
+          if-no-files-found: error
+          retention-days: 30
