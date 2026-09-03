@@ -67,4 +67,33 @@ No automatic update feed is published for the unsigned pilot.
 - Renderer, Electron and E2E typechecks passed; final Electron/E2E rechecks and
   scoped lint passed. Complete Python inventory/native/import verification passed
   and all 10,975 files remained identical after the import probes.
-- No new build, install, source push, tag, upload or public release yet.
+- C1 source 04983abde69d88748541e3c88900fced4adcb500 was pushed, built and
+  staged as a draft (not Latest). Installer SHA256:
+  f96a6c30c549cb4680b908e2ba72784b174180569dd27970a5dcd87f2b151595.
+- Hosted exact NSIS install passed; run33777916585 timed out at app startup.
+  Diagnostic run33779375271 preserves that artifact and timeout while gathering
+  startup progress and logs. No gateway/session acceptance has passed for C1.
+
+## C1 NO-GO and C2 uninstall correction
+
+The portable runtime deliberately has no legacy hermes-agent/venv. Source audit
+found the GUI uninstall summary and executor still depended on that old Python.
+The portable branch now uses the exact sibling NSIS uninstaller and OS-supplied
+PowerShell, not a Python interpreter inside the tree being removed. Legacy and
+non-Windows uninstall behavior is unchanged.
+
+Release rule: validate uninstall discovery against the actual installed runtime
+layout, not merely old-venv mocks. Require actual GUI keep-data/full cleanup,
+reinstall and persisted-history checks on the frozen installed artifact. Unit
+tests alone are insufficient. Parse generated cleanup scripts with the native
+shell without executing deletion in source tests; reject unsafe modes, broad
+paths and linked targets. Preserve user data if Windows uninstall fails.
+
+Recovery runbook: never patch C1 bytes. Build a separate C2 only after source
+repairs and checks; rerun the complete installed lifecycle. Owner's installed d14
+and backups remain unchanged. For a failed cleanup, retain the generated
+hermes-uninstall-*.log in OS temp and report the failure instead of deleting more.
+
+Current correction evidence: 86 focused tests passed, including six portable
+uninstall cases and a Windows PowerShell syntax-only parse. Electron typecheck
+and scoped lint passed. Real C2 install/uninstall acceptance remains pending.

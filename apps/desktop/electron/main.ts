@@ -211,6 +211,7 @@ import {
 import { runNativeLogin } from './native-oauth-login'
 import { loadNativeTokenSet, type NativeTokenStoreIo, persistNativeTokenSet } from './native-token-store'
 import { serializeJsonBody, setJsonRequestHeaders } from './oauth-net-request'
+import { buildPackagedWindowsUninstallScript, packagedWindowsUninstallPlan } from './packaged-windows-uninstall'
 import {
   createParentStartMarkerResolver,
   electronProcessStartMarker,
@@ -14798,6 +14799,21 @@ function uninstallVenvPython() {
 }
 
 async function getUninstallSummary() {
+  if (IS_WINDOWS && EXPERIMENTAL_RUNTIME_BUNDLE?.manifest.python) {
+    return {
+      hermes_home: HERMES_HOME,
+      agent_installed: experimentalRuntimeResult?.status === 'ready',
+      gui_installed: true,
+      source_built_artifacts: [],
+      packaged_app_paths: [path.dirname(process.execPath)],
+      running_app_path: path.dirname(process.execPath),
+      userdata_dir: app.getPath('userData'),
+      userdata_exists: fs.existsSync(app.getPath('userData')),
+      platform: process.platform,
+      probe: 'verified-portable-runtime'
+    }
+  }
+
   const py = uninstallVenvPython()
   const agentRoot = ACTIVE_HERMES_ROOT
 
@@ -14871,7 +14887,50 @@ async function getUninstallSummary() {
   })
 }
 
+async function runPackagedWindowsUninstall(mode) {
+  try {
+    const scriptPath = path.join(app.getPath('temp'), `hermes-uninstall-${Date.now()}.ps1`)
+
+    const input = {
+      mode, desktopPid: process.pid, executable: process.execPath,
+      hermesHome: HERMES_HOME, userData: app.getPath('userData'),
+      localAppData: process.env.LOCALAPPDATA || '', roamingAppData: process.env.APPDATA || '',
+      logPath: scriptPath.replace(/\.ps1$/, '.log')
+    }
+
+    const plan = packagedWindowsUninstallPlan(input)
+    const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+
+    if (!fileExists(plan.uninstaller) || !fileExists(powershell)) {
+      return { ok: false, error: 'uninstaller-missing', message: 'Không tìm thấy bộ gỡ Windows của bản cài này.' }
+    }
+
+    const script = buildPackagedWindowsUninstallScript(input)
+    await releaseBackendLock(EXPERIMENTAL_RUNTIME_BUNDLE.expectedTargetRoot, 'uninstall')
+    fs.writeFileSync(scriptPath, script, 'utf8')
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], {
+        cwd: path.dirname(scriptPath), detached: true, stdio: 'ignore', windowsHide: true
+      })
+
+      child.once('error', reject)
+      child.once('spawn', () => { child.unref(); resolve() })
+    })
+    rememberLog(`[uninstall] launched native packaged cleanup (${mode}): ${scriptPath}`)
+    isQuittingForHandoff = true
+    setTimeout(() => app.quit(), 800)
+
+    return { ok: true, mode, willRemoveAppBundle: true, scriptPath }
+  } catch (error) {
+    return { ok: false, error: 'packaged-uninstall-failed', message: error.message }
+  }
+}
+
 async function runDesktopUninstall(mode) {
+  if (IS_WINDOWS && EXPERIMENTAL_RUNTIME_BUNDLE?.manifest.python) {
+    return runPackagedWindowsUninstall(mode)
+  }
+
   let uninstallArgs
 
   try {

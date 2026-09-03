@@ -22,7 +22,7 @@ const OPTIONS: ModeOption[] = [
     mode: 'gui',
     title: 'Chỉ gỡ giao diện trò chuyện',
     description: 'Gỡ ứng dụng desktop; vẫn giữ Hermes Agent, cấu hình và các cuộc trò chuyện.',
-    consequence: 'giao diện trò chuyện desktop và dữ liệu riêng của ứng dụng',
+    consequence: 'giao diện trò chuyện desktop; vẫn giữ agent và dữ liệu Hermes',
     needsAgent: false
   },
   {
