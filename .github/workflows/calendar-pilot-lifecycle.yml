@@ -13,7 +13,36 @@ concurrency:
   group: calendar-pilot-lifecycle
   cancel-in-progress: false
 jobs:
+  fetch-frozen-inputs:
+    if: github.repository == 'LucDinhLe/hermes-agent-vietnamese'
+    runs-on: windows-2025
+    timeout-minutes: 15
+    # GitHub hides drafts from read-only release tokens. Keep this permission
+    # in a download-only job: no checkout, dependencies or product execution.
+    permissions:
+      contents: write
+    steps:
+      - name: Read existing draft and previous release, without publishing
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          New-Item -ItemType Directory -Path candidate-inputs | Out-Null
+          gh release download v2026.9.2 --repo LucDinhLe/hermes-agent-vietnamese --pattern Hermes-2026.9.2-win-x64.exe --dir candidate-inputs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          gh release download vi-v0.32.1-18 --repo LucDinhLe/hermes-agent-vietnamese --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir candidate-inputs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ((Get-FileHash candidate-inputs/Hermes-2026.9.2-win-x64.exe).Hash.ToLowerInvariant() -ne 'f96a6c30c549cb4680b908e2ba72784b174180569dd27970a5dcd87f2b151595') { throw 'Candidate hash mismatch' }
+          if ((Get-FileHash candidate-inputs/Hermes-Vietnamese-Windows-x64-Setup.exe).Hash.ToLowerInvariant() -ne '565e1313162505999238b9c3b4f1422ec37256a1da153bae5149b5795c83c5ac') { throw 'Previous hash mismatch' }
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: calendar-frozen-inputs
+          path: candidate-inputs/
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
   exact-windows-installer:
+    needs: fetch-frozen-inputs
     runs-on: windows-2025
     timeout-minutes: 90
     env:
@@ -29,22 +58,17 @@ jobs:
       - name: Install test harness dependencies only
         shell: pwsh
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Download frozen inputs
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          New-Item -ItemType Directory -Path candidate-inputs | Out-Null
-          gh release download v2026.9.2 --repo LucDinhLe/hermes-agent-vietnamese --pattern Hermes-2026.9.2-win-x64.exe --dir candidate-inputs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          gh release download vi-v0.32.1-18 --repo LucDinhLe/hermes-agent-vietnamese --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir candidate-inputs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: calendar-frozen-inputs
+          path: candidate-inputs/
       - name: Test exact NSIS without inherited developer tools or production credentials
+        id: lifecycle
         shell: pwsh
         run: |
           ./scripts/calendar-lifecycle.ps1 -Installer "$env:GITHUB_WORKSPACE/candidate-inputs/Hermes-2026.9.2-win-x64.exe" -Sha256 $env:CANDIDATE_SHA256 -SourceCommit $env:CANDIDATE_COMMIT -PreviousInstaller "$env:GITHUB_WORKSPACE/candidate-inputs/Hermes-Vietnamese-Windows-x64-Setup.exe" -RepoRoot $env:GITHUB_WORKSPACE
       - name: Preserve lifecycle evidence, including failed gates
-        if: always()
+        if: always() && steps.lifecycle.outcome != 'skipped'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: calendar-2026.9.2-lifecycle-${{ github.run_id }}
