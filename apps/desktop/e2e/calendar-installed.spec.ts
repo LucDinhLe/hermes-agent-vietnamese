@@ -96,7 +96,12 @@ test('exact installed calendar lifecycle', async ({}, testInfo) => {
     if (legacy) {
       // vi-v0.32.1-18 reports readiness in the footer, not C2's accessible
       // Gateway button label. Real send/reply and persistence remain required.
-      await page.getByText(/cổng kết nối sẵn sàng/i).waitFor({ state: 'visible', timeout: 300_000 })
+      // Label and detail are adjacent spans separated by CSS gap, not a text
+      // space. Match both leaves on the same button instead of joined text.
+      await page.getByRole('button')
+        .filter({ has: page.getByText('cổng kết nối', { exact: true }) })
+        .filter({ has: page.getByText('sẵn sàng', { exact: true }) })
+        .waitFor({ state: 'visible', timeout: 300_000 })
     } else {
       await page
         .getByRole('button', { name: 'Gateway: Đã kết nối', exact: true })
@@ -196,6 +201,13 @@ test('exact installed calendar lifecycle', async ({}, testInfo) => {
     await reopened.screenshot({ path: testInfo.outputPath('history-after-relaunch.png') })
   } finally {
     if (app) {
+      const diagnosticPage = app.windows()[0]
+      if (diagnosticPage) {
+        await testInfo.attach('final-ui-text', {
+          body: await diagnosticPage.locator('body').innerText().catch(() => 'Window unavailable'),
+          contentType: 'text/plain'
+        })
+      }
       await app
         .windows()[0]
         ?.screenshot({ path: testInfo.outputPath('last-state.png') })
