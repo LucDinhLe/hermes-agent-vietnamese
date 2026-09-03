@@ -11,6 +11,37 @@ Rollback: full pre-exp11 dev10 backup, plus preserve the current exp11 artifact.
 
 ## Current step
 
+### Reopened local acceptance: tab-plus, 2026-09-03
+
+The installed d12 passed startup but failed the actual tab-plus interaction.
+Owner explicitly requested finishing this repair. Keep d12 and the pre-d12
+backup unchanged; do not patch installed bytes. Scope this follow-up to new-tab
+ownership and real tab creation, without model/provider or user-data changes.
+
+1. Reproduce the resolved-descriptor vs primary-pool owner mismatch with a
+   regression that checks visible tiles, not just the create RPC.
+2. Repair the captured creation owner while preserving explicit local/remote
+   identity, async intent and provisional first-send ownership.
+3. Exercise actual pane registration/focus and repeated plus clicks; run routing,
+   provisional lifecycle and type checks. Freeze a new candidate only when green.
+4. Test the packaged plus -> editable tab -> first send -> reopen lifecycle in
+   an isolated profile, then replace local Stable and verify the installed plus.
+   Public distribution remains out of scope.
+
+Root cause confirmed: on the primary socket, activeGatewayConnectionId() is
+null while the resolved Electron descriptor is `local` (or a named primary
+remote). wiring activates that resolved owner's tile bucket. session.create
+used null and saveTilesForOwner therefore persisted the new tile without
+publishing it to the visible list. Both local and named-primary regression
+cases failed with an empty visible list before the repair and passed afterward.
+The repaired create captures the resolved identity for the primary transport,
+while preserving explicit secondary routes and frozen ownership across awaits.
+100 focused UI/routing/provisional tests passed, including the real TreeGroup
+plus button through paneMirror and tree adoption: three clicks, three distinct
+focused tiles with editable test content. Renderer and E2E typechecks passed.
+New candidate d13/exp13 retains the unchanged engine source `643343c3...`.
+These are source/integration results, not packaged lifecycle acceptance yet.
+
 1. **Source checks complete:** reproduce each failure with deterministic tests and record
    the actual cause. Preserve model/provider pairing, exact session ownership,
    image context and immutable runtime provenance.

@@ -53,6 +53,7 @@ import {
 import { setApprovalRequest } from '@/store/prompts'
 import {
   $activeSessionStoredIdRotation,
+  $connection,
   $currentCwd,
   $currentFastMode,
   $currentModel,
@@ -251,7 +252,13 @@ async function desktopSessionCreateTarget(
     : (() => {
         const profile = $newChatProfile.get() ?? normalizeProfileKey($activeGatewayProfile.get())
 
-        return normalizeSessionTileOwner({ connectionId: activeGatewayConnectionId(), profile })
+        // The primary socket's null is a transport alias, not the resolved
+        // source identity used by wiring's visible tile bucket. Preserve the
+        // descriptor identity or a successful create is persisted invisibly.
+        // Explicit secondary routes still win; never alias "local" to null.
+        const connectionId = activeGatewayConnectionId() ?? $connection.get()?.connectionId ?? null
+
+        return normalizeSessionTileOwner({ connectionId, profile })
       })()
   )
 

@@ -3,7 +3,7 @@
   "status": "local-experimental-only",
   "releaseCandidate": false,
   "publicDistributionAllowed": false,
-  "productVersion": "0.33.0-dev.12-advisor-exp.12",
+  "productVersion": "0.33.0-dev.13-advisor-exp.13",
   "shellRecipeCommit": "ca262d9893fe02cd6f72c3f9a4dda3749fa95d3f",
   "officialEngineBase": "fcbd1076a93841fa88855acce810e342a5b78101",
   "upstreamPullRequest": "https://github.com/NousResearch/hermes-agent/pull/98927",
@@ -19,7 +19,7 @@
     "userData": "%APPDATA%\\Hermes",
     "stableProfileShared": true,
     "strategy": "versioned-candidate-runtime",
-    "candidateId": "d12e12-643343c3-<build-commit>",
+    "candidateId": "d13e13-643343c3-<build-commit>",
     "failClosedOnHashMismatch": true
   },
   "advisor": {
@@ -54,6 +54,6 @@
     "sameRawRuntimeAcrossBackends": "isolated"
   },
   "verified": {
-    "status": "pending-d12-product-acceptance"
+    "status": "pending-d13-tab-plus-acceptance"
   }
 }

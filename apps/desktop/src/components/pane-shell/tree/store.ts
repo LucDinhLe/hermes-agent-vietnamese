@@ -672,9 +672,8 @@ export function treePanesWithPrefix(prefix: string): string[] {
   return tree ? allPaneIds(tree).filter(id => id.startsWith(prefix)) : []
 }
 
-/** The main tab strip's "+": open a new session as its own tab (reusing an
- *  already-open unused tab when one exists, so repeated clicks don't pile up
- *  empty sessions). The app wiring registers the concrete action so this
+/** The main tab strip's "+": open a fresh session as its own tab on each click.
+ *  The app wiring registers the concrete action so this
  *  generic renderer stays session-agnostic; null until wired (the "+" hides).
  *  An atom so the strip re-renders when the action becomes available. */
 export const $newSessionTabAction = atom<(() => void) | null>(null)

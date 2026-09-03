@@ -1,10 +1,11 @@
 import { useStore } from '@nanostores/react'
-import { act, cleanup, render, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import type { MutableRefObject } from 'react'
 import { useEffect, useRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { $terminalTakeover, setTerminalTakeover } from '@/app/right-sidebar/store'
+import type * as TreeStore from '@/components/pane-shell/tree/store'
 import { focusedSessionTabAnchor, noteActiveTreeGroup, revealTreePane } from '@/components/pane-shell/tree/store'
 import {
   deleteSessionForOwner as deleteSession,
@@ -25,6 +26,7 @@ import { $projectScope, $projectTree, ALL_PROJECTS } from '@/store/projects'
 import {
   $activeSessionId,
   $activeSessionStoredIdRotation,
+  $connection,
   $currentCwd,
   $currentFastMode,
   $currentModel,
@@ -62,6 +64,7 @@ import {
   discardSessionTile,
   openProvisionalSessionTile
 } from '@/store/session-states'
+import { stubMenuDomApis, stubResizeObserver } from '@/test/jsdom'
 
 import sessionResumeActiveTurn from '../../../../../../tests/fixtures/session-resume-active-turn.json'
 import { deferred } from '../../../test/deferred'
@@ -539,8 +542,157 @@ describe('createBackendSessionForSend profile routing', () => {
     discardSessionTile(tile!.storedSessionId)
   })
 
+  it.each(['local', 'remote-primary'])(
+    'publishes tab-plus under the resolved primary source %s',
+    async connectionId => {
+      // Primary transport uses null, but wiring activates tiles with Electron's
+      // resolved descriptor identity. Both are real stores, not owner mocks.
+      $connection.set({ connectionId, profile: 'default' } as NonNullable<ReturnType<typeof $connection.get>>)
+      activateSessionTileOwner({ connectionId, profile: 'default' })
+      vi.mocked(activeGatewayConnectionId).mockReturnValue(null)
+      vi.mocked(focusedSessionTabAnchor).mockReturnValue('workspace')
+
+      const requestSessionOwner = vi.fn(
+        async () =>
+          ({
+            session_id: 'primary-plus-runtime',
+            stored_session_id: 'primary-plus-stored',
+            info: {}
+          }) as never
+      )
+
+      let handle: HarnessHandle | null = null
+      render(
+        <Harness onReady={next => (handle = next)} requestGateway={vi.fn()} requestSessionOwner={requestSessionOwner} />
+      )
+      await waitFor(() => expect(handle).not.toBeNull())
+      await act(async () => {
+        await handle!.openNewSessionTile('center', { listed: false })
+      })
+      expect($sessionTiles.get()).toEqual([
+        expect.objectContaining({
+          owner: { connectionId, profile: 'default' },
+          kind: 'provisional',
+          anchor: 'workspace'
+        })
+      ])
+      expect(requestSessionOwner).toHaveBeenCalledWith(
+        { connectionId, profile: 'default' },
+        'session.create',
+        expect.any(Object),
+        undefined,
+        undefined
+      )
+      discardSessionTile($sessionTiles.get()[0].storedSessionId)
+    }
+  )
+
+  it('real strip plus creates and focuses three separate editable tabs through the pane mirror', async () => {
+    const tree = await vi.importActual<typeof TreeStore>('@/components/pane-shell/tree/store')
+
+    const { group, findGroupOfPane } = await import('@/components/pane-shell/tree/model')
+    const { TreeGroup } = await import('@/components/pane-shell/tree/renderer/tree-group')
+    const { registry } = await import('@/contrib/registry')
+    const { paneMirror } = await import('@/app/chat/pane-mirror')
+    stubMenuDomApis()
+    stubResizeObserver()
+    vi.stubGlobal('CSS', { escape: (value: string) => value })
+    vi.mocked(focusedSessionTabAnchor).mockImplementation(tree.focusedSessionTabAnchor)
+    vi.mocked(noteActiveTreeGroup).mockImplementation(tree.noteActiveTreeGroup)
+    vi.mocked(revealTreePane).mockImplementation(tree.revealTreePane)
+    $connection.set({ connectionId: 'local', profile: 'default' } as NonNullable<ReturnType<typeof $connection.get>>)
+    activateSessionTileOwner({ connectionId: 'local', profile: 'default' })
+
+    const disposeWorkspace = registry.register({
+      area: 'panes',
+      id: 'workspace',
+      title: 'Main chat',
+      data: { placement: 'main', uncloseable: true },
+      render: () => null
+    })
+
+    paneMirror({
+      source: $sessionTiles,
+      key: tile => tile.storedSessionId,
+      prefix: 'session-tile',
+      dir: tile => tile.dir,
+      anchor: tile => tile.anchor,
+      minWidth: '20rem',
+      title: key => key,
+      render: key => <input aria-label={`Draft ${key}`} />,
+      close: discardSessionTile
+    })()
+    tree.watchContributedPanes()
+    tree.declareDefaultTree(group(['workspace'], { active: 'workspace', id: 'plus-main' }))
+    let handle: HarnessHandle | null = null
+    let created = 0
+
+    const requestSessionOwner = vi.fn(
+      async () =>
+        ({
+          session_id: `plus-${++created}`,
+          stored_session_id: `candidate-${created}`,
+          info: {}
+        }) as never
+    )
+
+    function VisibleStrip() {
+      const layout = useStore(tree.$layoutTree)
+
+      return layout?.type === 'group' ? <TreeGroup node={layout} parentAxis="column" /> : null
+    }
+
+    const view = render(
+      <>
+        <Harness onReady={next => (handle = next)} requestGateway={vi.fn()} requestSessionOwner={requestSessionOwner} />
+        <VisibleStrip />
+      </>
+    )
+
+    await waitFor(() => expect(handle).not.toBeNull())
+    act(() =>
+      tree.$newSessionTabAction.set(() => {
+        void handle!.openNewSessionTile('center', { listed: false })
+      })
+    )
+
+    try {
+      for (let count = 1; count <= 3; count++) {
+        const plus = view.container.querySelector('[data-session-tab-plus] button')!
+        expect(plus).not.toBeNull()
+        fireEvent.pointerDown(plus)
+        fireEvent.click(plus)
+        await waitFor(() => expect($sessionTiles.get()).toHaveLength(count))
+        const tile = $sessionTiles.get()[count - 1]
+        const paneId = `session-tile:${tile.storedSessionId}`
+        expect(findGroupOfPane(tree.$layoutTree.get()!, paneId)?.active).toBe(paneId)
+        expect(view.container.querySelectorAll('[data-tree-tab]')).toHaveLength(count + 1)
+        const input = view.getByLabelText(`Draft ${tile.storedSessionId}`)
+        fireEvent.change(input, { target: { value: `Draft number ${count}` } })
+        expect((input as HTMLInputElement).value).toBe(`Draft number ${count}`)
+      }
+
+      expect(requestSessionOwner).toHaveBeenCalledTimes(3)
+    } finally {
+      cleanup()
+      tree.$newSessionTabAction.set(null)
+
+      for (const tile of $sessionTiles.get()) {
+        discardSessionTile(tile.storedSessionId)
+      }
+      disposeWorkspace()
+      vi.unstubAllGlobals()
+    }
+  })
+
   afterEach(() => {
     cleanup()
+    $connection.set(null)
+
+    for (const tile of $sessionTiles.get()) {
+      discardSessionTile(tile.storedSessionId)
+    }
+    activateSessionTileOwner({ connectionId: null, profile: 'default' })
     $newChatProfile.set(null)
     $activeGatewayProfile.set('default')
     $projectScope.set(ALL_PROJECTS)
@@ -708,6 +860,7 @@ describe('createBackendSessionForSend profile routing', () => {
 
       return {}
     })
+
     let handle: HarnessHandle | null = null
 
     render(
@@ -754,6 +907,7 @@ describe('createBackendSessionForSend profile routing', () => {
 
       return {}
     })
+
     let handle: HarnessHandle | null = null
 
     render(
@@ -1211,6 +1365,7 @@ describe('exact-owner selected session close', () => {
       gatewayEpoch: gatewayEpochForAgent('source-a', 'mbc'),
       profile: 'mbc'
     })
+
     const runtimeA = rendererRuntimeKey(backendA, 'runtime-shared')
     const storedA = storedSession({ connection_id: 'source-a', id: 'stored-a', profile: 'mbc' })
 
