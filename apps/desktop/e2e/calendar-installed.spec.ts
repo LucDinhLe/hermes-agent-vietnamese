@@ -158,7 +158,9 @@ test('exact installed calendar lifecycle', async ({}, testInfo) => {
     const composer = group.locator('[contenteditable="true"]:visible').first()
     await composer.fill('Calendar persisted message 9127')
     await group.locator('button[type="submit"]:visible').click()
-    await expect(group.getByText(/Hello from the mock inference server/)).toBeVisible({ timeout: 90_000 })
+    // Legacy mirrors the reply in its active message, session tile and title.
+    // Any visible exact reply proves the mocked inference round trip.
+    await expect(group.getByText(/Hello from the mock inference server/).first()).toBeVisible({ timeout: 90_000 })
     await page.screenshot({ path: testInfo.outputPath('three-tabs-chat.png') })
     if (!legacy) {
       await composer.fill('E2E_INTERIM_TRIGGER')
