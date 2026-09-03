@@ -150,3 +150,25 @@ the registration hive, installation path and user database. Keep the path guard;
 record mismatched registration metadata before stopping, never follow a changed
 path to delete files. Do not publish C2. Preserve its bytes/evidence and stage a
 new immutable C3, with all affected exact-installer gates rerun.
+
+## C3 native worker launch and C4
+
+Run33791451771 passed BOTH scope upgrades/repair/relaunch. Keep-data uninstall
+did not complete. Diagnostic33794360937 showed the generated script and correct
+log path, but no worker or uninstaller remained and app/runtime files remained.
+The script parses correctly. A local native probe of the exact -File invocation
+proved detached=true exits0 without executing a harmless marker command, while
+detached=false executes. A plain non-detached child does not survive its Node
+parent's exit in the tested host. Native Start-Process -WindowStyle Hidden does.
+
+C4 uses a short non-detached PowerShell launcher with -Launch. It invokes the
+same script independently through native Start-Process and exits. Desktop awaits
+that launcher exit (15s bound) before quitting; the existing PID wait, exact-path,
+link guards and keep/delete semantics remain unchanged. A harmless Windows unit
+test proves the worker executes after its Node parent exits, with no actual
+uninstaller/removal targets. Spawn or exit0 alone is never cleanup acceptance.
+Retain exact installed completion-log and data-retention checks for both scopes.
+
+Do not change or promote C3 bytes. Build a separate C4 and repeat the full matrix.
+The earlier suspected log-name regex was only JSON display escaping, not a code
+defect; validate real source characters before diagnosing escape sequences.

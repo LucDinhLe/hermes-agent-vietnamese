@@ -211,7 +211,7 @@ import {
 import { runNativeLogin } from './native-oauth-login'
 import { loadNativeTokenSet, type NativeTokenStoreIo, persistNativeTokenSet } from './native-token-store'
 import { serializeJsonBody, setJsonRequestHeaders } from './oauth-net-request'
-import { buildPackagedWindowsUninstallScript, packagedWindowsUninstallPlan } from './packaged-windows-uninstall'
+import { buildPackagedWindowsUninstallScript, PACKAGED_UNINSTALL_LAUNCH_OPTIONS, packagedWindowsUninstallPlan } from './packaged-windows-uninstall'
 import {
   createParentStartMarkerResolver,
   electronProcessStartMarker,
@@ -14909,12 +14909,18 @@ async function runPackagedWindowsUninstall(mode) {
     await releaseBackendLock(EXPERIMENTAL_RUNTIME_BUNDLE.expectedTargetRoot, 'uninstall')
     fs.writeFileSync(scriptPath, script, 'utf8')
     await new Promise<void>((resolve, reject) => {
-      const child = spawn(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], {
-        cwd: path.dirname(scriptPath), detached: true, stdio: 'ignore', windowsHide: true
+      const child = spawn(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, '-Launch'], {
+        ...PACKAGED_UNINSTALL_LAUNCH_OPTIONS, cwd: path.dirname(scriptPath)
       })
-
-      child.once('error', reject)
-      child.once('spawn', () => { child.unref(); resolve() })
+      const timer = setTimeout(() => {
+        child.kill()
+        reject(new Error('Windows cleanup launcher did not finish; application kept open'))
+      }, 15_000)
+      child.once('error', error => { clearTimeout(timer); reject(error) })
+      child.once('exit', code => {
+        clearTimeout(timer)
+        if (code === 0) { resolve() } else { reject(new Error(`Windows cleanup launcher failed (${code}); see ${input.logPath}`)) }
+      })
     })
     rememberLog(`[uninstall] launched native packaged cleanup (${mode}): ${scriptPath}`)
     isQuittingForHandoff = true

@@ -1,9 +1,11 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
+import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 
 import { describe, expect, test } from 'vitest'
 
-import { buildPackagedWindowsUninstallScript, packagedWindowsUninstallPlan } from './packaged-windows-uninstall'
+import { buildPackagedWindowsUninstallScript, PACKAGED_UNINSTALL_LAUNCH_OPTIONS, packagedWindowsUninstallPlan } from './packaged-windows-uninstall'
 
 const input = {
   mode: 'lite', desktopPid: 123, executable: 'C:\\Program Files\\Hermes\\Hermes.exe',
@@ -13,6 +15,24 @@ const input = {
 }
 
 describe('portable packaged Windows uninstall', () => {
+  test.skipIf(process.platform !== 'win32')('native hidden worker runs after its Node parent exits', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'hermes-uninstall-launch-test-'))
+    const scriptPath = path.join(root, 'cleanup.ps1')
+    const logPath = path.join(root, 'cleanup.log')
+    // No real uninstaller or removal target exists. Exercise only the native
+    // launcher and the worker's caught missing-uninstaller error/log.
+    fs.writeFileSync(scriptPath, buildPackagedWindowsUninstallScript({
+      ...input, mode: 'gui', desktopPid: 2147483647,
+      executable: path.join(root, 'Hermes.exe'), logPath
+    }))
+    const runner = path.join(process.env.SystemRoot!, 'System32/WindowsPowerShell/v1.0/powershell.exe')
+    const args = ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, '-Launch']
+    const parentCode = `const c=require('node:child_process').spawn(${JSON.stringify(runner)},${JSON.stringify(args)},${JSON.stringify(PACKAGED_UNINSTALL_LAUNCH_OPTIONS)});c.once('exit',code=>{process.exitCode=code});`
+    const parent = spawnSync(process.execPath, ['-e', parentCode], { encoding: 'utf8', windowsHide: true, timeout: 10_000 })
+    expect(parent.status, parent.stderr).toBe(0)
+    await expect.poll(() => fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8') : '',
+      { timeout: 10_000 }).toContain('Start-Process')
+  }, 25_000)
   test('lite removes only managed code and runtime pointer, preserving profile data', () => {
     const plan = packagedWindowsUninstallPlan(input)
     expect(plan.remove).toEqual([`${input.hermesHome}\\runtimes`, `${input.hermesHome}\\runtime-current.txt`, `${input.hermesHome}\\hermes-agent`])

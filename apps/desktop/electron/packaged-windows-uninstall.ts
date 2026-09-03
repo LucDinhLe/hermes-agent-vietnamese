@@ -1,5 +1,11 @@
 import path from 'node:path'
 
+// PowerShell 5 exits without executing -File under Node's DETACHED_PROCESS.
+// Let native Start-Process create the independent hidden worker instead.
+export const PACKAGED_UNINSTALL_LAUNCH_OPTIONS = {
+  detached: false, stdio: 'ignore', windowsHide: true
+} as const
+
 interface CleanupInput {
   mode: string
   desktopPid: number
@@ -47,8 +53,19 @@ export function buildPackagedWindowsUninstallScript(input: CleanupInput): string
 
   // Native PowerShell owns all deletion. Never run the Python being removed,
   // depend on developer tools, or interpolate a user path into a shell command.
-  return `$ErrorActionPreference = 'Stop'
+  return `param([switch]$Launch)
+$ErrorActionPreference = 'Stop'
 $spec = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encoded}')) | ConvertFrom-Json
+if ($Launch) {
+  try {
+    $runner = Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe'
+    Start-Process -FilePath $runner -ArgumentList @('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',('"'+$PSCommandPath+'"')) -WindowStyle Hidden | Out-Null
+    exit 0
+  } catch {
+    $_ | Out-File -LiteralPath ([string]$spec.logPath) -Encoding utf8
+    exit 1
+  }
+}
 function Assert-NoLinkedParents([string]$target) {
   $current = [IO.Path]::GetFullPath($target)
   while ($current) {
