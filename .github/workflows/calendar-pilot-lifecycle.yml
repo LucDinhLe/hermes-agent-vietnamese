@@ -32,7 +32,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           gh release download vi-v0.32.1-18 --repo LucDinhLe/hermes-agent-vietnamese --pattern Hermes-Vietnamese-Windows-x64-Setup.exe --dir candidate-inputs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if ((Get-FileHash candidate-inputs/Hermes-2026.9.2-win-x64.exe).Hash.ToLowerInvariant() -ne '15e9922a39c080ce4f7d176e30f5d959fc409e4cc4a52f00acd05cebba3c17da') { throw 'Candidate hash mismatch' }
+          if ((Get-FileHash candidate-inputs/Hermes-2026.9.2-win-x64.exe).Hash.ToLowerInvariant() -ne '34cd44b242efe7bda970056bb873ce4fd0f5f9a7efe9af871134c8e72bf12ea6') { throw 'Candidate hash mismatch' }
           if ((Get-FileHash candidate-inputs/Hermes-Vietnamese-Windows-x64-Setup.exe).Hash.ToLowerInvariant() -ne '565e1313162505999238b9c3b4f1422ec37256a1da153bae5149b5795c83c5ac') { throw 'Previous hash mismatch' }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -45,9 +45,13 @@ jobs:
     needs: fetch-frozen-inputs
     runs-on: windows-2025
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        install_scope: [currentuser, allusers]
     env:
-      CANDIDATE_COMMIT: 1cb828bdd977738b295c4a5d7c722e55e9e0dbc6
-      CANDIDATE_SHA256: 15e9922a39c080ce4f7d176e30f5d959fc409e4cc4a52f00acd05cebba3c17da
+      CANDIDATE_COMMIT: 3deaeec8ed311dd7276f6dcb3e641c890adce8e9
+      CANDIDATE_SHA256: 34cd44b242efe7bda970056bb873ce4fd0f5f9a7efe9af871134c8e72bf12ea6
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
@@ -66,12 +70,12 @@ jobs:
         id: lifecycle
         shell: pwsh
         run: |
-          ./scripts/calendar-lifecycle.ps1 -Installer "$env:GITHUB_WORKSPACE/candidate-inputs/Hermes-2026.9.2-win-x64.exe" -Sha256 $env:CANDIDATE_SHA256 -SourceCommit $env:CANDIDATE_COMMIT -PreviousInstaller "$env:GITHUB_WORKSPACE/candidate-inputs/Hermes-Vietnamese-Windows-x64-Setup.exe" -RepoRoot $env:GITHUB_WORKSPACE
+          ./scripts/calendar-lifecycle.ps1 -Installer "$env:GITHUB_WORKSPACE/candidate-inputs/Hermes-2026.9.2-win-x64.exe" -Sha256 $env:CANDIDATE_SHA256 -SourceCommit $env:CANDIDATE_COMMIT -PreviousInstaller "$env:GITHUB_WORKSPACE/candidate-inputs/Hermes-Vietnamese-Windows-x64-Setup.exe" -RepoRoot $env:GITHUB_WORKSPACE -InstallScope '${{ matrix.install_scope }}'
       - name: Preserve lifecycle evidence, including failed gates
         if: always() && steps.lifecycle.outcome != 'skipped'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: calendar-2026.9.2-lifecycle-${{ github.run_id }}
+          name: calendar-2026.9.2-lifecycle-${{ matrix.install_scope }}-${{ github.run_id }}
           path: calendar-lifecycle-evidence/
           if-no-files-found: error
           retention-days: 30

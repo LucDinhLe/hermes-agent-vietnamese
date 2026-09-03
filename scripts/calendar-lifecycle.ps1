@@ -3,7 +3,8 @@ param(
   [Parameter(Mandatory=$true)][string]$Sha256,
   [Parameter(Mandatory=$true)][string]$SourceCommit,
   [Parameter(Mandatory=$true)][string]$PreviousInstaller,
-  [Parameter(Mandatory=$true)][string]$RepoRoot
+  [Parameter(Mandatory=$true)][string]$RepoRoot,
+  [ValidateSet('currentuser','allusers')][string]$InstallScope='currentuser'
 )
 $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted' -or
@@ -42,7 +43,11 @@ function Installed {
     $productKey = $found[0].Split(':')[0]+":\Software\$productId"
     $location = [string](Get-ItemProperty -LiteralPath $productKey).InstallLocation
   }
+  [ordered]@{ scope=$InstallScope; key=$found[0]; location=$location; version=$reg.DisplayVersion; uninstall=$reg.UninstallString } |
+    ConvertTo-Json | Set-Content -LiteralPath (Join-Path $evidence 'last-registration.json') -Encoding utf8
   if (-not (Under $location $state)) { throw 'Registered installation escaped isolated state' }
+  $expectedHive = $(if ($InstallScope -eq 'currentuser') {'HKCU:'} else {'HKLM:'})
+  if (-not $found[0].StartsWith($expectedHive)) { throw 'Installer changed existing registration scope' }
   $command = [string]$reg.UninstallString
   if ($command -notmatch '^"([^"]+)"') { throw 'Expected quoted uninstaller path' }
   $uninstaller = $Matches[1]
@@ -54,8 +59,9 @@ function Installed {
 function Install([string]$File, [string]$Stage, [bool]$Legacy=$false, [bool]$First=$false) {
   if (Get-Process Hermes -ErrorAction SilentlyContinue) { throw 'Hermes process remains before install' }
   $arguments = @('/S')
-  if ($Legacy) { $arguments += '/currentuser' }
-  if ($First) { $arguments += "/D=$installDir" }
+  # Scope and destination are explicit only on fresh installs. Upgrade/repair
+  # must detect the existing registration; /D would conceal a relocation bug.
+  if ($First) { $arguments += "/$InstallScope"; $arguments += "/D=$installDir" }
   $run = Start-Process -FilePath $File -ArgumentList $arguments -Wait -PassThru -WindowStyle Hidden
   if ($run.ExitCode -ne 0) { throw "Installer failed in $Stage ($($run.ExitCode))" }
   $current = Installed
@@ -76,7 +82,7 @@ function Install([string]$File, [string]$Stage, [bool]$Legacy=$false, [bool]$Fir
     }
   }
   $env:HERMES_ACCEPTANCE_BINARY = $current.binary
-  Event $Stage @{ sha256=(Hash $File); location=$current.directory }
+  Event $Stage @{ sha256=(Hash $File); location=$current.directory; scope=$InstallScope }
 }
 function Block-ProductNetwork {
   $current = Installed
