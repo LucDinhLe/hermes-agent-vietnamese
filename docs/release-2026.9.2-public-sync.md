@@ -50,4 +50,29 @@ legacy và chỉ có validator stable. Cần kiểm độc lập tài liệu c�
 - Tài liệu dịch upstream được ghi rõ là tham khảo; không nhầm link upstream với
   bộ cài Vietnamese. Chưa có GitHub Pages được cấu hình tại thời điểm kiểm tra.
 
-Trạng thái: kiểm tra cục bộ đạt, chuẩn bị công khai thay đổi tài liệu.
+## Kết quả công khai
+
+**GO cho đồng bộ tài liệu, hoàn tất.** Commit triển khai `6d1cac8b8` đã vào main
+bằng fast-forward từ `2b47cf582`; không hợp nhất engine hoặc rebuild sản phẩm.
+
+- [Kiểm tra nhánh riêng](https://github.com/LucDinhLe/hermes-agent-vietnamese/actions/runs/33824194652) đạt.
+- [Kiểm tra main và Latest thật](https://github.com/LucDinhLe/hermes-agent-vietnamese/actions/runs/33824280661) đạt.
+- Đọc lại tám tệp công khai qua GitHub API, so nội dung với tệp cục bộ đã kiểm
+  tra; README, README.vi, hướng dẫn Windows, release notes, descriptor, signing
+  policy, maintainers và sao lưu đều khớp.
+- Ghi chú release công khai khớp `.github/release-notes-vietnamese.md`; mô tả kho
+  đã đổi sang 2026.9.2/Windows x64/chưa ký số. Homepage vẫn là `/releases/latest`.
+- Hậu kiểm tag và source commit không đổi. Asset IDs `543251477`, `543251475`,
+  `543251476` giữ nguyên tên, kích thước, digest và thời điểm cập nhật trước/sau.
+- 28 đích liên kết tài liệu cục bộ tồn tại; ba URL tải kiểm HTTP200.
+- Tổng kiểm thử cục bộ liên quan 23/23 đạt. Không chạy lại bộ cài vì chỉ thay
+  tài liệu và công cụ kiểm tra điều hướng, không đổi byte sản phẩm.
+
+Rủi ro còn lại: bộ cài chưa ký số, các quyền model thật chưa được xác minh bởi
+mock lifecycle, main vẫn có source legacy và không thay source tag calendar.
+Các báo cáo v32.1 được giữ như lịch sử thay vì sửa lại kết quả cũ.
+
+Quay lui tài liệu bằng revert commit đồng bộ nếu cần; không đổi tag/asset khi
+rollback tài liệu. Rollback sản phẩm vẫn là Windows x64 vi-v0.32.1-18.
+Bước tiếp theo ngoài phạm vi việc này là cài đè trên máy chủ dự án sau khi được
+phép tạm dừng gateway nền và có bản sao lưu mới đã xác minh. Chưa thực hiện.

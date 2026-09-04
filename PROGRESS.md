@@ -5,11 +5,14 @@
 - Latest thực tế là v2026.9.2, community pilot chỉ Windows x64, chưa ký số.
   Source b51f306eae2370adc774b63f198ab12990bcf063; lifecycle33798311695 đạt cả
   currentuser/allusers. Xem [hồ sơ hiện hành](docs/release-2026.9.2-public-sync.md).
-- Đang đồng bộ README/README.vi/hướng dẫn Windows, descriptor, release notes,
+- Đã đồng bộ README/README.vi/hướng dẫn Windows, descriptor, release notes,
   ký số và sao lưu. Các mục v32.1 bên dưới là lịch sử, không phải Latest hiện tại.
 - Chỉ sửa tài liệu/kiểm tra điều hướng, không rebuild hoặc sửa tag/asset,
   không cài lên hồ sơ thật, không nộp hồ sơ ký số. Mã nguồn main legacy chưa
   hợp nhất toàn bộ sản phẩm calendar; build đúng sản phẩm phải dùng source tag.
+- Commit đồng bộ6d1cac8b8 đã vào main; CI33824194652 và33824280661 đạt.
+  Hậu kiểm tám tệp qua API, release body, description và identity asset đạt;
+  không đổi byte/tag/source của bộ cài. Hồ sơ liên kết phía trên ghi bằng chứng.
 
 ## Cập nhật 2026-08-28 — v32.1-18 là GitHub Latest đa nền tảng
 
