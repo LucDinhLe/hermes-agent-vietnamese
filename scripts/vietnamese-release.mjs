@@ -15,11 +15,29 @@ export const VI_PRODUCT_RELEASE = Object.freeze({
   releaseTitle: `${productMetadata.displayName} ${productMetadata.productVersion}`,
 })
 
+// Kênh composite (kế hoạch 04/09/2026): tag lịch vYYYY.M.D hoặc vYYYY.M.D-thunghiem.N.
+// appVersion giữ nguyên chuỗi (SemVer hợp lệ, hậu tố thunghiem là prerelease),
+// khớp cách electron/release-notice.ts suy kênh từ phiên bản đang chạy.
+export const CALVER_RELEASE_TAG_RE = /^v(\d{4})\.(\d{1,2})\.(\d{1,3})(?:-thunghiem\.(\d{1,4}))?$/
+
 export function parseVietnameseReleaseTag(tag) {
   const normalized = String(tag).trim()
+  const calver = CALVER_RELEASE_TAG_RE.exec(normalized)
+  if (calver) {
+    const [, year, month, day, iteration] = calver
+    const baseVersion = `${year}.${month}.${day}`
+    return {
+      tag: normalized,
+      baseVersion,
+      iteration: iteration === undefined ? 0 : Number(iteration),
+      calver: true,
+      channel: iteration === undefined ? "latest" : "thunghiem",
+      appVersion: normalized.slice(1),
+    }
+  }
   const match = VI_RELEASE_TAG_RE.exec(normalized)
   if (!match) {
-    throw new Error(`release tag must be vi-vX.Y.Z-N, got: ${tag}`)
+    throw new Error(`release tag must be vi-vX.Y.Z-N or vYYYY.M.D[-thunghiem.N], got: ${tag}`)
   }
   const [, major, minor, patch, iteration] = match
   const baseVersion = `${major}.${minor}.${patch}`
@@ -27,6 +45,8 @@ export function parseVietnameseReleaseTag(tag) {
     tag: normalized,
     baseVersion,
     iteration: Number(iteration),
+    calver: false,
+    channel: "legacy",
     // GitHub stays on a stable vi-* release. Electron needs valid SemVer
     // for comparison inside latest*.yml, so encode the community revision
     // as a numeric prerelease component.
@@ -47,7 +67,7 @@ export function resolveVietnameseReleaseCandidate(tag) {
   if (!/^\d+\.\d+\.\d+$/.test(metadata.upstreamVersion || "")) {
     throw new Error(`product metadata has an invalid upstream version: ${metadata.upstreamVersion}`)
   }
-  if (release.baseVersion !== metadata.technicalVersion) {
+  if (!release.calver && release.baseVersion !== metadata.technicalVersion) {
     throw new Error(
       `release tag ${tag} does not match Hermes Vietnamese technical version ${metadata.technicalVersion}`,
     )

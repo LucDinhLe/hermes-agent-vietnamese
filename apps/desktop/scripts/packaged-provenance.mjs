@@ -4,6 +4,8 @@ import path from 'node:path'
 const RELEASE_CLASSES = new Set(['community-prerelease', 'stable'])
 const FULL_COMMIT_RE = /^[0-9a-f]{40}$/
 const VI_RELEASE_TAG_RE = /^vi-v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)-(0|[1-9]\d*)$/
+// Kênh composite (04/09/2026): tag lịch vYYYY.M.D[-thunghiem.N], appVersion = tag bỏ 'v'
+const CALVER_RELEASE_TAG_RE = /^v(\d{4}\.\d{1,2}\.\d{1,3}(?:-thunghiem\.\d{1,4})?)$/
 
 function requiredString(value, label) {
   if (typeof value !== 'string' || value.trim() === '') {
@@ -28,8 +30,8 @@ export function expectedBundledProvenanceFromEnv(env = process.env) {
   const commit = requiredString(env.HERMES_PAYLOAD_GIT_REF, 'HERMES_PAYLOAD_GIT_REF')
   const releaseClass = requiredString(env.HERMES_RELEASE_CLASS, 'HERMES_RELEASE_CLASS')
 
-  if (!VI_RELEASE_TAG_RE.test(tag)) {
-    throw new Error(`HERMES_PAYLOAD_TAG must be vi-vX.Y.Z-N, got: ${tag}`)
+  if (!VI_RELEASE_TAG_RE.test(tag) && !CALVER_RELEASE_TAG_RE.test(tag)) {
+    throw new Error(`HERMES_PAYLOAD_TAG must be vi-vX.Y.Z-N or vYYYY.M.D[-thunghiem.N], got: ${tag}`)
   }
   if (!FULL_COMMIT_RE.test(commit)) {
     throw new Error('HERMES_PAYLOAD_GIT_REF must be the full lowercase 40-character commit SHA')
@@ -119,9 +121,13 @@ export function readAndValidateBundledProvenance({ expected, resourcesPath }) {
 }
 
 export function appVersionFromVietnameseTag(tag) {
+  const calver = CALVER_RELEASE_TAG_RE.exec(String(tag || ''))
+  if (calver) {
+    return calver[1]
+  }
   const match = VI_RELEASE_TAG_RE.exec(String(tag || ''))
   if (!match) {
-    throw new Error(`release tag must be vi-vX.Y.Z-N, got: ${tag}`)
+    throw new Error(`release tag must be vi-vX.Y.Z-N or vYYYY.M.D[-thunghiem.N], got: ${tag}`)
   }
   return `${match[1]}.${match[2]}.${match[3]}-vi.${match[4]}`
 }

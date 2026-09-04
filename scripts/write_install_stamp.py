@@ -39,6 +39,8 @@ _REPO_ROOT = Path(__file__).parent.parent.resolve()
 # so these date tags cannot masquerade as the v0.x.y SemVer boundaries.
 _SEMVER_TAG_RE = re.compile(r"^v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 _VI_RELEASE_TAG_RE = re.compile(r"^vi-v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)-(0|[1-9]\d*)$")
+# Kênh composite (04/09/2026): tag lịch vYYYY.M.D[-thunghiem.N]
+_CALVER_RELEASE_TAG_RE = re.compile(r"^v\d{4}\.\d{1,2}\.\d{1,3}(?:-thunghiem\.\d{1,4})?$")
 _BUNDLED_RELEASE_CLASSES = {"community-prerelease", "stable"}
 _LEGACY_CALVER_TAG_RE = re.compile(r"^v20\d{2}\.\d+\.\d+(?:\.\d+)?$")
 
@@ -187,11 +189,11 @@ def build_stamp(
     update_channel = None
     update_feed_enabled = False
     if payload:
-        tag_match = tag and _VI_RELEASE_TAG_RE.fullmatch(tag)
+        tag_match = tag and (_VI_RELEASE_TAG_RE.fullmatch(tag) or _CALVER_RELEASE_TAG_RE.fullmatch(tag))
         if not tag_match:
             raise SystemExit(
                 "write_install_stamp: HERMES_DESKTOP_BUNDLED=1 requires "
-                f"HERMES_PAYLOAD_TAG=vi-vX.Y.Z-N (got {tag!r})"
+                f"HERMES_PAYLOAD_TAG=vi-vX.Y.Z-N or vYYYY.M.D[-thunghiem.N] (got {tag!r})"
             )
         if release_class not in _BUNDLED_RELEASE_CLASSES:
             raise SystemExit(
