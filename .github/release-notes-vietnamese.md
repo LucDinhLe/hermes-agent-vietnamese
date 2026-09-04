@@ -1,18 +1,18 @@
-# Hermes Vietnamese 2026.9.2
+# Hermes Vietnamese 2026.9.3
 
 <!-- current-release:start -->
-> **Latest hiện tại là [2026.9.2](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2), chỉ phát hành Windows x64.** Đây là community pilot chưa ký số, chưa phải stable. Cập nhật thủ công bằng bộ cài đầy đủ, không có cập nhật tự động nền.
+> **Latest hiện tại là [2026.9.3](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.3), chỉ phát hành Windows x64.** Đây là community pilot chưa ký số, chưa phải stable. Ứng dụng báo khi có bản mới kèm SHA-256, không tự tải hay tự cài.
 
 | Tệp | Tải xuống |
 | --- | --- |
-| Bộ cài Windows x64 | [Hermes-2026.9.2-win-x64.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/Hermes-2026.9.2-win-x64.exe) |
-| Cùng bộ cài, tên tương thích đường tải cũ | [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/Hermes-Vietnamese-Windows-x64-Setup.exe) |
-| Mã kiểm tra toàn vẹn | [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/SHA256SUMS.txt) |
+| Bộ cài Windows x64 | [Hermes-2026.9.3-win-x64.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-2026.9.3-win-x64.exe) |
+| Cùng bộ cài, tên tương thích đường tải cũ | [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-Vietnamese-Windows-x64-Setup.exe) |
+| Mã kiểm tra toàn vẹn | [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/SHA256SUMS.txt) |
 
-Chỉ tải **một** trong hai tệp `.exe`. Cả hai có cùng nội dung, kích thước **252118156 byte** và SHA-256:
+Chỉ tải **một** trong hai tệp `.exe`. Cả hai có cùng nội dung, kích thước **345527696 byte** và SHA-256:
 
 ```text
-1ae55b4a3280e92d4a297f85d81cbb6bcc0a19170da8d9122755d19f40c43015
+cc2798452d5c3d87fd0029c28af9e26f51b7406265707bb654521d2b1362e250
 ```
 <!-- current-release:end -->
 

@@ -1,31 +1,26 @@
 {
-  "tag": "v2026.9.2",
-  "version": "2026.9.2",
+  "tag": "v2026.9.3",
+  "version": "2026.9.3",
   "versionScheme": "year.month.monthly-update",
-  "previousTag": "vi-v0.32.1-18",
-  "rollbackTag": "vi-v0.32.1-18",
+  "previousTag": "v2026.9.2",
+  "rollbackTag": "v2026.9.2",
   "releaseClass": "community-pilot",
-  "artifactProvenanceClass": "native-windows-pilot",
-  "sourceCommit": "b51f306eae2370adc774b63f198ab12990bcf063",
+  "artifactProvenanceClass": "github-actions-windows-composite",
+  "sourceCommit": "ca66d24a60722643204b7add59117cf84649b92d",
   "supportedTargets": [
     "windows-x64"
   ],
-  "updateFeedEnabled": false,
+  "updateFeedEnabled": true,
   "windowsX64": {
-    "filename": "Hermes-2026.9.2-win-x64.exe",
+    "filename": "Hermes-2026.9.3-win-x64.exe",
     "compatibilityFilename": "Hermes-Vietnamese-Windows-x64-Setup.exe",
-    "size": 252118156,
-    "sha256": "1ae55b4a3280e92d4a297f85d81cbb6bcc0a19170da8d9122755d19f40c43015",
+    "size": 345527696,
+    "sha256": "cc2798452d5c3d87fd0029c28af9e26f51b7406265707bb654521d2b1362e250",
     "authenticode": "NotSigned"
   },
   "lifecycle": {
-    "runId": 33798311695,
-    "harnessCommit": "d4847fe844b426bfac9ee0b295993e95fbbe80a7",
-    "scopes": [
-      "currentuser",
-      "allusers"
-    ],
-    "provider": "mock",
+    "runId": 33893738196,
+    "workflow": "build-release.yml",
     "conclusion": "success"
   },
   "windowsInstallImages": [
@@ -35,7 +30,7 @@
     "edge-keep-anyway-v25.jpg"
   ],
   "downloadFiles": [
-    "Hermes-2026.9.2-win-x64.exe",
+    "Hermes-2026.9.3-win-x64.exe",
     "Hermes-Vietnamese-Windows-x64-Setup.exe"
   ],
   "documentationFiles": [
@@ -49,5 +44,9 @@
     "windowsArm64": "historical-build-only",
     "linux": "historical-build-only",
     "macos": "not-recommended-for-real-users"
+  },
+  "engine": {
+    "tag": "v2026.8.31",
+    "commit": "29112bef099274229cadff79cdff7bf7b99c4b77"
   }
 }

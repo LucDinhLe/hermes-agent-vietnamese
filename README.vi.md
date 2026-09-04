@@ -1,16 +1,16 @@
 # Hướng dẫn cài đặt và kết nối Hermes Vietnamese
 
 <!-- current-release:start -->
-**Latest hiện tại là [2026.9.2](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2), chỉ dành cho Windows x64.** Bản community pilot chưa ký số, chưa phải stable. Cập nhật thủ công bằng bộ cài đầy đủ, không có cập nhật tự động nền.
+**Latest hiện tại là [2026.9.3](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.3), chỉ dành cho Windows x64.** Bản community pilot chưa ký số, chưa phải stable. Ứng dụng báo khi có bản mới kèm SHA-256, không tự tải hay tự cài.
 
-- [Hermes-2026.9.2-win-x64.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/Hermes-2026.9.2-win-x64.exe).
-- [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/Hermes-Vietnamese-Windows-x64-Setup.exe), cùng nội dung với tên tương thích cũ. Chỉ chạy một bộ cài.
-- [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/SHA256SUMS.txt).
+- [Hermes-2026.9.3-win-x64.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-2026.9.3-win-x64.exe).
+- [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-Vietnamese-Windows-x64-Setup.exe), cùng nội dung với tên tương thích cũ. Chỉ chạy một bộ cài.
+- [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/SHA256SUMS.txt).
 
-Hai tệp `.exe` đều có kích thước **252118156 byte**, SHA-256:
+Hai tệp `.exe` đều có kích thước **345527696 byte**, SHA-256:
 
 ```text
-1ae55b4a3280e92d4a297f85d81cbb6bcc0a19170da8d9122755d19f40c43015
+cc2798452d5c3d87fd0029c28af9e26f51b7406265707bb654521d2b1362e250
 ```
 <!-- current-release:end -->
 

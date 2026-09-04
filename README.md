@@ -21,20 +21,20 @@ Hermes phù hợp với người làm nội dung, đào tạo, nghiên cứu, v�
 </p>
 
 <!-- current-release:start -->
-> **Bản tải mới nhất là [2026.9.2](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2), dành cho Windows x64.** Đây là bản dùng thử cộng đồng (community pilot), chưa ký số và chưa phải stable. Windows có thể hiển thị cảnh báo khi tải hoặc cài. Chưa có bộ cài cho macOS, Linux hoặc Windows ARM64 trong bản phát hành này.
+> **Bản tải mới nhất là [2026.9.3](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.3), dành cho Windows x64.** Đây là bản dùng thử cộng đồng (community pilot), chưa ký số và chưa phải stable. Windows có thể hiển thị cảnh báo khi tải hoặc cài. Chưa có bộ cài cho macOS, Linux hoặc Windows ARM64 trong bản phát hành này.
 
-**[Tải bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/Hermes-2026.9.2-win-x64.exe)** · [Hướng dẫn cài đặt và kết nối](README.vi.md)
+**[Tải bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-2026.9.3-win-x64.exe)** · [Hướng dẫn cài đặt và kết nối](README.vi.md)
 
 <details>
 <summary>Kiểm tra tệp tải về</summary>
 
-Bộ cài `Hermes-2026.9.2-win-x64.exe` có kích thước **252118156 byte**. Đối chiếu mã SHA-256 với [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/SHA256SUMS.txt):
+Bộ cài `Hermes-2026.9.3-win-x64.exe` có kích thước **345527696 byte**. Đối chiếu mã SHA-256 với [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/SHA256SUMS.txt):
 
 ```text
-1ae55b4a3280e92d4a297f85d81cbb6bcc0a19170da8d9122755d19f40c43015
+cc2798452d5c3d87fd0029c28af9e26f51b7406265707bb654521d2b1362e250
 ```
 
-[Tệp tải thay thế Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/Hermes-Vietnamese-Windows-x64-Setup.exe) có cùng nội dung và mã kiểm tra. Chỉ cần tải một trong hai tệp.
+[Tệp tải thay thế Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-Vietnamese-Windows-x64-Setup.exe) có cùng nội dung và mã kiểm tra. Chỉ cần tải một trong hai tệp.
 
 </details>
 <!-- current-release:end -->
