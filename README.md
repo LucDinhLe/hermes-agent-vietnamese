@@ -4,6 +4,24 @@
 
 Bạn mô tả việc cần làm, chọn model AI của mình và làm việc cùng Hermes trong một cửa sổ. Ứng dụng có giao diện Việt/Anh và bộ cài đóng gói sẵn môi trường cần thiết, giúp bạn bắt đầu mà không phải tự thiết lập môi trường lập trình.
 
+## Vì sao có bản Việt hóa này
+
+Hermes Agent của Nous Research là phần mềm mã nguồn mở mạnh, nhưng để chạy được bản gốc, người dùng phải tự dựng môi trường lập trình gồm Python, trình quản lý gói và một chuỗi lệnh trong cửa sổ dòng lệnh. Với người làm nội dung, đào tạo hay vận hành, rào cản đó đủ lớn để bỏ cuộc trước khi kịp thấy phần mềm giúp được gì.
+
+Dự án này sinh ra để rút quãng đường đó xuống còn một bộ cài. Bạn tải một tệp, bấm cài, mở lên và làm việc bằng tiếng Việt. Mọi thứ cần cho lõi chạy đã nằm sẵn trong bộ cài.
+
+Người viết bản này là [Lê Đình Lực](https://github.com/LucDinhLe), làm đào tạo ứng dụng AI cho doanh nghiệp và giảng viên tại Việt Nam. Bản Việt hóa trước hết phục vụ học viên của chính chương trình đào tạo, sau đó mở cho cộng đồng dùng chung.
+
+## Bản này khác bản gốc chỗ nào
+
+- **Cài bằng một bộ cài Windows.** Python 3.12.10 và lõi Hermes đã đóng gói sẵn, bạn không cần cài môi trường lập trình hay chạy lệnh nào.
+- **Giao diện và tài liệu tiếng Việt.** Toàn bộ màn hình, thông báo và hướng dẫn đều có tiếng Việt, kèm [hướng dẫn cài bằng hình ảnh](docs/cai-dat-windows-bang-anh.md) cho người ngại kỹ thuật.
+- **Lõi giữ nguyên từng byte so với bản gốc.** Bạn nhận đúng hành vi và các bản sửa lỗi của Nous Research, không nhận thêm rủi ro từ một nhánh sửa riêng. Máy chủ dựng bản phát hành chạy `scripts/engine-sync.mjs check` để chứng minh điều này ở mỗi lần dựng.
+- **Cài song song, dữ liệu riêng.** Bản này dùng mã sản phẩm và thư mục dữ liệu riêng nên đứng cạnh bản Hermes cũ, giữ đường quay lui khi cần.
+- **Cập nhật chỉ báo tin.** Ứng dụng báo có bản mới kèm tên tệp, kích thước và mã SHA-256, việc tải và cài vẫn do bạn quyết định.
+
+Những gì bản này giữ nguyên như bản gốc gồm toàn bộ tính năng lõi, danh mục nhà cung cấp AI, kỹ năng, công cụ và định dạng dữ liệu. Bản Việt hóa thêm lớp vỏ cho dễ dùng, không cắt bớt và không khóa thêm gì.
+
 ## Bạn có thể làm gì với Hermes?
 
 - **Làm việc với tài liệu và tệp.** Nhờ AI đọc, tóm tắt, soạn nội dung hoặc hỗ trợ chỉnh sửa các tệp bạn cho phép truy cập.
@@ -17,7 +35,7 @@ Hermes phù hợp với người làm nội dung, đào tạo, nghiên cứu, v�
 ## Tải và bắt đầu
 
 <p align="center">
-  <a href="https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2"><img src="https://img.shields.io/badge/Tải_bản_2026.9.2-Windows_x64-F97316?style=for-the-badge" alt="Tải Hermes Vietnamese 2026.9.2 Windows x64"></a>
+  <a href="https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/latest"><img src="https://img.shields.io/badge/Tải_bản_mới_nhất-Windows_x64-F97316?style=for-the-badge" alt="Tải Hermes Vietnamese bản mới nhất cho Windows x64"></a>
 </p>
 
 <!-- current-release:start -->
@@ -70,6 +88,6 @@ Hermes Vietnamese là dự án cá nhân vì cộng đồng do [Lê Đình Lực
 
 Phần lõi Hermes trong bản này giữ nguyên từng byte so với bản gốc của Nous Research; dự án chỉ duy trì lớp vỏ Việt hóa (ứng dụng, tài liệu, công cụ đóng gói). `scripts/engine-sync.mjs check` là bước kiểm tra tự động xác nhận lõi khớp bản gốc.
 
-- [Ghi chú phát hành](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2).
-- [Mã nguồn của bản phát hành](https://github.com/LucDinhLe/hermes-agent-vietnamese/tree/v2026.9.2) và [phạm vi bảo trì](MAINTAINERS.md).
-- [Hồ sơ kỹ thuật và kiểm thử](docs/release-2026.9.2-public-sync.md).
+- [Ghi chú phát hành](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/latest).
+- [Mã nguồn của bản phát hành](https://github.com/LucDinhLe/hermes-agent-vietnamese/tree/main) và [phạm vi bảo trì](MAINTAINERS.md).
+- [Hồ sơ kỹ thuật và kiểm thử của đợt 2026.9.2](docs/release-2026.9.2-public-sync.md).

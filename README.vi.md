@@ -14,11 +14,25 @@ cc2798452d5c3d87fd0029c28af9e26f51b7406265707bb654521d2b1362e250
 ```
 <!-- current-release:end -->
 
+## Bảy điều nên biết trước khi cài
+
+1. **Bộ cài chưa ký số.** Windows và Edge sẽ cảnh báo nhà phát hành chưa xác định. Chỉ đi tiếp khi bạn tải từ trang phát hành chính thức của dự án và mã SHA-256 khớp với mã công bố ở đầu trang này.
+2. **Chỉ có bản Windows x64.** macOS, Linux và Windows ARM64 chưa nằm trong phạm vi phát hành này.
+3. **Ứng dụng cài song song với bản Hermes cũ.** Mã sản phẩm và thư mục dữ liệu đều riêng nên bản cũ giữ nguyên, mở lại được bất cứ lúc nào. Lối tắt mới mang tên "Hermes Vietnamese" và có thể thay tên lối tắt cũ trên màn hình.
+4. **Lần mở đầu tiên, ứng dụng hỏi có nhập dữ liệu từ bản cũ không.** Chọn nhập thì cấu hình, phiên làm việc, trí nhớ và kỹ năng được sao chép sang thư mục mới. Bản cũ giữ nguyên vì đây là sao chép chứ không phải di chuyển.
+5. **Ứng dụng không kèm tài khoản AI.** Bạn kết nối bằng tài khoản hoặc khóa API của chính mình, và mỗi nhà cung cấp có điều kiện, hạn mức, chi phí riêng.
+6. **Hermes làm việc trực tiếp trên máy bạn.** Nó đọc và sửa tệp, chạy công cụ, thao tác trong phạm vi quyền bạn cấp. Hãy bắt đầu bằng tệp thử hoặc bản sao, và kiểm tra kết quả trước những việc quan trọng.
+7. **Đây là bản dùng thử cộng đồng, chưa có bảo hành thương mại.** Dữ liệu quan trọng cần được [sao lưu](docs/sao-luu-khoi-phuc.md) trước khi giao việc lớn.
+
+## Vì sao có bản này
+
+Bản gốc của Nous Research đòi người dùng tự dựng môi trường Python và chạy một chuỗi lệnh trước khi mở được ứng dụng. Bản Việt hóa gói sẵn phần đó vào một bộ cài, dịch toàn bộ giao diện cùng tài liệu sang tiếng Việt, và giữ lõi nguyên vẹn từng byte so với bản gốc để bạn vẫn nhận đúng hành vi cùng các bản sửa lỗi của Nous Research. Chi tiết khác biệt nằm ở [trang giới thiệu](README.md#bản-này-khác-bản-gốc-chỗ-nào).
+
 ## Kiểm tra máy có phù hợp không
 
 Trên Windows, mở **Cài đặt → Hệ thống → Giới thiệu**, xem **Loại hệ thống**. Đợt này có bộ cài Windows x64; máy ARM64 và hệ điều hành 32-bit không nằm trong phạm vi đã nghiệm thu. Các lượt kiểm thử tự động chạy trên Windows x64 của GitHub; không có cam kết đã thử mọi bản Windows hoặc mọi chính sách máy cơ quan.
 
-2026.9.2 chưa có bộ cài macOS, Linux hoặc Windows ARM64. Chỉ dùng bộ cài phù hợp với máy và không vượt cơ chế bảo vệ của hệ điều hành để thử một gói không được hỗ trợ.
+Bản này chưa có bộ cài macOS, Linux hoặc Windows ARM64. Chỉ dùng bộ cài phù hợp với máy và không vượt cơ chế bảo vệ của hệ điều hành để thử một gói không được hỗ trợ.
 
 ## Cài nhanh trong ba bước
 
@@ -91,11 +105,11 @@ Kiểm tra đúng tài khoản/dự án, khóa còn hiệu lực, quyền model 
 
 ### Lỗi tải install.ps1 hoặc cảnh báo runtime không khớp
 
-Xác nhận đang chạy đúng bản 2026.9.2 từ đường dẫn cài hiện tại, không mở nhầm lối tắt Experimental cũ. Lõi của bộ cài này đã được đóng gói sẵn. Nếu vẫn gặp lỗi, giữ nguyên dữ liệu, chụp thông báo và lấy nhật ký đã loại bí mật; không tự cập nhật checkout lõi hoặc xóa runtime để làm mất bằng chứng.
+Xác nhận đang chạy đúng bản mới nhất từ đường dẫn cài hiện tại, không mở nhầm lối tắt Experimental cũ. Lõi của bộ cài này đã được đóng gói sẵn. Nếu vẫn gặp lỗi, giữ nguyên dữ liệu, chụp thông báo và lấy nhật ký đã loại bí mật; không tự cập nhật checkout lõi hoặc xóa runtime để làm mất bằng chứng.
 
 ## Trạng thái ký số và cảnh báo khi cài
 
-2026.9.2 chưa ký số nên Windows có thể hiển thị nhà phát hành chưa xác định hoặc cảnh báo uy tín. Xem [chính sách ký mã](CODE_SIGNING_POLICY.md).
+Bản phát hành hiện tại chưa ký số nên Windows có thể hiển thị nhà phát hành chưa xác định hoặc cảnh báo uy tín. Xem [chính sách ký mã](CODE_SIGNING_POLICY.md).
 
 Chỉ cân nhắc tiếp tục qua cảnh báo uy tín khi nguồn tải và SHA-256 khớp. Mã băm xác nhận đúng tệp đã công bố, không bảo đảm phần mềm không có lỗi. Nếu Defender phát hiện mối đe dọa cụ thể hoặc máy cơ quan chặn bằng chính sách, dừng và liên hệ người quản trị. Không tắt bảo vệ toàn máy.
 
@@ -108,7 +122,7 @@ Chỉ cân nhắc tiếp tục qua cảnh báo uy tín khi nguồn tải và SHA
 3. Tải bộ cài từ [Latest](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/latest), kiểm tra mã rồi cài đè. Không chọn gỡ toàn bộ dữ liệu.
 4. Mở lại, kiểm tra phiên bản, lịch sử và kết nối. Khởi động lại gateway/bot đã tạm dừng khi sẵn sàng.
 
-Cài đè giữ dữ liệu theo thiết kế và đã được kiểm thử trên hồ sơ cô lập. Vẫn cần bản sao lưu cho dữ liệu thật. Nếu có lỗi, giữ nhật ký và dùng bản sao đã xác minh để phục hồi; bản quay lui Windows x64 là `vi-v0.32.1-18`. Không khôi phục đè khi chưa sao lưu dữ liệu mới hơn.
+Cài đè giữ dữ liệu theo thiết kế và đã được kiểm thử trên hồ sơ cô lập. Vẫn cần bản sao lưu cho dữ liệu thật. Nếu có lỗi, giữ nhật ký và dùng bản sao đã xác minh để phục hồi; bản quay lui Windows x64 là `v2026.9.2`. Không khôi phục đè khi chưa sao lưu dữ liệu mới hơn.
 
 Đợt pilot này không có luồng tự tải hay tự cài. Ứng dụng chỉ tự kiểm tra bản mới mỗi ngày (hoặc bấm "Kiểm tra ngay" trong mục Giới thiệu) và báo tên tệp, kích thước, mã SHA-256 kèm nút mở trang tải; việc tải và chạy bộ cài vẫn do bạn tự thực hiện. Bản cũ hơn dùng cơ chế kiểm tra khác nên có thể không thấy được thông báo này; nếu vậy, hãy tự vào trang phát hành để tải bản mới. Không dùng `git pull` hay cập nhật lõi riêng để thay phiên bản ứng dụng.
 
@@ -126,7 +140,7 @@ Vì bản này dùng thư mục dữ liệu riêng với các bản Hermes cũ, 
 
 ## Phiên bản và nguồn gốc
 
-Số phiên bản có dạng **năm.tháng.lần cập nhật trong tháng**; phần cuối không phải ngày. Bạn có thể xem [ghi chú phát hành](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2) và [mã nguồn tương ứng](https://github.com/LucDinhLe/hermes-agent-vietnamese/tree/v2026.9.2).
+Số phiên bản có dạng **năm.tháng.lần cập nhật trong tháng**; phần cuối không phải ngày. Bạn có thể xem [ghi chú phát hành](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/latest) và [mã nguồn tương ứng](https://github.com/LucDinhLe/hermes-agent-vietnamese/tree/main).
 
 ## Riêng tư và hỗ trợ
 
