@@ -1057,6 +1057,18 @@ export const en: Translations = {
     },
     providers: {
       connectAccount: 'Connect an account',
+      googleAccount: {
+        title: 'Google (Google account)',
+        subtitle: 'Sign in with your Google account the same way Gemini CLI does; Gemini runs on your Google plan.',
+        signIn: 'Sign in with Google',
+        signOut: 'Sign out',
+        makeDefault: 'Make default',
+        signingIn: 'Waiting for the browser…',
+        connected: 'Connected',
+        tierLabel: 'Tier',
+        caveat: 'This uses the same door as Gemini CLI. Google may change or close it; it is not an official Hermes provider.',
+        errorPrefix: 'Google sign-in problem'
+      },
       haveApiKey: 'Have an API key instead?',
       intro:
         'Sign in with a subscription — no API key to copy. Hermes runs the browser sign-in for you, right here in the app.',

@@ -30,6 +30,7 @@ import { useBackendOwnerGuard } from '../hooks/use-backend-owner-guard'
 import { isKeyVar, ProviderKeyRows } from './credential-key-ui'
 import { CustomEndpointsSettings } from './custom-endpoints-settings'
 import { SettingsCategoryHeading, useEnvCredentials } from './env-credentials'
+import { GoogleAccountRow } from './google-account-row'
 import { providerGroup, providerMeta, providerPriority } from './helpers'
 import { SettingsContent, SettingsSkeleton } from './primitives'
 
@@ -543,6 +544,8 @@ export function ProvidersSettings({
         onWantApiKey={() => onViewChange('keys')}
         providers={oauthProviders}
       />
+      {/* Vỏ Hermes Vietnamese: tài khoản Google qua cửa Gemini CLI (custom endpoint, không sửa lõi). */}
+      <GoogleAccountRow onChanged={onConfigSaved} />
     </SettingsContent>
   )
 }

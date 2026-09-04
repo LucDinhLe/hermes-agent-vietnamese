@@ -437,6 +437,13 @@ declare global {
       onBootstrapEvent: (callback: (payload: DesktopBootstrapEvent) => void) => () => void
       getVersion: () => Promise<DesktopVersionInfo>
       getRemoteDisplayReason?: () => Promise<string | null>
+      /** Cầu nối tài khoản Google (vỏ Hermes Vietnamese, qua cửa Gemini CLI) */
+      google?: {
+        status: () => Promise<DesktopGoogleBridgeStatus>
+        signIn: () => Promise<DesktopGoogleBridgeStatus>
+        signOut: () => Promise<DesktopGoogleBridgeStatus>
+        activate: () => Promise<DesktopGoogleBridgeStatus>
+      }
       updates: {
         check: (opts?: { force?: boolean }) => Promise<DesktopUpdateStatus>
         apply: (opts?: DesktopUpdateApplyOptions) => Promise<DesktopUpdateApplyResult>
@@ -547,6 +554,19 @@ export interface DesktopUpdateCommit {
   summary: string
   author: string
   at: number
+}
+
+export interface DesktopGoogleBridgeStatus {
+  available: true
+  signedIn: boolean
+  email: string | null
+  tier: string | null
+  project: string | null
+  serverPort: number | null
+  endpointId: string
+  models: string[]
+  defaultModel: string
+  lastError: string | null
 }
 
 export interface DesktopUpdateStatus {

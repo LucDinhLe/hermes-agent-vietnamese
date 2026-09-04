@@ -1142,6 +1142,18 @@ export const vi = defineLocale({
     },
     providers: {
       connectAccount: 'Kết nối tài khoản',
+      googleAccount: {
+        title: 'Google (tài khoản Google)',
+        subtitle: 'Đăng nhập bằng tài khoản Google theo đúng cửa của Gemini CLI, Gemini chạy theo gói Google của bạn.',
+        signIn: 'Đăng nhập Google',
+        signOut: 'Đăng xuất',
+        makeDefault: 'Đặt làm mặc định',
+        signingIn: 'Đang chờ trình duyệt…',
+        connected: 'Đã kết nối',
+        tierLabel: 'Bậc',
+        caveat: 'Dùng chung cửa với Gemini CLI. Google có thể thay đổi hoặc đóng cửa này; đây không phải nhà cung cấp chính thức của Hermes.',
+        errorPrefix: 'Đăng nhập Google gặp lỗi'
+      },
       haveApiKey: 'Bạn có khóa API không?',
       intro:
         'Đăng nhập bằng đăng ký — không có khóa API để sao chép. Hermes chạy tính năng đăng nhập vào trình duyệt cho bạn, ngay trong ứng dụng.',

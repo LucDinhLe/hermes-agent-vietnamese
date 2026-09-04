@@ -1243,6 +1243,18 @@ export const zh: Translations = {
     },
     providers: {
       connectAccount: '连接账号',
+      googleAccount: {
+        title: 'Google（Google 账号）',
+        subtitle: '像 Gemini CLI 一样用 Google 账号登录，Gemini 按你的 Google 套餐运行。',
+        signIn: '用 Google 登录',
+        signOut: '退出登录',
+        makeDefault: '设为默认',
+        signingIn: '等待浏览器…',
+        connected: '已连接',
+        tierLabel: '等级',
+        caveat: '与 Gemini CLI 走同一入口。Google 可能更改或关闭它；这不是 Hermes 官方提供商。',
+        errorPrefix: 'Google 登录问题'
+      },
       haveApiKey: '改用 API 密钥？',
       intro: '使用订阅登录，无需复制 API 密钥。Hermes 会在应用中为你完成浏览器登录。',
       connected: '已连接',

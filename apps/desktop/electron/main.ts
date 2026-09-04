@@ -196,6 +196,7 @@ import {
   switchBranch
 } from './git-worktree-ops'
 import { clearStaleGitLocks } from './gitlock'
+import { GoogleBridge } from './google-bridge'
 import { readAndConsumeHandoffResult } from './handoff-result'
 import {
   ATTACHMENT_UPLOAD_DEFAULT_MAX_BYTES,
@@ -755,6 +756,54 @@ function resolveHermesHome() {
 }
 
 const HERMES_HOME = resolveHermesHome()
+
+// ── Cầu nối tài khoản Google (vỏ, không sửa lõi) ────────────────────────────
+// Backend cục bộ gần nhất (baseUrl + token) để cầu nối đăng ký custom endpoint vào lõi.
+let googleBridgeBackend: { baseUrl: string; token: string } | null = null
+let googleBridgeInstance: GoogleBridge | null = null
+
+function googleBridge(): GoogleBridge {
+  if (!googleBridgeInstance) {
+    googleBridgeInstance = new GoogleBridge({
+      hermesHome: HERMES_HOME,
+      secrets: {
+        encrypt: value => {
+          try {
+            if (safeStorage.isEncryptionAvailable()) {
+              return `ss:${safeStorage.encryptString(value).toString('base64')}`
+            }
+          } catch {
+            /* rơi xuống lưu thường, tệp 0600 */
+          }
+
+          return `plain:${Buffer.from(value, 'utf8').toString('base64')}`
+        },
+        decrypt: stored => {
+          if (stored.startsWith('ss:')) {
+            return safeStorage.decryptString(Buffer.from(stored.slice(3), 'base64'))
+          }
+
+          if (stored.startsWith('plain:')) {
+            return Buffer.from(stored.slice(6), 'base64').toString('utf8')
+          }
+
+          throw new Error('định dạng không nhận ra')
+        }
+      },
+      openExternal: url => shell.openExternal(url),
+      fetch: (input, init) => fetch(input, init),
+      log: rememberLog,
+      backend: () => googleBridgeBackend
+    })
+  }
+
+  return googleBridgeInstance
+}
+
+ipcMain.handle('hermes:google:status', () => googleBridge().status())
+ipcMain.handle('hermes:google:sign-in', () => googleBridge().signIn())
+ipcMain.handle('hermes:google:sign-out', () => googleBridge().signOut())
+ipcMain.handle('hermes:google:activate', () => googleBridge().activate())
 
 function pathWithHermesManagedNode(...entries) {
   const managed = hermesManagedNodePathEntries(HERMES_HOME).filter(directoryExists)
@@ -10923,6 +10972,11 @@ async function startHermes() {
 
     // Verify the WebSocket session token before declaring backend ready.
     const wsUrl = `ws://127.0.0.1:${port}/api/ws?token=${encodeURIComponent(authToken)}`
+
+    // Backend chính đã sẵn sàng: cầu nối Google (nếu đã đăng nhập) chạy server loopback và
+    // ghi custom endpoint vào cấu hình lõi. Không chặn khởi động.
+    googleBridgeBackend = { baseUrl, token: authToken }
+    void googleBridge().ensureRunning()
     const wsProbe = await probeGatewayWebSocket(wsUrl, { WebSocketImpl: globalThis.WebSocket })
 
     if (!wsProbe.ok) {

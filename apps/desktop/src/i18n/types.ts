@@ -913,6 +913,18 @@ export interface Translations {
     }
     providers: {
       connectAccount: string
+      googleAccount: {
+        title: string
+        subtitle: string
+        signIn: string
+        signOut: string
+        makeDefault: string
+        signingIn: string
+        connected: string
+        tierLabel: string
+        caveat: string
+        errorPrefix: string
+      }
       haveApiKey: string
       intro: string
       connected: string
