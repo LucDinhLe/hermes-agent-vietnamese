@@ -2,6 +2,8 @@
 
 Hướng dẫn này dành cho người tải Hermes Vietnamese bằng Microsoft Edge trên Windows 10 hoặc Windows 11. Bạn không cần mở Terminal, cài Git, cài Python hoặc sửa tệp cấu hình.
 
+Đang dùng macOS hoặc Linux? Trang này chỉ nói về Windows. Hướng dẫn cài macOS và Linux nằm trong README tiếng Việt, ở mục [macOS](../README.vi.md#macos) và mục [Linux](../README.vi.md#linux); mục [Kiểm tra máy có phù hợp không](../README.vi.md#kiểm-tra-máy-có-phù-hợp-không) trong cùng trang giúp bạn xác nhận đúng kiến trúc máy trước khi tải.
+
 > **Vì sao Windows cảnh báo?** Tệp hiện chưa có chữ ký xác minh nhà phát hành và chưa có nhiều lượt tải, nên Edge hoặc Windows SmartScreen có thể hiện cảnh báo uy tín. Dòng `Publisher: Unknown` trong các ảnh dưới đây phản ánh trạng thái chưa ký, không phải kết luận tệp an toàn hoặc có mã độc.
 
 Chỉ tiếp tục khi đủ ba điều kiện:
@@ -13,13 +15,11 @@ Chỉ tiếp tục khi đủ ba điều kiện:
 ## 1. Chọn đúng bộ cài
 
 <!-- current-release:start -->
-Latest là [2026.9.3](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.3), community pilot Windows x64 chưa ký số, chưa phải stable.
+Latest là [2026.9.3](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.3), community pilot chưa phải stable; Windows chưa ký số. Ứng dụng báo khi có bản mới kèm SHA-256, không tự tải hay tự cài.
 
-1. Tải [Hermes-2026.9.3-win-x64.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-2026.9.3-win-x64.exe).
-2. Tên tương thích [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-Vietnamese-Windows-x64-Setup.exe) có cùng nội dung. Chỉ chạy một tệp.
-3. Đối chiếu [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/SHA256SUMS.txt) của cùng bản phát hành.
-
-Hai bộ cài có kích thước **345527696 byte**, SHA-256 `cc2798452d5c3d87fd0029c28af9e26f51b7406265707bb654521d2b1362e250`. Ứng dụng báo khi có bản mới kèm SHA-256, không tự tải hay tự cài.
+- Windows x64: [Hermes-2026.9.3-win-x64.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-2026.9.3-win-x64.exe), **345527696 byte**, SHA-256 `cc2798452d5c3d87fd0029c28af9e26f51b7406265707bb654521d2b1362e250`.
+- Cùng bộ cài Windows với tên tương thích cũ: [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-Vietnamese-Windows-x64-Setup.exe). Chỉ chạy một bộ cài.
+- [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/SHA256SUMS.txt) gom mã kiểm tra của mọi tệp.
 <!-- current-release:end -->
 
 Ảnh bên dưới minh họa cảnh báo Edge từ bản cũ; tên tệp trong ảnh có thể khác 2026.9.2. Dùng tên và mã kiểm tra phía trên làm chuẩn. Bản này chưa có bộ cài ARM64.

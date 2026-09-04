@@ -1,23 +1,17 @@
 # Hướng dẫn cài đặt và kết nối Hermes Vietnamese
 
 <!-- current-release:start -->
-**Latest hiện tại là [2026.9.3](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.3), chỉ dành cho Windows x64.** Bản community pilot chưa ký số, chưa phải stable. Ứng dụng báo khi có bản mới kèm SHA-256, không tự tải hay tự cài.
+**Latest hiện tại là [2026.9.3](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.3), dành cho Windows x64.** Bản community pilot chưa phải stable; Windows chưa ký số. Ứng dụng báo khi có bản mới kèm SHA-256, không tự tải hay tự cài.
 
-- [Hermes-2026.9.3-win-x64.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-2026.9.3-win-x64.exe).
-- [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-Vietnamese-Windows-x64-Setup.exe), cùng nội dung với tên tương thích cũ. Chỉ chạy một bộ cài.
-- [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/SHA256SUMS.txt).
-
-Hai tệp `.exe` đều có kích thước **345527696 byte**, SHA-256:
-
-```text
-cc2798452d5c3d87fd0029c28af9e26f51b7406265707bb654521d2b1362e250
-```
+- Windows x64: [Hermes-2026.9.3-win-x64.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-2026.9.3-win-x64.exe), **345527696 byte**, SHA-256 `cc2798452d5c3d87fd0029c28af9e26f51b7406265707bb654521d2b1362e250`.
+- Cùng bộ cài Windows với tên tương thích cũ: [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-Vietnamese-Windows-x64-Setup.exe). Chỉ chạy một bộ cài.
+- [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/SHA256SUMS.txt) gom mã kiểm tra của mọi tệp.
 <!-- current-release:end -->
 
 ## Bảy điều nên biết trước khi cài
 
 1. **Bộ cài chưa ký số.** Windows và Edge sẽ cảnh báo nhà phát hành chưa xác định. Chỉ đi tiếp khi bạn tải từ trang phát hành chính thức của dự án và mã SHA-256 khớp với mã công bố ở đầu trang này.
-2. **Chỉ có bản Windows x64.** macOS, Linux và Windows ARM64 chưa nằm trong phạm vi phát hành này.
+2. **Windows, macOS Apple Silicon và Linux x64 đều có bộ cài.** macOS chỉ hỗ trợ máy dùng chip Apple Silicon (M1 trở lên), Mac dùng chip Intel chưa được hỗ trợ. Windows ARM64 và Linux ARM64 vẫn chưa nằm trong phạm vi phát hành này.
 3. **Ứng dụng cài song song với bản Hermes cũ.** Mã sản phẩm và thư mục dữ liệu đều riêng nên bản cũ giữ nguyên, mở lại được bất cứ lúc nào. Lối tắt mới mang tên "Hermes Vietnamese" và có thể thay tên lối tắt cũ trên màn hình.
 4. **Lần mở đầu tiên, ứng dụng hỏi có nhập dữ liệu từ bản cũ không.** Chọn nhập thì cấu hình, phiên làm việc, trí nhớ và kỹ năng được sao chép sang thư mục mới. Bản cũ giữ nguyên vì đây là sao chép chứ không phải di chuyển.
 5. **Ứng dụng không kèm tài khoản AI.** Bạn kết nối bằng tài khoản hoặc khóa API của chính mình, và mỗi nhà cung cấp có điều kiện, hạn mức, chi phí riêng.
@@ -30,24 +24,48 @@ Bản gốc của Nous Research đòi người dùng tự dựng môi trường 
 
 ## Kiểm tra máy có phù hợp không
 
-Trên Windows, mở **Cài đặt → Hệ thống → Giới thiệu**, xem **Loại hệ thống**. Đợt này có bộ cài Windows x64; máy ARM64 và hệ điều hành 32-bit không nằm trong phạm vi đã nghiệm thu. Các lượt kiểm thử tự động chạy trên Windows x64 của GitHub; không có cam kết đã thử mọi bản Windows hoặc mọi chính sách máy cơ quan.
+**Windows.** Mở **Cài đặt → Hệ thống → Giới thiệu**, xem dòng **Loại hệ thống**. Bản Windows dùng cho máy x64; máy ARM64 và hệ điều hành 32-bit không nằm trong phạm vi đã nghiệm thu.
 
-Bản này chưa có bộ cài macOS, Linux hoặc Windows ARM64. Chỉ dùng bộ cài phù hợp với máy và không vượt cơ chế bảo vệ của hệ điều hành để thử một gói không được hỗ trợ.
+**macOS.** Mở menu Apple, chọn **About This Mac (Giới thiệu về Mac này)**, xem dòng **Chip**. Máy hiện dòng **Apple M…** (M1, M2, M3, M4 trở lên) dùng được bản này. Máy hiện dòng **Intel** chưa được hỗ trợ vì bộ cài macOS chỉ dựng riêng cho Apple Silicon.
+
+**Linux.** Mở terminal và chạy `uname -m`. Kết quả `x86_64` dùng được bản Linux x64. Bản AppImage chạy được trên hầu hết bản phân phối, gói `.deb` chỉ dành riêng cho Ubuntu/Debian.
+
+Các lượt kiểm thử tự động chạy trên Windows x64, macOS Apple Silicon và Linux x64 của GitHub; không có cam kết đã thử mọi bản phân phối Linux, mọi phiên bản macOS hoặc mọi chính sách máy cơ quan. Windows ARM64 và Linux ARM64 chưa nằm trong phạm vi phát hành. Chỉ dùng bộ cài phù hợp với máy và không vượt cơ chế bảo vệ của hệ điều hành để thử một gói không được hỗ trợ.
 
 ## Cài nhanh trong ba bước
 
 ### 1. Tải và cài ứng dụng
 
-1. Tải một bộ cài ở đầu trang và đối chiếu mã SHA-256.
+1. Tải bộ cài đúng nền tảng ở đầu trang và đối chiếu mã SHA-256.
 2. Nếu đang dùng Hermes, thực hiện phần [cập nhật và sao lưu](#cập-nhật-sao-lưu-và-gỡ-cài-đặt) trước.
-3. Mở bộ cài và làm theo hướng dẫn. Cài mới có thể chọn phạm vi một người dùng hoặc toàn máy. Cài toàn máy có thể yêu cầu quyền quản trị Windows.
-4. Mở Hermes, chọn ngôn ngữ nếu được hỏi và chờ chuẩn bị lõi đóng gói sẵn.
 
-Bản này dùng mã sản phẩm và thư mục dữ liệu riêng với các bản Hermes cũ, nên cài song song thay vì ghi đè; lối tắt "Hermes Vietnamese" có thể thay tên lối tắt cũ, nhưng bản cũ vẫn còn nguyên trong danh sách Ứng dụng và vẫn mở được. Lần mở đầu tiên, nếu máy có dữ liệu Hermes cũ, ứng dụng hỏi "Nhập dữ liệu từ bản Hermes cũ?" rồi sao chép (không xóa hay di chuyển) cấu hình, phiên làm việc, trí nhớ, kỹ năng và các thiết lập khác sang thư mục mới. Bản cũ giữ nguyên nên luôn dùng được để quay lại nếu cần.
+#### Windows
 
-Python 3.12.10 và thư viện bắt buộc đã ở trong bộ cài. Bạn không cần tự cài môi trường lập trình hoặc tải `install.ps1` để khởi động lõi. Internet vẫn cần cho tải bộ cài, xác thực, dịch vụ AI và một số công cụ tùy chọn.
+Mở bộ cài `.exe` và làm theo hướng dẫn. Cài mới có thể chọn phạm vi một người dùng hoặc toàn máy; cài toàn máy có thể yêu cầu quyền quản trị Windows. Mở Hermes, chọn ngôn ngữ nếu được hỏi và chờ chuẩn bị lõi đóng gói sẵn. Nếu Windows/Edge cảnh báo, đọc [hướng dẫn bằng hình ảnh](docs/cai-dat-windows-bang-anh.md). Không tắt Defender, SmartScreen hoặc chính sách bảo mật toàn máy.
 
-Nếu Windows/Edge cảnh báo, đọc [hướng dẫn bằng hình ảnh](docs/cai-dat-windows-bang-anh.md). Không tắt Defender, SmartScreen hoặc chính sách bảo mật toàn máy.
+#### macOS
+
+Mở tệp `.dmg` rồi kéo **HermesVietnamese.app** (hiện tên "Hermes Vietnamese" trong Finder) vào thư mục **Applications**. Lần mở đầu tiên, macOS chặn ứng dụng và báo "Apple could not verify...". Bấm **Done** hoặc **Cancel**, mở **System Settings → Privacy & Security**, cuộn tới mục Security, bấm **Open Anyway** cạnh Hermes Vietnamese, xác nhận rồi mở lại ứng dụng.
+
+Nếu macOS báo ứng dụng "is damaged and can't be opened" (thường gặp với tệp Safari tải về, do cờ quarantine gây xung đột), mở Terminal và chạy `xattr -cr /Applications/HermesVietnamese.app`, rồi mở lại ứng dụng. Lệnh này chỉ gỡ cờ "tải từ Internet" trên riêng tệp này.
+
+Lý do macOS chặn ứng dụng là bộ cài được ký ad-hoc, không dùng chứng thư Apple Developer, nên Gatekeeper không xác minh được nhà phát hành. Đây là thao tác một lần cho mỗi máy. Không tắt Gatekeeper toàn hệ thống để tránh cảnh báo này. Xem thêm [chính sách ký mã](CODE_SIGNING_POLICY.md).
+
+#### Linux
+
+**AppImage.** Tải tệp, cấp quyền chạy bằng `chmod +x Hermes-*.AppImage` (hoặc chuột phải → Properties → cho phép chạy như chương trình), rồi bấm đúp hoặc chạy từ terminal. Một số bản phân phối cần cài FUSE 2 trước; trên Ubuntu 22.04 trở lên chạy `sudo apt install libfuse2`.
+
+**Gói deb, dành cho Ubuntu/Debian.** Chạy `sudo apt install ./Hermes-<phiên bản>-linux-amd64.deb`, sau đó mở **Hermes Vietnamese** từ menu ứng dụng. Các bản phân phối khác dùng AppImage.
+
+Linux không có cơ chế ký mã. Xác minh tệp bằng SHA-256 thay vì dựa vào chữ ký.
+
+#### Xác minh mã SHA-256
+
+Trên Windows, mở PowerShell trong thư mục tải xuống và chạy `Get-FileHash <tên tệp> -Algorithm SHA256`. Trên macOS, mở Terminal và chạy `shasum -a 256 <tên tệp>`. Trên Linux, chạy `sha256sum <tên tệp>`. So kết quả với `SHA256SUMS.txt` của cùng bản phát hành ở đầu trang.
+
+Bản này dùng mã sản phẩm và thư mục dữ liệu riêng với các bản Hermes cũ, nên cài song song thay vì ghi đè. Trên Windows, lối tắt "Hermes Vietnamese" có thể thay tên lối tắt cũ, nhưng bản cũ vẫn còn nguyên trong danh sách Ứng dụng và vẫn mở được. Trên macOS và Linux, thư mục dữ liệu là `~/.hermes-vietnamese`; bản Hermes cũ dùng `~/.hermes`. Lần mở đầu tiên, nếu máy có dữ liệu Hermes cũ, ứng dụng hỏi "Nhập dữ liệu từ bản Hermes cũ?" rồi sao chép (không xóa hay di chuyển) cấu hình, phiên làm việc, trí nhớ, kỹ năng và các thiết lập khác sang thư mục mới. Bản cũ giữ nguyên nên luôn dùng được để quay lại nếu cần.
+
+Python 3.12.10 và thư viện bắt buộc đã ở trong bộ cài, trên cả ba nền tảng. Bạn không cần tự cài môi trường lập trình hoặc tải `install.ps1` để khởi động lõi. Internet vẫn cần cho tải bộ cài, xác thực, dịch vụ AI và một số công cụ tùy chọn.
 
 ### 2. Kết nối model
 
@@ -109,9 +127,9 @@ Xác nhận đang chạy đúng bản mới nhất từ đường dẫn cài hi�
 
 ## Trạng thái ký số và cảnh báo khi cài
 
-Bản phát hành hiện tại chưa ký số nên Windows có thể hiển thị nhà phát hành chưa xác định hoặc cảnh báo uy tín. Xem [chính sách ký mã](CODE_SIGNING_POLICY.md).
+Bản Windows chưa ký số nên Windows có thể hiển thị nhà phát hành chưa xác định hoặc cảnh báo uy tín. Bản macOS ký ad-hoc, chưa qua notarization của Apple, nên Gatekeeper chặn ở lần mở đầu tiên; xem bước xử lý ở mục [macOS](#macos) phía trên. Bản Linux không có cơ chế ký mã. Xem thêm [chính sách ký mã](CODE_SIGNING_POLICY.md).
 
-Chỉ cân nhắc tiếp tục qua cảnh báo uy tín khi nguồn tải và SHA-256 khớp. Mã băm xác nhận đúng tệp đã công bố, không bảo đảm phần mềm không có lỗi. Nếu Defender phát hiện mối đe dọa cụ thể hoặc máy cơ quan chặn bằng chính sách, dừng và liên hệ người quản trị. Không tắt bảo vệ toàn máy.
+Chỉ cân nhắc tiếp tục qua cảnh báo uy tín khi nguồn tải và SHA-256 khớp. Mã băm xác nhận đúng tệp đã công bố, không bảo đảm phần mềm không có lỗi. Nếu Defender phát hiện mối đe dọa cụ thể hoặc máy cơ quan chặn bằng chính sách, dừng và liên hệ người quản trị. Không tắt bảo vệ toàn máy hoặc Gatekeeper toàn hệ thống.
 
 ## Cập nhật, sao lưu và gỡ cài đặt
 
@@ -122,9 +140,9 @@ Chỉ cân nhắc tiếp tục qua cảnh báo uy tín khi nguồn tải và SHA
 3. Tải bộ cài từ [Latest](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/latest), kiểm tra mã rồi cài đè. Không chọn gỡ toàn bộ dữ liệu.
 4. Mở lại, kiểm tra phiên bản, lịch sử và kết nối. Khởi động lại gateway/bot đã tạm dừng khi sẵn sàng.
 
-Cài đè giữ dữ liệu theo thiết kế và đã được kiểm thử trên hồ sơ cô lập. Vẫn cần bản sao lưu cho dữ liệu thật. Nếu có lỗi, giữ nhật ký và dùng bản sao đã xác minh để phục hồi; bản quay lui Windows x64 là `v2026.9.2`. Không khôi phục đè khi chưa sao lưu dữ liệu mới hơn.
+Cài đè giữ dữ liệu theo thiết kế và đã được kiểm thử trên hồ sơ cô lập. Vẫn cần bản sao lưu cho dữ liệu thật. Nếu có lỗi, giữ nhật ký và dùng bản sao đã xác minh để phục hồi; bản quay lui là `v2026.9.2`. Không khôi phục đè khi chưa sao lưu dữ liệu mới hơn.
 
-Đợt pilot này không có luồng tự tải hay tự cài. Ứng dụng chỉ tự kiểm tra bản mới mỗi ngày (hoặc bấm "Kiểm tra ngay" trong mục Giới thiệu) và báo tên tệp, kích thước, mã SHA-256 kèm nút mở trang tải; việc tải và chạy bộ cài vẫn do bạn tự thực hiện. Bản cũ hơn dùng cơ chế kiểm tra khác nên có thể không thấy được thông báo này; nếu vậy, hãy tự vào trang phát hành để tải bản mới. Không dùng `git pull` hay cập nhật lõi riêng để thay phiên bản ứng dụng.
+Đợt pilot này không có luồng tự tải hay tự cài, trên cả ba nền tảng. Ứng dụng chỉ tự kiểm tra bản mới mỗi ngày (hoặc bấm "Kiểm tra ngay" trong mục Giới thiệu) và báo tên tệp, kích thước, mã SHA-256 kèm nút mở trang tải; việc tải và chạy bộ cài vẫn do bạn tự thực hiện. Ứng dụng tự chọn đúng tệp cho nền tảng đang chạy, bạn không cần tự phân biệt Windows, macOS hay Linux. Bản cũ hơn dùng cơ chế kiểm tra khác nên có thể không thấy được thông báo này; nếu vậy, hãy tự vào trang phát hành để tải bản mới. Không dùng `git pull` hay cập nhật lõi riêng để thay phiên bản ứng dụng.
 
 ### Sao lưu
 
@@ -132,11 +150,11 @@ Mở **Trung tâm chỉ huy → Bảo trì → Tạo bản sao lưu**, chờ ho�
 
 ### Gỡ cài đặt
 
-- **Chỉ gỡ ứng dụng** bằng trình gỡ Windows giữ thư mục dữ liệu.
+- **Chỉ gỡ ứng dụng, giữ thư mục dữ liệu.** Windows dùng trình gỡ cài trong **Cài đặt → Ứng dụng**. macOS kéo **HermesVietnamese.app** (hiện tên "Hermes Vietnamese" trong Finder) từ **Applications** vào Thùng rác. Linux xóa tệp AppImage, hoặc gỡ gói deb qua trình quản lý gói của Ubuntu/Debian.
 - **Gỡ GUI + agent, giữ dữ liệu** trong Hermes loại ứng dụng/runtime, giữ dữ liệu người dùng để cài lại.
 - **Gỡ toàn bộ** xóa cả vùng dữ liệu đã chọn. Chỉ dùng khi đã đọc cảnh báo, kiểm tra sao lưu và thực sự muốn xóa.
 
-Vì bản này dùng thư mục dữ liệu riêng với các bản Hermes cũ, gỡ bản mới không đụng tới dữ liệu hay bản cài cũ; bản cũ vẫn còn nguyên nếu bạn muốn quay lại tạm thời.
+Vì bản này dùng thư mục dữ liệu riêng với các bản Hermes cũ (`~/.hermes-vietnamese` trên macOS/Linux), gỡ bản mới không đụng tới dữ liệu hay bản cài cũ; bản cũ vẫn còn nguyên nếu bạn muốn quay lại tạm thời.
 
 ## Phiên bản và nguồn gốc
 

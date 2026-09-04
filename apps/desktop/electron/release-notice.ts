@@ -26,13 +26,41 @@ export const RELEASE_FEED_URLS: Record<ReleaseChannel, string> = {
 }
 export const RELEASE_NOTICE_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 
+/** Mục tiêu phát hành: khớp tên trong supportedTargets của feed. */
+export type ReleaseTarget = 'windows-x64' | 'macos-arm64' | 'linux-x64'
+
+export interface ReleaseAsset {
+  filename: string
+  size: number
+  sha256: string
+}
+
 /** Phần của public-release.json mà notice cần. Trường lạ được bỏ qua. */
 export interface ReleaseFeed {
   tag: string
   version: string
   updateFeedEnabled: boolean
   releaseClass?: string
-  windowsX64?: { filename: string; size: number; sha256: string }
+  /** tài sản theo mục tiêu; feed cũ chỉ có windowsX64 vẫn đọc được */
+  assets: Partial<Record<ReleaseTarget, ReleaseAsset>>
+}
+
+/** Khoá feed của từng mục tiêu (windowsX64, macosArm64, linuxX64). */
+export const FEED_KEY_BY_TARGET: Record<ReleaseTarget, string> = {
+  'windows-x64': 'windowsX64',
+  'macos-arm64': 'macosArm64',
+  'linux-x64': 'linuxX64'
+}
+
+/** Mục tiêu của máy đang chạy; null khi bản phát hành không có tệp cho máy này. */
+export function releaseTargetFor(platform: string, arch: string): ReleaseTarget | null {
+  if (platform === 'win32' && arch === 'x64') {return 'windows-x64'}
+
+  if (platform === 'darwin' && arch === 'arm64') {return 'macos-arm64'}
+
+  if (platform === 'linux' && arch === 'x64') {return 'linux-x64'}
+
+  return null
 }
 
 export interface ReleaseNotice {
@@ -107,30 +135,41 @@ export function parseReleaseFeed(raw: unknown): ReleaseFeed | null {
     return null
   }
 
-  const w = r.windowsX64 as Record<string, unknown> | undefined
+  const readAsset = (value: unknown): ReleaseAsset | undefined => {
+    const a = value as Record<string, unknown> | undefined
 
-  const windowsX64 =
-    w &&
-    typeof w.filename === 'string' &&
-    typeof w.size === 'number' &&
-    typeof w.sha256 === 'string' &&
-    /^[0-9a-f]{64}$/i.test(w.sha256)
-      ? { filename: w.filename, size: w.size, sha256: w.sha256.toLowerCase() }
+    return a &&
+      typeof a.filename === 'string' &&
+      typeof a.size === 'number' &&
+      typeof a.sha256 === 'string' &&
+      /^[0-9a-f]{64}$/i.test(a.sha256)
+      ? { filename: a.filename, size: a.size, sha256: a.sha256.toLowerCase() }
       : undefined
+  }
+
+  const assets: ReleaseFeed['assets'] = {}
+
+  for (const [target, key] of Object.entries(FEED_KEY_BY_TARGET) as [ReleaseTarget, string][]) {
+    const asset = readAsset(r[key])
+
+    if (asset) {
+      assets[target] = asset
+    }
+  }
 
   return {
     tag: r.tag,
     version: r.version,
     updateFeedEnabled: r.updateFeedEnabled === true,
     releaseClass: typeof r.releaseClass === 'string' ? r.releaseClass : undefined,
-    windowsX64
+    assets
   }
 }
 
 export function buildReleaseNotice(
   currentVersion: string,
   feed: ReleaseFeed | null,
-  opts: { channel: ReleaseChannel; fromCache: boolean; fetchedAt: number; error?: string }
+  opts: { channel: ReleaseChannel; fromCache: boolean; fetchedAt: number; error?: string; target?: ReleaseTarget | null }
 ): ReleaseNotice {
   const base: ReleaseNotice = {
     supported: true,
@@ -165,7 +204,9 @@ export function buildReleaseNotice(
   const newer = cmp !== null && cmp > 0
   const available = feed.updateFeedEnabled && newer
   const releaseUrl = `https://github.com/${RELEASE_REPO}/releases/tag/${encodeURIComponent(feed.tag)}`
-  const asset = feed.windowsX64 ?? null
+  // Mặc định lấy mục tiêu của máy đang chạy; máy không có tệp riêng vẫn thấy bản mới và trang tải.
+  const target = opts.target === undefined ? releaseTargetFor(process.platform, process.arch) : opts.target
+  const asset = (target && feed.assets[target]) ?? null
 
   return {
     ...base,

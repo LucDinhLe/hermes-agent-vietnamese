@@ -2,13 +2,15 @@
 
 ## Trạng thái
 
-Ngày 2026-09-04, bản Latest [2026.9.2](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2) chỉ phát hành Windows x64 và có Authenticode `NotSigned`. Dự án đang hoàn thiện tài liệu/quy trình để nộp lại hồ sơ chương trình ký mã nguồn mở. Chưa có xác nhận hồ sơ được chấp thuận hoặc chữ ký mới trong đợt này; việc công khai bản cập nhật không đồng nghĩa đã nộp lại hồ sơ.
+Kể từ bản 2026.9.4, dự án phát hành ba nền tảng, mỗi nền tảng có trạng thái ký khác nhau. Windows dùng Authenticode `NotSigned`. macOS ký ad-hoc, không dùng chứng thư Apple Developer, chưa qua notarization của Apple. Linux không có cơ chế ký mã nào. Dự án đang hoàn thiện tài liệu/quy trình để nộp hồ sơ chương trình ký mã nguồn mở dành cho Windows. Chưa có xác nhận hồ sơ được chấp thuận hoặc chữ ký mới trong đợt này; việc công khai bản cập nhật không đồng nghĩa đã nộp lại hồ sơ.
 
-Chỉ xem một tệp là đã ký khi trang phát hành ghi rõ và chữ ký thực tế xác minh thành công. Bản macOS cũ chưa đạt yêu cầu ký/công chứng và kiểm tra Gatekeeper cho người dùng thường; đợt 2026.9.2 không cung cấp macOS. Không khuyến nghị vô hiệu hóa bảo vệ để chạy các gói cũ.
+Chỉ xem một tệp là đã ký khi trang phát hành ghi rõ và chữ ký thực tế xác minh thành công. Chữ ký ad-hoc trên macOS chỉ xác nhận tệp chưa bị đổi sau khi đóng gói, không xác minh danh tính nhà phát hành như chữ ký Developer ID; Gatekeeper vì vậy vẫn chặn ứng dụng ở lần mở đầu tiên và cần thao tác **Open Anyway** theo hướng dẫn trong [README tiếng Việt](README.vi.md#macos). Linux không có cơ chế kiểm tra chữ ký tương đương; cách xác minh tệp tải về là đối chiếu SHA-256 với `SHA256SUMS.txt` của cùng bản phát hành. Không khuyến nghị vô hiệu hóa Gatekeeper hoặc bảo vệ hệ điều hành toàn máy để chạy Hermes.
 
-Chứng thư ký mã dùng để xác minh nguồn phát hành và tính toàn vẹn của tệp. Đây không phải giấy phép sử dụng phần mềm của Microsoft hoặc Apple. Trạng thái hiện tại cũng không có nghĩa hai công ty này đã từ chối dự án. Windows SmartScreen đánh giá cả chữ ký và uy tín của tệp; macOS Gatekeeper sử dụng Developer ID cùng quy trình notarization riêng của Apple.
+Chứng thư ký mã dùng để xác minh nguồn phát hành và tính toàn vẹn của tệp. Đây không phải giấy phép sử dụng phần mềm của Microsoft hoặc Apple. Trạng thái hiện tại cũng không có nghĩa các công ty này đã từ chối dự án. Windows SmartScreen đánh giá cả chữ ký và uy tín của tệp; macOS Gatekeeper sử dụng Developer ID cùng quy trình notarization riêng của Apple cho phần mềm đã ký đầy đủ.
 
-Khi hồ sơ được chấp thuận, dự án sẽ ghi nhận chương trình theo tuyên bố chính thức: **Free code signing provided by SignPath.io, certificate by SignPath Foundation**.
+Ký Developer ID và notarization của Apple cho bản macOS chỉ được triển khai nếu và khi dự án có tài khoản Apple Developer. Hiện dự án chưa có tài khoản này, nên bản macOS tiếp tục ký ad-hoc cho tới khi điều kiện đó thay đổi.
+
+Khi hồ sơ ký Windows được chấp thuận, dự án sẽ ghi nhận chương trình theo tuyên bố chính thức: **Free code signing provided by SignPath.io, certificate by SignPath Foundation**.
 
 ## Dự án và giấy phép
 

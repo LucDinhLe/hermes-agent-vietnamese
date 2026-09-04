@@ -14,59 +14,76 @@ export function renderBlocks(release) {
   const tagUrl = `${base}/tag/${release.tag}`
   const dl = name => `${base}/download/${release.tag}/${name}`
   const w = release.windowsX64
-  const [exe, compat] = release.downloadFiles
+  const m = release.macosArm64
+  const l = release.linuxX64
+  const deb = l?.deb
+  const compat = w.compatibilityFilename
   const update = release.updateFeedEnabled
     ? 'Ứng dụng báo khi có bản mới kèm SHA-256, không tự tải hay tự cài.'
     : 'Cập nhật thủ công bằng bộ cài đầy đủ, không có cập nhật tự động nền.'
+  const platforms = ['Windows x64', ...(m ? ['macOS Apple Silicon'] : []), ...(l ? ['Linux x64'] : [])]
+  const platformList = platforms.length === 1 ? platforms[0] : `${platforms.slice(0, -1).join(', ')} và ${platforms[platforms.length - 1]}`
+  const signing = `Windows chưa ký số${m ? ', macOS ký ad-hoc' : ''}${l ? ', Linux không có cơ chế ký' : ''}`
+  const macNote = m
+    ? ` Trên macOS, lần mở đầu vào **System Settings → Privacy & Security** bấm **Open Anyway**; nếu báo "damaged", chạy \`xattr -cr /Applications/HermesVietnamese.app\`.`
+    : ''
+  const linuxNote = l ? ` Trên Linux, cấp quyền chạy cho AppImage (\`chmod +x\`)${deb ? ' hoặc cài gói deb' : ''}.` : ''
+
+  // Dòng liệt kê từng tệp cho README.vi và hướng dẫn cài
+  const items = [
+    `- Windows x64: [${w.filename}](${dl(w.filename)}), **${w.size} byte**, SHA-256 \`${w.sha256}\`.`,
+    ...(compat ? [`- Cùng bộ cài Windows với tên tương thích cũ: [${compat}](${dl(compat)}). Chỉ chạy một bộ cài.`] : []),
+    ...(m ? [`- macOS Apple Silicon (M1 trở lên): [${m.filename}](${dl(m.filename)}), **${m.size} byte**, SHA-256 \`${m.sha256}\`.`] : []),
+    ...(l ? [`- Linux x64 AppImage: [${l.filename}](${dl(l.filename)}), **${l.size} byte**, SHA-256 \`${l.sha256}\`.`] : []),
+    ...(deb ? [`- Linux x64 gói deb (Ubuntu/Debian): [${deb.filename}](${dl(deb.filename)}), **${deb.size} byte**, SHA-256 \`${deb.sha256}\`.`] : []),
+    `- [SHA256SUMS.txt](${dl('SHA256SUMS.txt')}) gom mã kiểm tra của mọi tệp.`
+  ].join('\n')
+
+  const tableRows = [
+    `| Windows x64 | [${w.filename}](${dl(w.filename)}) | ${w.size} | \`${w.sha256}\` |`,
+    ...(compat ? [`| Windows x64, tên tương thích cũ | [${compat}](${dl(compat)}) | ${w.size} | \`${w.sha256}\` |`] : []),
+    ...(m ? [`| macOS Apple Silicon | [${m.filename}](${dl(m.filename)}) | ${m.size} | \`${m.sha256}\` |`] : []),
+    ...(l ? [`| Linux x64 AppImage | [${l.filename}](${dl(l.filename)}) | ${l.size} | \`${l.sha256}\` |`] : []),
+    ...(deb ? [`| Linux x64 deb | [${deb.filename}](${dl(deb.filename)}) | ${deb.size} | \`${deb.sha256}\` |`] : []),
+    `| Mã kiểm tra toàn vẹn | [SHA256SUMS.txt](${dl('SHA256SUMS.txt')}) | | |`
+  ].join('\n')
+
+  const readmeLinks = [
+    `**[Tải cho Windows x64](${dl(w.filename)})**`,
+    ...(m ? [`**[Tải cho macOS Apple Silicon](${dl(m.filename)})**`] : []),
+    ...(l ? [`**[Tải cho Linux x64 (AppImage)](${dl(l.filename)})**`] : []),
+    '[Hướng dẫn cài đặt và kết nối](README.vi.md)'
+  ].join(' · ')
+
+  const readmeDetails = [
+    `Bộ cài Windows \`${w.filename}\` có kích thước **${w.size} byte**, SHA-256 \`${w.sha256}\`.${compat ? ` Tệp [${compat}](${dl(compat)}) có cùng nội dung và mã kiểm tra, chỉ cần tải một trong hai.` : ''}`,
+    ...(m ? [`Bản macOS \`${m.filename}\` có kích thước **${m.size} byte**, SHA-256 \`${m.sha256}\`.`] : []),
+    ...(l ? [`Bản Linux \`${l.filename}\` có kích thước **${l.size} byte**, SHA-256 \`${l.sha256}\`.${deb ? ` Gói [${deb.filename}](${dl(deb.filename)}) có kích thước **${deb.size} byte**, SHA-256 \`${deb.sha256}\`.` : ''}`] : []),
+    `Đối chiếu với [SHA256SUMS.txt](${dl('SHA256SUMS.txt')}) của cùng bản phát hành.`
+  ].join('\n\n')
 
   return {
-    'README.md': `> **Bản tải mới nhất là [${release.version}](${tagUrl}), dành cho Windows x64.** Đây là bản dùng thử cộng đồng (community pilot), chưa ký số và chưa phải stable. Windows có thể hiển thị cảnh báo khi tải hoặc cài. Chưa có bộ cài cho macOS, Linux hoặc Windows ARM64 trong bản phát hành này.
+    'README.md': `> **Bản tải mới nhất là [${release.version}](${tagUrl}), dành cho ${platformList}.** Đây là bản dùng thử cộng đồng (community pilot), chưa phải stable; ${signing}. Hệ điều hành có thể hiển thị cảnh báo khi tải hoặc cài.${macNote}${linuxNote}
 
-**[Tải bộ cài Windows x64](${dl(exe)})** · [Hướng dẫn cài đặt và kết nối](README.vi.md)
+${readmeLinks}
 
 <details>
 <summary>Kiểm tra tệp tải về</summary>
 
-Bộ cài \`${exe}\` có kích thước **${w.size} byte**. Đối chiếu mã SHA-256 với [SHA256SUMS.txt](${dl('SHA256SUMS.txt')}):
-
-\`\`\`text
-${w.sha256}
-\`\`\`
-
-[Tệp tải thay thế ${compat}](${dl(compat)}) có cùng nội dung và mã kiểm tra. Chỉ cần tải một trong hai tệp.
+${readmeDetails}
 
 </details>`,
-    'README.vi.md': `**Latest hiện tại là [${release.version}](${tagUrl}), chỉ dành cho Windows x64.** Bản community pilot chưa ký số, chưa phải stable. ${update}
+    'README.vi.md': `**Latest hiện tại là [${release.version}](${tagUrl}), dành cho ${platformList}.** Bản community pilot chưa phải stable; ${signing}. ${update}${macNote}${linuxNote}
 
-- [${exe}](${dl(exe)}).
-- [${compat}](${dl(compat)}), cùng nội dung với tên tương thích cũ. Chỉ chạy một bộ cài.
-- [SHA256SUMS.txt](${dl('SHA256SUMS.txt')}).
+${items}`,
+    'docs/cai-dat-windows-bang-anh.md': `Latest là [${release.version}](${tagUrl}), community pilot chưa phải stable; ${signing}. ${update}
 
-Hai tệp \`.exe\` đều có kích thước **${w.size} byte**, SHA-256:
+${items}`,
+    '.github/release-notes-vietnamese.md': `> **Latest hiện tại là [${release.version}](${tagUrl}), dành cho ${platformList}.** Đây là community pilot chưa phải stable; ${signing}. ${update}${macNote}${linuxNote}
 
-\`\`\`text
-${w.sha256}
-\`\`\``,
-    'docs/cai-dat-windows-bang-anh.md': `Latest là [${release.version}](${tagUrl}), community pilot Windows x64 chưa ký số, chưa phải stable.
-
-1. Tải [${exe}](${dl(exe)}).
-2. Tên tương thích [${compat}](${dl(compat)}) có cùng nội dung. Chỉ chạy một tệp.
-3. Đối chiếu [SHA256SUMS.txt](${dl('SHA256SUMS.txt')}) của cùng bản phát hành.
-
-Hai bộ cài có kích thước **${w.size} byte**, SHA-256 \`${w.sha256}\`. ${update}`,
-    '.github/release-notes-vietnamese.md': `> **Latest hiện tại là [${release.version}](${tagUrl}), chỉ phát hành Windows x64.** Đây là community pilot chưa ký số, chưa phải stable. ${update}
-
-| Tệp | Tải xuống |
-| --- | --- |
-| Bộ cài Windows x64 | [${exe}](${dl(exe)}) |
-| Cùng bộ cài, tên tương thích đường tải cũ | [${compat}](${dl(compat)}) |
-| Mã kiểm tra toàn vẹn | [SHA256SUMS.txt](${dl('SHA256SUMS.txt')}) |
-
-Chỉ tải **một** trong hai tệp \`.exe\`. Cả hai có cùng nội dung, kích thước **${w.size} byte** và SHA-256:
-
-\`\`\`text
-${w.sha256}
-\`\`\``
+| Nền tảng | Tải xuống | Kích thước (byte) | SHA-256 |
+| --- | --- | --- | --- |
+${tableRows}`
   }
 }
 

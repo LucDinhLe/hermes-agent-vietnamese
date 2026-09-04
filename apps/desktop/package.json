@@ -255,8 +255,7 @@
       "extendInfo": {
         "CFBundleDisplayName": "Hermes Vietnamese",
         "CFBundleExecutable": "HermesVietnamese",
-        "CFBundleName": "Hermes",
-        "NSAudioCaptureUsageDescription": "Hermes Vietnamese uses audio capture for voice conversations.",
+                "NSAudioCaptureUsageDescription": "Hermes Vietnamese uses audio capture for voice conversations.",
         "NSCameraUsageDescription": "Hermes Vietnamese uses the camera when a plugin or feature you enable requests it.",
         "NSMicrophoneUsageDescription": "Hermes Vietnamese uses the microphone for voice input and voice conversations."
       },

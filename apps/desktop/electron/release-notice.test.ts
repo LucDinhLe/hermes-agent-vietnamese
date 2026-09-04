@@ -12,7 +12,8 @@ import {
   parseCalverVersion,
   parseReleaseFeed,
   RELEASE_FEED_URLS,
-  releaseChannelForVersion
+  releaseChannelForVersion,
+  releaseTargetFor
 } from './release-notice'
 
 const feed = {
@@ -20,7 +21,9 @@ const feed = {
   version: '2026.9.3',
   updateFeedEnabled: true,
   releaseClass: 'community-pilot',
-  windowsX64: { filename: 'Hermes-2026.9.3-win-x64.exe', size: 252000000, sha256: 'A'.repeat(64) }
+  windowsX64: { filename: 'Hermes-2026.9.3-win-x64.exe', size: 252000000, sha256: 'A'.repeat(64) },
+  macosArm64: { filename: 'Hermes-2026.9.3-mac-arm64.dmg', size: 251000000, sha256: 'B'.repeat(64) },
+  linuxX64: { filename: 'Hermes-2026.9.3-linux-x86_64.AppImage', size: 250000000, sha256: 'C'.repeat(64) }
 }
 
 test('parseCalverVersion: bản thường xếp trên bản thử nghiệm cùng số', () => {
@@ -43,14 +46,18 @@ test('releaseChannelForVersion: hậu tố thunghiem chọn kênh thử nghiệm
 
 test('parseReleaseFeed: chỉ nhận sha256 hợp lệ, bỏ trường lạ', () => {
   const parsed = parseReleaseFeed({ ...feed, extra: 1 })
-  assert.equal(parsed?.windowsX64?.sha256, 'a'.repeat(64))
-  assert.equal(parseReleaseFeed({ ...feed, windowsX64: { ...feed.windowsX64, sha256: 'xyz' } })?.windowsX64, undefined)
+  assert.equal(parsed?.assets['windows-x64']?.sha256, 'a'.repeat(64))
+  assert.equal(parsed?.assets['macos-arm64']?.filename, 'Hermes-2026.9.3-mac-arm64.dmg')
+  assert.equal(parsed?.assets['linux-x64']?.sha256, 'c'.repeat(64))
+  assert.equal(parseReleaseFeed({ ...feed, windowsX64: { ...feed.windowsX64, sha256: 'xyz' } })?.assets['windows-x64'], undefined)
+  // feed cũ chỉ có Windows vẫn đọc được
+  assert.deepEqual(Object.keys(parseReleaseFeed({ tag: 'v2026.9.3', version: '2026.9.3', updateFeedEnabled: true, windowsX64: feed.windowsX64 })?.assets ?? {}), ['windows-x64'])
   assert.equal(parseReleaseFeed({ ...feed, version: 'vi-v0.32.1-18' }), null)
   assert.equal(parseReleaseFeed(null), null)
 })
 
 test('buildReleaseNotice: có bản mới → đủ tên tệp, kích thước, SHA-256, liên kết; không tự tải', () => {
-  const n = buildReleaseNotice('2026.9.2', parseReleaseFeed(feed), { channel: 'latest', fromCache: false, fetchedAt: 1 })
+  const n = buildReleaseNotice('2026.9.2', parseReleaseFeed(feed), { channel: 'latest', fromCache: false, fetchedAt: 1, target: 'windows-x64' })
   assert.equal(n.notifyOnly, true)
   assert.equal(n.updateAvailable, true)
   assert.equal(n.sha256, 'a'.repeat(64))
@@ -123,4 +130,25 @@ test('checkReleaseNotice: cache 24 giờ bền qua khởi động lại, force b
 
   assert.equal(failing.error, 'fetch-failed')
   assert.equal(failing.message, 'offline')
+})
+
+test('buildReleaseNotice: chọn tệp theo máy đang chạy; máy không có tệp riêng vẫn thấy bản mới và trang tải', () => {
+  const parsed = parseReleaseFeed(feed)
+  const mac = buildReleaseNotice('2026.9.2', parsed, { channel: 'latest', fromCache: false, fetchedAt: 1, target: 'macos-arm64' })
+  assert.equal(mac.filename, 'Hermes-2026.9.3-mac-arm64.dmg')
+  assert.match(mac.downloadUrl ?? '', /mac-arm64\.dmg$/)
+
+  const linux = buildReleaseNotice('2026.9.2', parsed, { channel: 'latest', fromCache: false, fetchedAt: 1, target: 'linux-x64' })
+  assert.equal(linux.sha256, 'c'.repeat(64))
+
+  const none = buildReleaseNotice('2026.9.2', parsed, { channel: 'latest', fromCache: false, fetchedAt: 1, target: null })
+  assert.equal(none.updateAvailable, true)
+  assert.equal(none.filename, null)
+  assert.equal(none.downloadUrl, null)
+  assert.equal(none.releaseUrl, 'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.3')
+
+  assert.equal(releaseTargetFor('win32', 'x64'), 'windows-x64')
+  assert.equal(releaseTargetFor('darwin', 'arm64'), 'macos-arm64')
+  assert.equal(releaseTargetFor('darwin', 'x64'), null)
+  assert.equal(releaseTargetFor('linux', 'x64'), 'linux-x64')
 })
