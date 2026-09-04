@@ -21,9 +21,20 @@
 
 import path from 'node:path'
 
+import { normalizeBundleSymlinks } from './mac-bundle-symlinks.mjs'
 import { stampExeIdentity } from './set-exe-identity.mjs'
 
 export default async function afterPack(context) {
+  if (context.electronPlatformName === 'darwin') {
+    // Chạy TRƯỚC khi electron-builder ký: dọn symlink mà codesign --strict từ chối.
+    const productName = context.packager?.appInfo?.productFilename || 'Hermes'
+    const app = path.join(context.appOutDir, `${productName}.app`)
+    const { fixed, removed } = normalizeBundleSymlinks(app)
+    console.log(`[after-pack] macOS symlink: viết lại ${fixed.length}, xoá ${removed.length}`)
+
+    return
+  }
+
   if (context.electronPlatformName !== 'win32') {
     return
   }

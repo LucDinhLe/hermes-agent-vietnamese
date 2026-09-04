@@ -45,9 +45,9 @@ Mở bộ cài `.exe` và làm theo hướng dẫn. Cài mới có thể chọn 
 
 #### macOS
 
-Mở tệp `.dmg` rồi kéo **Hermes Vietnamese.app** vào thư mục **Applications**. Lần mở đầu tiên, macOS chặn ứng dụng và báo "Apple could not verify...". Bấm **Done** hoặc **Cancel**, mở **System Settings → Privacy & Security**, cuộn tới mục Security, bấm **Open Anyway** cạnh Hermes Vietnamese, xác nhận rồi mở lại ứng dụng.
+Mở tệp `.dmg` rồi kéo **HermesVietnamese.app** (hiện tên "Hermes Vietnamese" trong Finder) vào thư mục **Applications**. Lần mở đầu tiên, macOS chặn ứng dụng và báo "Apple could not verify...". Bấm **Done** hoặc **Cancel**, mở **System Settings → Privacy & Security**, cuộn tới mục Security, bấm **Open Anyway** cạnh Hermes Vietnamese, xác nhận rồi mở lại ứng dụng.
 
-Nếu macOS báo ứng dụng "is damaged and can't be opened" (thường gặp với tệp Safari tải về, do cờ quarantine gây xung đột), mở Terminal và chạy `xattr -cr "/Applications/Hermes Vietnamese.app"`, rồi mở lại ứng dụng. Lệnh này chỉ gỡ cờ "tải từ Internet" trên riêng tệp này.
+Nếu macOS báo ứng dụng "is damaged and can't be opened" (thường gặp với tệp Safari tải về, do cờ quarantine gây xung đột), mở Terminal và chạy `xattr -cr /Applications/HermesVietnamese.app`, rồi mở lại ứng dụng. Lệnh này chỉ gỡ cờ "tải từ Internet" trên riêng tệp này.
 
 Lý do macOS chặn ứng dụng là bộ cài được ký ad-hoc, không dùng chứng thư Apple Developer, nên Gatekeeper không xác minh được nhà phát hành. Đây là thao tác một lần cho mỗi máy. Không tắt Gatekeeper toàn hệ thống để tránh cảnh báo này. Xem thêm [chính sách ký mã](CODE_SIGNING_POLICY.md).
 
@@ -150,7 +150,7 @@ Mở **Trung tâm chỉ huy → Bảo trì → Tạo bản sao lưu**, chờ ho�
 
 ### Gỡ cài đặt
 
-- **Chỉ gỡ ứng dụng, giữ thư mục dữ liệu.** Windows dùng trình gỡ cài trong **Cài đặt → Ứng dụng**. macOS kéo **Hermes Vietnamese.app** từ **Applications** vào Thùng rác. Linux xóa tệp AppImage, hoặc gỡ gói deb qua trình quản lý gói của Ubuntu/Debian.
+- **Chỉ gỡ ứng dụng, giữ thư mục dữ liệu.** Windows dùng trình gỡ cài trong **Cài đặt → Ứng dụng**. macOS kéo **HermesVietnamese.app** (hiện tên "Hermes Vietnamese" trong Finder) từ **Applications** vào Thùng rác. Linux xóa tệp AppImage, hoặc gỡ gói deb qua trình quản lý gói của Ubuntu/Debian.
 - **Gỡ GUI + agent, giữ dữ liệu** trong Hermes loại ứng dụng/runtime, giữ dữ liệu người dùng để cài lại.
 - **Gỡ toàn bộ** xóa cả vùng dữ liệu đã chọn. Chỉ dùng khi đã đọc cảnh báo, kiểm tra sao lưu và thực sự muốn xóa.
 

@@ -25,7 +25,7 @@ export function renderBlocks(release) {
   const platformList = platforms.length === 1 ? platforms[0] : `${platforms.slice(0, -1).join(', ')} và ${platforms[platforms.length - 1]}`
   const signing = `Windows chưa ký số${m ? ', macOS ký ad-hoc' : ''}${l ? ', Linux không có cơ chế ký' : ''}`
   const macNote = m
-    ? ` Trên macOS, lần mở đầu vào **System Settings → Privacy & Security** bấm **Open Anyway**; nếu báo "damaged", chạy \`xattr -cr "/Applications/Hermes Vietnamese.app"\`.`
+    ? ` Trên macOS, lần mở đầu vào **System Settings → Privacy & Security** bấm **Open Anyway**; nếu báo "damaged", chạy \`xattr -cr /Applications/HermesVietnamese.app\`.`
     : ''
   const linuxNote = l ? ` Trên Linux, cấp quyền chạy cho AppImage (\`chmod +x\`)${deb ? ' hoặc cài gói deb' : ''}.` : ''
 

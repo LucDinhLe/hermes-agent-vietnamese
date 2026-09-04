@@ -354,7 +354,7 @@ jobs:
           | Linux x64 AppImage | \`${{ steps.feed.outputs.linux_file }}\` | ${{ steps.feed.outputs.linux_size }} byte | \`${{ steps.feed.outputs.linux_sha }}\` |
           | Linux x64 deb | \`${{ steps.feed.outputs.deb_file }}\` | ${{ steps.feed.outputs.deb_size }} byte | \`${{ steps.feed.outputs.deb_sha }}\` |
 
-          **macOS:** lần mở đầu bị chặn, vào **System Settings → Privacy & Security**, bấm **Open Anyway** rồi mở lại. Nếu báo "damaged", chạy \`xattr -cr "/Applications/Hermes Vietnamese.app"\` trong Terminal.
+          **macOS:** lần mở đầu bị chặn, vào **System Settings → Privacy & Security**, bấm **Open Anyway** rồi mở lại. Nếu báo "damaged", chạy \`xattr -cr /Applications/HermesVietnamese.app\` trong Terminal.
           **Linux:** cấp quyền chạy cho AppImage (\`chmod +x\`) hoặc cài gói deb bằng \`sudo apt install ./<tệp>.deb\`.
           **Windows:** SmartScreen có thể cảnh báo vì bộ cài chưa ký số. Đối chiếu SHA-256 trước khi chạy.
           EOF
