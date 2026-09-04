@@ -170,8 +170,10 @@ jobs:
               --repo "$GITHUB_REPOSITORY" --prerelease --latest=false \
               --title "Hermes Vietnamese $RELEASE_TAG (thử nghiệm)" --notes-file out/NOTES.md
           fi
-          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease,isLatest -q '"prerelease=\(.isPrerelease) latest=\(.isLatest)"'
-          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isLatest -q .isLatest)" = "false" || { echo "::error::pre-release lại thành Latest"; exit 1; }
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease -q .isPrerelease)" = "true" || { echo "::error::release không phải pre-release"; exit 1; }
+          latest_tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" -q .tag_name)"
+          echo "Latest hiện tại: $latest_tag"
+          test "$latest_tag" != "$RELEASE_TAG" || { echo "::error::pre-release lại thành Latest"; exit 1; }
 
       - name: Cập nhật feed kênh thử nghiệm (nhánh feed/thunghiem)
         shell: bash
