@@ -102,7 +102,7 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: |
           export GITHUB_SHA="$HERMES_PAYLOAD_GIT_REF"
-          node scripts/build-bundled-desktop.mjs --tag="$RELEASE_TAG" --no-install -- --publish never
+          node scripts/build-bundled-desktop.mjs --tag="$RELEASE_TAG" --no-install
 
       - name: Băm và ghi feed kênh thử nghiệm
         id: assets
