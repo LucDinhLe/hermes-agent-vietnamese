@@ -220,6 +220,13 @@ import { snapHudBounds } from './hud-snap'
 import { createHudSnapShortcut } from './hud-snap-shortcut'
 import { buildHudWindowUrl } from './hud-url'
 import { imageContextMenuItems } from './image-context-menu'
+import {
+  findLegacyImportSource,
+  legacyHermesHomeCandidates,
+  planLegacyImport,
+  runLegacyImport,
+  writeLegacyImportMarker
+} from './legacy-import'
 import { createLinkTitleWindow, guardLinkTitleSession, readLinkTitleWindowTitle } from './link-title-window'
 import { ensureMainWindow } from './main-window-lifecycle'
 import { createMediaProtocolHandler, MEDIA_PROTOCOL } from './media-protocol'
@@ -15597,7 +15604,62 @@ app.on('open-url', (event, url) => {
   handleDeepLink(url)
 })
 
+// Nhập dữ liệu từ bản Hermes cũ (trước 2026.9.3) ở lần mở đầu. Chỉ sao chép, bản cũ giữ
+// nguyên; hỏi đúng một lần; chạy TRƯỚC khi backend hay cửa sổ chạm vào HERMES_HOME.
+function offerLegacyImport() {
+  if (process.env.HERMES_DESKTOP_USER_DATA_DIR || process.env.HERMES_VI_SKIP_LEGACY_IMPORT === '1') {
+    return
+  }
+
+  const source = findLegacyImportSource(
+    HERMES_HOME,
+    legacyHermesHomeCandidates(process.platform, process.env, app.getPath('home'))
+  )
+
+  if (!source) {
+    return
+  }
+
+  const entries = planLegacyImport(source)
+
+  const choice = dialog.showMessageBoxSync({
+    type: 'question',
+    title: 'Hermes Vietnamese',
+    message: 'Nhập dữ liệu từ bản Hermes cũ?',
+    detail:
+      `Tìm thấy dữ liệu của bản Hermes trước tại:\n${source}\n\n` +
+      `Sao chép sang bản này: ${entries.join(', ') || 'không có gì'}.\n` +
+      'Bản cũ và dữ liệu của nó được giữ nguyên, bạn vẫn mở lại được bản cũ bất cứ lúc nào.',
+    buttons: ['Nhập dữ liệu', 'Bắt đầu mới'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true
+  })
+
+  if (choice !== 0) {
+    writeLegacyImportMarker(HERMES_HOME, { source, decision: 'skipped' })
+    rememberLog(`[legacy-import] người dùng chọn bắt đầu mới; nguồn ${source}`)
+
+    return
+  }
+
+  const result = runLegacyImport(source, HERMES_HOME, entries)
+  writeLegacyImportMarker(HERMES_HOME, { source, decision: 'imported', copied: result.copied, failed: result.failed })
+  rememberLog(`[legacy-import] đã sao chép ${result.copied.length} mục từ ${source}; lỗi ${result.failed.length}`)
+
+  if (result.failed.length) {
+    dialog.showMessageBoxSync({
+      type: 'warning',
+      title: 'Hermes Vietnamese',
+      message: 'Một số mục không sao chép được',
+      detail: result.failed.map(f => `${f.name}: ${f.error}`).join('\n'),
+      buttons: ['Tiếp tục']
+    })
+  }
+}
+
 app.whenReady().then(() => {
+  offerLegacyImport()
   // Warm the login-shell PATH resolution immediately so it usually completes
   // before the backend start path awaits the same single-flight promise.
   void ensureLoginShellPath()
