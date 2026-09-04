@@ -130,6 +130,8 @@
       "scripts/prepare-agent-browser-native.mjs",
       "scripts/prepare-agent-browser-native.test.mjs",
       "scripts/release-asset-inventory.mjs",
+      "scripts/render-current-release.mjs",
+      "scripts/render-current-release.test.mjs",
       "scripts/validate-pilot-release-evidence.mjs",
       "scripts/validate-pilot-release-evidence.test.mjs",
       "scripts/validate-public-release-contract.mjs",

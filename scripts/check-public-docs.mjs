@@ -10,7 +10,7 @@ export function checkPublicDocs(release, documents, live) {
   assert.match(release.version, /^\d{4}\.(?:[1-9]|1[0-2])\.[1-9]\d*$/)
   assert.equal(release.tag, `v${release.version}`)
   assert.equal(release.releaseClass, 'community-pilot')
-  assert.equal(release.updateFeedEnabled, false)
+  assert.equal(typeof release.updateFeedEnabled, 'boolean')
   assert.deepEqual(release.supportedTargets, ['windows-x64'])
   assert.equal(release.windowsX64.authenticode, 'NotSigned')
   assert.match(release.sourceCommit, /^[a-f0-9]{40}$/)

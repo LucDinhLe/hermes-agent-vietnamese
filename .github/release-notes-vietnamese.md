@@ -1,7 +1,7 @@
 # Hermes Vietnamese 2026.9.2
 
 <!-- current-release:start -->
-> **Latest hiện tại là [2026.9.2](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2), chỉ phát hành Windows x64.** Đây là community pilot chưa ký số, chưa phải stable. Bộ cài đã qua nghiệm thu cả kiểu cài cho một người dùng và toàn máy. Cập nhật bằng bộ cài đầy đủ, không có cập nhật tự động nền.
+> **Latest hiện tại là [2026.9.2](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2), chỉ phát hành Windows x64.** Đây là community pilot chưa ký số, chưa phải stable. Cập nhật thủ công bằng bộ cài đầy đủ, không có cập nhật tự động nền.
 
 | Tệp | Tải xuống |
 | --- | --- |

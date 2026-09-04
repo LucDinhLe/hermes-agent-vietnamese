@@ -1,0 +1,263 @@
+name: Dựng và phát hành (kênh thử nghiệm và kênh chính)
+
+# Workflow phát hành của kiến trúc composite (kế hoạch 04/09/2026). Hai kênh, một job:
+# - tag vYYYY.M.D-thunghiem.N → pre-release, không đổi Latest, feed lên nhánh mồ côi feed/thunghiem
+# - tag vYYYY.M.D (phải nằm trên main) → release thường, thành Latest, rồi commit lên main:
+#   .github/public-release.json (feed kênh chính, notify-only) + khối current-release trong tài liệu
+# Cả hai kênh: lõi phải khớp engine.lock, không ký số, SHA256SUMS.txt kèm theo.
+
+on:
+  push:
+    tags:
+      - 'v[0-9][0-9][0-9][0-9].[0-9]*.[0-9]*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag đã tồn tại: v2026.9.3-thunghiem.1 (thử nghiệm) hoặc v2026.9.3 (kênh chính)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  windows-x64:
+    name: Windows x64, chưa ký số
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      HERMES_DESKTOP_BUNDLED: '1'
+      HERMES_PAYLOAD_TAG: ${{ inputs.tag || github.ref_name }}
+      HERMES_PAYLOAD_PYTHON: '3.11'
+      HERMES_RELEASE_CLASS: community-prerelease
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Kiểm tag, chọn kênh, trỏ HEAD
+        shell: bash
+        run: |
+          if [[ "$RELEASE_TAG" =~ ^v[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,3}-thunghiem\.[0-9]{1,4}$ ]]; then
+            channel=thunghiem
+          elif [[ "$RELEASE_TAG" =~ ^v[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,3}$ ]]; then
+            channel=latest
+            git fetch -q origin main
+            git merge-base --is-ancestor HEAD origin/main || { echo "::error::tag kênh chính $RELEASE_TAG phải nằm trên main (merge trước, tag sau)"; exit 1; }
+          else
+            echo "::error::tag $RELEASE_TAG không phải dạng vYYYY.M.D hoặc vYYYY.M.D-thunghiem.N"; exit 1
+          fi
+          test "$(git rev-list -n 1 "refs/tags/$RELEASE_TAG")" = "$(git rev-parse HEAD)" || { echo "::error::tag không trỏ vào checkout"; exit 1; }
+          echo "HERMES_PAYLOAD_GIT_REF=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "CHANNEL=$channel" >> "$GITHUB_ENV"
+          echo "Kênh: $channel"
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26
+          cache: npm
+
+      - name: Cài npm 12
+        run: npm install --global npm@12
+
+      - uses: actions/setup-python@e348410e00f449ece8581cb8e88be8f0e7712da6 # v5
+        with:
+          python-version: '3.12'
+
+      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39 # 8.2.0
+        with:
+          version: '0.12.1'
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Lõi phải khớp engine.lock
+        run: node scripts/engine-sync.mjs check
+
+      - name: Cài phụ thuộc từ lockfile
+        uses: ./.github/actions/retry
+        with:
+          command: npm ci --no-audit --no-fund
+
+      - name: Kiểm thử cleanup uninstaller trên Windows thật
+        run: npm run --prefix apps/desktop test:desktop:platforms -- electron/desktop-uninstall.test.ts electron/release-notice.test.ts
+
+      - name: Cây làm việc phải sạch trước khi dựng (in ra rồi dọn tệp phụ của bước cài/test)
+        shell: bash
+        run: |
+          # Upstream có hai tệp chỉ khác nhau chữ hoa/thường (contributors/emails/agent@Agents-Mac-mini.local
+          # và agent@agents-Mac-mini.local); Windows không phân biệt nên luôn báo "modified".
+          # Đánh dấu skip-worktree để git status và build script bỏ qua; nội dung lõi không đổi.
+          git ls-files contributors/emails | grep -i 'agents-mac-mini' | while read -r f; do git update-index --skip-worktree -- "$f"; done
+          git status --porcelain=v1 --untracked-files=normal | tee /tmp/status-before.txt
+          if [ -s /tmp/status-before.txt ]; then
+            echo "::warning::npm ci / vitest để lại thay đổi ở trên; khôi phục tệp theo dõi và xoá tệp lạ (không đụng tệp bị ignore như node_modules)"
+            git checkout -- .
+            git clean -fdq
+          fi
+          test -z "$(git status --porcelain=v1 --untracked-files=normal)"
+
+      - name: Dựng runtime và bộ cài NSIS
+        shell: bash
+        env:
+          HERMES_PAYLOAD_BUILD_PYTHON: python
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          export GITHUB_SHA="$HERMES_PAYLOAD_GIT_REF"
+          node scripts/build-bundled-desktop.mjs --tag="$RELEASE_TAG" --no-install
+
+      - name: Băm, tên tương thích, ghi feed theo kênh
+        id: assets
+        shell: bash
+        run: |
+          app_version="${RELEASE_TAG#v}"
+          exe="apps/desktop/release/Hermes-$app_version-win-x64.exe"
+          test -f "$exe" || { echo "::error::không thấy $exe"; ls apps/desktop/release; exit 1; }
+          mkdir -p out
+          cp "$exe" out/
+          if [ "$CHANNEL" = latest ]; then
+            cp "$exe" out/Hermes-Vietnamese-Windows-x64-Setup.exe
+          fi
+          ( cd out && sha256sum *.exe > SHA256SUMS.txt )
+          size="$(stat -c %s "$exe")"
+          sha="$(sha256sum "$exe" | cut -d' ' -f1)"
+          engine="$(node -e 'const l=JSON.parse(require("fs").readFileSync("engine.lock","utf8"));console.log(JSON.stringify({tag:l.engine.tag,commit:l.engine.commit}))')"
+          if [ "$CHANNEL" = thunghiem ]; then
+            cat > out/public-release-thunghiem.json <<EOF
+          {
+            "channel": "thunghiem",
+            "tag": "$RELEASE_TAG",
+            "version": "$app_version",
+            "releaseClass": "community-pilot",
+            "updateFeedEnabled": true,
+            "sourceCommit": "$HERMES_PAYLOAD_GIT_REF",
+            "engine": $engine,
+            "supportedTargets": ["windows-x64"],
+            "windowsX64": { "filename": "Hermes-$app_version-win-x64.exe", "size": $size, "sha256": "$sha", "authenticode": "NotSigned" },
+            "rollback": "Bản chính không bị đụng; gỡ bản thử nghiệm là quay lui."
+          }
+          EOF
+            node -e 'JSON.parse(require("fs").readFileSync("out/public-release-thunghiem.json","utf8"))' || { echo "::error::feed JSON hỏng"; cat out/public-release-thunghiem.json; exit 1; }
+          else
+            # Feed kênh chính = .github/public-release.json trên main; giữ mọi trường mà check-public-docs cần
+            export ENGINE="$engine" SIZE="$size" SHA="$sha"
+            node --input-type=module -e '
+              import fs from "node:fs"
+              const prev = JSON.parse(fs.readFileSync(".github/public-release.json", "utf8"))
+              const tag = process.env.RELEASE_TAG, version = tag.slice(1)
+              const next = {
+                ...prev,
+                tag, version,
+                versionScheme: "year.month.monthly-update",
+                previousTag: prev.tag, rollbackTag: prev.tag,
+                releaseClass: "community-pilot",
+                artifactProvenanceClass: "github-actions-windows-composite",
+                sourceCommit: process.env.HERMES_PAYLOAD_GIT_REF,
+                engine: JSON.parse(process.env.ENGINE),
+                supportedTargets: ["windows-x64"],
+                updateFeedEnabled: true,
+                windowsX64: { filename: `Hermes-${version}-win-x64.exe`, compatibilityFilename: "Hermes-Vietnamese-Windows-x64-Setup.exe", size: Number(process.env.SIZE), sha256: process.env.SHA, authenticode: "NotSigned" },
+                downloadFiles: [`Hermes-${version}-win-x64.exe`, "Hermes-Vietnamese-Windows-x64-Setup.exe"],
+                lifecycle: { runId: Number(process.env.GITHUB_RUN_ID), workflow: "build-release.yml", conclusion: "success" }
+              }
+              fs.writeFileSync("out/public-release.json", JSON.stringify(next, null, 2) + "\n")
+            '
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "size=$size" >> "$GITHUB_OUTPUT"
+          echo "exe=Hermes-$app_version-win-x64.exe" >> "$GITHUB_OUTPUT"
+          ls -la out; cat out/public-release*.json
+
+      - name: Ghi chú phát hành
+        shell: bash
+        run: |
+          engine_tag="$(node -e 'console.log(JSON.parse(require("fs").readFileSync("engine.lock","utf8")).engine.tag)')"
+          if [ "$CHANNEL" = thunghiem ]; then
+            cat > out/NOTES.md <<EOF
+          ## Hermes Vietnamese ${RELEASE_TAG} · bản thử nghiệm
+
+          Đây là **bản thử nghiệm cộng đồng (pre-release), chưa ký số, chưa phải Latest**.
+
+          Bản này cài **cạnh** bản Hermes cũ (trước 2026.9.3), dùng thư mục dữ liệu riêng (\`%LOCALAPPDATA%\\hermes-vietnamese\`) và mục gỡ cài đặt riêng. Bản cũ và dữ liệu của nó không bị đụng. Muốn quay lui, gỡ bản thử nghiệm.
+
+          Lõi là Hermes Agent **${engine_tag}** nguyên bản của Nous Research (ghim trong \`engine.lock\`), giao diện Việt giữ nguyên, cập nhật kiểu **chỉ báo**: ứng dụng báo bản mới kèm SHA-256, không tự tải hay tự cài.
+
+          Tệp: \`${{ steps.assets.outputs.exe }}\` · ${{ steps.assets.outputs.size }} byte
+          SHA-256: \`${{ steps.assets.outputs.sha }}\`
+
+          Windows có thể cảnh báo vì bộ cài chưa ký số. Đối chiếu SHA-256 trước khi chạy.
+          EOF
+          else
+            # Ghi chú kênh chính lấy từ .github/release-notes-vietnamese.md đã render (bước sau ghi lên main)
+            cp .github/public-release.json /tmp/prev-public-release.json
+            cp out/public-release.json .github/public-release.json
+            node scripts/render-current-release.mjs
+            node scripts/check-public-docs.mjs
+            cp .github/release-notes-vietnamese.md out/NOTES.md
+          fi
+
+      - name: Tạo release trên GitHub theo kênh
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "$CHANNEL" = thunghiem ]; then
+            assets="out/*.exe out/SHA256SUMS.txt out/public-release-thunghiem.json"
+            flags="--prerelease --latest=false"
+            title="Hermes Vietnamese $RELEASE_TAG (thử nghiệm)"
+          else
+            assets="out/*.exe out/SHA256SUMS.txt"
+            flags="--latest"
+            title="Hermes Vietnamese ${RELEASE_TAG#v}"
+          fi
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" $assets --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" $flags --title "$title" --notes-file out/NOTES.md
+          else
+            gh release create "$RELEASE_TAG" $assets --repo "$GITHUB_REPOSITORY" $flags --title "$title" --notes-file out/NOTES.md
+          fi
+          latest_tag="$(gh api "repos/$GITHUB_REPOSITORY/releases/latest" -q .tag_name)"
+          echo "Latest hiện tại: $latest_tag"
+          if [ "$CHANNEL" = thunghiem ]; then
+            test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease -q .isPrerelease)" = "true" || { echo "::error::release không phải pre-release"; exit 1; }
+            test "$latest_tag" != "$RELEASE_TAG" || { echo "::error::pre-release lại thành Latest"; exit 1; }
+          else
+            test "$latest_tag" = "$RELEASE_TAG" || { echo "::error::release kênh chính chưa thành Latest (đang là $latest_tag)"; exit 1; }
+          fi
+
+      - name: Cập nhật feed (thử nghiệm → nhánh feed/thunghiem; kênh chính → main)
+        shell: bash
+        run: |
+          git config user.name "hermes-vietnamese-ci"
+          git config user.email "LucDinhLe@users.noreply.github.com"
+          if [ "$CHANNEL" = thunghiem ]; then
+            if git fetch origin feed/thunghiem 2>/dev/null; then
+              git worktree add feedwt FETCH_HEAD
+            else
+              git worktree add --detach feedwt
+              ( cd feedwt && git checkout --orphan feed/thunghiem && git rm -rfq . && git clean -fdxq )
+            fi
+            cp out/public-release-thunghiem.json feedwt/public-release-thunghiem.json
+            ( cd feedwt && git add public-release-thunghiem.json && git -c commit.gpgsign=false commit -q -m "feed(thunghiem): $RELEASE_TAG" && git push origin HEAD:refs/heads/feed/thunghiem )
+          else
+            # Ghi feed + tài liệu đã render lên main (tag đã được kiểm là nằm trên main)
+            git fetch -q origin main
+            git worktree add mainwt origin/main
+            cp out/public-release.json mainwt/.github/public-release.json
+            ( cd mainwt && node scripts/render-current-release.mjs && node scripts/check-public-docs.mjs \
+              && git add .github/public-release.json README.md README.vi.md docs/cai-dat-windows-bang-anh.md .github/release-notes-vietnamese.md \
+              && git -c commit.gpgsign=false commit -q -m "release: công bố $RELEASE_TAG làm Latest (feed notify-only, tài liệu current-release)" \
+              && git push origin HEAD:refs/heads/main )
+          fi
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: hermes-${{ env.CHANNEL }}-${{ env.RELEASE_TAG }}-win-x64
+          path: out/
+          if-no-files-found: error

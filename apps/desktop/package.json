@@ -317,8 +317,8 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
-      "shortcutName": "Hermes Vietnamese (thử nghiệm)",
-      "uninstallDisplayName": "Hermes Vietnamese (thử nghiệm)",
+      "shortcutName": "Hermes Vietnamese",
+      "uninstallDisplayName": "Hermes Vietnamese",
       "warningsAsErrors": false,
       "guid": "f55add5f-6655-5c1d-b8e3-d7252a8a4152"
     }
