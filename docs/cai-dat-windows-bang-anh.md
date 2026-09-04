@@ -2,6 +2,8 @@
 
 Hướng dẫn này dành cho người tải Hermes Vietnamese bằng Microsoft Edge trên Windows 10 hoặc Windows 11. Bạn không cần mở Terminal, cài Git, cài Python hoặc sửa tệp cấu hình.
 
+Đang dùng macOS hoặc Linux? Trang này chỉ nói về Windows. Hướng dẫn cài macOS và Linux nằm trong README tiếng Việt, ở mục [macOS](../README.vi.md#macos) và mục [Linux](../README.vi.md#linux); mục [Kiểm tra máy có phù hợp không](../README.vi.md#kiểm-tra-máy-có-phù-hợp-không) trong cùng trang giúp bạn xác nhận đúng kiến trúc máy trước khi tải.
+
 > **Vì sao Windows cảnh báo?** Tệp hiện chưa có chữ ký xác minh nhà phát hành và chưa có nhiều lượt tải, nên Edge hoặc Windows SmartScreen có thể hiện cảnh báo uy tín. Dòng `Publisher: Unknown` trong các ảnh dưới đây phản ánh trạng thái chưa ký, không phải kết luận tệp an toàn hoặc có mã độc.
 
 Chỉ tiếp tục khi đủ ba điều kiện:

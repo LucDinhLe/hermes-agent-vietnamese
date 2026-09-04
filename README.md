@@ -14,7 +14,7 @@ Người viết bản này là [Lê Đình Lực](https://github.com/LucDinhLe),
 
 ## Bản này khác bản gốc chỗ nào
 
-- **Cài bằng một bộ cài Windows.** Python 3.12.10 và lõi Hermes đã đóng gói sẵn, bạn không cần cài môi trường lập trình hay chạy lệnh nào.
+- **Cài bằng một bộ cài cho từng nền tảng.** Windows, macOS Apple Silicon và Linux x64 đều có bộ cài riêng, đóng gói sẵn Python 3.12.10 và lõi Hermes, bạn không cần cài môi trường lập trình hay chạy lệnh nào.
 - **Giao diện và tài liệu tiếng Việt.** Toàn bộ màn hình, thông báo và hướng dẫn đều có tiếng Việt, kèm [hướng dẫn cài bằng hình ảnh](docs/cai-dat-windows-bang-anh.md) cho người ngại kỹ thuật.
 - **Lõi giữ nguyên từng byte so với bản gốc.** Bạn nhận đúng hành vi và các bản sửa lỗi của Nous Research, không nhận thêm rủi ro từ một nhánh sửa riêng. Máy chủ dựng bản phát hành chạy `scripts/engine-sync.mjs check` để chứng minh điều này ở mỗi lần dựng.
 - **Cài song song, dữ liệu riêng.** Bản này dùng mã sản phẩm và thư mục dữ liệu riêng nên đứng cạnh bản Hermes cũ, giữ đường quay lui khi cần.
