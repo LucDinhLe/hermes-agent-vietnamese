@@ -438,7 +438,7 @@ declare global {
       getVersion: () => Promise<DesktopVersionInfo>
       getRemoteDisplayReason?: () => Promise<string | null>
       updates: {
-        check: () => Promise<DesktopUpdateStatus>
+        check: (opts?: { force?: boolean }) => Promise<DesktopUpdateStatus>
         apply: (opts?: DesktopUpdateApplyOptions) => Promise<DesktopUpdateApplyResult>
         getBranch: () => Promise<{ branch: string }>
         setBranch: (name: string) => Promise<{ branch: string }>
@@ -551,6 +551,16 @@ export interface DesktopUpdateCommit {
 
 export interface DesktopUpdateStatus {
   supported: boolean
+  /** Bản đóng gói Hermes Vietnamese: chỉ báo, không tự tải/cài (release-notice.ts). */
+  notifyOnly?: boolean
+  releaseChannel?: 'latest' | 'thunghiem'
+  downloadUrl?: string | null
+  releaseUrl?: string | null
+  filename?: string | null
+  size?: number | null
+  sha256?: string | null
+  feedEnabled?: boolean
+  fromCache?: boolean
   mechanism?: 'app-updater' | 'git'
   channel?: 'main' | 'stable'
   updateAvailable?: boolean

@@ -31,15 +31,7 @@ import {
 import nodePty from 'node-pty'
 
 import { classifyActiveRuntime, shouldRefreshManagedRuntime } from './active-runtime-state'
-import {
-  applyAppUpdate,
-  checkAppUpdate,
-  COMMUNITY_RELEASES_API_URL,
-  decideDesktopUpdateRoute,
-  type DesktopUpdateRoute,
-  dispatchDesktopUpdateRoute,
-  selectInstallStampCandidates
-} from './app-updater'
+import { decideDesktopUpdateRoute, type DesktopUpdateRoute, selectInstallStampCandidates } from './app-updater'
 import { stopBackendChild as stopBackendChildImpl, stopBackendTreesForUpdate } from './backend-child'
 import { dashboardFallbackArgs, sourceDeclaresServe } from './backend-command'
 import { createBackendConnectionState } from './backend-connection-state'
@@ -286,6 +278,7 @@ import {
 } from './profile-session-routing'
 import { createQuickEntryShortcut, quickEntryWindowBounds, sanitizeQuickEntrySettings } from './quick-entry'
 import { type ActiveWork, mergeActiveWork, normalizeActiveWork, quitPromptFor } from './quit-guard'
+import { checkReleaseNotice, type ReleaseNotice } from './release-notice'
 import * as remoteLifecycle from './remote-lifecycle'
 import {
   RemoteLivenessTracker,
@@ -2883,56 +2876,37 @@ async function checkStableChannelUpdates() {
   }
 }
 
-async function checkBundledUpdates() {
-  // checkForUpdates rejects on any network/feed failure. Map that to the
-  // structured shape the git paths return, so the renderer never sees a
-  // raw IPC rejection on an offline check.
-  try {
-    const response = await electronNet.fetch(COMMUNITY_RELEASES_API_URL, {
-      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'hermes-desktop-update' }
-    })
+// Bản đóng gói: cập nhật kiểu "chỉ báo" (notify-only). Không tải, không cài.
+// Mọi trạng thái đóng gói (kể cả stamp cũ/hỏng, payload thiếu) đều an toàn để
+// báo, vì không có hành động cài nào đi kèm. Chi tiết: electron/release-notice.ts.
+async function checkReleaseNoticeForApp(force: boolean): Promise<ReleaseNotice> {
+  return checkReleaseNotice({
+    currentVersion: app.getVersion(),
+    userDataDir: app.getPath('userData'),
+    force,
+    fetchJson: async url => {
+      const response = await electronNet.fetch(url, {
+        headers: { Accept: 'application/json', 'User-Agent': 'hermes-vietnamese-desktop-release-notice' },
+        cache: 'no-store'
+      })
 
-    if (!response.ok) {
-      throw new Error(`GitHub Releases returned HTTP ${response.status}`)
+      if (!response.ok) {
+        throw new Error(`Feed phát hành trả HTTP ${response.status}`)
+      }
+
+      return response.json()
     }
-
-    const releases = await response.json()
-
-    if (!Array.isArray(releases)) {
-      throw new Error('GitHub Releases returned an invalid response.')
-    }
-
-    return await checkAppUpdate(app.getVersion(), releases)
-  } catch (error) {
-    return {
-      supported: true,
-      mechanism: 'app-updater',
-      channel: 'stable',
-      error: 'fetch-failed',
-      message: firstLine(error instanceof Error ? error.message : String(error)) || 'Update feed check failed.',
-      fetchedAt: Date.now()
-    }
-  }
+  })
 }
 
-async function checkUpdates() {
+async function checkUpdates(opts: { force?: boolean } = {}) {
   const route = desktopUpdateRoute()
 
-  return dispatchDesktopUpdateRoute(route, {
-    appUpdater: () => checkBundledUpdates(),
-    blocked: blocked => ({
-      supported: false,
-      mechanism:
-        blocked.reason === 'community-feed-disabled'
-          ? 'disabled-community-prerelease'
-          : 'disabled-invalid-bundle-provenance',
-      updateAvailable: false,
-      message: blockedUpdateMessage(blocked),
-      releaseClass: blocked.releaseClass,
-      fetchedAt: Date.now()
-    }),
-    git: () => checkGitUpdates()
-  })
+  if (route.mechanism === 'git') {
+    return checkGitUpdates()
+  }
+
+  return checkReleaseNoticeForApp(opts.force === true)
 }
 
 async function checkGitUpdates() {
@@ -3665,58 +3639,24 @@ async function applyUpdates(opts: { stopSafeBlockers?: boolean } = {}) {
 
   const route = desktopUpdateRoute()
 
-  return dispatchDesktopUpdateRoute(route, {
-    appUpdater: () => applyBundledUpdate(),
-    blocked: blocked => {
-      throw new Error(blockedUpdateMessage(blocked))
-    },
-    git: () => applyGitUpdate(opts)
-  })
-}
+  if (route.mechanism === 'git') {
+    return applyGitUpdate(opts)
+  }
 
-async function applyBundledUpdate() {
-  // Bundled installs: download the new app from the GitHub Releases feed,
-  // then quit and install. After the relaunch, the marker-tag mismatch
-  // triggers the offline agent rebuild — no git, no venv mutation while
-  // the app runs, and the Windows setup-binary handoff is unnecessary.
-  updateInFlight = true
-  let installerHandoffStarted = false
+  // Notify-only: "Cập nhật" trên bản đóng gói chỉ mở trang tải của bản mới.
+  const notice = await checkReleaseNoticeForApp(false)
+  const target = notice.downloadUrl ?? notice.releaseUrl
 
-  try {
-    const result = await applyAppUpdate(
-      percent => emitUpdateProgress({ stage: 'download', message: 'Downloading the app update…', percent }),
-      () => {
-        // electron-updater closes every window before quitAndInstall returns.
-        // Mark this as a hand-off first so the active-work prompt and macOS
-        // keep-alive convention cannot strand the installer waiting for us.
-        installerHandoffStarted = true
-        isQuittingForHandoff = true
-        rememberLog('[updates] downloaded full app artifact; handing off to the platform installer')
-      }
-    )
+  if (!notice.updateAvailable || !target) {
+    return { ok: false, error: 'notify-only', message: 'Chưa có bản mới để tải.' }
+  }
 
-    if (installerHandoffStarted) {
-      // A wedged renderer/backend must not leave NSIS/ShipIt waiting forever
-      // for the old process. Graceful before-quit teardown gets 30 seconds;
-      // afterwards the platform installer already owns recovery + relaunch.
-      const forceExitTimer = setTimeout(() => {
-        rememberLog('[updates] installer hand-off did not exit in 30s; forcing process exit')
-        app.exit(0)
-      }, 30_000)
+  await shell.openExternal(target)
 
-      forceExitTimer.unref()
-    }
-
-    return result
-  } catch (error) {
-    // A thrown quitAndInstall means no platform hand-off owns recovery.
-    // Keep the working app usable instead of suppressing future quit guards.
-    installerHandoffStarted = false
-    isQuittingForHandoff = false
-
-    throw error
-  } finally {
-    updateInFlight = false
+  return {
+    ok: false,
+    error: 'notify-only',
+    message: `Đã mở trang tải ${notice.latestVersion ?? ''}. Kiểm SHA-256 rồi chạy bộ cài; ứng dụng không tự cài.`
   }
 }
 
@@ -4447,11 +4387,6 @@ function desktopUpdateRoute(): DesktopUpdateRoute {
   })
 }
 
-function blockedUpdateMessage(route: Extract<DesktopUpdateRoute, { mechanism: 'blocked' }>): string {
-  return route.reason === 'community-feed-disabled'
-    ? 'Updates are disabled for this unsigned community prerelease build.'
-    : 'Updates are disabled because this bundled release is missing valid update provenance.'
-}
 
 // Marker-independent: is the canonical install at ACTIVE_HERMES_ROOT actually
 // runnable right now? A complete CLI install (`install.sh --include-desktop`)
@@ -15162,8 +15097,8 @@ ipcMain.handle('hermes:terminal:cwd', async (_event, id) => {
 
 ipcMain.handle('hermes:terminal:dispose', (_event, id) => disposeTerminalSession(String(id || '')))
 
-ipcMain.handle('hermes:updates:check', async () =>
-  checkUpdates().catch(error => ({
+ipcMain.handle('hermes:updates:check', async (_event, payload) =>
+  checkUpdates(payload || {}).catch(error => ({
     supported: true,
     branch: readDesktopUpdateConfig().branch,
     error: 'check-failed',

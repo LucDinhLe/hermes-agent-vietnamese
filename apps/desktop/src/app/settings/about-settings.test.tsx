@@ -59,7 +59,7 @@ describe('AboutSettings community identity and updater source', () => {
     expect(screen.getByText('Phiên bản kỹ thuật')).toBeTruthy()
     expect(screen.getByText('0.20.4-vi.35')).toBeTruthy()
     expect(screen.getByText('Phiên bản Hermes Agent gốc')).toBeTruthy()
-    expect(screen.getByText('0.20.4')).toBeTruthy()
+    expect(screen.getByText('0.21.0')).toBeTruthy() // upstream ghim trong engine.lock (v2026.8.31)
     expect(screen.getByText('Hermes Agent · Nous Research')).toBeTruthy()
     expect(screen.getByText('Lê Đình Lực (LucDinhLe)')).toBeTruthy()
     expect(screen.getByText('Giấy phép MIT')).toBeTruthy()

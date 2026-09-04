@@ -814,6 +814,11 @@ export const vi = defineLocale({
       cantReach: 'Chúng tôi không thể truy cập máy chủ cập nhật.',
       tapCheck: 'Nhấn vào "Kiểm tra ngay" để tìm kiếm thông tin cập nhật.',
       updateReady: count => `Một bản cập nhật mới đã sẵn sàng (${count} thay đổi bao gồm).`,
+      notifyOnlyReady: version => `Đã có phiên bản ${version}. Ứng dụng không tự cài: bạn tải bộ cài, đối chiếu SHA-256 rồi chạy.`,
+      openDownloadPage: 'Mở trang tải',
+      notifyOnlyDesc:
+        'Hermes Vietnamese chỉ báo khi có phiên bản mới. Ứng dụng không tự tải hay tự cài; bạn tải bộ cài từ GitHub Releases và kiểm mã tệp trước khi chạy.',
+      checksumLine: (filename, sizeMb, sha256) => `${filename} · ${sizeMb} MB · SHA-256 ${sha256}`,
       lastChecked: age => `Đã kiểm tra lần cuối ${age}`,
       justNowSuffix: ' · vừa rồi',
       automaticUpdates: 'Cập nhật tự động',

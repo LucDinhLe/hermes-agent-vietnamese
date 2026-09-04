@@ -638,6 +638,11 @@ export const en: Translations = {
       tapCheck: 'Tap "Check now" to look for updates.',
       updateReady: count => `A new update is ready (${count} change${count === 1 ? '' : 's'} included).`,
       updateReadyUnknown: 'A new update is ready.',
+      notifyOnlyReady: version => `Version ${version} is available. This app does not install updates itself: download the installer, verify its SHA-256, then run it.`,
+      openDownloadPage: 'Open download page',
+      notifyOnlyDesc:
+        'Hermes Vietnamese only notifies you about new versions. It never downloads or installs anything by itself; you download the installer from GitHub Releases and verify its checksum.',
+      checksumLine: (filename, sizeMb, sha256) => `${filename} · ${sizeMb} MB · SHA-256 ${sha256}`,
       lastChecked: age => `Last checked ${age}`,
       justNowSuffix: ' · just now',
       automaticUpdates: 'Automatic updates',

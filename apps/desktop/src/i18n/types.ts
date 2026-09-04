@@ -532,6 +532,10 @@ export interface Translations {
       tapCheck: string
       updateReady: (count: number) => string
       updateReadyUnknown: string
+      notifyOnlyReady: (version: string) => string
+      openDownloadPage: string
+      notifyOnlyDesc: string
+      checksumLine: (filename: string, sizeMb: string, sha256: string) => string
       lastChecked: (age: string) => string
       justNowSuffix: string
       automaticUpdates: string

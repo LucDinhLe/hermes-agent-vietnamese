@@ -104,7 +104,7 @@ export function AboutSettings() {
 
   const handleCheck = async () => {
     setJustChecked(false)
-    const next = await checkUpdates()
+    const next = await checkUpdates({ force: true })
     setJustChecked(Boolean(next))
   }
 
@@ -119,6 +119,9 @@ export function AboutSettings() {
     statusTone = 'error'
   } else if (applying) {
     statusLine = a.installing
+    statusTone = 'available'
+  } else if (updateAvailable && status?.notifyOnly) {
+    statusLine = a.notifyOnlyReady(status.latestVersion ?? '')
     statusTone = 'available'
   } else if (updateAvailable) {
     statusLine = behind > 0 ? a.updateReady(behind) : a.updateReadyUnknown
@@ -225,7 +228,17 @@ export function AboutSettings() {
               {checking ? a.checking : a.checkNow}
             </Button>
 
-            {updateAvailable && supported && !applying && (
+            {updateAvailable && supported && !applying && status?.notifyOnly && (
+              <Button
+                onClick={() => void window.hermesDesktop?.openExternal?.(status.downloadUrl ?? status.releaseUrl ?? RELEASE_NOTES_URL)}
+                size="sm"
+              >
+                <ExternalLink className="size-3" />
+                {a.openDownloadPage}
+              </Button>
+            )}
+
+            {updateAvailable && supported && !applying && !status?.notifyOnly && (
               <>
                 <Button onClick={() => startActiveUpdate()} size="sm">
                   {a.updateNow}
@@ -253,8 +266,14 @@ export function AboutSettings() {
           </div>
         </div>
 
+        {updateAvailable && status?.notifyOnly && status.sha256 && status.filename && (
+          <p className="mt-2 font-mono text-[11px] break-all text-muted-foreground select-all">
+            {a.checksumLine(status.filename, ((status.size ?? 0) / 1_000_000).toFixed(1), status.sha256)}
+          </p>
+        )}
+
         <ListRow
-          description={a.automaticUpdatesDesc}
+          description={status?.notifyOnly ? a.notifyOnlyDesc : a.automaticUpdatesDesc}
           hint={updateSourceHint}
           title={a.automaticUpdates}
         />
