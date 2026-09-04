@@ -1,0 +1,66 @@
+{
+  "$schema": "engine.lock v1 — lõi Hermes Agent nguyên bản được ghim; scripts/engine-sync.mjs đọc tệp này",
+  "engine": {
+    "repository": "https://github.com/NousResearch/hermes-agent",
+    "tag": "v2026.8.31",
+    "commit": "29112bef099274229cadff79cdff7bf7b99c4b77",
+    "pinnedOn": "2026-09-04",
+    "pinnedBy": "Fable theo quyết định của Lê Đình Lực 04/09/2026",
+    "license": "MIT (LICENSE ở gốc kho là của Nous Research, giữ nguyên)"
+  },
+  "rules": {
+    "core": "Mọi đường dẫn trong corePaths phải bằng đúng từng byte với cây upstream tại engine.commit. Tệp upstream có mà kho không có là lỗi. Tệp kho có dưới corePaths mà upstream không có là lỗi, trừ khi nằm trong shellOverlay.",
+    "shell": "Mọi đường dẫn trong shellPaths thuộc vỏ Hermes Vietnamese, upstream không được ghi đè.",
+    "patches": "Mỗi chỗ cố ý lệch lõi phải có một mục trong docs/patch-ledger.md ở nhóm RED kèm test, lý do và điều kiện xoá. Đích tiệm cận là nhóm RED rỗng."
+  },
+  "corePaths": [
+    ".coderabbit.yaml", ".dockerignore", ".env.example", ".envrc", ".gitattributes", ".gitignore",
+    ".hadolint.yaml", ".mailmap", ".npmrc", ".nvmrc", ".prettierignore", ".prettierrc", ".python-version",
+    "AGENTS.md", "CONTRIBUTING.es.md", "CONTRIBUTING.md", "Dockerfile", "LICENSE", "SECURITY.es.md", "SECURITY.md", "SOUL.md",
+    "acp_adapter", "agent", "assets", "batch_runner.py", "cli-config.yaml.example", "cli.py",
+    "constraints-termux.txt", "contributors", "cron", "datagen-config-examples",
+    "docker-compose.windows.yml", "docker-compose.yml", "docker", "eslint.config.shared.mjs", "evals",
+    "flake.lock", "flake.nix", "gateway", "hermes", "hermes_bootstrap.py", "hermes_cli",
+    "hermes_constants.py", "hermes_logging.py", "hermes_state.py", "hermes_state_common.py",
+    "hermes_state_portability.py", "hermes_state_schema.py", "hermes_state_search.py", "hermes_time.py",
+    "locales", "mcp-research-data", "mcp_serve.py", "mini_swe_runner.py", "model_tools.py", "native", "nix",
+    "optional-mcps", "optional-skills", "package-lock.json", "package.json", "plugins", "providers",
+    "pyproject.toml", "registration_lifecycle.py", "run_agent.py", "scripts", "setup-hermes.sh", "setup.py",
+    "skills", "tests", "tests-js", "tools", "toolset_distributions.py", "toolsets.py",
+    "trajectory_compressor.py", "tui_gateway", "ui-tui", "utils.py", "uv.lock", "web", "website"
+  ],
+  "shellPaths": [
+    "apps", "docs", ".github",
+    "README.md", "README.vi.md", "README.es.md", "README.ur-pk.md", "README.zh-CN.md",
+    "CODE_SIGNING_POLICY.md", "DISCLAIMER.md", "MAINTAINERS.md", "PROGRESS.md",
+    "engine.lock"
+  ],
+  "shellOverlay": {
+    "_comment": "Tệp của vỏ nằm dưới corePaths. Chỉ công cụ phát hành và đóng gói; không có mã chạy trong lõi.",
+    "scripts": [
+      "scripts/build-bundled-desktop.mjs",
+      "scripts/bundled-release-policy.mjs", "scripts/bundled-release-policy.test.mjs",
+      "scripts/check-public-docs.mjs", "scripts/check-public-docs.test.mjs",
+      "scripts/create-v321-pilot-evidence.mjs", "scripts/create-v321-pilot-evidence.test.mjs",
+      "scripts/engine-sync.mjs", "scripts/engine-sync.test.mjs",
+      "scripts/local-candidate-derived-outputs.mjs", "scripts/local-candidate-derived-outputs.test.mjs",
+      "scripts/prepare-agent-browser-native.mjs", "scripts/prepare-agent-browser-native.test.mjs",
+      "scripts/release-asset-inventory.mjs",
+      "scripts/validate-pilot-release-evidence.mjs", "scripts/validate-pilot-release-evidence.test.mjs",
+      "scripts/validate-public-release-contract.mjs", "scripts/validate-public-release-contract.test.mjs",
+      "scripts/validate-release-evidence.mjs", "scripts/validate-release-evidence.test.mjs",
+      "scripts/validate-v32-promotion.mjs", "scripts/validate-v321-promotion.mjs", "scripts/validate-v321-promotion.test.mjs",
+      "scripts/vietnamese-release.mjs", "scripts/vietnamese-release.test.mjs",
+      "scripts/windows-lifecycle-acceptance/",
+      "scripts/write_install_stamp.py"
+    ],
+    "tests": [
+      "tests/scripts/test_write_install_stamp.py"
+    ]
+  },
+  "pendingDecisions": [
+    "scripts/lib/venv-transaction.sh: fork thêm cho bộ cài hay cho lõi? Xếp theo ledger.",
+    "scripts/benchmark_*.py và scripts/test_benchmark_v32_offline.py: gắn với capability_profile (tính năng tạm ẩn), dự kiến bỏ cùng tính năng.",
+    "apps/shared: fork sửa 3 tệp (+102/−11); thuộc vỏ nhưng phải khớp hợp đồng với apps/desktop upstream ở bước 3."
+  ]
+}
