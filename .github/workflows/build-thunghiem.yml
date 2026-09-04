@@ -124,7 +124,7 @@ jobs:
             "releaseClass": "community-pilot",
             "updateFeedEnabled": true,
             "sourceCommit": "$HERMES_PAYLOAD_GIT_REF",
-            "engine": $(node -e 'const l=require("./engine.lock");console.log(JSON.stringify({tag:l.engine.tag,commit:l.engine.commit}))'),
+            "engine": $(node -e 'const l=JSON.parse(require("fs").readFileSync("engine.lock","utf8"));console.log(JSON.stringify({tag:l.engine.tag,commit:l.engine.commit}))'),
             "supportedTargets": ["windows-x64"],
             "windowsX64": { "filename": "Hermes-$app_version-win-x64.exe", "size": $size, "sha256": "$sha", "authenticode": "NotSigned" },
             "rollback": "Bản chính v2026.9.2 không bị đụng; gỡ bản thử nghiệm là quay lui."
@@ -133,12 +133,13 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "size=$size" >> "$GITHUB_OUTPUT"
           echo "exe=Hermes-$app_version-win-x64.exe" >> "$GITHUB_OUTPUT"
+          node -e 'JSON.parse(require("fs").readFileSync("out/public-release-thunghiem.json","utf8"))' || { echo "::error::feed JSON hỏng"; cat out/public-release-thunghiem.json; exit 1; }
           cat out/public-release-thunghiem.json
 
       - name: Ghi chú phát hành
         shell: bash
         run: |
-          engine_tag="$(node -e 'console.log(require("./engine.lock").engine.tag)')"
+          engine_tag="$(node -e 'console.log(JSON.parse(require("fs").readFileSync("engine.lock","utf8")).engine.tag)')"
           cat > out/NOTES.md <<EOF
           ## Hermes Vietnamese ${RELEASE_TAG} · bản thử nghiệm
 
