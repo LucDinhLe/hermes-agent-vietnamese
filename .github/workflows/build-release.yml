@@ -191,6 +191,65 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$app"
           codesign --display --verbose=2 "$app" 2>&1 | grep -E 'Signature=adhoc|Identifier=' || true
 
+      - name: Chạy thử bộ cài trên máy chủ (macOS)
+        if: matrix.platform == 'darwin'
+        shell: bash
+        env:
+          APP_VERSION: ${{ needs.prepare.outputs.app_version }}
+          HERMES_VI_SKIP_LEGACY_IMPORT: '1'
+        run: |
+          dmg="apps/desktop/release/Hermes-$APP_VERSION-mac-arm64.dmg"
+          test -f "$dmg" || { echo "::error::không thấy $dmg"; ls apps/desktop/release; exit 1; }
+          mnt="$(hdiutil attach -nobrowse -readonly "$dmg" | awk -F'\t' '/\/Volumes\//{print $NF}' | tail -1)"
+          echo "dmg gắn tại: $mnt"
+          app="$(ls -d "$mnt"/*.app | head -1)"
+          cp -R "$app" "$RUNNER_TEMP/HermesVietnamese.app"
+          hdiutil detach "$mnt" -quiet || true
+          app="$RUNNER_TEMP/HermesVietnamese.app"
+          # Gatekeeper trên máy chủ: chữ ký hợp lệ nhưng chưa notarize → spctl từ chối là ĐÚNG mong đợi.
+          codesign --verify --deep --strict "$app" && echo "codesign: hợp lệ"
+          spctl --assess --type execute -vv "$app" 2>&1 || echo "spctl từ chối như mong đợi với ký ad-hoc (người dùng bấm Open Anyway)"
+          export HERMES_VI_HOME="$RUNNER_TEMP/hv-home"
+          mkdir -p "$HERMES_VI_HOME"
+          "$app/Contents/MacOS/HermesVietnamese" --disable-gpu > "$RUNNER_TEMP/run.log" 2>&1 &
+          pid=$!
+          ok=0
+          for i in $(seq 1 60); do
+            sleep 3
+            if grep -q "Hermes backend is ready" "$HERMES_VI_HOME/logs/desktop.log" 2>/dev/null; then ok=1; break; fi
+            kill -0 $pid 2>/dev/null || break
+          done
+          kill $pid 2>/dev/null || true
+          echo "--- desktop.log"; tail -40 "$HERMES_VI_HOME/logs/desktop.log" 2>/dev/null || tail -40 "$RUNNER_TEMP/run.log"
+          test "$ok" = 1 || { echo "::error::ứng dụng macOS không báo backend sẵn sàng trong 180 giây"; exit 1; }
+          test -f "$HERMES_VI_HOME/state.db" && echo "state.db đã tạo: backend chạy thật"
+
+      - name: Chạy thử bộ cài trên máy chủ (Linux)
+        if: matrix.platform == 'linux'
+        shell: bash
+        env:
+          APP_VERSION: ${{ needs.prepare.outputs.app_version }}
+          HERMES_VI_SKIP_LEGACY_IMPORT: '1'
+        run: |
+          sudo apt-get install -y -qq xvfb libfuse2t64 >/dev/null 2>&1 || sudo apt-get install -y -qq xvfb libfuse2 >/dev/null
+          img="apps/desktop/release/Hermes-$APP_VERSION-linux-x86_64.AppImage"
+          chmod +x "$img"
+          ( cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/$img" --appimage-extract >/dev/null )
+          export HERMES_VI_HOME="$RUNNER_TEMP/hv-home"
+          mkdir -p "$HERMES_VI_HOME"
+          xvfb-run -a "$RUNNER_TEMP/squashfs-root/HermesVietnamese" --no-sandbox --disable-gpu --disable-dev-shm-usage > "$RUNNER_TEMP/run.log" 2>&1 &
+          pid=$!
+          ok=0
+          for i in $(seq 1 60); do
+            sleep 3
+            if grep -q "Hermes backend is ready" "$HERMES_VI_HOME/logs/desktop.log" 2>/dev/null; then ok=1; break; fi
+            kill -0 $pid 2>/dev/null || break
+          done
+          kill $pid 2>/dev/null || true
+          echo "--- desktop.log"; tail -40 "$HERMES_VI_HOME/logs/desktop.log" 2>/dev/null || tail -40 "$RUNNER_TEMP/run.log"
+          test "$ok" = 1 || { echo "::error::ứng dụng Linux không báo backend sẵn sàng trong 180 giây"; exit 1; }
+          test -f "$HERMES_VI_HOME/state.db" && echo "state.db đã tạo: backend chạy thật"
+
       - name: Gom tài sản của nền tảng này
         shell: bash
         env:
