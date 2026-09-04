@@ -196,51 +196,6 @@ def test_x_search_returns_structured_http_error(monkeypatch):
     assert result["error"] == "forbidden: x_search is not enabled for this model"
 
 
-def test_x_search_retry_reserves_each_attempt_and_blocks_second_post(monkeypatch):
-    import pytest
-
-    from agent.turn_budget import (
-        TurnBudgetExceeded,
-        TurnGovernor,
-        bind_turn_governor,
-    )
-    from tools.x_search_tool import x_search_tool
-
-    calls = []
-
-    def _failing_post(*args, **kwargs):
-        calls.append((args, kwargs))
-        return _FakeResponse(
-            {"error": "temporary"}, status_code=500, text="temporary"
-        )
-
-    monkeypatch.setattr(
-        "tools.x_search_tool._resolve_xai_bearer",
-        lambda: ("xai-test-key", "https://api.x.ai/v1", "xai"),
-    )
-    monkeypatch.setattr(
-        "tools.x_search_tool._load_x_search_config",
-        lambda: {"retries": 2},
-    )
-    monkeypatch.setattr("tools.x_search_tool.time.sleep", lambda *_: None)
-    monkeypatch.setattr("requests.post", _failing_post)
-    governor = TurnGovernor(
-        turn_id="x-search-retry-cap",
-        model_warn_limit=1,
-        model_hard_limit=1,
-    )
-
-    with bind_turn_governor(governor), pytest.raises(TurnBudgetExceeded):
-        x_search_tool(query="latest xAI discussion")
-
-    assert len(calls) == 1
-    snapshot = governor.snapshot()
-    assert snapshot["model"]["count"] == 1
-    assert snapshot["model"]["denied"] == 1
-    assert snapshot["by_task"]["x_search"]["model_attempts"] == 1
-    assert snapshot["by_task"]["x_search"]["denied_model_attempts"] == 1
-
-
 # ---------------------------------------------------------------------------
 # Credential-resolution coverage — the OAuth-or-API-key gating contract.
 # ---------------------------------------------------------------------------
@@ -476,3 +431,4 @@ def test_x_search_bearer_requests_prefer_api_key_from_shared_resolver(monkeypatc
     _api_key, _base_url, source = _resolve_xai_bearer()
     assert captured.get("prefer_api_key") is True
     assert source == "xai"
+

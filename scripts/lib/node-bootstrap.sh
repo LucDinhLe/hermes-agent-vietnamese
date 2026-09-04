@@ -18,13 +18,13 @@
 #   if [ "$HERMES_NODE_AVAILABLE" = true ]; then ...; fi
 #
 # Env inputs (set before sourcing to override defaults):
-#   HERMES_NODE_MIN_VERSION   (default: 26)   — accepted on PATH
-#   HERMES_NODE_TARGET_MAJOR  (default: 26)   — installed when we install
+#   HERMES_NODE_MIN_VERSION   (default: 20)   — accepted on PATH
+#   HERMES_NODE_TARGET_MAJOR  (default: 22)   — installed when we install
 #   HERMES_HOME               (default: $HOME/.hermes)
 # ============================================================================
 
-HERMES_NODE_MIN_VERSION="${HERMES_NODE_MIN_VERSION:-26}"
-HERMES_NODE_TARGET_MAJOR="${HERMES_NODE_TARGET_MAJOR:-26}"
+HERMES_NODE_MIN_VERSION="${HERMES_NODE_MIN_VERSION:-20}"
+HERMES_NODE_TARGET_MAJOR="${HERMES_NODE_TARGET_MAJOR:-22}"
 HERMES_HOME="${HERMES_HOME:-$HOME/.hermes}"
 HERMES_NODE_AVAILABLE=false
 
@@ -163,8 +163,20 @@ _nb_ensure_bundled_npm_range() {
     return 1
 }
 
+# A pre-release Node (…-alpha/-beta/-rc/-pre/-nightly) never counts as modern,
+# however high its major. nodejs.org publishes a headers tarball only for final
+# releases, so node-gyp cannot build node-pty — which has no Linux prebuild —
+# against one. Mirrors node_satisfies_build() in install.sh.
+_nb_node_is_prerelease() {
+    case "$(node --version 2>/dev/null)" in
+        *-*) return 0 ;;
+        *)   return 1 ;;
+    esac
+}
+
 _nb_have_modern_node() {
     command -v node >/dev/null 2>&1 || return 1
+    _nb_node_is_prerelease && return 1
     [ "$(_nb_node_major)" -ge "$HERMES_NODE_MIN_VERSION" ]
 }
 
@@ -294,6 +306,18 @@ _nb_install_bundled_node() {
         rm -rf "$tmp"
         return 1
     fi
+
+    # Trust the binary, not the filename: a tarball named for a final release
+    # can still carry a pre-release build (latest-v26.x serves
+    # node-v26.8.0-<os>-<arch>.tar.xz stamped v26.8.0-alpha.0.0.0). Probe it
+    # before it replaces a working managed tree.
+    case "$("$extracted/bin/node" --version 2>/dev/null)" in
+        *-*)
+            _nb_warn "Node $("$extracted/bin/node" --version 2>/dev/null) is a pre-release build — native modules cannot be built against it"
+            rm -rf "$tmp"
+            return 1
+            ;;
+    esac
 
     mkdir -p "$HERMES_HOME"
     rm -rf "$HERMES_HOME/node"

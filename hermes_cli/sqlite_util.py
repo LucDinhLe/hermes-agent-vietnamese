@@ -8,35 +8,7 @@ transaction. One definition here keeps the two stores from drifting.
 from __future__ import annotations
 
 import contextlib
-import random
 import sqlite3
-import time
-
-
-_BUSY_MAX_RETRIES = 5
-_BUSY_RETRY_MIN_S = 0.020
-_BUSY_RETRY_MAX_S = 0.150
-
-
-def _is_busy_error(exc: BaseException) -> bool:
-    return isinstance(exc, sqlite3.OperationalError) and (
-        "database is locked" in str(exc).lower()
-        or "database is busy" in str(exc).lower()
-    )
-
-
-def _execute_boundary_with_retry(conn: sqlite3.Connection, sql: str) -> None:
-    """Execute an idempotent transaction boundary through transient BUSY."""
-    for attempt in range(_BUSY_MAX_RETRIES + 1):
-        try:
-            conn.execute(sql)
-            return
-        except sqlite3.OperationalError as exc:
-            if not _is_busy_error(exc) or attempt == _BUSY_MAX_RETRIES:
-                raise
-            # SQLite's busy timeout can release competing writers in lockstep.
-            # A small jitter prevents them immediately colliding again.
-            time.sleep(random.uniform(_BUSY_RETRY_MIN_S, _BUSY_RETRY_MAX_S))
 
 
 def add_column_if_missing(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> bool:
@@ -64,9 +36,7 @@ def write_txn(conn: sqlite3.Connection):
     transaction left under EIO / lock contention / corruption) cannot shadow
     the original exception with a spurious rollback error.
     """
-    # Only transaction boundaries are retried. The body is yielded exactly
-    # once, so counters and other writes can never be replayed.
-    _execute_boundary_with_retry(conn, "BEGIN IMMEDIATE")
+    conn.execute("BEGIN IMMEDIATE")
     try:
         yield conn
     except Exception:
@@ -76,11 +46,4 @@ def write_txn(conn: sqlite3.Connection):
             pass
         raise
     else:
-        try:
-            _execute_boundary_with_retry(conn, "COMMIT")
-        except Exception:
-            try:
-                conn.execute("ROLLBACK")
-            except sqlite3.OperationalError:
-                pass
-            raise
+        conn.execute("COMMIT")

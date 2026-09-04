@@ -15,7 +15,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 
-from agent.context_compressor import SUMMARY_PREFIX
+from agent.context_compressor import SUMMARY_PREFIX, _DB_PERSISTED_MARKER
 from agent.conversation_compression import COMPACTION_DONE_STATUS, COMPACTION_STATUS
 from run_agent import AIAgent
 import run_agent
@@ -479,10 +479,13 @@ class TestPreflightCompression:
         # summary-first before the next API call).
         assert compressed == [
             {"role": "user", "content": f"{SUMMARY_PREFIX}\nPrevious conversation"},
-            {"role": "user", "content": "hello"},
+            {"role": "user", "content": "hello", _DB_PERSISTED_MARKER: True},
         ]
-        assert new_system_prompt == "You are helpful."
-        build_prompt.assert_not_called()
+        # Post-#98426 the commit boundary ALWAYS runs the live builder;
+        # its output differs from the cached prompt here, so the rebuilt
+        # prompt wins.
+        assert new_system_prompt == "new system prompt"
+        build_prompt.assert_called_once()
         assert events == [
             ("lifecycle", COMPACTION_STATUS),
             ("compress", "started"),
@@ -508,9 +511,33 @@ class TestPreflightCompression:
         assert [event for event, _ in events] == ["lifecycle", "warn", "compacted"]
         assert events[-1] == ("compacted", COMPACTION_DONE_STATUS)
 
+    def test_compress_context_does_not_emit_completion_after_an_abort(self, agent):
+        """An aborted summary must not claim that compaction completed."""
+        agent.compression_enabled = False
+        events = []
+        agent.status_callback = lambda event, message: events.append((event, message))
+        messages = [{"role": "user", "content": "hello"}]
+
+        def _abort_compression(current_messages, **_kwargs):
+            agent.context_compressor._last_compress_aborted = True
+            agent.context_compressor._last_summary_error = "auxiliary model unavailable"
+            return current_messages
+
+        with patch.object(agent.context_compressor, "compress", side_effect=_abort_compression):
+            compressed, prompt = agent._compress_context(messages, "system prompt", force=True)
+
+        assert compressed is messages
+        assert prompt == "You are helpful."
+        assert [event for event, _ in events] == ["lifecycle", "warn"]
+        assert ("compacted", COMPACTION_DONE_STATUS) not in events
 
     def test_compression_reuses_cached_prompt_when_memory_snapshot_is_unchanged(self, agent):
-        """A memory reload without new injected text must keep the cache prefix."""
+        """A byte-equal rebuild must keep the EXACT cached prompt object.
+
+        Post-#98426 the commit boundary always runs the live builder; when
+        its output is byte-identical to the stored prompt, the ORIGINAL
+        string object is kept (KV/prefix caches keyed on identity survive).
+        """
         agent.compression_enabled = False
         agent._memory_enabled = True
         agent._user_profile_enabled = False
@@ -528,7 +555,11 @@ class TestPreflightCompression:
                 "compress",
                 return_value=[{"role": "user", "content": f"{SUMMARY_PREFIX}\nPrevious conversation"}],
             ),
-            patch.object(agent, "_build_system_prompt") as build_prompt,
+            patch.object(
+                agent,
+                "_build_system_prompt",
+                return_value="cached system prompt\n\n<memory>same facts</memory>",
+            ) as build_prompt,
         ):
             _, new_system_prompt = agent._compress_context(
                 [{"role": "user", "content": "hello"}],
@@ -538,7 +569,7 @@ class TestPreflightCompression:
 
         assert new_system_prompt is agent._cached_system_prompt
         assert new_system_prompt == "cached system prompt\n\n<memory>same facts</memory>"
-        build_prompt.assert_not_called()
+        build_prompt.assert_called_once()
         memory_store.load_from_disk.assert_called_once()
 
 
@@ -656,7 +687,7 @@ class TestPreflightCompression:
             mock_compress.return_value = (
                 [
                     {"role": "user", "content": f"{SUMMARY_PREFIX}\nPrevious conversation"},
-                    {"role": "user", "content": "hello"},
+                    {"role": "user", "content": "hello", _DB_PERSISTED_MARKER: True},
                 ],
                 "new system prompt",
             )
@@ -1029,21 +1060,15 @@ class TestPreflightCompression:
 
 
 class TestToolResultPreflightCompression:
-    """Tool output must be bounded before any context-recovery pass."""
+    """Compression should trigger when tool results push context past the threshold."""
 
-    def test_large_tool_results_are_spilled_before_context_recovery(
-        self, agent, tmp_path
-    ):
-        """V32 recovery receives a pointer, never the full large tool result."""
+    def test_large_tool_results_trigger_compression(self, agent):
+        """When tool results push estimated tokens past threshold, compress before next call."""
         agent.compression_enabled = True
         agent.context_compressor.context_length = 200_000
         agent.context_compressor.threshold_tokens = 130_000  # below the 135k reported usage
         agent.context_compressor.last_prompt_tokens = 130_000
         agent.context_compressor.last_completion_tokens = 5_000
-        # V32's lean profile defers web_search behind the stable bridge. This
-        # regression exercises post-execution storage directly, so expose the
-        # mocked tool name for this turn without changing the real tool schema.
-        agent.valid_tool_names.add("web_search")
 
         tc = SimpleNamespace(
             id="tc1", type="function",
@@ -1062,10 +1087,6 @@ class TestToolResultPreflightCompression:
 
         with (
             patch("run_agent.handle_function_call", return_value=large_result),
-            patch(
-                "tools.tool_result_storage._local_storage_dir",
-                return_value=tmp_path / "tool-artifacts",
-            ),
             patch.object(agent, "_compress_context") as mock_compress,
             patch.object(agent, "_persist_session"),
             patch.object(agent, "_save_trajectory"),
@@ -1076,24 +1097,8 @@ class TestToolResultPreflightCompression:
             )
             result = agent.run_conversation("hello")
 
-        # The prior provider usage already crossed the configured threshold,
-        # so recovery still runs. Its input must contain only the bounded
-        # pointer/preview rather than the 100K raw payload.
         mock_compress.assert_called_once()
         assert result["completed"] is True
-        compaction_input = mock_compress.call_args.args[0]
-        tool_messages = [
-            message for message in compaction_input
-            if message.get("role") == "tool"
-        ]
-        assert len(tool_messages) == 1
-        stored_pointer = tool_messages[0]["content"]
-        assert "<persisted-output>" in stored_pointer
-        assert "100,000 characters" in stored_pointer
-        assert large_result not in stored_pointer
-        artifacts = list((tmp_path / "tool-artifacts").glob("*.txt"))
-        assert len(artifacts) == 1
-        assert artifacts[0].read_text(encoding="utf-8") == large_result
 
     def test_mid_turn_retry_compares_fully_assembled_requests(self, agent):
         """API-only context must not make marginal compression look effective."""

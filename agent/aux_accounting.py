@@ -8,9 +8,7 @@ dashboard analytics blind to aux model spend (issue #23270).
 Instead of threading ``session_db``/``session_id`` parameters through every
 aux call site, the agent loop publishes them here (mirroring the Nous Portal
 conversation context in ``agent.portal_tags``) and the auxiliary client
-records usage at its single response-validation chokepoint.  The same context
-also carries the originating turn id and shared ``TurnGovernor`` so auxiliary
-retries reserve physical attempts before provider I/O.
+records usage at its single response-validation chokepoint.
 
 ContextVar semantics give us the right isolation for free:
 
@@ -30,24 +28,12 @@ from __future__ import annotations
 
 import logging
 from contextvars import ContextVar
-from dataclasses import dataclass
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-@dataclass(frozen=True)
-class AccountingContext:
-    """Ambient handles for auxiliary accounting within one originating turn."""
-
-    session_db: Any = None
-    session_id: Optional[str] = None
-    turn_id: Optional[str] = None
-    governor: Any = None
-    role: Optional[str] = None
-    agent: Any = None
-
-
-_accounting: ContextVar[Optional[AccountingContext]] = ContextVar(
+# (session_db, session_id) for the active agent turn, or None outside one.
+_accounting: ContextVar[Optional[tuple]] = ContextVar(
     "aux_accounting_context", default=None
 )
 
@@ -57,43 +43,16 @@ _accounting: ContextVar[Optional[AccountingContext]] = ContextVar(
 _EXCLUDED_TASKS = frozenset({"moa_reference", "moa_aggregator"})
 
 
-def set_accounting_context(
-    session_db: Any,
-    session_id: Optional[str],
-    turn_id: Optional[str] = None,
-    governor: Any = None,
-    role: Optional[str] = None,
-    agent: Any = None,
-):
+def set_accounting_context(session_db: Any, session_id: Optional[str]):
     """Publish the active session's accounting handles for aux usage recording.
 
     Called by the agent loop at turn entry. Returns the ContextVar token so
     callers can ``reset_accounting_context(token)`` on turn exit. Publishing
-    ``None`` DB/session handles still clear the legacy accounting context when
-    no turn governor is supplied.  A governor-only context remains valid so
-    ephemeral/non-persisted sessions are protected too.
+    ``None`` handles (no DB / no session id) clears the context.
     """
-    if governor is None:
-        try:
-            from agent.turn_budget import get_turn_governor
-
-            governor = get_turn_governor()
-        except Exception:
-            governor = None
-    if turn_id is None and governor is not None:
-        turn_id = getattr(governor, "turn_id", None)
-    if (session_db is None or not session_id) and governor is None and not turn_id:
+    if session_db is None or not session_id:
         return _accounting.set(None)
-    return _accounting.set(
-        AccountingContext(
-            session_db=session_db,
-            session_id=session_id,
-            turn_id=str(turn_id) if turn_id else None,
-            governor=governor,
-            role=str(role) if role else None,
-            agent=agent,
-        )
-    )
+    return _accounting.set((session_db, session_id))
 
 
 def reset_accounting_context(token) -> None:
@@ -106,65 +65,7 @@ def reset_accounting_context(token) -> None:
 
 def get_accounting_context() -> Optional[tuple]:
     """Return ``(session_db, session_id)`` for the active turn, or ``None``."""
-    context = _accounting.get()
-    if context is None or context.session_db is None or not context.session_id:
-        return None
-    return context.session_db, context.session_id
-
-
-def get_accounting_details() -> Optional[AccountingContext]:
-    """Return the extended turn context without changing the legacy getter."""
     return _accounting.get()
-
-
-def reserve_aux_model_attempt(
-    task: Optional[str],
-    *,
-    role: Optional[str] = None,
-    provider: Optional[str] = None,
-    api_mode: Optional[str] = None,
-):
-    """Reserve one physical auxiliary attempt before provider I/O.
-
-    No-op outside a governed turn.  A hard-limit exception deliberately
-    propagates so the auxiliary retry/fallback machinery cannot bypass the
-    turn pause.
-    """
-    context = _accounting.get()
-    governor = context.governor if context is not None else None
-    if governor is None:
-        try:
-            from agent.turn_budget import get_turn_governor
-
-            governor = get_turn_governor()
-        except Exception:
-            governor = None
-    if governor is None:
-        return None
-    from agent.turn_budget import require_observable_model_runtime
-
-    require_observable_model_runtime(
-        provider=provider,
-        api_mode=api_mode,
-        governor=governor,
-    )
-    effective_role = role or (context.role if context is not None else None)
-    try:
-        reservation = governor.reserve_model_attempt(
-            task=task or "auxiliary",
-            role=effective_role or "auxiliary",
-        )
-    except Exception as exc:
-        from agent.turn_budget import TurnBudgetExceeded, publish_turn_budget
-
-        if isinstance(exc, TurnBudgetExceeded) and context is not None and context.agent is not None:
-            publish_turn_budget(context.agent, exc.reservation)
-        raise
-    if context is not None and context.agent is not None:
-        from agent.turn_budget import publish_turn_budget
-
-        publish_turn_budget(context.agent, reservation)
-    return reservation
 
 
 def record_aux_usage(
@@ -191,17 +92,10 @@ def record_aux_usage(
     try:
         if not task or task in _EXCLUDED_TASKS:
             return
-        context = _accounting.get()
-        governor = context.governor if context is not None else None
-        if governor is None:
-            try:
-                from agent.turn_budget import get_turn_governor
-
-                governor = get_turn_governor()
-            except Exception:
-                governor = None
-        if context is None and governor is None:
+        ctx = _accounting.get()
+        if ctx is None:
             return
+        session_db, session_id = ctx
         raw_usage = getattr(response, "usage", None)
         if raw_usage is None:
             return
@@ -227,50 +121,18 @@ def record_aux_usage(
         except Exception:
             logger.debug("Aux usage cost estimation failed", exc_info=True)
 
-        if governor is not None:
-            governor.update_usage(
-                task=task,
-                role=(context.role if context is not None else None) or "auxiliary",
-                input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-                cache_read_tokens=usage.cache_read_tokens,
-                cache_write_tokens=usage.cache_write_tokens,
-                reasoning_tokens=usage.reasoning_tokens,
-                estimated_cost_usd=estimated_cost,
-            )
-            if context is not None and context.agent is not None:
-                from agent.turn_budget import publish_turn_budget
-
-                publish_turn_budget(context.agent)
-
-        if (
-            context is not None
-            and context.session_db is not None
-            and context.session_id
-        ):
-            context.session_db.record_auxiliary_usage(
-                context.session_id,
-                task,
-                model=model,
-                billing_provider=provider,
-                billing_base_url=base_url,
-                input_tokens=usage.input_tokens,
-                output_tokens=usage.output_tokens,
-                cache_read_tokens=usage.cache_read_tokens,
-                cache_write_tokens=usage.cache_write_tokens,
-                reasoning_tokens=usage.reasoning_tokens,
-                estimated_cost_usd=estimated_cost,
-            )
+        session_db.record_auxiliary_usage(
+            session_id,
+            task,
+            model=model,
+            billing_provider=provider,
+            billing_base_url=base_url,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cache_read_tokens=usage.cache_read_tokens,
+            cache_write_tokens=usage.cache_write_tokens,
+            reasoning_tokens=usage.reasoning_tokens,
+            estimated_cost_usd=estimated_cost,
+        )
     except Exception:
         logger.debug("Aux usage recording failed (non-fatal)", exc_info=True)
-
-
-__all__ = [
-    "AccountingContext",
-    "get_accounting_context",
-    "get_accounting_details",
-    "record_aux_usage",
-    "reserve_aux_model_attempt",
-    "reset_accounting_context",
-    "set_accounting_context",
-]

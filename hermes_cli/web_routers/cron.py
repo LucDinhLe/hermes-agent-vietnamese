@@ -317,12 +317,6 @@ async def instantiate_blueprint(body: AutomationBlueprintInstantiate, profile: s
         except BlueprintFillError as exc:
             # Field-level validation error — 422 so the form can show it inline.
             raise HTTPException(status_code=422, detail=str(exc)) from exc
-        # A localized GUI may provide the title users should see in its job
-        # list. This never changes the blueprint key, prompt, schedule, or slot
-        # validation contract; CLI/dashboard clients that omit it keep the
-        # catalog's canonical English title.
-        if body.name and body.name.strip():
-            spec["name"] = body.name.strip()
         # Blueprint-created jobs deliver to the dashboard's configured target by
         # default; the form's deliver slot overrides via spec["deliver"].
         spec.pop("origin", None)

@@ -7,6 +7,7 @@ agent resource finalizer stops returning after the model turn has ended.
 from __future__ import annotations
 
 import threading
+import time
 from unittest.mock import MagicMock, patch
 
 from cron.scheduler import run_job, _teardown_cron_agent
@@ -18,26 +19,6 @@ _RUNTIME = {
     "provider": "openrouter",
     "api_mode": "chat_completions",
 }
-
-
-def _call_with_watchdog(call, *, timeout: float = 10.0):
-    """Run a potentially hanging cleanup assertion behind a daemon watchdog."""
-    finished = threading.Event()
-    outcome = {}
-
-    def _target():
-        try:
-            outcome["value"] = call()
-        except BaseException as exc:  # re-raise in the test thread
-            outcome["error"] = exc
-        finally:
-            finished.set()
-
-    threading.Thread(target=_target, daemon=True).start()
-    assert finished.wait(timeout=timeout), "cleanup exceeded its bounded watchdog"
-    if "error" in outcome:
-        raise outcome["error"]
-    return outcome.get("value")
 
 
 class HangingSessionDB:
@@ -85,11 +66,12 @@ def test_run_job_bounds_sessiondb_finalization(tmp_path):
             mock_agent.run_conversation.return_value = {"final_response": "ok"}
             mock_agent_cls.return_value = mock_agent
 
-            success, _output, final_response, error = _call_with_watchdog(
-                lambda: run_job(job)
-            )
+            started = time.monotonic()
+            success, _output, final_response, error = run_job(job)
+            elapsed = time.monotonic() - started
 
         assert fake_db.entered.wait(timeout=0.5)
+        assert elapsed < 0.5
         assert success is True
         assert final_response == "ok"
         assert error is None
@@ -102,15 +84,12 @@ def test_agent_teardown_is_bounded():
     agent = HangingAgent(release)
 
     try:
-        _call_with_watchdog(
-            lambda: _teardown_cron_agent(
-                agent,
-                "cleanup-agent-hang",
-                timeout_seconds=0.02,
-            )
-        )
+        started = time.monotonic()
+        _teardown_cron_agent(agent, "cleanup-agent-hang", timeout_seconds=0.02)
+        elapsed = time.monotonic() - started
 
         assert agent.entered.wait(timeout=0.5)
+        assert elapsed < 0.5
     finally:
         release.set()
 

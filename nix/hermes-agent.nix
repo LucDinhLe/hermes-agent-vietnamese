@@ -33,28 +33,11 @@
   # check for updates without needing a local .git directory. Null for
   # impure / dirty builds where flakes can't determine a rev.
   rev ? null,
-  revCount ? null,
-  branch ? null,
-  dirty ? false,
-  lastModified ? null,
   # Overridable parameters
   extraPythonPackages ? [ ],
   extraDependencyGroups ? [ ],
 }:
 let
-  version = (fromTOML (builtins.readFile ../pyproject.toml)).project.version;
-  versionModule = builtins.readFile ../hermes_cli/__init__.py;
-  releaseRevCountLine = lib.findFirst (line: lib.hasPrefix "__release_rev_count__" line) null (lib.splitString "\n" versionModule);
-  releaseRevCountMatch = if releaseRevCountLine == null then null else builtins.match ".*= ([0-9]+)" releaseRevCountLine;
-  releaseRevCount = if releaseRevCountMatch == null then null else builtins.fromJSON (builtins.elemAt releaseRevCountMatch 0);
-
-  # Install stamp values — written to .hermes_build_info.json so the Python
-  # runtime (CLI, TUI) reads one file instead of env vars or .git probes.
-  stampDistance = if revCount != null && releaseRevCount != null then lib.trivial.max 0 (revCount - releaseRevCount) else null;
-  stampDisplayVersion =
-    if stampDistance != null && stampDistance > 0 then "${version}+${toString stampDistance}"
-    else if dirty && stampDistance == null then "${version}+?"
-    else version;
   mkHermesVenv =
     extraDependencyGroups:
     callPackage ./python.nix {
@@ -177,7 +160,7 @@ let
 in
 stdenv.mkDerivation (finalAttrs: {
   pname = "hermes-agent";
-  inherit version;
+  version = (fromTOML (builtins.readFile ../pyproject.toml)).project.version;
 
   dontUnpack = true;
   dontBuild = true;
@@ -198,13 +181,6 @@ stdenv.mkDerivation (finalAttrs: {
     ln -s ${hermesWeb} $out/share/hermes-agent/web_dist
     ln -s ${hermesTui}/lib/hermes-tui $out/ui-tui
 
-    # Write the canonical install stamp. version_info.py reads this at
-    # runtime instead of probing env vars or .git — one file, one source
-    # of truth for the Python runtime (CLI, TUI).
-    cat > $out/share/hermes-agent/.hermes_build_info.json <<STAMP
-    {"schemaVersion":2,"commit":${builtins.toJSON rev},"commitDate":${builtins.toJSON lastModified},"branch":${builtins.toJSON branch},"baseVersion":"${version}","displayVersion":"${stampDisplayVersion}","distance":${builtins.toJSON stampDistance},"dirty":${if dirty then "true" else "false"},"source":"nix"}
-    STAMP
-
     ${lib.concatMapStringsSep "\n"
       (name: ''
         makeWrapper ${hermesVenv}/bin/${name} $out/bin/${name} \
@@ -218,9 +194,18 @@ stdenv.mkDerivation (finalAttrs: {
           --set HERMES_TUI_DIR $out/ui-tui \
           --set-default HERMES_BIN $out/bin/hermes \
           --set HERMES_PYTHON ${hermesVenv}/bin/python3 \
-          --set HERMES_NODE ${lib.getExe hermesNpmLib.nodejs} \
-          --set HERMES_BUILD_INFO $out/share/hermes-agent/.hermes_build_info.json${lib.optionalString (extraPythonPackages != [ ]) " \\
-          --suffix PYTHONPATH : \"${pythonPath}\""}
+          --set HERMES_NODE ${lib.getExe hermesNpmLib.nodejs}${
+            # Fold the line continuation INTO the optionalString: a bare
+            # `\` on the line above an empty expansion would dangle onto a
+            # blank line, ending the makeWrapper command early and running
+            # the next flag as its own shell command (`--suffix: command
+            # not found`). Only reproduces when rev == null (dirty trees).
+            lib.optionalString (rev != null) " \\\n          --set HERMES_REVISION ${rev}"
+          }${
+            lib.optionalString (
+              extraPythonPackages != [ ]
+            ) " \\\n          --suffix PYTHONPATH : \"${pythonPath}\""
+          }
       '')
       [
         "hermes"
@@ -260,9 +245,6 @@ stdenv.mkDerivation (finalAttrs: {
       hermesDesktop = callPackage ./desktop.nix {
         inherit hermesNpmLib electron;
         hermesAgent = finalAttrs.finalPackage;
-        inherit rev branch dirty;
-        distance = stampDistance;
-        displayVersion = stampDisplayVersion;
       };
 
       devShellHook = ''

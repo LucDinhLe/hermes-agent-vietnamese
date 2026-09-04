@@ -58,17 +58,6 @@ if [ -n "${DEV_SANDBOX_ELECTRON_LD_LIBRARY_PATH:-}" ]; then
     --setenv HERMES_DESKTOP_DISABLE_GPU 1
   )
 fi
-
-# install.sh switches an existing checkout's origin from SSH to HTTPS after a
-# successful clone. Without this process-local rewrite, the installer re-run
-# route escapes the fake remote and pulls the real public main branch, so the
-# test compares two unrelated commits. Route all GitHub HTTPS Git traffic back
-# through the SSH shim; that shim serves the sandbox's prepared bare repo.
-git_env=(
-  --setenv GIT_CONFIG_COUNT 1
-  --setenv GIT_CONFIG_KEY_0 'url.git@github.com:.insteadOf'
-  --setenv GIT_CONFIG_VALUE_0 'https://github.com/'
-)
 gui_mounts=()
 if [ -n "${DEV_SANDBOX_WAYLAND_SOCKET:-}" ]; then
   runtime_dir="${DEV_SANDBOX_XDG_RUNTIME_DIR:?missing DEV_SANDBOX_XDG_RUNTIME_DIR}"
@@ -224,10 +213,10 @@ exec bwrap \
   --setenv HOME "$DEV_SANDBOX_HOME" \
   --setenv USER "$DEV_SANDBOX_USER" \
   --setenv LOGNAME "$DEV_SANDBOX_USER" \
-  --setenv CURL_CA_BUNDLE /work/certs/combined-ca.pem \
-  --setenv SSL_CERT_FILE /work/certs/combined-ca.pem \
-  --setenv GIT_SSL_CAINFO /work/certs/combined-ca.pem \
-  --setenv NODE_EXTRA_CA_CERTS /work/certs/combined-ca.pem \
+  --setenv CURL_CA_BUNDLE /work/certs/ca.pem \
+  --setenv SSL_CERT_FILE /work/certs/ca.pem \
+  --setenv GIT_SSL_CAINFO /work/certs/ca.pem \
+  --setenv NODE_EXTRA_CA_CERTS /work/certs/real-ca.pem \
   --setenv OPENSSL_CONF /work/certs/openssl.cnf \
   --setenv HTTP_PROXY http://127.0.0.1:8080 \
   --setenv HTTPS_PROXY http://127.0.0.1:8080 \
@@ -235,7 +224,6 @@ exec bwrap \
   --setenv NO_PROXY '' \
   --setenv DEV_SANDBOX_INTERACTIVE "$DEV_SANDBOX_INTERACTIVE" \
   --setenv ELECTRON_DISABLE_SANDBOX 1 \
-  "${git_env[@]}" \
   "${node_env[@]}" \
   "${electron_env[@]}" \
   -- "$DEV_SANDBOX_BASH" -ceu '

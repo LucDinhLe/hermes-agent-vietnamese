@@ -1,7 +1,5 @@
 """Tests for agent.title_generator — auto-generated session titles."""
 
-import threading
-
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -246,43 +244,6 @@ class TestAutoTitleSession:
 
 class TestMaybeAutoTitle:
     """Tests for maybe_auto_title() — the fire-and-forget entry point."""
-
-    def test_background_upgrade_inherits_the_user_turn_governor(self):
-        """The daemon title worker must not become an unmetered hidden call."""
-        from agent.turn_budget import (
-            TurnGovernor,
-            bind_turn_governor,
-            get_turn_governor,
-        )
-
-        db = MagicMock()
-        db.get_session_title.return_value = None
-        governor = TurnGovernor(turn_id="title-turn")
-        observed = []
-        called = threading.Event()
-
-        def capture_context(*_args, **_kwargs):
-            observed.append(get_turn_governor())
-            called.set()
-
-        with (
-            patch("agent.title_generator._auto_title_enabled", return_value=True),
-            patch("agent.title_generator.apply_instant_title"),
-            patch(
-                "agent.title_generator.auto_title_session",
-                side_effect=capture_context,
-            ),
-            bind_turn_governor(governor),
-        ):
-            maybe_auto_title(
-                db,
-                "sess-1",
-                "hello",
-                [{"role": "user", "content": "hello"}],
-            )
-
-        assert called.wait(timeout=10), "auto-title worker never ran"
-        assert observed == [governor]
 
     def test_skips_if_not_first_exchange(self):
         """Should not fire once the conversation is past its opening turn."""

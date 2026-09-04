@@ -51,11 +51,6 @@ def test_profile_local_mcp_tool_is_visible_in_slash_worker(tmp_path):
     (profile_home / "config.yaml").write_text(
         yaml.safe_dump(
             {
-                # The test requires the first /tools snapshot to include the
-                # cold profile server. Give discovery a deterministic test
-                # budget instead of inheriting the 1.5s interactive UX
-                # default, which intentionally permits a later-turn refresh.
-                "mcp_discovery_timeout": 60,
                 "mcp_servers": {
                     "profileprobe": {
                         "enabled": True,
@@ -104,16 +99,9 @@ def test_profile_local_mcp_tool_is_visible_in_slash_worker(tmp_path):
         proc.stdin.write(json.dumps({"id": 1, "command": "/tools"}) + "\n")
         proc.stdin.flush()
         try:
-            # Importing the slash worker and starting a profile-local MCP
-            # subprocess can share a heavily saturated full-suite host. This
-            # is a hang watchdog, not a 10-second startup performance gate.
-            line = output.get(timeout=60)
+            line = output.get(timeout=10)
         except queue.Empty:
-            stderr = proc.stderr.read() if proc.stderr is not None else ""
-            pytest.fail(
-                "slash worker produced no /tools response within 60 seconds; "
-                f"stderr={stderr!r}"
-            )
+            pytest.fail("slash worker produced no /tools response within 10 seconds")
         response = json.loads(line)
         assert response["ok"] is True
         assert "mcp__profileprobe__hermes_61922_profile_probe" in response["output"]

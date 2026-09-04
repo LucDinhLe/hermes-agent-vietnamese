@@ -149,70 +149,6 @@ def test_locked_starlette_is_not_vulnerable_to_cve_2026_48710():
         )
 
 
-def test_cryptography_pin_and_lock_cover_2026_advisories():
-    """Runtime and lock must cover CVE-2026-69247/69248/69249.
-
-    The highest fixed-version floor across the three advisories is 50.0.0.
-    Hermes imports cryptography on production authentication and messaging
-    paths, so a transitive-only or stale-lock fix is insufficient.
-    """
-    floor = _UPDATE_DOWNGRADE_GUARD_FLOORS["cryptography"]
-    pins = _pins_from_specs(_pyproject_pinned_specs()).get("cryptography")
-
-    assert pins, "cryptography must remain directly pinned on runtime install paths"
-    for version in pins:
-        assert _version_tuple(version) >= floor, (
-            f"pyproject pins cryptography=={version}, below the common fixed floor "
-            f"{'.'.join(map(str, floor))} for CVE-2026-69247/69248/69249"
-        )
-
-    locked = _locked_versions("cryptography")
-    assert locked, "cryptography not found in uv.lock"
-    for version in locked:
-        assert _version_tuple(version) >= floor, (
-            f"uv.lock resolves cryptography=={version}, below the common fixed "
-            f"floor {'.'.join(map(str, floor))}"
-        )
-
-
-def test_pywinpty_pin_and_lock_ship_native_windows_arm64_wheel():
-    """The bundled Windows ARM64 runtime must not compile pywinpty from sdist.
-
-    pywinpty 2.x did not publish win_arm64 wheels. The v18 native candidate
-    therefore linked Git for Windows' x64 ``winpty.lib`` on the ARM64 runner
-    and failed with machine-type conflicts. Version 3.0.5 is the first usable
-    release whose published CPython 3.11/3.12 wheels include both Windows
-    architectures; 3.0.4 is explicitly excluded because its wheels omitted
-    required native binaries.
-    """
-    pins = _pins_from_specs(_pyproject_pinned_specs()).get("pywinpty")
-    assert pins == {"3.0.5"}, (
-        "Windows runtime must exact-pin pywinpty==3.0.5; earlier releases do "
-        "not provide a complete native Windows ARM64 payload"
-    )
-
-    lock = tomllib.loads((REPO_ROOT / "uv.lock").read_text(encoding="utf-8"))
-    packages = [
-        pkg
-        for pkg in lock.get("package", [])
-        if _canonical(pkg["name"]) == "pywinpty"
-    ]
-    assert [pkg["version"] for pkg in packages] == ["3.0.5"]
-
-    wheel_names = {
-        Path(wheel["url"]).name
-        for package in packages
-        for wheel in package.get("wheels", [])
-    }
-    for python_tag in ("cp311-cp311", "cp312-cp312"):
-        assert any(
-            f"-{python_tag}-win_amd64.whl" in name for name in wheel_names
-        ), python_tag
-        assert any(
-            f"-{python_tag}-win_arm64.whl" in name for name in wheel_names
-        ), python_tag
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -350,6 +286,62 @@ def test_build_system_requires_exempt_from_exclude_newer():
     )
 
 
+def test_exact_pinned_deps_exempt_from_exclude_newer():
+    """Regression guard for the release-day brick class.
+
+    Every release exact-pins at least one dependency to a version published
+    days before the release (v0.20.6: snowballstemmer==3.1.1,
+    psutil==7.2.2). For two weeks after release the relative
+    ``exclude-newer`` cutoff filters those versions out, so any venv that
+    predates the release cannot resolve the new pins at all ("no version of
+    snowballstemmer==3.1.1" — observed 2026-08-29 updating three production
+    installs v0.20.0 -> v0.20.6, one Termux and two Linux servers). The pin
+    bump WAS the review, so the cutoff adds zero float protection for an
+    exact pin and can only brick.
+
+    Every exact-pinned package in [project].dependencies and
+    optional-dependencies must therefore appear in the
+    ``exclude-newer-package`` whitelist (set to ``false``) for as long as a
+    relative ``exclude-newer`` cutoff is configured.
+    """
+    data = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    uv_cfg = data.get("tool", {}).get("uv", {})
+    if "exclude-newer" not in uv_cfg:
+        pytest.skip("no exclude-newer cutoff configured — nothing to exempt")
+    whitelist = {
+        _canonical(name)
+        for name, enabled in uv_cfg.get("exclude-newer-package", {}).items()
+        if enabled is False
+    }
+    missing = sorted(set(_pins_from_specs(_pyproject_pinned_specs())) - whitelist)
+    assert not missing, (
+        "exact-pinned packages are subject to the exclude-newer cutoff but "
+        "missing from the [tool.uv].exclude-newer-package whitelist — "
+        "release-day updates brick while the pinned version is younger than "
+        f"the cutoff: {missing}"
+    )
+
+
+
+def test_build_system_requires_wheel_for_isolated_builds():
+    """Regression for #96488 — PEP 517 isolation must include wheel.
+
+    ``setuptools.build_meta`` and our ``setup.py`` bdist_wheel guard import
+    ``wheel`` during editable builds. uv's build-isolation sandbox is seeded
+    only from ``[build-system].requires``; without ``wheel`` there, Windows
+    ``uv sync`` / ``uv pip install -e .`` fails with
+    ``ModuleNotFoundError: No module named 'wheel.cli'`` even when the real
+    venv already has wheel installed.
+    """
+    data = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    names = {
+        _distribution_name(req)
+        for req in data.get("build-system", {}).get("requires", [])
+    }
+    assert "wheel" in names, (
+        "wheel must be listed in [build-system].requires so PEP 517 isolated "
+        "builds can import wheel.cli / bdist_wheel — see #96488"
+    )
 
 
 def _lazy_deps_by_feature():

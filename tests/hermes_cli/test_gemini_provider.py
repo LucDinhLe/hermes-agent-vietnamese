@@ -6,7 +6,6 @@ from unittest.mock import patch, MagicMock
 from hermes_cli.auth import PROVIDER_REGISTRY, resolve_provider, resolve_api_key_provider_credentials
 from hermes_cli.models import _PROVIDER_MODELS, _PROVIDER_LABELS, _PROVIDER_ALIASES, normalize_provider
 from hermes_cli.model_normalize import normalize_model_for_provider, detect_vendor
-from hermes_cli.providers import get_label
 from agent.model_metadata import get_model_context_length
 from agent.models_dev import PROVIDER_TO_MODELS_DEV, list_agentic_models, _NOISE_PATTERNS
 
@@ -20,10 +19,9 @@ class TestGeminiProviderRegistry:
     def test_gemini_config(self):
         pconfig = PROVIDER_REGISTRY["gemini"]
         assert pconfig.id == "gemini"
-        assert pconfig.name == "Google AI Studio (API)"
+        assert pconfig.name == "Google AI Studio"
         assert pconfig.auth_type == "api_key"
         assert pconfig.inference_base_url == "https://generativelanguage.googleapis.com/v1beta"
-        assert get_label("gemini") == "Google AI Studio (API)"
 
 
 # ── Provider Aliases ──
@@ -203,3 +201,4 @@ class TestGeminiModelsDev:
         assert "gemini-2.5-flash-preview-tts" not in result  # no tool_call
         assert "gemini-live-2.5-flash" not in result     # noise: live-
         assert "gemini-2.5-flash-preview-04-17" not in result  # noise: dated preview
+

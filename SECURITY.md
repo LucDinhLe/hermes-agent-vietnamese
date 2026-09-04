@@ -1,7 +1,5 @@
 # Hermes Agent Security Policy
 
-> **Phạm vi của bản cộng đồng tiếng Việt:** lỗ hổng liên quan đến bản dịch, bộ cài đa nền tảng, cơ chế đăng nhập được bổ sung trong fork hoặc quy trình phát hành của kho này nên được báo cáo riêng qua [GitHub Security Advisories](https://github.com/LucDinhLe/hermes-agent-vietnamese/security/advisories/new). Không đăng khóa API, mã OAuth, dữ liệu cá nhân hoặc chi tiết khai thác nhạy cảm trong issue công khai. Lỗ hổng thuộc mã Hermes Agent gốc tiếp tục được báo cáo cho Nous Research theo hướng dẫn bên dưới.
-
 This document describes Hermes Agent's trust model, names the one
 security boundary the project treats as load-bearing, and defines the
 scope for vulnerability reports.
@@ -18,7 +16,7 @@ A useful report includes:
 - A concise description and severity assessment.
 - The affected component, identified by file path and line range
   (e.g. `path/to/file.py:120-145`).
-- Environment details (`hermes version`, commit SHA, OS, Python
+- Environment details (`hermes --version`, commit SHA, OS, Python
   version).
 - A reproduction against `main` or the latest release.
 - A statement of which trust boundary in §2 is crossed.

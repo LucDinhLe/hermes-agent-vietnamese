@@ -179,12 +179,7 @@ async def test_runner_goal_hook_enqueues_into_the_key_the_adapter_drains(hermes_
     adapter = _DrainProbeAdapter()
     runner.adapters = {Platform.SLACK: adapter}
 
-    # Goal persistence deliberately avoids blocking the event loop while its
-    # SessionDB connection bootstraps. Initialize this test fixture off-loop
-    # so a loaded CI runner cannot turn setup into a silent no-op.
-    await asyncio.to_thread(
-        lambda: GoalManager(session_entry.session_id).set("ship it")
-    )
+    GoalManager(session_entry.session_id).set("ship it")
     with patch(
         "hermes_cli.goals.judge_goal",
         return_value=("continue", "still needs work", False, None, False),
@@ -194,6 +189,7 @@ async def test_runner_goal_hook_enqueues_into_the_key_the_adapter_drains(hermes_
             source=src,
             final_response="partial progress",
         )
+        await asyncio.sleep(0.05)
 
     assert adapter_key in adapter._pending_messages, (
         "continuation enqueued under a different key than the adapter "

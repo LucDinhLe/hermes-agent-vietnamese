@@ -139,15 +139,14 @@ class TestUpdateCommandGatewayFlag:
         fake_root.mkdir()
         (fake_root / ".git").mkdir()
         (fake_root / "gateway").mkdir()
-        (fake_root / "gateway" / "slash_commands.py").touch()
-        fake_file = str(fake_root / "gateway" / "slash_commands.py")
+        (fake_root / "gateway" / "run.py").touch()
+        fake_file = str(fake_root / "gateway" / "run.py")
         hermes_home = tmp_path / "hermes"
         hermes_home.mkdir()
 
         mock_popen = MagicMock()
         with patch("gateway.run._hermes_home", hermes_home), \
-             patch("gateway.slash_commands.__file__", fake_file), \
-             patch("gateway.slash_commands.sys.platform", "linux"), \
+             patch("gateway.run.__file__", fake_file), \
              patch("shutil.which", side_effect=lambda x: f"/usr/bin/{x}"), \
              patch("subprocess.Popen", mock_popen):
             result = await runner._handle_update_command(event)

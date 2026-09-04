@@ -32,6 +32,17 @@ def build_update_parser(subparsers, *, cmd_update: Callable) -> None:
         help="Check whether an update is available without installing anything",
     )
     update_parser.add_argument(
+        "--plan",
+        action="store_true",
+        default=False,
+        help=(
+            "Show the update plan and exit without changing anything: install "
+            "kind (git/docker/nix), every running Hermes service across all "
+            "profiles with its supervisor and running code version, and how "
+            "each will be restarted. Read-only; safe on a live fleet."
+        ),
+    )
+    update_parser.add_argument(
         "--no-backup",
         action="store_true",
         default=False,
@@ -48,7 +59,19 @@ def build_update_parser(subparsers, *, cmd_update: Callable) -> None:
         "-y",
         action="store_true",
         default=False,
-        help="Assume yes for interactive prompts (config migration, stash restore). API-key entry is skipped; run 'hermes config migrate' separately for those.",
+        help="Run without blocking on prompts: accepts the config-migration and stash-restore prompts, skips the fork-upstream prompt without adding a remote. API-key entry is skipped; run 'hermes config migrate' separately for those.",
+    )
+    update_parser.add_argument(
+        "--keep-stash",
+        action="store_true",
+        default=False,
+        help=(
+            "Do NOT re-apply local changes after the update. Uncommitted "
+            "changes are still stashed so the update can proceed, but they "
+            "stay parked in git stash instead of being restored onto the "
+            "updated code. Used by the desktop updater so local source edits "
+            "never silently ride along across updates."
+        ),
     )
     update_parser.add_argument(
         "--branch",
@@ -62,40 +85,30 @@ def build_update_parser(subparsers, *, cmd_update: Callable) -> None:
         ),
     )
     update_parser.add_argument(
+        "--switch-branch",
+        action="store_true",
+        default=False,
+        help=(
+            "With updates.parked_branch_strategy: update_in_place configured, "
+            "override it for this run: switch to the update target and update "
+            "THERE instead of merging the target into the checked-out branch. "
+            "The branch is left exactly as it was — no merge commit is written "
+            "into its history. Use on long-lived feature branches where an "
+            "update-driven merge commit would pollute the branch. No effect "
+            "under the default strategy (switch), which already switches. "
+            "Still refuses to touch a dirty tree."
+        ),
+    )
+    update_parser.add_argument(
         "--force",
         action="store_true",
         default=False,
-        help="Windows: proceed with the update even when another hermes.exe is detected. The concurrent process will likely cause WinError 32 warnings and may leave a reboot-deferred .exe replacement. Does NOT bypass the venv-process guard (see --force-venv).",
+        help="Windows: proceed with the update even when another hermes.exe is detected. The concurrent process will likely cause WinError 32 warnings. Does NOT bypass the venv-process guard (see --force-venv).",
     )
     update_parser.add_argument(
         "--force-venv",
         action="store_true",
         default=False,
         help="Windows: mutate the venv even while other processes are running from its interpreter (desktop backend, gateway, terminals). Those processes keep native .pyd files locked, so the dependency sync will likely fail partway and strand the install half-updated. Use only if you know the detected holders are false positives.",
-    )
-    update_parser.add_argument(
-        "--eject",
-        action="store_true",
-        default=False,
-        help=(
-            "Take control of updates for a desktop-bundled install. This "
-            "option marks the checkout as source-managed (git updates with "
-            "`hermes update`) and fetches the full git history. The desktop "
-            "app continues to update itself, but it no longer touches the "
-            "agent checkout. This option has no effect on installs that are "
-            "already source-managed."
-        ),
-    )
-    update_parser.add_argument(
-        "--channel",
-        default=None,
-        choices=("stable", "main"),
-        metavar="CHANNEL",
-        help=(
-            "With --eject: the releases that the ejected install tracks. Use "
-            "'stable' for tagged releases or 'main' for the git main branch. "
-            "The desktop cadence before the eject is 'stable'. The default "
-            "is 'main'."
-        ),
     )
     update_parser.set_defaults(func=cmd_update)

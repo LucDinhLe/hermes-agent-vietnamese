@@ -1,21 +1,22 @@
 """Progressive tool disclosure ("tool search") for Hermes Agent.
 
-When enabled, tools are replaced in the model-visible tools array by three
-bridge tools — ``tool_search``, ``tool_describe``, ``tool_call`` — and surfaced
-on demand.  The legacy ``full`` profile only defers MCP/plugin tools; the
-default ``lean`` session profile also defers built-in Hermes tools except for a
-tiny direct allowlist.
+When enabled, MCP and non-core plugin tools are replaced in the model-visible
+tools array by three bridge tools — ``tool_search``, ``tool_describe``,
+``tool_call`` — and surfaced on demand. Core Hermes tools never defer.
 
 Design constraints this module is built around (see ``openclaw-tool-search-report``
 for the full rationale):
 
-* ``lean`` sessions defer every granted tool except a tiny direct allowlist.
-  ``full`` preserves the legacy rule that Hermes core tools stay eager while
-  MCP/plugin tools may defer. The profile is resolved once when a session is
-  created and persisted for resume.
-* Tiered disclosure (July 2026 plan): the moment ANY profile-deferrable tools
-  are present, they hide behind the bridge. What scales with catalog size is
-  the *listing*, not the activation decision:
+* Core tools defined in ``toolsets._HERMES_CORE_TOOLS`` are *never* deferred.
+  Always-load means always-load. No exceptions.
+* Session-gated GUI toolsets (``desktop_ui``, ``project``) are also never
+  deferred. They stay off the core list so CLI and messaging never pay for
+  their schemas, but once a session enables them they stay in the
+  model-facing array. Tool Search is for MCP/plugin catalog bloat, not for
+  hiding the tools that define this session's surface.
+* Tiered disclosure (July 2026 plan): the moment ANY deferrable (MCP/plugin)
+  tools are present, they hide behind the bridge. What scales with catalog
+  size is the *listing*, not the activation decision:
     - Tier 0 — no MCP/plugin tools: pure passthrough, everything eager.
     - Tier 1 — deferred tools whose catalog listing fits the listing budget
       (``min(threshold_pct`` of context — default 5% — ``, listing_max_tokens)``):
@@ -41,12 +42,16 @@ for the full rationale):
 
 from __future__ import annotations
 
+import functools
 import json
 import logging
 import math
 import re
+import threading
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Literal, Optional, Tuple
+
+import snowballstemmer
 
 from tools.registry import tool_error
 
@@ -62,15 +67,6 @@ TOOL_CALL_NAME = "tool_call"
 
 BRIDGE_TOOL_NAMES = frozenset({TOOL_SEARCH_NAME, TOOL_DESCRIBE_NAME, TOOL_CALL_NAME})
 
-TOOL_PROFILE_LEAN = "lean"
-TOOL_PROFILE_FULL = "full"
-TOOL_PROFILES = frozenset({TOOL_PROFILE_LEAN, TOOL_PROFILE_FULL})
-
-# Keep only the interaction primitive direct in lean sessions. Everything
-# else remains available through Tool Search, but a simple explanation has no
-# action-shaped schema tempting the model into an unnecessary tool loop.
-LEAN_DIRECT_TOOL_NAMES = frozenset({"clarify"})
-
 # When estimating tokens from char count without a real tokenizer, this is
 # the cheap rule of thumb that's stable across providers. Roughly 4 chars
 # per token for English+JSON. Underestimating leads to false negatives
@@ -78,6 +74,11 @@ LEAN_DIRECT_TOOL_NAMES = frozenset({"clarify"})
 # positives (activated when not needed). 4.0 errs slightly toward
 # underestimating, which is the safer default.
 CHARS_PER_TOKEN = 4.0
+
+# Bound the work one tool_search bridge call can request.
+_MAX_QUERIES_PER_CALL = 10
+# Bound the work one tool_describe bridge call can request.
+_MAX_DESCRIBE_NAMES_PER_CALL = 10
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +90,7 @@ CHARS_PER_TOKEN = 4.0
 class ToolSearchConfig:
     """Resolved, validated tool-search configuration for a single assembly."""
 
-    enabled: str  # "auto" | "on" | "off"
+    enabled: str  # "auto" | "on" | "off" — "auto" is an alias of "on" today
     # Listing budget as a percentage of the model's context window. Under
     # tiered disclosure this no longer gates *activation* (any deferrable
     # tool activates the bridge) — it bounds how much context the embedded
@@ -122,13 +123,13 @@ class ToolSearchConfig:
         """
         if raw is True:
             return cls(enabled="auto", threshold_pct=5.0,
-                       search_default_limit=5, max_search_limit=20)
+                       search_default_limit=5, max_search_limit=25)
         if raw is False:
             return cls(enabled="off", threshold_pct=5.0,
-                       search_default_limit=5, max_search_limit=20)
+                       search_default_limit=5, max_search_limit=25)
         if not isinstance(raw, dict):
             return cls(enabled="auto", threshold_pct=5.0,
-                       search_default_limit=5, max_search_limit=20)
+                       search_default_limit=5, max_search_limit=25)
 
         enabled_raw = str(raw.get("enabled", "auto")).strip().lower()
         if enabled_raw in ("true", "1", "yes"):
@@ -143,7 +144,7 @@ class ToolSearchConfig:
         threshold_pct = _safe_float(raw.get("threshold_pct"), 5.0)
         threshold_pct = max(0.0, min(100.0, threshold_pct))
 
-        max_search_limit = max(1, min(50, _safe_int(raw.get("max_search_limit"), 20)))
+        max_search_limit = max(1, min(50, _safe_int(raw.get("max_search_limit"), 25)))
         search_default_limit = max(1, min(max_search_limit,
                                           _safe_int(raw.get("search_default_limit"), 5)))
 
@@ -196,53 +197,18 @@ def load_config() -> ToolSearchConfig:
         return ToolSearchConfig.from_raw(None)
 
 
-def normalize_tool_profile(value: Any, *, default: str = TOOL_PROFILE_LEAN) -> str:
-    """Return ``lean`` or ``full`` with a safe, deterministic fallback."""
-    normalized_default = (
-        str(default or "").strip().lower()
-        if str(default or "").strip().lower() in TOOL_PROFILES
-        else TOOL_PROFILE_LEAN
-    )
-    normalized = str(value or "").strip().lower()
-    return normalized if normalized in TOOL_PROFILES else normalized_default
-
-
-def load_tool_profile() -> str:
-    """Load the default session tool profile from ``tools.profile``."""
+def load_config_readonly() -> ToolSearchConfig:
+    """Load tool-search config without copying the cached full config."""
     try:
-        from hermes_cli.config import load_config as _load
-
+        from hermes_cli.config import load_config_readonly as _load
         cfg = _load() or {}
         tools_cfg = cfg.get("tools") if isinstance(cfg.get("tools"), dict) else {}
-        return normalize_tool_profile((tools_cfg or {}).get("profile"))
-    except Exception as exc:
-        logger.debug("Failed to load session tool profile: %s", exc)
-        return TOOL_PROFILE_LEAN
-
-
-def resolve_session_tool_profile(*, session_db=None, session_id: str | None = None) -> str:
-    """Resolve one immutable profile for a new or resumed session.
-
-    A persisted ``model_config.tool_profile`` wins over ambient configuration,
-    so changing config between launches cannot silently rewrite the tool-schema
-    prefix of a resumed conversation.
-    """
-    if session_db is not None and session_id:
-        try:
-            persisted = session_db.get_session_model_config_value(
-                session_id,
-                "tool_profile",
-                None,
-            )
-            if str(persisted or "").strip().lower() in TOOL_PROFILES:
-                return normalize_tool_profile(persisted)
-        except Exception:
-            logger.debug(
-                "Failed to restore tool profile for session %s",
-                session_id,
-                exc_info=True,
-            )
-    return load_tool_profile()
+        if not isinstance(tools_cfg, dict):
+            tools_cfg = {}
+        return ToolSearchConfig.from_raw(tools_cfg.get("tool_search"))
+    except Exception as e:
+        logger.debug("Failed to load tool-search config: %s", e)
+        return ToolSearchConfig.from_raw(None)
 
 
 # ---------------------------------------------------------------------------
@@ -263,22 +229,22 @@ def _core_tool_names() -> frozenset[str]:
         return frozenset()
 
 
-def is_deferrable_tool_name(name: str, *, profile: str = TOOL_PROFILE_FULL) -> bool:
+# Session-gated GUI toolsets. Off ``_HERMES_CORE_TOOLS`` so non-GUI clients
+# never pay their schema; once a session enables them they stay direct.
+_DIRECT_SURFACE_TOOLSETS = frozenset({"desktop_ui", "project"})
+
+
+def is_deferrable_tool_name(name: str) -> bool:
     """Return True if a tool with this name is *eligible* for deferral.
 
     A tool is deferrable iff it is registered with an MCP toolset prefix
-    OR it is not in ``_HERMES_CORE_TOOLS``. Core tools are never deferred
-    even when their toolset is technically plugin-provided (this protects
+    OR it is neither in ``_HERMES_CORE_TOOLS`` nor a session-gated GUI
+    surface toolset. Core and direct surface tools are never deferred even
+    when their toolset is technically plugin-provided (this protects
     against accidental shadowing).
     """
     if name in BRIDGE_TOOL_NAMES:
         return False
-    if normalize_tool_profile(profile, default=TOOL_PROFILE_FULL) == TOOL_PROFILE_LEAN:
-        # The caller still scopes the name against the session's frozen raw
-        # catalog before dispatch. Treating unknown-but-granted injected tools
-        # (memory/context engines) as deferrable is therefore safe and keeps
-        # them out of the eager schema too.
-        return name not in LEAN_DIRECT_TOOL_NAMES
     if name in _core_tool_names():
         return False
     # Check registry toolset for MCP prefix.
@@ -289,22 +255,40 @@ def is_deferrable_tool_name(name: str, *, profile: str = TOOL_PROFILE_FULL) -> b
             return False
         if entry.toolset.startswith("mcp-"):
             return True
+        if entry.toolset in _DIRECT_SURFACE_TOOLSETS:
+            return False
         # Non-MCP, non-core → plugin tool, eligible.
         return True
     except Exception:
         return False
 
 
-def classify_tools(
-    tool_defs: List[Dict[str, Any]],
-    *,
-    profile: str = TOOL_PROFILE_FULL,
-) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+def _describe_classification(
+    name: str,
+) -> Literal["available", "not_found", "not_deferrable"]:
+    """Classify a describe name without treating unknown names as errors."""
+    try:
+        from tools.registry import registry
+        entry = registry.get_entry(name)
+    except Exception:
+        return "not_found"
+    if entry is None:
+        return "not_found"
+    if (
+        name in BRIDGE_TOOL_NAMES
+        or name in _core_tool_names()
+        or entry.toolset in _DIRECT_SURFACE_TOOLSETS
+    ):
+        return "not_deferrable"
+    return "available"
+
+
+def classify_tools(tool_defs: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """Split a tool-defs list into (visible, deferrable).
 
     ``visible`` retains every tool that must stay in the model-facing array:
-    every core tool, plus any tool we can't classify. ``deferrable`` is the
-    candidate set for catalog entry.
+    every core tool, every session-gated GUI surface tool, plus any tool we
+    can't classify. ``deferrable`` is the candidate set for catalog entry.
     """
     visible: List[Dict[str, Any]] = []
     deferrable: List[Dict[str, Any]] = []
@@ -315,7 +299,7 @@ def classify_tools(
             # Should never happen — bridge tools are added after classification —
             # but be defensive.
             continue
-        if is_deferrable_tool_name(name, profile=profile):
+        if is_deferrable_tool_name(name):
             deferrable.append(td)
         else:
             visible.append(td)
@@ -348,13 +332,18 @@ def should_activate(
     config: ToolSearchConfig,
     deferrable_tokens: int,
     context_length: Optional[int],
-    *,
-    profile: str = TOOL_PROFILE_FULL,
 ) -> bool:
     """Decide whether tool search should activate for the current assembly.
 
     ``"off"`` skips unconditionally. ``"on"`` and ``"auto"`` activate whenever
     at least one deferrable tool exists (there's no point swapping a no-op).
+
+    ``"auto"`` is an ALIAS of ``"on"`` under tiered disclosure — it is kept
+    as the shipped default so that a future budget-gated mode ("inline the
+    schemas when they fit, defer only when they don't") can change ``auto``'s
+    behavior without breaking users who explicitly pinned ``on`` or ``off``.
+    Do not add behavior that distinguishes them without that design; see the
+    config reference for the user-facing statement of this contract.
 
     Tiered-disclosure semantics (July 2026): the presence of ANY MCP/plugin
     tool activates the bridge — schemas always defer. What the threshold now
@@ -362,14 +351,7 @@ def should_activate(
     activation. ``context_length`` is retained in the signature for
     backward compatibility with existing callers.
     """
-    # ``tools.profile: full`` is the explicit eager escape hatch.  The legacy
-    # tool_search.enabled switch still controls plugin deferral in that profile,
-    # but cannot accidentally expand a lean session back to the full schema.
-    if (
-        normalize_tool_profile(profile, default=TOOL_PROFILE_FULL)
-        == TOOL_PROFILE_FULL
-        and config.enabled == "off"
-    ):
+    if config.enabled == "off":
         return False
     if deferrable_tokens <= 0:
         return False
@@ -414,29 +396,67 @@ class CatalogEntry:
 
 _TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
 
+# Snowball stemmer instances keep mutable parsing state, so they are not
+# safe to share across threads — and bridge dispatch can run on parallel
+# tool-call threads. One stemmer per thread, created lazily.
+_thread_local = threading.local()
+
+
+def _stemmer() -> Any:
+    st = getattr(_thread_local, "stemmer", None)
+    if st is None:
+        st = snowballstemmer.stemmer("english")
+        _thread_local.stemmer = st
+    return st
+
+
+@functools.lru_cache(maxsize=16384)
+def _stem(token: str) -> str:
+    """Stem one token, memoized across stateless catalog rebuilds."""
+    return _stemmer().stemWord(token)
+
 
 def _tokenize(text: str) -> List[str]:
+    """Lowercase alphanumeric tokens, Snowball-stemmed (English).
+
+    Stemming is applied here so it hits BOTH the index path
+    (:func:`build_catalog` via :func:`_entry_search_text`) and the query
+    path (:func:`search_catalog`) identically — a query for "issues"
+    matches a tool named ``create_issue``.
+    """
     if not text:
         return []
-    return [t.lower() for t in _TOKEN_RE.findall(text)]
+    return [_stem(token.lower()) for token in _TOKEN_RE.findall(text)]
 
 
-def _entry_search_text(td: Dict[str, Any]) -> str:
+def _entry_search_text(td: Dict[str, Any], source_label: str = "") -> str:
     """Build the search-text blob for a deferrable tool.
 
     Includes the tool name (with underscores broken into words so BM25 can
-    match against query terms), the description, and the names of the
-    top-level parameters. Schema bodies are deliberately excluded —
-    indexing them adds noise without improving recall in our measurement.
+    match against query terms), the source label (the MCP server / plugin
+    toolset the tool belongs to, e.g. ``linear`` for toolset ``mcp-linear``),
+    the description, and the names of the top-level parameters. Schema
+    bodies are deliberately excluded — indexing them adds noise without
+    improving recall in our measurement.
+
+    The ``mcp__`` name prefix is stripped before splitting: ``mcp`` appears
+    in every native MCP tool document, so its IDF collapses to near zero —
+    it is dead weight in every document and useless as a query term.
+    Indexing the source label is what makes a service-name query ("linear")
+    reach a tool whose NAME does not carry the service (a plugin tool named
+    ``create_issue``, or any catalog whose naming omits the vendor).
     """
     fn = td.get("function") or {}
     name = fn.get("name", "")
+    if name.startswith("mcp__"):
+        name = name[len("mcp__"):]
     desc = fn.get("description", "") or ""
     params = ((fn.get("parameters") or {}).get("properties") or {})
     param_names = " ".join(params.keys())
     # Break snake_case and dotted names into words for BM25.
     name_words = name.replace("_", " ").replace(".", " ").replace("-", " ").replace(":", " ")
-    return f"{name_words} {desc} {param_names}"
+    extra = source_label if source_label and source_label not in name_words.split() else ""
+    return f"{name_words} {extra} {desc} {param_names}"
 
 
 def _classify_source(name: str) -> Tuple[str, str]:
@@ -467,13 +487,17 @@ def build_catalog(tool_defs: List[Dict[str, Any]]) -> List[CatalogEntry]:
             continue
         desc = fn.get("description", "") or ""
         source, source_name = _classify_source(name)
+        # Index the human-facing group label ("linear", not "mcp-linear") so
+        # a service-name query matches tools from that source even when the
+        # tool's own name omits the service.
+        source_label = _listing_group_label(source_name) if source_name else ""
         entry = CatalogEntry(
             name=name,
             description=desc,
             schema=td,
             source=source,
             source_name=source_name,
-            _tokens=_tokenize(_entry_search_text(td)),
+            _tokens=_tokenize(_entry_search_text(td, source_label)),
         )
         catalog.append(entry)
     return catalog
@@ -510,14 +534,36 @@ def _bm25_score(query_tokens: List[str], doc_tokens: List[str],
     return score
 
 
-def search_catalog(catalog: List[CatalogEntry], query: str, limit: int = 5) -> List[CatalogEntry]:
+_CorpusStats = Tuple[List[int], float, Dict[str, int], int]
+
+
+def _corpus_stats(catalog: List[CatalogEntry]) -> _CorpusStats:
+    """Compute the BM25 statistics shared by every query over a catalog."""
+    doc_lengths = [len(entry._tokens) for entry in catalog]
+    avg_dl = sum(doc_lengths) / max(len(doc_lengths), 1)
+    doc_freq: Dict[str, int] = {}
+    for entry in catalog:
+        for token in set(entry._tokens):
+            doc_freq[token] = doc_freq.get(token, 0) + 1
+    return doc_lengths, avg_dl, doc_freq, len(catalog)
+
+
+def search_catalog(
+    catalog: List[CatalogEntry],
+    query: str,
+    limit: int = 5,
+    *,
+    corpus_stats: Optional[_CorpusStats] = None,
+) -> List[CatalogEntry]:
     """Return the top-``limit`` catalog entries for ``query`` by BM25.
 
-    Falls back to a stable name-substring match when BM25 yields no hits
-    above zero. That ensures a query like ``"github"`` against a catalog
-    where every tool is named ``github_*`` still returns results — BM25
-    can underperform when query and document share only one token that
-    appears in every document (zero IDF).
+    Falls back to a stable name-substring match when every query token
+    misses every document — e.g. the query ``"hub"`` against ``github_*``
+    tools ("hub" is a substring of the name but never a token, so BM25
+    scores nothing). The IDF variant used here,
+    ``log(1 + (N - df + 0.5) / (df + 0.5))``, is strictly positive even
+    when a term appears in every document, so the fallback only runs when
+    no query token appears in any document.
     """
     if not catalog or limit <= 0:
         return []
@@ -525,18 +571,16 @@ def search_catalog(catalog: List[CatalogEntry], query: str, limit: int = 5) -> L
     if not query_tokens:
         return []
 
-    # Precompute doc statistics.
-    doc_lengths = [len(e._tokens) for e in catalog]
-    avg_dl = sum(doc_lengths) / max(len(doc_lengths), 1)
-    doc_freq: Dict[str, int] = {}
-    for e in catalog:
-        seen = set(e._tokens)
-        for t in seen:
-            doc_freq[t] = doc_freq.get(t, 0) + 1
-    n_docs = len(catalog)
+    if corpus_stats is None:
+        corpus_stats = _corpus_stats(catalog)
+    doc_lengths, avg_dl, doc_freq, n_docs = corpus_stats
 
     scored: List[Tuple[float, CatalogEntry]] = []
+    exact_name = query.strip().lower()
     for entry in catalog:
+        if entry.name.lower() == exact_name:
+            scored.append((float("inf"), entry))
+            continue
         s = _bm25_score(query_tokens, entry._tokens, doc_lengths, avg_dl,
                         doc_freq, n_docs)
         if s > 0:
@@ -558,22 +602,24 @@ def search_catalog(catalog: List[CatalogEntry], query: str, limit: int = 5) -> L
 # ---------------------------------------------------------------------------
 
 
-_SENTENCE_END_RE = re.compile(r"[.!?\n]")
+# A sentence ends at ., !, or ? followed by whitespace or end-of-string, but
+# not at the end of a common dotted abbreviation.
+_SENTENCE_END_RE = re.compile(r"(?<!\be\.g)(?<!\bi\.e)(?<!\betc)[.!?](?=\s|$)")
 
 
 def _short_desc(description: str, max_chars: int = 60) -> str:
     """First sentence of a tool description, clipped to ``max_chars``.
 
-    Mirrors the skills-listing convention: one terse line per capability.
-    Whitespace is collapsed; a hard clip never cuts mid-word unless the
-    first word itself exceeds the budget.
+    A terminator must be followed by whitespace or end-of-string; ``e.g.``,
+    ``i.e.``, and ``etc.`` do not end a sentence. Whitespace normalization and
+    the unbounded regex search both remain linear-time on hostile input.
     """
     text = " ".join((description or "").split())
     if not text:
         return ""
     m = _SENTENCE_END_RE.search(text)
     if m:
-        text = text[:m.start() + (1 if text[m.start()] == "." else 0)]
+        text = text[:m.end()]
     if len(text) <= max_chars:
         return text
     clipped = text[:max_chars]
@@ -710,8 +756,6 @@ def bridge_tool_schemas(
     deferred_count: int,
     listing: Optional[str] = None,
     listing_form: str = "",
-    *,
-    profile: str = TOOL_PROFILE_FULL,
 ) -> List[Dict[str, Any]]:
     """Build the bridge tool schemas to inject in place of deferred tools.
 
@@ -728,23 +772,16 @@ def bridge_tool_schemas(
     sees the exact name; the server-summary form ("groups") tells it which
     DOMAINS are reachable and that search is mandatory for tool discovery.
     """
-    if normalize_tool_profile(profile, default=TOOL_PROFILE_FULL) == TOOL_PROFILE_LEAN:
-        desc_search = (
-            f"Search {deferred_count} on-demand tools only when the request "
-            "requires external data or an action not available directly. Do not "
-            "use this for a simple explanation, conversation, rewrite, or other "
-            "answer that needs no external capability. Returns matching names and "
-            f"descriptions; use `{TOOL_DESCRIBE_NAME}` for the parameter schema, "
-            f"then `{TOOL_CALL_NAME}` to invoke the chosen tool."
-        )
-    else:
-        desc_search = (
-            f"Search {deferred_count} additional tools that are loaded on demand. "
-            "Returns up to ``limit`` matches with name and description. Follow "
-            f"with `{TOOL_DESCRIBE_NAME}` to load a tool's full parameter schema, "
-            f"then `{TOOL_CALL_NAME}` to invoke it. Tools listed at the top of this "
-            "system prompt are already available and do not need to be searched."
-        )
+    desc_search = (
+        f"Search {deferred_count} additional tools that are loaded on demand. "
+        "Takes a list of queries searched in parallel against the same "
+        "catalog; send one query per distinct capability you need. Returns "
+        "matching tool names grouped per query plus a shared map with each "
+        "tool's description. Follow with "
+        f"`{TOOL_DESCRIBE_NAME}` to load full parameter schemas, "
+        f"then `{TOOL_CALL_NAME}` to invoke. Tools listed at the top of this "
+        "system prompt are already available and do not need to be searched."
+    )
     if listing and listing_form == "groups":
         desc_search += (
             "\n\nThe servers below are connected and their tools ARE available "
@@ -768,8 +805,9 @@ def bridge_tool_schemas(
             )
         desc_search += "\n\n" + listing
     desc_describe = (
-        f"Load the full JSON schema for one tool returned by `{TOOL_SEARCH_NAME}`. "
-        f"Required before `{TOOL_CALL_NAME}` if the tool's parameters are unknown."
+        f"Load the full JSON schemas for tools returned by `{TOOL_SEARCH_NAME}`. "
+        f"Required before `{TOOL_CALL_NAME}` if a tool's parameters are unknown. "
+        "Batch every schema you need into one call."
     )
     desc_call = (
         "Invoke a deferred tool by name with the given arguments. Argument shape "
@@ -786,16 +824,17 @@ def bridge_tool_schemas(
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "Keywords describing the capability you need (e.g. 'create github issue').",
+                        "queries": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Search queries, each a few keywords describing one capability (e.g. ['create github issue', 'send slack message']). Searched in parallel; results come back grouped per query. A single string is accepted and treated as one query.",
                         },
                         "limit": {
                             "type": "integer",
-                            "description": "Maximum number of results to return. Default 5.",
+                            "description": "Maximum number of matches per query. Defaults to 5 and is clamped to the configured maximum (25 by default).",
                         },
                     },
-                    "required": ["query"],
+                    "required": ["queries"],
                 },
             },
         },
@@ -807,12 +846,13 @@ def bridge_tool_schemas(
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "name": {
-                            "type": "string",
-                            "description": "Exact tool name (as returned by tool_search).",
+                        "names": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "Exact tool names (as returned by tool_search). A single string is accepted and treated as one name.",
                         },
                     },
-                    "required": ["name"],
+                    "required": ["names"],
                 },
             },
         },
@@ -867,15 +907,13 @@ def assemble_tool_defs(
     *,
     context_length: Optional[int] = None,
     config: Optional[ToolSearchConfig] = None,
-    profile: str = TOOL_PROFILE_FULL,
 ) -> AssemblyResult:
     """Return the tool-defs list the model should actually see.
 
     When tool search is inactive (off, no deferrable tools, or below
-    threshold), this is a passthrough. When active, profile-deferrable tools
+    threshold), this is a passthrough. When active, MCP and plugin tools
     are stripped from the visible list and replaced with the three bridge
-    tools. ``full`` keeps core tools eager; ``lean`` defers them too except
-    for :data:`LEAN_DIRECT_TOOL_NAMES`.
+    tools. Core tools are *never* deferred regardless of config.
 
     Idempotent: calling with bridge tools already in the input is a no-op
     (they classify as non-core/non-deferrable but their names are reserved,
@@ -883,24 +921,18 @@ def assemble_tool_defs(
     """
     if config is None:
         config = load_config()
-    profile = normalize_tool_profile(profile, default=TOOL_PROFILE_FULL)
 
     # Defensive: strip any bridge tools that may already be in the list
     # (e.g. someone called assemble twice).
     incoming = [td for td in tool_defs
                 if (td.get("function") or {}).get("name") not in BRIDGE_TOOL_NAMES]
 
-    visible, deferrable = classify_tools(incoming, profile=profile)
+    visible, deferrable = classify_tools(incoming)
     if not deferrable:
         return AssemblyResult(tool_defs=incoming, activated=False)
 
     deferrable_tokens = estimate_tokens_from_schemas(deferrable)
-    if not should_activate(
-        config,
-        deferrable_tokens,
-        context_length,
-        profile=profile,
-    ):
+    if not should_activate(config, deferrable_tokens, context_length):
         return AssemblyResult(
             tool_defs=incoming,
             activated=False,
@@ -913,14 +945,11 @@ def assemble_tool_defs(
     listing = None
     listing_form = "none"
     listing_budget = listing_token_budget(config, context_length)
-    # Lean keeps a constant-size bridge and discovers on demand. Embedding the
-    # catalog would spend thousands of fixed tokens and reintroduce the exact
-    # fresh-session overhead this profile exists to remove.
-    if profile == TOOL_PROFILE_FULL and config.listing != "off":
+    if config.listing != "off":
         listing, listing_form = build_catalog_listing_with_form(
             deferrable, max_tokens=listing_budget)
     bridge = bridge_tool_schemas(len(deferrable), listing=listing,
-                                 listing_form=listing_form, profile=profile)
+                                 listing_form=listing_form)
     result = visible + bridge
     # Tier 1 = per-tool listing for at least part of the catalog (full,
     # names, or mixed). Tier 2 = search-only discovery; the server-level
@@ -955,13 +984,30 @@ def is_bridge_tool(name: str) -> bool:
     return name in BRIDGE_TOOL_NAMES
 
 
-def _format_search_hit(entry: CatalogEntry) -> Dict[str, Any]:
+def _shared_tool_record(entry: CatalogEntry) -> Dict[str, Any]:
+    """One record for the response's shared ``tools`` map.
+
+    Held once per tool no matter how many query groups matched it — the
+    per-query groups carry names only. ``required`` lists the schema's
+    required parameter names so the model can attempt a call without a
+    ``tool_describe`` round-trip when the required surface is trivial.
+    """
+    schema = entry.schema if isinstance(entry.schema, dict) else {}
+    fn = schema.get("function")
+    if not isinstance(fn, dict):
+        fn = {}
+    params = fn.get("parameters")
+    if not isinstance(params, dict):
+        params = {}
+    required = params.get("required")
+    if not isinstance(required, list):
+        required = []
     return {
-        "name": entry.name,
         "source": entry.source,
         "source_name": entry.source_name,
         # Cap description so a chatty MCP server doesn't blow up the result.
         "description": (entry.description or "")[:400],
+        "required": [r[:64] for r in required if isinstance(r, str)][:32],
     }
 
 
@@ -988,14 +1034,43 @@ def _available_source_summary(catalog: List[CatalogEntry]) -> List[Dict[str, Any
 def dispatch_tool_search(args: Dict[str, Any],
                          *,
                          current_tool_defs: List[Dict[str, Any]],
-                         config: Optional[ToolSearchConfig] = None,
-                         profile: str = TOOL_PROFILE_FULL) -> str:
-    """Execute the ``tool_search`` bridge tool. Returns a JSON string."""
+                         config: Optional[ToolSearchConfig] = None) -> str:
+    """Execute the ``tool_search`` bridge tool. Returns a JSON string.
+
+    Accepts ``queries: [str, ...]`` — each query is searched independently
+    against the same catalog. The response groups matching tool NAMES per
+    query and carries each matched tool's record exactly once in a shared
+    ``tools`` map::
+
+        {
+          "queries": ["...", "..."],
+          "total_available": 215,
+          "results": [{"query": "...", "matches": ["<tool name>", ...]}, ...],
+          "tools": {"<tool name>": {"source": ..., "source_name": ...,
+                                     "description": ..., "required": [...]}}
+        }
+
+    ``limit`` applies PER QUERY. Each query group that returns no matches gets
+    an ``available_sources`` + ``hint`` block so a lexical miss is not mistaken
+    for a missing capability.
+    """
     if config is None:
         config = load_config()
-    query = str(args.get("query") or "").strip()
-    if not query:
-        return tool_error("query is required")
+
+    raw_queries = args.get("queries")
+    if isinstance(raw_queries, str):
+        # A bare string is an understandable model slip; treat as one query.
+        raw_queries = [raw_queries]
+    if not isinstance(raw_queries, list):
+        return tool_error("queries is required and must be an array of strings")
+    queries = [str(q).strip() for q in raw_queries if str(q or "").strip()]
+    if not queries:
+        return tool_error("queries is required and must contain at least one non-empty string")
+    if len(queries) > _MAX_QUERIES_PER_CALL:
+        return tool_error(
+            f"too many queries: {len(queries)} > max {_MAX_QUERIES_PER_CALL}. "
+            "Retry with fewer, more targeted queries."
+        )
 
     raw_limit = args.get("limit")
     if raw_limit is None:
@@ -1003,57 +1078,114 @@ def dispatch_tool_search(args: Dict[str, Any],
     else:
         limit = max(1, min(config.max_search_limit, _safe_int(raw_limit, config.search_default_limit)))
 
-    _, deferrable = classify_tools(current_tool_defs, profile=profile)
+    _, deferrable = classify_tools(current_tool_defs)
     catalog = build_catalog(deferrable)
-    hits = search_catalog(catalog, query, limit=limit)
+
+    results: List[Dict[str, Any]] = []
+    tools_map: Dict[str, Dict[str, Any]] = {}
+    corpus_stats = _corpus_stats(catalog)
+    available_sources = _available_source_summary(catalog) if catalog else []
+    for query in queries:
+        hits = search_catalog(catalog, query, limit=limit, corpus_stats=corpus_stats)
+        for h in hits:
+            if h.name not in tools_map:
+                tools_map[h.name] = _shared_tool_record(h)
+        group: Dict[str, Any] = {"query": query, "matches": [h.name for h in hits]}
+        if not hits and catalog:
+            group["available_sources"] = available_sources
+            group["hint"] = (
+                "This query returned no lexical matches, but the sources above "
+                "are connected and their tools remain available. Retry "
+                "tool_search with the service name plus a concrete action or "
+                "object before concluding the capability is unavailable."
+            )
+        results.append(group)
+
     result: Dict[str, Any] = {
-        "query": query,
+        "queries": queries,
         "total_available": len(catalog),
-        "matches": [_format_search_hit(h) for h in hits],
+        "results": results,
+        "tools": tools_map,
     }
-    if not hits and catalog:
-        result["available_sources"] = _available_source_summary(catalog)
-        result["hint"] = (
-            "No lexical match was found, but the sources above are connected "
-            "and their tools remain available. Retry tool_search with the "
-            "service name plus a concrete action or object before concluding "
-            "the capability is unavailable."
-        )
     return json.dumps(result, ensure_ascii=False)
 
 
 def dispatch_tool_describe(args: Dict[str, Any],
                            *,
                            current_tool_defs: List[Dict[str, Any]],
-                           profile: str = TOOL_PROFILE_FULL) -> str:
-    """Execute the ``tool_describe`` bridge tool. Returns a JSON string."""
-    name = str(args.get("name") or "").strip()
-    if not name:
-        return tool_error("name is required")
-    if not is_deferrable_tool_name(name, profile=profile):
+                           config: Optional[ToolSearchConfig] = None) -> str:
+    """Execute the ``tool_describe`` bridge tool. Returns a JSON string.
+
+    Accepts ``names: [str, ...]`` and returns a map keyed by tool name::
+
+        {
+          "tools": {"<name>": {"description": ..., "parameters": {...}}, ...},
+          "not_found": ["<name>", ...],   # only when some names missed
+          "errors": {"<name>": "..."}     # only for non-deferrable names
+        }
+
+    Unknown/unregistered names and registered deferrable names absent from the
+    current assembly land in ``not_found`` instead of failing the whole call.
+    Registered non-deferrable names keep their per-name message in ``errors``.
+    Duplicates are deduped silently.
+    """
+    if config is None:
+        config = load_config_readonly()
+
+    raw_names = args.get("names")
+    if isinstance(raw_names, str):
+        # A bare string is an understandable model slip; treat as one name.
+        raw_names = [raw_names]
+    if not isinstance(raw_names, list):
+        return tool_error("names is required and must be an array of strings")
+    names: List[str] = []
+    for n in raw_names:
+        n = str(n or "").strip()
+        if n and n not in names:
+            names.append(n)
+    if not names:
+        return tool_error("names is required and must contain at least one non-empty string")
+    if len(names) > _MAX_DESCRIBE_NAMES_PER_CALL:
         return tool_error(
-            f"'{name}' is not a deferrable tool. If you see it in the tools list "
-            "already, call it directly; otherwise check the spelling against tool_search."
+            f"too many names: {len(names)} > max {_MAX_DESCRIBE_NAMES_PER_CALL}. "
+            "Retry with fewer names per call."
         )
-    _, deferrable = classify_tools(current_tool_defs, profile=profile)
+
+    _, deferrable = classify_tools(current_tool_defs)
+    by_name: Dict[str, Dict[str, Any]] = {}
     for td in deferrable:
         fn = td.get("function") or {}
-        if fn.get("name") == name:
-            return json.dumps({
-                "name": name,
+        if fn.get("name"):
+            by_name[fn["name"]] = fn
+
+    tools: Dict[str, Dict[str, Any]] = {}
+    not_found: List[str] = []
+    errors: Dict[str, str] = {}
+    for name in names:
+        fn = by_name.get(name)
+        if fn is not None:
+            tools[name] = {
                 "description": fn.get("description", ""),
                 "parameters": fn.get("parameters", {}),
-            }, ensure_ascii=False)
-    return tool_error(
-        f"'{name}' is not currently available. Re-run tool_search to refresh."
-    )
+            }
+        elif _describe_classification(name) == "not_deferrable":
+            errors[name] = (
+                f"'{name}' is not a deferrable tool. If you see it in the tools list "
+                "already, call it directly; otherwise check the spelling against tool_search."
+            )
+        else:
+            not_found.append(name)
+
+    result: Dict[str, Any] = {"tools": tools}
+    if not_found:
+        result["not_found"] = not_found
+        result["hint"] = "Names in not_found are not currently available. Re-run tool_search to refresh."
+    if errors:
+        result["errors"] = errors
+    return json.dumps(result, ensure_ascii=False)
 
 
-def scoped_deferrable_names(
-    tool_defs: List[Dict[str, Any]],
-    *,
-    profile: str = TOOL_PROFILE_FULL,
-) -> frozenset[str]:
+def scoped_deferrable_names(tool_defs: List[Dict[str, Any]]) -> frozenset[str]:
     """Return the set of deferrable tool names present in ``tool_defs``.
 
     ``tool_defs`` is expected to be the *pre-assembly* tool list for the
@@ -1068,7 +1200,7 @@ def scoped_deferrable_names(
     names: set[str] = set()
     for td in tool_defs:
         name = (td.get("function") or {}).get("name", "")
-        if name and is_deferrable_tool_name(name, profile=profile):
+        if name and is_deferrable_tool_name(name):
             names.add(name)
     return frozenset(names)
 
@@ -1126,11 +1258,7 @@ def validate_deferred_call_args(name: str, args: Dict[str, Any]) -> Optional[str
         return None
 
 
-def resolve_underlying_call(
-    args: Dict[str, Any],
-    *,
-    profile: str = TOOL_PROFILE_FULL,
-) -> Tuple[Optional[str], Dict[str, Any], Optional[str]]:
+def resolve_underlying_call(args: Dict[str, Any]) -> Tuple[Optional[str], Dict[str, Any], Optional[str]]:
     """Parse a ``tool_call`` invocation into (underlying_name, args, error_msg).
 
     Used by:
@@ -1155,7 +1283,7 @@ def resolve_underlying_call(
             return None, {}, f"tool_call 'arguments' is not valid JSON: {e}"
     if not isinstance(raw_args, dict):
         return None, {}, "tool_call 'arguments' must be an object"
-    if not is_deferrable_tool_name(name, profile=profile):
+    if not is_deferrable_tool_name(name):
         return None, {}, (
             f"'{name}' is not a deferrable tool. If it appears in the model-facing tools "
             "list already, call it directly instead of via tool_call."
@@ -1168,17 +1296,10 @@ __all__ = [
     "TOOL_DESCRIBE_NAME",
     "TOOL_CALL_NAME",
     "BRIDGE_TOOL_NAMES",
-    "TOOL_PROFILE_LEAN",
-    "TOOL_PROFILE_FULL",
-    "TOOL_PROFILES",
-    "LEAN_DIRECT_TOOL_NAMES",
     "ToolSearchConfig",
     "CatalogEntry",
     "AssemblyResult",
     "load_config",
-    "load_tool_profile",
-    "normalize_tool_profile",
-    "resolve_session_tool_profile",
     "is_deferrable_tool_name",
     "classify_tools",
     "estimate_tokens_from_schemas",

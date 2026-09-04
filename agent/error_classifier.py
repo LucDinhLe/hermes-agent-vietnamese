@@ -13,10 +13,6 @@ from __future__ import annotations
 
 import enum
 import logging
-import math
-import re
-import time
-from datetime import datetime
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
@@ -61,6 +57,7 @@ class FailoverReason(enum.Enum):
     context_overflow = "context_overflow"  # Context too large — compress, not failover
     payload_too_large = "payload_too_large"  # 413 — compress payload
     image_too_large = "image_too_large"   # Native image part exceeds provider's per-image limit — shrink and retry
+    image_corrupt = "image_corrupt"       # Provider says the image bytes are undecodable — shrinking won't help, strip and retry instead
 
     # Model / provider policy
     model_not_found = "model_not_found"  # 404 or invalid model — fallback to different model
@@ -183,19 +180,6 @@ _BILLING_ERROR_CODES = frozenset({
     _XAI_SPENDING_LIMIT_ERROR_CODE,
 })
 
-_CONTEXT_ERROR_CODES = frozenset({
-    "context_length_exceeded",
-    "max_tokens_exceeded",
-})
-
-_RATE_LIMIT_ERROR_CODES = frozenset({
-    "resource_exhausted",
-    "throttled",
-    "rate_limit_exceeded",
-})
-
-_SAFE_FAILURE_CODE_RE = re.compile(r"^[a-z0-9][a-z0-9_.:-]{0,79}$")
-
 # Patterns that indicate rate limiting (transient, will resolve)
 _RATE_LIMIT_PATTERNS = [
     "rate limit",
@@ -262,10 +246,15 @@ _USAGE_LIMIT_TRANSIENT_SIGNALS = [
     "retry",
     "resets at",
     "reset in",
+    "resets in",
+    "reset after",
+    "available in",
     "wait",
     "requests remaining",
     "periodic",
     "window",
+    "per minute",
+    "per second",
 ]
 
 # Payload-too-large patterns detected from message text (no status_code attr).
@@ -295,8 +284,47 @@ _IMAGE_TOO_LARGE_PATTERNS = [
     "image dimensions exceed",  # Anthropic: "image dimensions exceed max allowed size: 8000 pixels"
     "dimensions exceed max allowed size",  # Anthropic dimension-cap (wording variant)
     "max allowed size: 8000",  # Anthropic dimension-cap (explicit pixel ceiling)
+    # Vendors that reject the same oversized image without using the word
+    # "image".  MiniMax's Anthropic-compatible endpoint returns
+    # "media exceeds size limit: max 10485760 bytes (2013)" for a native
+    # image part above its 10 MB ceiling (#76039).  Matched on the "media"
+    # fragment to mirror "image exceeds" above and catch reworded variants.
+    # A non-image media rejection (audio/video) that lands here is safe: the
+    # shrink pass finds no image parts, returns False, and the caller
+    # surfaces the original error unchanged.
+    "media exceeds",
+    "media too large",
     # "request_too_large" on a request known to contain an image → image is
     # the likely culprit; we still try the shrink path before giving up.
+]
+
+# Image-corruption patterns — distinct from _IMAGE_TOO_LARGE_PATTERNS above.
+# These fire when the provider can decode the request but not the image
+# bytes themselves (e.g. a re-serialized image part in replayed history that
+# lost data along the way). Re-encoding/shrinking corrupt bytes does not fix
+# corruption, so this list is routed to the strip-and-retry path
+# (FailoverReason.image_corrupt), never to the shrink path.
+#
+# xAI wording: {"code":"invalid-argument","error":"...Invalid PNG image."}
+# xAI has a second wording for the same failure class depending on where
+# the truncation lands: "Invalid PNG image." for aligned truncation,
+# "base64 string of provided image cannot be decoded" for unaligned
+# truncation (confirmed by the issue reporter — same root cause, two wire
+# messages).
+# A third xAI wording covers the URL-image path — the provider downloads
+# the image itself and rejects the fetched bytes:
+# {"code":"invalid-argument","error":"code: 'Client specified an invalid
+# argument', message: \"Downloaded response does not contain a valid JPG,
+# PNG, WebP, or ICO image.\""}
+# Matched as the full observed sentence on purpose — shorter fragments
+# ("downloaded response does not contain a valid") also match non-image
+# download failures and would misroute them into strip-and-retry.
+# See: https://github.com/NousResearch/hermes-agent/issues/69078
+_IMAGE_CORRUPT_PATTERNS = [
+    "invalid png image",
+    "invalid jpeg image",
+    "base64 string of provided image cannot be decoded",
+    "downloaded response does not contain a valid jpg, png, webp, or ico image",
 ]
 
 # Providers that follow the OpenAI spec strictly require tool message
@@ -475,6 +503,59 @@ _REQUEST_VALIDATION_PATTERNS = [
     "unknown_parameter",
     "unsupported_parameter",
 ]
+
+# Request parameters that Hermes sends on SOME routes only, paired with the
+# providers/hosts where sending them is deliberate.
+#
+# When a host that is NOT in the allowed set rejects one of these fields, the
+# client never put it in the body — the provider's own gateway injected it —
+# so the 400 is a server-side flake rather than a deterministic request-shape
+# error.  See ``_is_server_injected_param_rejection`` and the branch in
+# ``_classify_400``.
+#
+# ``prompt_cache_retention`` is only sent for api.meta.ai and bedrock-mantle
+# hosts (agent/transports/codex.py::_default_prompt_cache_retention_for_request).
+# The Codex OAuth backend rejects it spontaneously on requests that provably
+# never carried it.
+_SERVER_INJECTED_PARAM_SENDERS: Dict[str, tuple] = {
+    "prompt_cache_retention": ("meta", "muse", "msl", "model-api", "bedrock", "mantle"),
+}
+
+
+def _is_server_injected_param_rejection(error_msg: str, provider: str) -> bool:
+    """True when a 400 blames a parameter this route never sends.
+
+    ``error_msg`` is the lowercased, concatenated message text; ``provider`` is
+    the lowercased provider slug.  A match means the rejection cannot be
+    attributed to our own request shape, so the error is transient and retrying
+    the identical request is the correct recovery.
+
+    Deliberately conservative: it fires only for known one-route-only
+    parameters AND only when the current provider is not one of the routes that
+    actually sends them, so a genuine client-side bad parameter (``max_tokens``
+    on a GPT-5 model) still fails fast as a ``format_error``.
+    """
+    if not error_msg:
+        return False
+    provider_slug = (provider or "").strip().lower()
+    for param, senders in _SERVER_INJECTED_PARAM_SENDERS.items():
+        if param not in error_msg:
+            continue
+        # Require the message to actually be a rejection of that parameter,
+        # not an incidental mention.
+        if not (
+            "not supported" in error_msg
+            or "unsupported" in error_msg
+            or "unknown" in error_msg
+            or "unrecognized" in error_msg
+        ):
+            continue
+        if any(sender in provider_slug for sender in senders):
+            # This route sends the field on purpose — a real request error.
+            return False
+        return True
+    return False
+
 
 # OpenRouter aggregator policy-block patterns.
 #
@@ -724,94 +805,6 @@ _SSL_TRANSIENT_PATTERNS = [
 ]
 
 
-def _coerce_reset_at(value: Any) -> Optional[float]:
-    """Normalize an absolute reset timestamp without retaining source text."""
-    if isinstance(value, bool) or value is None:
-        return None
-    if isinstance(value, (int, float)):
-        parsed = float(value)
-        return parsed if math.isfinite(parsed) and parsed >= 0 else None
-    if not isinstance(value, str):
-        return None
-    text = value.strip()
-    if not text or len(text) > 64:
-        return None
-    try:
-        parsed = float(text)
-    except ValueError:
-        try:
-            parsed = datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
-        except (ValueError, OverflowError):
-            return None
-    return parsed if math.isfinite(parsed) and parsed >= 0 else None
-
-
-def _normalized_error_context(
-    error: Exception,
-    body: dict,
-    error_code: str,
-) -> Dict[str, Any]:
-    """Return persistence-safe failure metadata (code/reset only).
-
-    Provider messages and raw response bodies may contain prompts, tool
-    results, bearer tokens, or other private material. This helper therefore
-    uses a strict code grammar and extracts only numeric reset metadata.
-    """
-    context: Dict[str, Any] = {}
-    code = (error_code or "").strip().lower()
-    if _SAFE_FAILURE_CODE_RE.fullmatch(code):
-        context["code"] = code
-
-    payloads = []
-    if isinstance(body, dict):
-        nested = body.get("error")
-        if isinstance(nested, dict):
-            payloads.append(nested)
-        payloads.append(body)
-
-    reset_at = None
-    retry_after = None
-    for payload in payloads:
-        for key in ("reset_at", "resets_at", "reset"):
-            reset_at = _coerce_reset_at(payload.get(key))
-            if reset_at is not None:
-                break
-        if reset_at is not None:
-            break
-        for key in ("retry_after", "retry_after_seconds"):
-            retry_after_candidate = _coerce_reset_at(payload.get(key))
-            if retry_after_candidate is not None:
-                retry_after = retry_after_candidate
-                break
-
-    response = getattr(error, "response", None)
-    headers = getattr(response, "headers", None)
-    if headers is not None:
-        try:
-            normalized_headers = {
-                str(key).strip().lower(): value for key, value in headers.items()
-            }
-        except Exception:
-            normalized_headers = {}
-        if reset_at is None:
-            for key in (
-                "x-ratelimit-reset",
-                "x-ratelimit-reset-requests",
-                "x-ratelimit-reset-tokens",
-            ):
-                reset_at = _coerce_reset_at(normalized_headers.get(key))
-                if reset_at is not None:
-                    break
-        if retry_after is None:
-            retry_after = _coerce_reset_at(normalized_headers.get("retry-after"))
-
-    if reset_at is None and retry_after is not None:
-        reset_at = time.time() + retry_after
-    if reset_at is not None:
-        context["reset_at"] = float(reset_at)
-    return context
-
-
 # ── Classification pipeline ─────────────────────────────────────────────
 
 def classify_api_error(
@@ -855,7 +848,7 @@ def classify_api_error(
         status_code = 429
     body = _extract_error_body(error)
     error_code = _extract_error_code(body)
-    normalized_error_context = _normalized_error_context(error, body, error_code)
+    response_headers = _extract_response_headers(error)
 
     # Build a comprehensive error message string for pattern matching.
     # str(error) alone may not include the body message (e.g. OpenAI SDK's
@@ -901,17 +894,12 @@ def classify_api_error(
     model_lower = (model or "").strip().lower()
 
     def _result(reason: FailoverReason, **overrides) -> ClassifiedError:
-        override_context = overrides.pop("error_context", None)
-        error_context = dict(normalized_error_context)
-        if isinstance(override_context, dict):
-            error_context.update(override_context)
         defaults = {
             "reason": reason,
             "status_code": status_code,
             "provider": provider,
             "model": model,
             "message": _extract_message(error, body),
-            "error_context": error_context,
         }
         defaults.update(overrides)
         return ClassifiedError(**defaults)
@@ -1105,7 +1093,7 @@ def classify_api_error(
             provider=provider_lower, model=model_lower,
             approx_tokens=approx_tokens, context_length=context_length,
             num_messages=num_messages,
-            normalized_error_context=normalized_error_context,
+            response_headers=response_headers,
             result_fn=_result,
         )
         if classified is not None:
@@ -1135,12 +1123,7 @@ def classify_api_error(
     # ── 3. Error code classification ────────────────────────────────
 
     if error_code:
-        classified = _classify_by_error_code(
-            error_code,
-            error_msg,
-            _result,
-            normalized_error_context=normalized_error_context,
-        )
+        classified = _classify_by_error_code(error_code, error_msg, _result)
         if classified is not None:
             return classified
 
@@ -1268,57 +1251,10 @@ def _classify_by_status(
     approx_tokens: int,
     context_length: int,
     num_messages: int = 0,
-    normalized_error_context: Optional[Dict[str, Any]] = None,
+    response_headers=None,
     result_fn,
 ) -> Optional[ClassifiedError]:
     """Classify based on HTTP status code with message-aware refinement."""
-
-    # A structured provider code is more specific than the overloaded HTTP
-    # status. In particular, providers surface context overflow as 400, 413,
-    # or even 429, while ``insufficient_quota`` can be either a periodic quota
-    # (when reset metadata exists) or durable billing exhaustion.
-    code_lower = (error_code or "").strip().lower()
-    if status_code in {400, 413, 429}:
-        if code_lower in _CONTEXT_ERROR_CODES:
-            return result_fn(
-                FailoverReason.context_overflow,
-                retryable=True,
-                should_compress=True,
-                should_rotate_credential=False,
-                should_fallback=False,
-            )
-        if code_lower == "insufficient_quota":
-            if (normalized_error_context or {}).get("reset_at") is not None:
-                return result_fn(
-                    FailoverReason.rate_limit,
-                    retryable=True,
-                    should_compress=False,
-                    should_rotate_credential=True,
-                    should_fallback=True,
-                )
-            return result_fn(
-                FailoverReason.billing,
-                retryable=False,
-                should_compress=False,
-                should_rotate_credential=True,
-                should_fallback=True,
-            )
-        if code_lower in _BILLING_ERROR_CODES:
-            return result_fn(
-                FailoverReason.billing,
-                retryable=False,
-                should_compress=False,
-                should_rotate_credential=True,
-                should_fallback=True,
-            )
-        if code_lower in _RATE_LIMIT_ERROR_CODES:
-            return result_fn(
-                FailoverReason.rate_limit,
-                retryable=True,
-                should_compress=False,
-                should_rotate_credential=True,
-                should_fallback=True,
-            )
 
     if status_code == 401:
         # Not retryable on its own — credential pool rotation and
@@ -1450,6 +1386,48 @@ def _classify_by_status(
                 should_fallback=True,
                 error_context=ctx,
             )
+        # Account/subscription usage exhaustion is a quota wall, not a
+        # request-rate throttle. Anthropic returns this as 429, so the generic
+        # branch below used to retry it and Desktop rendered a provider error
+        # instead of the billing/quota recovery. Preserve periodic quotas when
+        # the response supplies an explicit reset/retry signal.
+        #
+        # The check covers the narrow #93419 core (Anthropic's
+        # ``usage_limit_reached``) plus the broader ``_USAGE_LIMIT_PATTERNS``
+        # ("quota", "limit exceeded", "key limit exceeded") so other providers'
+        # hard quota walls also route to billing — but ONLY when the message is
+        # not itself an explicit rate-limit phrase. Without that guard,
+        # "Rate limit exceeded" ("limit exceeded" substring) would wrongly
+        # promote to non-retryable billing. (broadening + guard credit #39441)
+        has_usage_limit = (
+            error_code.lower() == "usage_limit_reached"
+            or "usage_limit_reached" in error_msg
+            or any(p in error_msg for p in _USAGE_LIMIT_PATTERNS)
+        )
+        # Explicit billing phrases in a 429 body are a hard wall regardless of
+        # usage-limit wording — a provider that wraps "insufficient credits" in
+        # a 429 (rather than 402) was previously retried as a rate limit and
+        # burned the pool. (credit #39441)
+        has_billing = any(p in error_msg for p in _BILLING_PATTERNS)
+        has_explicit_rate_limit = any(
+            p in error_msg for p in _RATE_LIMIT_PATTERNS
+        )
+        has_transient_signal = _has_usage_limit_transient_signal(
+            error_msg,
+            body,
+            response_headers,
+        )
+        if (
+            (has_billing or has_usage_limit)
+            and not has_explicit_rate_limit
+            and not has_transient_signal
+        ):
+            return result_fn(
+                FailoverReason.billing,
+                retryable=False,
+                should_rotate_credential=True,
+                should_fallback=True,
+            )
         return result_fn(
             FailoverReason.rate_limit,
             retryable=True,
@@ -1475,11 +1453,16 @@ def _classify_by_status(
         # server_error" rule turns one bad request into a retry flood.
         # Detect the unambiguous request-validation signals (in either the
         # message text or the structured error code) and fail fast.
+        #
+        # Exception: a parameter WE never sent on this route was injected by
+        # the provider/proxy itself, so the rejection is not deterministic and
+        # the generic retryable-5xx handling is correct. Mirrors the guard in
+        # _classify_400 — see _is_server_injected_param_rejection.
         if (
             any(p in error_msg for p in _REQUEST_VALIDATION_PATTERNS)
             or error_code.lower() in {"invalid_request_error", "unknown_parameter",
                                       "unsupported_parameter"}
-        ):
+        ) and not _is_server_injected_param_rejection(error_msg, provider):
             return result_fn(
                 FailoverReason.format_error,
                 retryable=False,
@@ -1552,6 +1535,41 @@ def _classify_by_status(
     return None
 
 
+def _has_usage_limit_transient_signal(
+    error_msg: str,
+    body: dict,
+    response_headers,
+) -> bool:
+    """Return whether a usage-limit response identifies a reset window."""
+    if any(pattern in error_msg for pattern in _USAGE_LIMIT_TRANSIENT_SIGNALS):
+        return True
+
+    payloads = [body]
+    if isinstance(body, dict) and isinstance(body.get("error"), dict):
+        payloads.append(body["error"])
+    reset_fields = ("resets_in_seconds", "resets_at", "reset_at", "retry_after")
+    for payload in payloads:
+        if not isinstance(payload, dict):
+            continue
+        if any(
+            payload.get(field) is not None and payload.get(field) != ""
+            for field in reset_fields
+        ):
+            return True
+
+    if response_headers and hasattr(response_headers, "get"):
+        for header in (
+            "retry-after",
+            "Retry-After",
+            "x-ratelimit-reset",
+            "X-RateLimit-Reset",
+        ):
+            value = response_headers.get(header)
+            if value is not None and value != "":
+                return True
+    return False
+
+
 def _classify_402(error_msg: str, result_fn) -> ClassifiedError:
     """Disambiguate 402: billing exhaustion vs transient usage limit.
 
@@ -1608,6 +1626,16 @@ def _classify_400(
             retryable=True,
         )
 
+    # Image-corruption from 400 (xAI's undecodable-image check fires this way).
+    # Must be checked BEFORE image_too_large: both are image-shaped 400s, but
+    # corrupt bytes need strip-and-retry, not shrink-and-retry — shrinking
+    # can't repair a truncated/malformed PNG.
+    if any(p in error_msg for p in _IMAGE_CORRUPT_PATTERNS):
+        return result_fn(
+            FailoverReason.image_corrupt,
+            retryable=True,
+        )
+
     # Image-too-large from 400 (Anthropic's 5 MB per-image check fires this way).
     # Must be checked BEFORE context_overflow because messages can trip both
     # patterns ("exceeds" + "image") and image-shrink is a cheaper recovery.
@@ -1636,6 +1664,25 @@ def _classify_400(
             FailoverReason.invalid_encrypted_content,
             retryable=True,
             should_fallback=False,
+        )
+
+    # Server-injected parameter rejection: a 400 blaming a request field the
+    # client never sent.  MUST be checked BEFORE the request-validation branch
+    # below, which would otherwise class it as a deterministic format_error and
+    # abort the turn.
+    #
+    # Observed live on the Codex OAuth backend (chatgpt.com/backend-api/codex):
+    # it intermittently adds ``prompt_cache_retention`` to its own upstream
+    # call and then rejects it, so a byte-identical request succeeds on retry
+    # (measured ~20% failure over n=20 on a minimal 1-message request that
+    # provably carried no cache parameters).  Retrying is the correct and only
+    # recovery; failing fast burnt an entire large-context request per attempt.
+    if _is_server_injected_param_rejection(error_msg, provider):
+        return result_fn(
+            FailoverReason.server_error,
+            retryable=True,
+            # The request shape was fine — never route this into compression.
+            should_compress=False,
         )
 
     # Request-validation errors (unsupported / unknown parameter) MUST be
@@ -1795,11 +1842,7 @@ def _classify_400(
 # ── Error code classification ───────────────────────────────────────────
 
 def _classify_by_error_code(
-    error_code: str,
-    error_msg: str,
-    result_fn,
-    *,
-    normalized_error_context: Optional[Dict[str, Any]] = None,
+    error_code: str, error_msg: str, result_fn,
 ) -> Optional[ClassifiedError]:
     """Classify by structured error codes from the response body."""
     code_lower = error_code.lower()
@@ -1818,22 +1861,11 @@ def _classify_by_error_code(
             should_fallback=True,
         )
 
-    if code_lower in _RATE_LIMIT_ERROR_CODES:
+    if code_lower in {"resource_exhausted", "throttled", "rate_limit_exceeded"}:
         return result_fn(
             FailoverReason.rate_limit,
             retryable=True,
             should_rotate_credential=True,
-        )
-
-    if (
-        code_lower == "insufficient_quota"
-        and (normalized_error_context or {}).get("reset_at") is not None
-    ):
-        return result_fn(
-            FailoverReason.rate_limit,
-            retryable=True,
-            should_rotate_credential=True,
-            should_fallback=True,
         )
 
     if code_lower in _BILLING_ERROR_CODES:
@@ -1851,7 +1883,7 @@ def _classify_by_error_code(
             should_fallback=True,
         )
 
-    if code_lower in _CONTEXT_ERROR_CODES:
+    if code_lower in {"context_length_exceeded", "max_tokens_exceeded"}:
         return result_fn(
             FailoverReason.context_overflow,
             retryable=True,
@@ -1892,6 +1924,13 @@ def _classify_by_message(
     if any(p in error_msg for p in _MULTIMODAL_TOOL_CONTENT_PATTERNS):
         return result_fn(
             FailoverReason.multimodal_tool_content_unsupported,
+            retryable=True,
+        )
+
+    # Image-corruption patterns (from message text when no status_code)
+    if any(p in error_msg for p in _IMAGE_CORRUPT_PATTERNS):
+        return result_fn(
+            FailoverReason.image_corrupt,
             retryable=True,
         )
 
@@ -2061,6 +2100,21 @@ def _extract_error_body(error: Exception) -> dict:
                     return json_body
             except Exception:
                 pass
+        cause = getattr(current, "__cause__", None) or getattr(current, "__context__", None)
+        if cause is None or cause is current:
+            break
+        current = cause
+    return {}
+
+
+def _extract_response_headers(error: Exception):
+    """Walk the error and its cause chain to find response headers."""
+    current = error
+    for _ in range(5):
+        response = getattr(current, "response", None)
+        headers = getattr(response, "headers", None)
+        if headers and hasattr(headers, "get"):
+            return headers
         cause = getattr(current, "__cause__", None) or getattr(current, "__context__", None)
         if cause is None or cause is current:
             break

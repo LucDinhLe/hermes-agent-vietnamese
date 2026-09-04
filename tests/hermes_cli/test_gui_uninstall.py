@@ -167,39 +167,3 @@ def test_uninstall_args_namespace_mode_mapping():
     full = uninstall._UninstallArgs(mode="full")
     assert full.gui is False and full.full is True and full.yes is True
 
-
-def test_uninstall_gui_can_skip_packaged_apps_owned_by_detached_cleanup(tmp_path, monkeypatch):
-    """Desktop handoff must not scan or remove sibling packaged installs."""
-    hermes_home = tmp_path / ".hermes"
-    current_app = tmp_path / "current" / "Hermes"
-    sibling_app = tmp_path / "other" / "Hermes"
-    current_app.mkdir(parents=True)
-    sibling_app.mkdir(parents=True)
-    (current_app / "Hermes.exe").write_text("current", encoding="utf-8")
-    (sibling_app / "Hermes.exe").write_text("sibling", encoding="utf-8")
-
-    monkeypatch.setattr(gu, "packaged_gui_app_paths", lambda: [current_app, sibling_app])
-    monkeypatch.setattr(gu, "desktop_userdata_dir", lambda: tmp_path / "none")
-
-    removed = gu.uninstall_gui(hermes_home, packaged_app_paths=[])
-
-    assert removed == []
-    assert (current_app / "Hermes.exe").read_text(encoding="utf-8") == "current"
-    assert (sibling_app / "Hermes.exe").read_text(encoding="utf-8") == "sibling"
-
-
-@pytest.mark.parametrize(
-    ("mode", "runner_name"),
-    [("gui", "run_gui_uninstall"), ("lite", "run_uninstall"), ("full", "run_uninstall")],
-)
-def test_module_entrypoint_passes_skip_packaged_apps_to_every_desktop_mode(
-    monkeypatch, mode, runner_name
-):
-    import hermes_cli.uninstall as uninstall
-
-    captured = []
-    monkeypatch.setattr(uninstall, runner_name, lambda args: captured.append(args))
-
-    assert uninstall.main(["--mode", mode, "--skip-packaged-apps"]) == 0
-    assert len(captured) == 1
-    assert captured[0].packaged_app_paths == []

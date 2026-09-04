@@ -41,6 +41,7 @@ class HermesOverlay:
     extra_env_vars: Tuple[str, ...] = ()  # env vars models.dev doesn't list
     base_url_override: str = ""           # override if models.dev URL is wrong/missing
     base_url_env_var: str = ""            # env var for user-custom base URL
+    keyless: bool = False                 # served anonymously — no credential exists to configure
 
 
 HERMES_OVERLAYS: Dict[str, HermesOverlay] = {
@@ -93,11 +94,6 @@ HERMES_OVERLAYS: Dict[str, HermesOverlay] = {
         auth_type="external_process",
         base_url_override="acp://copilot",
         base_url_env_var="COPILOT_ACP_BASE_URL",
-    ),
-    "claude-code": HermesOverlay(
-        transport="openai_chat",
-        auth_type="external_process",
-        base_url_override="claude-code://local",
     ),
     "github-copilot": HermesOverlay(
         transport="openai_chat",
@@ -161,6 +157,12 @@ HERMES_OVERLAYS: Dict[str, HermesOverlay] = {
         is_aggregator=True,
         base_url_env_var="OPENCODE_GO_BASE_URL",
     ),
+    "opencode-free": HermesOverlay(
+        transport="openai_chat",
+        is_aggregator=True,
+        base_url_override="https://opencode.ai/zen/v1",
+        keyless=True,
+    ),
     "kilo": HermesOverlay(
         transport="openai_chat",
         is_aggregator=True,
@@ -194,6 +196,11 @@ HERMES_OVERLAYS: Dict[str, HermesOverlay] = {
         transport="openai_chat",
         base_url_env_var="TOKENHUB_BASE_URL",
     ),
+    "tencent-tokenplan": HermesOverlay(
+        transport="anthropic_messages",
+        base_url_override="https://api.lkeap.cloud.tencent.com/plan/anthropic",
+        base_url_env_var="TOKENPLAN_BASE_URL",
+    ),
     "arcee": HermesOverlay(
         transport="openai_chat",
         base_url_override="https://api.arcee.ai/api/v1",
@@ -221,6 +228,12 @@ HERMES_OVERLAYS: Dict[str, HermesOverlay] = {
         extra_env_vars=("UPSTAGE_API_KEY",),
         base_url_override="https://api.upstage.ai/v1",
         base_url_env_var="UPSTAGE_BASE_URL",
+    ),
+    "nebius-token-factory": HermesOverlay(
+        transport="openai_chat",
+        extra_env_vars=("NEBIUS_API_KEY", "NEBIUS_TOKEN_FACTORY_API_KEY"),
+        base_url_override="https://api.tokenfactory.nebius.com/v1",
+        base_url_env_var="NEBIUS_BASE_URL",
     ),
     "ollama-cloud": HermesOverlay(
         transport="openai_chat",
@@ -317,8 +330,7 @@ ALIASES: Dict[str, str] = {
 
     # anthropic
     "claude": "anthropic",
-    "claude-code": "claude-code",
-    "claude-pro": "claude-code",
+    "claude-code": "anthropic",
 
     # github-copilot (models.dev ID)
     "copilot": "github-copilot",
@@ -337,6 +349,10 @@ ALIASES: Dict[str, str] = {
     # opencode-go
     "go": "opencode-go",
     "opencode-go-sub": "opencode-go",
+
+    # opencode-free
+    "free": "opencode-free",
+    "opencode_free": "opencode-free",
 
     # kilo (models.dev ID for KiloCode)
     "kilocode": "kilo",
@@ -373,6 +389,8 @@ ALIASES: Dict[str, str] = {
     "tokenhub": "tencent-tokenhub",
     "tencent-cloud": "tencent-tokenhub",
     "tencentmaas": "tencent-tokenhub",
+    "tokenplan": "tencent-tokenplan",
+    "tencent-lkeap": "tencent-tokenplan",
 
     # bedrock
     "aws": "bedrock",
@@ -399,6 +417,12 @@ ALIASES: Dict[str, str] = {
     "actual-computer": "actual",
     "actualcomputer": "actual",
     "aci": "actual",
+    # Nebius Token Factory
+    "nebius": "nebius-token-factory",
+    "nebius-tokenfactory": "nebius-token-factory",
+    "nebius-tf": "nebius-token-factory",
+    "token-factory": "nebius-token-factory",
+    "tokenfactory": "nebius-token-factory",
 
     # Local server aliases → virtual "local" concept (resolved via user config)
     "lmstudio": "lmstudio",
@@ -421,20 +445,21 @@ _LABEL_OVERRIDES: Dict[str, str] = {
     "nous": "Nous Portal",
     "openai-codex": "ChatGPT or Codex Subscription",
     "copilot-acp": "GitHub Copilot ACP",
-    "claude-code": "Claude Pro / Max (Claude Code)",
-    "gemini": "Google AI Studio (API)",
     "stepfun": "StepFun Step Plan",
     "xiaomi": "Xiaomi MiMo",
     "gmi": "GMI Cloud",
     "upstage": "Upstage Solar",
     "actual": "Actual Computer",
     "tencent-tokenhub": "Tencent TokenHub",
+    "nebius-token-factory": "Nebius Token Factory",
+    "tencent-tokenplan": "Tencent TokenPlan",
     "lmstudio": "LM Studio",
     "local": "Local endpoint",
     "bedrock": "AWS Bedrock",
     "vertex": "Google Vertex AI",
     "ollama-cloud": "Ollama Cloud",
     "xai-oauth": "xAI Grok OAuth (SuperGrok / Premium+)",
+    "opencode-free": "OpenCode Free",
 }
 
 
@@ -533,6 +558,37 @@ def get_provider(name: str, *, allow_network: bool = True) -> Optional[ProviderD
             source="hermes",
         )
 
+    # Plugin-registered provider profiles (plugins/model-providers/<name>/).
+    # Providers that ship only as plugin profiles (e.g. commandcode,
+    # tencent-tokenhub) are absent from models.dev and HERMES_OVERLAYS, so
+    # without this fallback they resolve as "Unknown provider" in /model,
+    # --provider, and the model-switch path even though the picker lists them
+    # (CANONICAL_PROVIDERS auto-extends from the same plugin registry).
+    try:
+        from providers import get_provider_profile as _profile
+
+        _prof = _profile(canonical)
+        # Only profiles with a concrete endpoint resolve here. Placeholder
+        # profiles like ``custom`` (aliases: ollama/local/vllm) ship with an
+        # empty base_url and are completed by config.yaml custom_providers —
+        # resolving them here would preempt resolve_provider_full's
+        # custom-provider step and collapse keyed IDs
+        # (``custom:local-...``) back to a bare, endpoint-less ``custom``.
+        if _prof is not None and (_prof.base_url or "").strip():
+            _api_mode_to_transport = {v: k for k, v in TRANSPORT_TO_API_MODE.items()}
+            _transport = _api_mode_to_transport.get(_prof.api_mode, "openai_chat")
+            return ProviderDef(
+                id=canonical,
+                name=_prof.display_name or _prof.name or canonical,
+                transport=_transport,
+                api_key_env_vars=tuple(_prof.env_vars or ()),
+                base_url=_prof.base_url or "",
+                auth_type=_prof.auth_type or "api_key",
+                source="plugin-profile",
+            )
+    except Exception:
+        pass
+
     return None
 
 
@@ -628,6 +684,10 @@ def host_mandated_api_mode(base_url: str = "") -> Optional[str]:
       - api.meta.ai only achieves KV-cache hits on /v1/responses with
         prompt_cache_retention; /v1/chat/completions returns 0 cached
         tokens (measured 0% vs 93-99% on /responses with retention).
+      - api.router.com (Ramp Router) is Responses-native: per-model
+        reasoning-effort validation, reasoning summaries, and prompt
+        caching live on /v1/responses; /v1/chat/completions is only a
+        minimal compatibility shim translated onto it.
       - api.anthropic.com / ``…/anthropic`` suffixes speak native Messages.
       - Kimi's ``/coding`` endpoint speaks native Messages.
       - AWS Bedrock runtime hosts speak Converse.
@@ -659,6 +719,13 @@ def host_mandated_api_mode(base_url: str = "") -> Optional[str]:
     # Responses API with prompt_cache_retention; chat/completions stays
     # cache-cold (0% vs 93-99% measured). Exact-hostname match per #32243.
     if hostname == "api.meta.ai":
+        return "codex_responses"
+    # Ramp Router (api.router.com) is Responses-native: reasoning-effort
+    # validation, reasoning summaries, and prompt caching live on
+    # /v1/responses, and /v1/chat/completions is only a minimal
+    # compatibility shim (docs.router.com/api/endpoint). Exact-hostname
+    # match per #32243.
+    if hostname == "api.router.com":
         return "codex_responses"
     if hostname.startswith("bedrock-runtime.") and base_url_host_matches(base_url, "amazonaws.com"):
         return "bedrock_converse"
@@ -742,7 +809,7 @@ def resolve_user_provider(name: str, user_config: Dict[str, Any]) -> Optional[Pr
     # Extract fields
     display_name = entry.get("name", "") or name
     api_url = entry.get("api", "") or entry.get("url", "") or entry.get("base_url", "") or ""
-    key_env = entry.get("key_env", "") or ""
+    key_env = entry.get("key_env") or entry.get("api_key_env") or ""
     transport = entry.get("transport", "openai_chat") or "openai_chat"
 
     env_vars: List[str] = []

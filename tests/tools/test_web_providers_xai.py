@@ -282,41 +282,6 @@ class TestXAIProviderSearchErrors:
         assert result["success"] is False
         assert "xAI" in result["error"]
 
-    def test_turn_hard_cap_blocks_first_responses_post(self):
-        import pytest
-
-        from agent.turn_budget import (
-            TurnBudgetExceeded,
-            TurnGovernor,
-            bind_turn_governor,
-        )
-        from plugins.web.xai import provider as xai_provider
-
-        governor = TurnGovernor(
-            turn_id="xai-web-search-cap",
-            model_warn_limit=1,
-            model_hard_limit=1,
-        )
-        governor.reserve_model_attempt(task="main", role="main")
-
-        with patch.object(
-            xai_provider, "resolve_xai_http_credentials", return_value=_creds()
-        ), patch.object(
-            xai_provider, "_load_xai_web_config", return_value={}
-        ), patch("httpx.post") as posted, bind_turn_governor(
-            governor
-        ), pytest.raises(TurnBudgetExceeded):
-            xai_provider.XAIWebSearchProvider().search("q", limit=5)
-
-        posted.assert_not_called()
-        snapshot = governor.snapshot()
-        assert snapshot["model"]["count"] == 1
-        assert snapshot["model"]["denied"] == 1
-        assert (
-            snapshot["by_task"]["xai_web_search"]["denied_model_attempts"]
-            == 1
-        )
-
     def test_mutually_exclusive_domain_filters_rejected_locally(self):
         from plugins.web.xai import provider as xai_provider
 
@@ -477,7 +442,7 @@ class TestXAIBackendWiring:
         monkeypatch.setattr(web_tools, "_load_web_config", lambda: {})
         for key in (
             "FIRECRAWL_API_KEY", "FIRECRAWL_API_URL", "PARALLEL_API_KEY",
-            "TAVILY_API_KEY", "EXA_API_KEY", "SEARXNG_URL", "BRAVE_SEARCH_API_KEY",
+            "EXA_API_KEY", "SEARXNG_URL", "BRAVE_SEARCH_API_KEY", "KEENABLE_API_KEY",
         ):
             monkeypatch.delenv(key, raising=False)
         monkeypatch.setenv("XAI_API_KEY", "xai-test-key")

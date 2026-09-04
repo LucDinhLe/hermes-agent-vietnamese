@@ -42,7 +42,7 @@
   gnugrep,
   gnused,
   gzip,
-  nodejs_26,
+  nodejs_22,
   openssl,
   python3,
   slirp4netns,
@@ -101,7 +101,7 @@ writeShellApplication {
     gnugrep
     gnused
     gzip
-    nodejs_26
+    nodejs_22
     openssl
     python3
     slirp4netns
@@ -113,7 +113,7 @@ writeShellApplication {
   text = ''
     export DEV_SANDBOX_REAL_CA_CERT=${cacert}/etc/ssl/certs/ca-bundle.crt
     export DEV_SANDBOX_DYNAMIC_LINKER=${stdenv.cc.bintools.dynamicLinker}
-    export DEV_SANDBOX_NODE_DIR=${nodejs_26}
+    export DEV_SANDBOX_NODE_DIR=${nodejs_22}
     export DEV_SANDBOX_ELECTRON_LD_LIBRARY_PATH=${lib.makeLibraryPath electronRuntime}
     # The script is imported into the store as a single file, so its own
     # directory has no scripts/sandbox/ beside it. Point it at the assets

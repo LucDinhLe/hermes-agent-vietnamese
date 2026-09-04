@@ -616,33 +616,19 @@ class TestContextAwareCorrectness:
         assert count == 1, f"err={err}"
         assert "beta TWO" in result
 
-    def test_no_match_on_large_file_is_linear_in_file_lines(self, monkeypatch):
+    def test_no_match_on_large_file_is_fast(self):
         """The anchor pre-filter keeps a no-match scan from being O(file×pattern)."""
-        from tools import fuzzy_match
-
-        comparisons = 0
-
-        class _NoMatchSequence:
-            def __init__(self, *_args, **_kwargs):
-                nonlocal comparisons
-                comparisons += 1
-
-            @staticmethod
-            def ratio():
-                return 0.0
-
-        # Count similarity work directly instead of asserting a wall-clock
-        # ceiling. On a saturated full-suite shard the old <2s assertion could
-        # fail even though the anchor rejected every window immediately.
-        monkeypatch.setattr(fuzzy_match, "SequenceMatcher", _NoMatchSequence)
+        import time
+        from tools.fuzzy_match import _strategy_context_aware
 
         big = "\n".join(f"line {i} content here" for i in range(10000))
         patt = "\n".join(f"nomatch xyzzy {i}" for i in range(40))
-        matches = fuzzy_match._strategy_context_aware(big, patt)
+        start = time.perf_counter()
+        matches = _strategy_context_aware(big, patt)
+        elapsed = time.perf_counter() - start
         assert matches == []
-        # One failed first-line anchor per candidate window. The pre-anchor
-        # implementation scored all 40 aligned lines for each window.
-        assert comparisons == 10000 - 40 + 1
+        # Was ~5.5s before anchoring; generous ceiling to avoid CI flake.
+        assert elapsed < 2.0, f"context_aware no-match took {elapsed:.2f}s"
 
 
 

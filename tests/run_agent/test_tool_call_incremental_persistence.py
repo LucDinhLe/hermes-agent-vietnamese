@@ -35,8 +35,6 @@ from agent.agent_runtime_helpers import sanitize_api_messages
 from agent.tool_executor import execute_tool_calls_segmented
 from hermes_state import SessionDB
 from run_agent import AIAgent
-from tools.budget_config import BudgetConfig
-from tools.tool_result_storage import PERSISTED_OUTPUT_TAG
 
 
 def _make_tool_defs(*names: str) -> list:
@@ -65,11 +63,6 @@ def _make_agent():
         patch("run_agent.OpenAI"),
         patch("run_agent._hermes_home", hermes_home),
         patch("agent.model_metadata.fetch_model_metadata", return_value={}),
-        # This suite exercises persistence ordering with a directly injected
-        # web_search call. The v32 default lean profile intentionally defers
-        # that tool behind Tool Search, so make the legacy eager-tool premise
-        # explicit instead of accidentally testing an invalid model call.
-        patch("tools.tool_search.resolve_session_tool_profile", return_value="full"),
     ):
         agent = AIAgent(
             api_key="test-key",
@@ -77,7 +70,6 @@ def _make_agent():
             quiet_mode=True,
             skip_context_files=True,
             skip_memory=True,
-            skip_background_review=True,
         )
     agent.client = MagicMock()
     agent._cached_system_prompt = "You are helpful."
@@ -624,80 +616,286 @@ def test_execute_tool_calls_concurrent_flushes_each_tool_result_in_order():
     assert flush_lengths == [1, 2]
 
 
-def test_aggregate_budget_rewrite_is_identical_after_cold_resume(
-    tmp_path,
-    monkeypatch,
-):
-    """Post-batch spill must replace the already-durable tool row in place."""
+def test_empty_final_response_updates_already_flushed_blank_assistant_row(tmp_path):
+    """#95514: popping _db_persisted must UPDATE the flushed row, not INSERT.
+
+    Incremental persist already wrote assistant(content=''). finalize_turn
+    recovers the stream buffer onto that live dict. Production flush is
+    append-only, so a re-insert would leave the empty row and add a second
+    assistant (assistant→assistant on reload).
+    """
+    from agent.turn_finalizer import finalize_turn
+
     agent = _make_agent()
     db_path = tmp_path / "state.db"
-    session_id = "aggregate-budget-cold-resume"
-    db = _attach_real_session_db(agent, db_path, session_id)
-    tool_calls = [
-        _mock_tool_call(call_id="budget-c1"),
-        _mock_tool_call(call_id="budget-c2"),
-    ]
+    session_id = "sess-empty-final-flush"
+    _attach_real_session_db(agent, db_path, session_id)
+    agent._current_streamed_assistant_text = "Already streamed to the user."
+
     messages = [
-        {"role": "user", "content": "collect both results"},
+        {"role": "user", "content": "summarize"},
         {
             "role": "assistant",
             "content": "",
             "tool_calls": [
-                {
-                    "id": call.id,
-                    "type": "function",
-                    "function": {"name": "web_search", "arguments": "{}"},
-                }
-                for call in tool_calls
+                {"id": "t1", "type": "function",
+                 "function": {"name": "terminal", "arguments": "{}"}}
             ],
         },
+        {"role": "tool", "tool_call_id": "t1", "name": "terminal", "content": "ok"},
+        {"role": "assistant", "content": ""},
     ]
     agent._flush_messages_to_session_db(messages)
+    pre = _durable_messages(db_path, session_id)
+    assert pre[-1]["role"] == "assistant"
+    assert (pre[-1].get("content") or "") == ""
 
-    budget = BudgetConfig(
-        default_result_size=9_500,
-        turn_budget=7_000,
-        preview_size=128,
+    finalize_turn(
+        agent,
+        final_response="",
+        api_call_count=2,
+        interrupted=False,
+        failed=False,
+        messages=messages,
+        conversation_history=[],
+        effective_task_id="task",
+        turn_id="turn",
+        user_message="summarize",
+        original_user_message="summarize",
+        _should_review_memory=False,
+        _turn_exit_reason="text_response(final)",
     )
-    monkeypatch.setattr(
-        "tools.tool_result_storage._local_storage_dir",
-        lambda: tmp_path / "tool-artifacts",
+
+    reloaded = _durable_messages(db_path, session_id)
+    assistants = [m for m in reloaded if m.get("role") == "assistant"]
+    assert assistants[-1]["content"] == "Already streamed to the user."
+    assert len(assistants) == 2
+    assert assistants[0].get("tool_calls")
+    assert sum(
+        1 for m in assistants
+        if not (m.get("content") or "").strip() and not m.get("tool_calls")
+    ) == 0
+
+
+def test_flush_stale_row_id_from_other_session_still_inserts(tmp_path):
+    """Copied dicts that keep a parent _row_id must still INSERT in a child session."""
+    parent = _make_agent()
+    child = _make_agent()
+    db_path = tmp_path / "state.db"
+    _attach_real_session_db(parent, db_path, "sess-parent")
+    _attach_real_session_db(child, db_path, "sess-child")
+    parent_msgs = [
+        {"role": "user", "content": "p-user"},
+        {"role": "assistant", "content": "p-answer"},
+    ]
+    parent._flush_messages_to_session_db(parent_msgs)
+    copies = [{k: v for k, v in m.items() if k != "_db_persisted"} for m in parent_msgs]
+    copies.extend(
+        [
+            {"role": "user", "content": "c-user"},
+            {"role": "assistant", "content": "c-answer"},
+        ]
     )
-    dispatch_results = iter(["A" * 6_000, "B" * 6_000])
-    assistant_message = SimpleNamespace(content="", tool_calls=tool_calls)
-    try:
-        with (
-            patch(
-                "agent.tool_executor._budget_for_agent",
-                return_value=budget,
-            ),
-            patch(
-                "run_agent.handle_function_call",
-                side_effect=lambda *_args, **_kwargs: next(dispatch_results),
-            ),
-        ):
-            agent._execute_tool_calls_sequential(
-                assistant_message,
-                messages,
-                "task-1",
-            )
-    finally:
-        db.close()
+    child._flush_messages_to_session_db(copies)
+    reloaded = _durable_messages(db_path, "sess-child")
+    assert [m.get("content") for m in reloaded] == [
+        "p-user",
+        "p-answer",
+        "c-user",
+        "c-answer",
+    ]
 
-    live_tools = [message for message in messages if message.get("role") == "tool"]
-    assert len(live_tools) == 2
-    assert PERSISTED_OUTPUT_TAG in live_tools[0]["content"]
-    assert sum(len(message["content"].encode("utf-8")) for message in live_tools) <= 7_000
 
-    durable_tools = [
-        message
-        for message in _durable_messages(db_path, session_id)
-        if message.get("role") == "tool"
+def test_flush_stale_row_id_from_other_session_does_not_fill_child_blank(tmp_path):
+    """A parent `_row_id` must INSERT in the child, not steal a blank tail."""
+    parent = _make_agent()
+    child = _make_agent()
+    db_path = tmp_path / "state.db"
+    _attach_real_session_db(parent, db_path, "sess-parent")
+    _attach_real_session_db(child, db_path, "sess-child")
+    parent_msgs = [
+        {"role": "user", "content": "p-user"},
+        {"role": "assistant", "content": "p-answer"},
     ]
-    assert [message["tool_call_id"] for message in durable_tools] == [
-        "budget-c1",
-        "budget-c2",
+    parent._flush_messages_to_session_db(parent_msgs)
+    child_msgs = [
+        {"role": "user", "content": "c-keep"},
+        {"role": "assistant", "content": ""},
     ]
-    assert [message["content"] for message in durable_tools] == [
-        message["content"] for message in live_tools
+    child._flush_messages_to_session_db(child_msgs)
+    copies = [{k: v for k, v in m.items() if k != "_db_persisted"} for m in parent_msgs]
+    copies.extend(
+        [
+            {"role": "user", "content": "c-user"},
+            {"role": "assistant", "content": "c-answer"},
+        ]
+    )
+    child._flush_messages_to_session_db(copies)
+    reloaded = _durable_messages(db_path, "sess-child")
+    assert [m.get("content") for m in reloaded] == [
+        "c-keep",
+        "",
+        "p-user",
+        "p-answer",
+        "c-user",
+        "c-answer",
     ]
+
+
+def test_flush_archived_same_session_row_id_fills_active_clone(tmp_path):
+    """Watermark compaction clones the tail; stale `_row_id` must not win.
+
+    ``archive_and_compact(..., watermark=...)`` archives the original
+    concurrent-tail row and inserts a fresh active clone with a new id.
+    The live dict still holds the archived id. A rewrite keyed only on
+    ``id + session_id`` updates the inactive row, stamps persistence, and
+    skips INSERT — reload then still sees the blank clone (#95514 P0).
+    """
+    from agent.turn_finalizer import finalize_turn
+
+    agent = _make_agent()
+    db_path = tmp_path / "state.db"
+    session_id = "sess-archived-row-id"
+    db = _attach_real_session_db(agent, db_path, session_id)
+    recovered = "Already streamed to the user."
+    agent._current_streamed_assistant_text = recovered
+    messages = [
+        {"role": "user", "content": "summarize"},
+        {"role": "assistant", "content": ""},
+    ]
+    agent._flush_messages_to_session_db(messages)
+    stale_id = messages[-1]["_row_id"]
+    user_id = messages[0]["_row_id"]
+    assert isinstance(stale_id, int)
+    assert stale_id > user_id
+
+    db.archive_and_compact(
+        session_id,
+        compacted_messages=[{"role": "user", "content": "prior turns summarized"}],
+        watermark=user_id,
+    )
+
+    finalize_turn(
+        agent,
+        final_response="",
+        api_call_count=1,
+        interrupted=False,
+        failed=False,
+        messages=messages,
+        conversation_history=[],
+        effective_task_id="task",
+        turn_id="turn",
+        user_message="summarize",
+        original_user_message="summarize",
+        _should_review_memory=False,
+        _turn_exit_reason="text_response(final)",
+    )
+
+    reloaded = _durable_messages(db_path, session_id)
+    active_assistants = [m for m in reloaded if m.get("role") == "assistant"]
+    assert active_assistants, "compaction clone should keep an active assistant"
+    assert any(
+        (m.get("content") or "").strip() == recovered for m in active_assistants
+    )
+    assert not any(
+        not (m.get("content") or "").strip() for m in active_assistants
+    )
+    inactive = db.get_messages(session_id, include_inactive=True)
+    archived = next(m for m in inactive if m.get("id") == stale_id)
+    assert archived.get("active") in (0, False)
+    assert messages[-1].get("_row_id") != stale_id
+
+
+def test_flush_atomic_mixed_repair_and_append_rollback_on_failure(tmp_path, monkeypatch):
+    """Mixed rewrite + append must be atomic: failure rolls back repair and stamps no markers.
+
+    If a turn contains both a blank assistant repair and a subsequent new message,
+    failure during the batch insert must roll back the assistant update and stamp
+    no in-memory markers.
+    """
+    from hermes_state import SessionDB
+
+    agent = _make_agent()
+    db_path = tmp_path / "state.db"
+    session_id = "sess-atomic-rollback"
+    db = _attach_real_session_db(agent, db_path, session_id)
+
+    messages = [
+        {"role": "user", "content": "summarize"},
+        {"role": "assistant", "content": ""},
+    ]
+    agent._flush_messages_to_session_db(messages)
+    orig_row_id = messages[-1]["_row_id"]
+    assert isinstance(orig_row_id, int)
+
+    # Now modify assistant message in memory and add a new message to the batch
+    messages[-1]["content"] = "Recovered stream answer"
+    messages[-1].pop("_db_persisted", None)
+    new_tool_msg = {"role": "tool", "tool_call_id": "t1", "name": "terminal", "content": "ok"}
+    messages.append(new_tool_msg)
+
+    # Force a failure inside the batch write transaction on the second message
+    orig_insert = SessionDB._insert_message_rows
+
+    def _failing_insert(self_db, conn, sid, msgs):
+        for msg in msgs:
+            if msg.get("role") == "tool":
+                raise RuntimeError("Simulated mid-batch persistence crash")
+        return orig_insert(self_db, conn, sid, msgs)
+
+    monkeypatch.setattr(SessionDB, "_insert_message_rows", _failing_insert)
+
+    success = agent._flush_messages_to_session_db(messages)
+    assert success is False or getattr(agent, "_incremental_persistence_failed", False) is True
+
+    # Check that in-memory markers were NOT stamped
+    assert messages[-1].get("_db_persisted") is not True
+    assert new_tool_msg.get("_db_persisted") is not True
+
+    # Check that the durable SQLite row was NOT updated (rolled back)
+    durable = _durable_messages(db_path, session_id)
+    assert len(durable) == 2
+    assert durable[-1]["role"] == "assistant"
+    assert (durable[-1].get("content") or "") == ""
+
+
+def test_flush_concurrent_nonblank_winner_adopts_canonical_content(tmp_path):
+    """A concurrent non-blank winner must be adopted without overwrite and synced to live dict."""
+    agent = _make_agent()
+    db_path = tmp_path / "state.db"
+    session_id = "sess-concurrent-winner"
+    db = _attach_real_session_db(agent, db_path, session_id)
+
+    messages = [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": ""},
+    ]
+    agent._flush_messages_to_session_db(messages)
+    row_id = messages[-1]["_row_id"]
+    assert isinstance(row_id, int)
+
+    # Concurrent writer updates the row in SQLite to non-blank canonical content
+    def _concurrent_write(conn):
+        conn.execute(
+            "UPDATE messages SET content = ? WHERE id = ?",
+            (db._encode_content("Canonical winner answer from sibling"), row_id),
+        )
+
+    db._execute_write(_concurrent_write)
+
+    # Live agent attempts to flush divergent content
+    messages[-1]["content"] = "Divergent live agent answer"
+    messages[-1].pop("_db_persisted", None)
+
+    success = agent._flush_messages_to_session_db(messages)
+    assert success is True
+
+    # SQLite must still have canonical winner content
+    durable = _durable_messages(db_path, session_id)
+    assert durable[-1]["content"] == "Canonical winner answer from sibling"
+
+    # Live dict must have adopted the canonical content and be marked persisted
+    assert messages[-1]["content"] == "Canonical winner answer from sibling"
+    assert messages[-1]["_db_persisted"] is True
+    assert messages[-1]["_row_id"] == row_id
+

@@ -8,7 +8,6 @@ import sys
 import threading
 import time
 import types
-from unittest.mock import patch
 
 import pytest
 
@@ -162,69 +161,6 @@ def test_portable_only_mcp_configuration_opens_startup_gate(monkeypatch):
     )
 
     assert mcp_startup._has_configured_mcp_servers() is True
-
-
-def test_no_configured_mcp_is_zero_startup_and_fail_closed(monkeypatch):
-    monkeypatch.setitem(
-        sys.modules,
-        "hermes_cli.config",
-        types.SimpleNamespace(read_raw_config=lambda: {}),
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "hermes_cli.agent_plugins",
-        types.SimpleNamespace(has_enabled_agent_plugin_mcp=lambda _config: False),
-    )
-
-    with patch("threading.Thread") as thread:
-        mcp_startup.start_background_mcp_discovery(
-            logger=_retry_logger(),
-            thread_name="must-not-start",
-        )
-
-    thread.assert_not_called()
-    assert mcp_startup._mcp_discovery_thread is None
-    assert mcp_startup._mcp_discovery_started is False
-    assert "tools.mcp_tool" not in sys.modules
-
-
-def test_broken_config_probe_does_not_authorize_mcp_startup(monkeypatch):
-    def broken_config():
-        raise OSError("isolated config unavailable")
-
-    monkeypatch.setitem(
-        sys.modules,
-        "hermes_cli.config",
-        types.SimpleNamespace(read_raw_config=broken_config),
-    )
-
-    assert mcp_startup._has_configured_mcp_servers() is False
-
-
-def test_disabled_only_mcp_config_is_zero_startup(monkeypatch):
-    monkeypatch.setitem(
-        sys.modules,
-        "hermes_cli.config",
-        types.SimpleNamespace(
-            read_raw_config=lambda: {
-                "mcp_servers": {"demo": {"enabled": False}}
-            }
-        ),
-    )
-    monkeypatch.setitem(
-        sys.modules,
-        "hermes_cli.agent_plugins",
-        types.SimpleNamespace(has_enabled_agent_plugin_mcp=lambda _config: False),
-    )
-
-    with patch("threading.Thread") as thread:
-        mcp_startup.start_background_mcp_discovery(
-            logger=_retry_logger(),
-            thread_name="disabled-must-not-start",
-        )
-
-    thread.assert_not_called()
-    assert mcp_startup._mcp_discovery_started is False
 
 
 

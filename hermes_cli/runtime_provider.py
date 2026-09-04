@@ -40,14 +40,36 @@ from hermes_cli.auth import (
     is_actual_local_base_url,
     normalize_actual_base_url,
 )
-from hermes_cli.config import (
-    get_compatible_custom_providers,
-    load_config,
-    normalize_extra_headers,
-)
+from hermes_cli import config as _config_mod
 from hermes_cli.providers import custom_provider_aliases, custom_provider_slug
 from hermes_constants import OPENROUTER_BASE_URL
 from hermes_cli.providers import is_official_openai_host
+
+
+def load_config():
+    """Late-bound delegate to :func:`hermes_cli.config.load_config`.
+
+    Deliberately NOT a module-level ``from hermes_cli.config import
+    load_config``: this module is often imported lazily (inside functions),
+    so its first import can happen while a test has
+    ``hermes_cli.config.load_config`` patched — a from-import would then
+    bind the MagicMock *permanently*, poisoning every later caller in the
+    process (the mock's fixed config shadows the real one long after the
+    patch exits). Delegating at call time keeps both patch targets working:
+    patching ``hermes_cli.config.load_config`` OR
+    ``hermes_cli.runtime_provider.load_config`` behaves as expected.
+    """
+    return _config_mod.load_config()
+
+
+def get_compatible_custom_providers(config=None):
+    """Late-bound delegate — see :func:`load_config` for why."""
+    return _config_mod.get_compatible_custom_providers(config)
+
+
+def normalize_extra_headers(value):
+    """Late-bound delegate — see :func:`load_config` for why."""
+    return _config_mod.normalize_extra_headers(value)
 from utils import base_url_host_matches, base_url_hostname, env_int
 
 
@@ -140,6 +162,13 @@ def _detect_api_mode_for_url(base_url: str) -> Optional[str]:
     if hostname == "api.meta.ai":
         return "codex_responses"
     if hostname == "api.actual.inc":
+        return "codex_responses"
+    # Ramp Router: Responses-native host — /v1/chat/completions is only a
+    # minimal compatibility shim, while reasoning and caching support live
+    # on /v1/responses (docs.router.com/api/endpoint). Mirrors the
+    # host_mandated_api_mode clause in hermes_cli/providers.py so the
+    # runtime resolver stays in lockstep. Exact hostname per #32243.
+    if hostname == "api.router.com":
         return "codex_responses"
     # Direct native Anthropic host: realign with providers.determine_api_mode,
     # which already maps this host to anthropic_messages. The exact-hostname
@@ -567,7 +596,8 @@ def _resolve_runtime_from_pool_entry(
             if cfg_base_url:
                 base_url = cfg_base_url
         configured_mode = _parse_api_mode(model_cfg.get("api_mode"))
-        if provider in {"opencode-zen", "opencode-go"}:
+        from hermes_cli.models import opencode_provider_family
+        if opencode_provider_family(provider) is not None:
             # Re-derive api_mode from the effective model rather than the
             # persisted api_mode: the opencode providers serve both
             # anthropic_messages and chat_completions models, so the previous
@@ -588,7 +618,8 @@ def _resolve_runtime_from_pool_entry(
     # symmetrically: strip /v1 for anthropic_messages, re-append it for
     # chat_completions / codex_responses (heals a stripped URL persisted to
     # model.base_url by an earlier switch into an anthropic-routed model).
-    if provider in {"opencode-zen", "opencode-go"}:
+    from hermes_cli.models import opencode_provider_family
+    if opencode_provider_family(provider) is not None:
         from hermes_cli.models import normalize_opencode_base_url
 
         base_url = normalize_opencode_base_url(provider, api_mode, base_url)
@@ -676,6 +707,30 @@ def _try_resolve_from_custom_pool(
         return None
 
 
+def _filter_capabilities(value: Any) -> Dict[str, bool]:
+    """Return the string-keyed boolean capabilities accepted at runtime."""
+    if not isinstance(value, dict):
+        return {}
+    return {
+        key: enabled
+        for key, enabled in value.items()
+        if isinstance(key, str) and isinstance(enabled, bool)
+    }
+
+
+def _lift_model_capabilities(
+    entry: Dict[str, Any], model: Optional[str], result: Dict[str, Any]
+) -> None:
+    """Copy explicit boolean per-model capabilities into the runtime."""
+    capabilities = _filter_capabilities(entry.get("capabilities"))
+    models = entry.get("models")
+    model_config = models.get(model) if isinstance(models, dict) and model else None
+    if isinstance(model_config, dict):
+        capabilities.update(_filter_capabilities(model_config))
+    if capabilities:
+        result["capabilities"] = capabilities
+
+
 def _lift_max_output_tokens(entry: Dict[str, Any], result: Dict[str, Any]) -> None:
     """Propagate a per-provider output cap onto the resolved runtime dict.
 
@@ -757,7 +812,9 @@ def _get_named_custom_provider(requested_provider: str) -> Optional[Dict[str, An
             if not is_provider_enabled(entry):
                 continue
             # Resolve the API key from the env var name stored in key_env
-            key_env = str(entry.get("key_env", "") or "").strip()
+            key_env = str(
+                entry.get("key_env") or entry.get("api_key_env") or ""
+            ).strip()
             resolved_api_key = _getenv(key_env, "").strip() if key_env else ""
             # Fall back to inline api_key when key_env is absent or unresolvable
             if not resolved_api_key:
@@ -771,7 +828,7 @@ def _get_named_custom_provider(requested_provider: str) -> Optional[Dict[str, An
                 # Found match by provider key
                 base_url = entry.get("api") or entry.get("url") or entry.get("base_url") or ""
                 if base_url:
-                    result = {
+                    result: Dict[str, Any] = {
                         "name": entry.get("name", ep_name),
                         "base_url": base_url.strip(),
                         "api_key": resolved_api_key,
@@ -799,6 +856,9 @@ def _get_named_custom_provider(requested_provider: str) -> Optional[Dict[str, An
                     if api_mode:
                         result["api_mode"] = api_mode
                     _lift_max_output_tokens(entry, result)
+                    capabilities = _filter_capabilities(entry.get("capabilities"))
+                    if capabilities:
+                        result["capabilities"] = capabilities
                     return result
 
     # Fall back to custom_providers: list (legacy format)
@@ -846,6 +906,9 @@ def _get_named_custom_provider(requested_provider: str) -> Optional[Dict[str, An
         if model_name:
             result["model"] = model_name
         _lift_max_output_tokens(entry, result)
+        capabilities = _filter_capabilities(entry.get("capabilities"))
+        if capabilities:
+            result["capabilities"] = capabilities
         return result
 
     return None
@@ -1078,6 +1141,45 @@ def canonical_custom_identity(
     return None
 
 
+def is_routable_provider(provider: Optional[str]) -> bool:
+    """Whether a provider name currently resolves to a routable route.
+
+    Empty/None is vacuously routable: agent build falls back to the
+    configured default instead of failing. A name that resolves through
+    the full chain (built-in -> user ``providers:`` -> ``custom_providers:``
+    -> models.dev) is routable; anything else would fail agent init with
+    "Unknown provider '<name>'".
+
+    Session resume uses this to detect a stale/renamed/removed provider
+    persisted in an older session snapshot, so recovery can fall back to
+    the configured default or the model the user picked instead of letting
+    the agent build die.
+    """
+    name = str(provider or "").strip()
+    if not name or name.lower() == "auto":
+        return True
+    if name.lower() == "custom":
+        # The bare string is the resolved billing class shared by every
+        # named custom entry — not a routable identity. restore paths must
+        # heal it (canonical_custom_identity) or fall back, never hand it
+        # straight to agent init.
+        return False
+    try:
+        from hermes_cli.providers import resolve_provider_full
+
+        config = load_config()
+        return (
+            resolve_provider_full(
+                name,
+                config.get("providers"),
+                get_compatible_custom_providers(config),
+            )
+            is not None
+        )
+    except Exception:
+        return False
+
+
 def _normalize_base_url_for_match(value) -> str:
     return str(value or "").strip().rstrip("/").lower()
 
@@ -1094,6 +1196,7 @@ def _resolve_named_custom_runtime(
     requested_provider: str,
     explicit_api_key: Optional[str] = None,
     explicit_base_url: Optional[str] = None,
+    target_model: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     # Bare `provider="custom"` with an explicit base_url (e.g. propagated
     # from a `model_aliases:` direct-alias resolution) — build a runtime
@@ -1123,9 +1226,15 @@ def _resolve_named_custom_runtime(
             return pool_result
         _da_is_openai_url   = base_url_host_matches(base_url, "openai.com") or base_url_host_matches(base_url, "openai.azure.com")
         _da_is_openrouter   = base_url_host_matches(base_url, "openrouter.ai")
+        _da_is_ollama_url   = base_url_host_matches(base_url, "ollama.com")
         api_key_candidates = [
             (explicit_api_key or "").strip(),
             # Gate env key fallbacks on authoritative hosts (#28660)
+            # OLLAMA_API_KEY needs its own gate here: _host_derived_api_key
+            # deliberately skips it, expecting an explicit host-matched path
+            # like this one (GHSA-76xc-57q6-vm5m). Without it a `model_aliases:`
+            # entry pointing at Ollama Cloud resolved no key at all.
+            (_getenv("OLLAMA_API_KEY", "").strip()     if _da_is_ollama_url else ""),
             (_getenv("OPENAI_API_KEY", "").strip()     if _da_is_openai_url else ""),
             (_getenv("OPENROUTER_API_KEY", "").strip() if _da_is_openrouter  else ""),
             # Bonus (#28660): derive `<VENDOR>_API_KEY` from the host so users
@@ -1162,9 +1271,11 @@ def _resolve_named_custom_runtime(
     if pool_result:
         # Propagate the model name even when using pooled credentials —
         # the pool doesn't know about the custom_providers model field.
-        model_name = custom_provider.get("model")
+        # An explicit ``target_model`` wins (same rule as the non-pool path).
+        model_name = target_model or custom_provider.get("model")
         if model_name:
             pool_result["model"] = model_name
+        _lift_model_capabilities(custom_provider, model_name, pool_result)
         if isinstance(custom_provider.get("max_output_tokens"), int):
             pool_result["max_output_tokens"] = custom_provider["max_output_tokens"]
         request_overrides = _custom_provider_request_overrides(custom_provider)
@@ -1220,11 +1331,21 @@ def _resolve_named_custom_runtime(
         "base_url": base_url,
         "api_key": api_key or "no-key-required",
         "source": f"custom_provider:{custom_provider.get('name', requested_provider)}",
+        "requested_provider": requested_provider,
     }
     # Propagate the model name so callers can override self.model when the
     # provider name differs from the actual model string the API expects.
-    if custom_provider.get("model"):
+    # An explicit ``target_model`` wins over the provider's configured
+    # default (regression: auxiliary slots / background-review resolve a
+    # concrete model for a custom provider and must not silently fall back
+    # to ``default_model``).
+    if target_model:
+        result["model"] = target_model
+    elif custom_provider.get("model"):
         result["model"] = custom_provider["model"]
+    _lift_model_capabilities(
+        custom_provider, result.get("model"), result
+    )
     if isinstance(custom_provider.get("max_output_tokens"), int):
         result["max_output_tokens"] = custom_provider["max_output_tokens"]
     # Per-provider extra HTTP headers (proxies, gateways, custom auth).
@@ -1234,6 +1355,43 @@ def _resolve_named_custom_runtime(
     request_overrides = _custom_provider_request_overrides(custom_provider)
     if request_overrides:
         result["request_overrides"] = request_overrides
+
+    # Custom providers in the OpenCode family (name extends opencode-go/zen,
+    # or base_url hosted on opencode.ai) serve models behind different API
+    # surfaces per model — a static api_mode 503s for /v1/responses-only
+    # models like grok-4.5 (#85589). Re-derive api_mode from the effective
+    # model and normalize the /v1 suffix, exactly like the built-in
+    # opencode-zen/go paths do.
+    from hermes_cli.models import opencode_provider_family
+
+    _oc_family = opencode_provider_family(requested_provider)
+    if _oc_family is None:
+        try:
+            from utils import base_url_hostname
+
+            if base_url_hostname(base_url).lower() == "opencode.ai":
+                _oc_family = (
+                    "opencode-go" if "/zen/go" in base_url.lower() else "opencode-zen"
+                )
+        except Exception:
+            _oc_family = None
+    if _oc_family is not None and not custom_provider.get("api_mode"):
+        from hermes_cli.models import (
+            normalize_opencode_base_url,
+            opencode_model_api_mode,
+        )
+
+        _effective_model = str(
+            target_model
+            or custom_provider.get("model")
+            or _get_model_config().get("default")
+            or ""
+        ).strip()
+        if _effective_model:
+            result["api_mode"] = opencode_model_api_mode(_oc_family, _effective_model)
+        result["base_url"] = normalize_opencode_base_url(
+            _oc_family, result["api_mode"], result["base_url"]
+        )
     return result
 
 
@@ -1843,6 +2001,7 @@ def resolve_runtime_provider(
         requested_provider=requested_provider,
         explicit_api_key=explicit_api_key,
         explicit_base_url=explicit_base_url,
+        target_model=target_model,
     )
     if custom_runtime:
         custom_runtime["requested_provider"] = requested_provider
@@ -1891,6 +2050,27 @@ def resolve_runtime_provider(
         explicit_base_url=explicit_base_url,
     )
     model_cfg = _get_model_config()
+
+    # OpenCode Zen free tier (*-free slugs, e.g. x-preview-f-free /
+    # "Ox Alpha"): served ANONYMOUSLY on the Zen relay ONLY. Any bearer the
+    # relay doesn't recognize is a 401 — and the Go relay doesn't serve the
+    # free tier at all ("Model x is not supported"), so a valid OpenCode GO
+    # subscription key still fails. Route free slugs through the keyless Zen
+    # runtime BEFORE the credential-pool / explicit / api_key paths so they
+    # work with any OpenCode credential state, including none.
+    from hermes_cli.models import (
+        opencode_provider_family as _oc_family_fn,
+        opencode_zen_free_runtime as _oc_free_runtime_fn,
+    )
+    if _oc_family_fn(provider) is not None:
+        _oc_model = str(
+            target_model or model_cfg.get("default") or model_cfg.get("model") or ""
+        ).strip()
+        _free_runtime = _oc_free_runtime_fn(provider, _oc_model)
+        if _free_runtime is not None:
+            _free_runtime["requested_provider"] = requested_provider
+            return _free_runtime
+
     explicit_runtime = _resolve_explicit_runtime(
         provider=provider,
         requested_provider=requested_provider,
@@ -2084,10 +2264,10 @@ def resolve_runtime_provider(
                 "requested_provider": requested_provider,
             }
 
-    if provider in {"copilot-acp", "claude-code"}:
+    if provider == "copilot-acp":
         creds = resolve_external_process_provider_credentials(provider)
         return {
-            "provider": provider,
+            "provider": "copilot-acp",
             "api_mode": "chat_completions",
             "base_url": creds.get("base_url", "").rstrip("/"),
             "api_key": creds.get("api_key", ""),
@@ -2171,8 +2351,11 @@ def resolve_runtime_provider(
         from agent.bedrock_adapter import (
             has_aws_credentials,
             resolve_aws_auth_env_var,
-            resolve_bedrock_region,
+            resolve_bedrock_runtime_region,
             is_anthropic_bedrock_model,
+            is_openai_bedrock_model,
+            bedrock_openai_base_url,
+            resolve_bedrock_bearer_token,
         )
         # When the user explicitly selected bedrock (not auto-detected),
         # trust boto3's credential chain — it handles IMDS, ECS task roles,
@@ -2190,8 +2373,10 @@ def resolve_runtime_provider(
             )
         # Read bedrock-specific config from config.yaml
         _bedrock_cfg = load_config().get("bedrock", {})
-        # Region priority: config.yaml bedrock.region → env var → us-east-1
-        region = (_bedrock_cfg.get("region") or "").strip() or resolve_bedrock_region()
+        # Region priority: config.yaml bedrock.region → env var → us-east-1.
+        # resolve_bedrock_runtime_region() is the canonical implementation of
+        # this priority; auxiliary resolution uses the same helper.
+        region = resolve_bedrock_runtime_region({"bedrock": _bedrock_cfg})
         auth_source = resolve_aws_auth_env_var() or "aws-sdk-default-chain"
         # Build guardrail config if configured
         _gr = _bedrock_cfg.get("guardrail", {})
@@ -2205,9 +2390,12 @@ def resolve_runtime_provider(
                 guardrail_config["streamProcessingMode"] = _gr["stream_processing_mode"]
             if _gr.get("trace"):
                 guardrail_config["trace"] = _gr["trace"]
-        # Dual-path routing: Claude models use AnthropicBedrock SDK for full
-        # feature parity (prompt caching, thinking budgets, adaptive thinking).
-        # Non-Claude models use the Converse API for multi-model support.
+        # Triple-path routing:
+        # - OpenAI GPT-5.5 on Bedrock uses Bedrock Mantle's OpenAI Responses
+        #   endpoint (not Converse / bedrock-runtime).
+        # - Claude models use AnthropicBedrock SDK for prompt caching,
+        #   thinking budgets, and adaptive thinking.
+        # - Other models use the native Converse API.
         #
         # Exception: Bearer Token auth (AWS_BEARER_TOKEN_BEDROCK) is NOT
         # supported by the AnthropicBedrock SDK (it only does SigV4 signing —
@@ -2216,7 +2404,20 @@ def resolve_runtime_provider(
         # API regardless of model. Ref: #28156.
         _current_model = str(target_model or model_cfg.get("default") or "").strip()
         _has_bearer_token = bool(os.environ.get("AWS_BEARER_TOKEN_BEDROCK", "").strip())
-        if is_anthropic_bedrock_model(_current_model) and not _has_bearer_token:
+        if is_openai_bedrock_model(_current_model):
+            bearer = resolve_bedrock_bearer_token()
+            runtime = {
+                "provider": "bedrock",
+                "api_mode": "codex_responses",
+                "base_url": bedrock_openai_base_url(region),
+                "api_key": bearer or "aws-sdk",
+                "source": "AWS_BEARER_TOKEN_BEDROCK" if bearer else auth_source,
+                "region": region,
+                "model": _current_model,
+                "bedrock_openai": True,
+                "requested_provider": requested_provider,
+            }
+        elif is_anthropic_bedrock_model(_current_model) and not _has_bearer_token:
             # Claude on Bedrock → AnthropicBedrock SDK → anthropic_messages path
             runtime = {
                 "provider": "bedrock",
@@ -2229,7 +2430,7 @@ def resolve_runtime_provider(
                 "requested_provider": requested_provider,
             }
         else:
-            # Non-Claude (Nova, DeepSeek, Llama, etc.) → Converse API
+            # Non-Claude/OpenAI (Nova, DeepSeek, Llama, GPT-OSS, etc.) → Converse API
             runtime = {
                 "provider": "bedrock",
                 "api_mode": "bedrock_converse",
@@ -2303,7 +2504,8 @@ def resolve_runtime_provider(
             configured_provider = str(model_cfg.get("provider") or "").strip().lower()
             # Only honor persisted api_mode when it belongs to the same provider family.
             configured_mode = _parse_api_mode(model_cfg.get("api_mode"))
-            if provider in {"opencode-zen", "opencode-go"}:
+            from hermes_cli.models import opencode_provider_family
+            if opencode_provider_family(provider) is not None:
                 # opencode-zen/go must always re-derive api_mode from the
                 # target model (not the stale persisted api_mode), because
                 # the same provider serves both anthropic_messages
@@ -2325,7 +2527,8 @@ def resolve_runtime_provider(
                     provider, base_url, target_model or model_cfg.get("default", "")
                 )
         # Normalize the /v1 suffix for OpenCode by API mode (see comment above).
-        if provider in {"opencode-zen", "opencode-go"}:
+        from hermes_cli.models import opencode_provider_family
+        if opencode_provider_family(provider) is not None:
             from hermes_cli.models import normalize_opencode_base_url
             base_url = normalize_opencode_base_url(provider, api_mode, base_url)
         if provider == "lmstudio":

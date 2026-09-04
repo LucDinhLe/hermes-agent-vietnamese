@@ -132,15 +132,45 @@ class TestCreateProfile:
         mode = stat.S_IMODE(env_path.stat().st_mode)
         assert mode == 0o600
 
-    def test_fresh_profile_gets_one_time_work_profile_onboarding_marker(self, profile_env):
-        profile_dir = create_profile("writer", no_alias=True)
 
-        config = yaml.safe_load((profile_dir / "config.yaml").read_text(encoding="utf-8"))
-        assert config["skills"]["work_profile"] == {
-            "completed": False,
-            "onboarding_required": True,
-            "version": 1,
-        }
+    def test_fresh_profile_inherits_a_usable_model(self, profile_env):
+        """A profile created without a clone source still resolves a provider.
+
+        Without this it gets no config.yaml at all, so its very first turn dies
+        with "No LLM provider configured" — created, but unable to run. Fresh
+        means fresh skills and SOUL, not unreachable.
+        """
+        default_home = profile_env / ".hermes"
+        (default_home / "config.yaml").write_text(
+            "model:\n  provider: nous\n  default: some/model\n"
+        )
+
+        profile_dir = create_profile("coder", no_alias=True)
+
+        cfg = yaml.safe_load((profile_dir / "config.yaml").read_text())
+        assert cfg["model"]["provider"] == "nous"
+        assert cfg["model"]["default"] == "some/model"
+
+
+    def test_fresh_profile_model_is_copied_not_linked(self, profile_env):
+        """Profiles stay independent islands.
+
+        The model block is copied at creation, so later edits to the source
+        profile never reach one already created from it.
+        """
+        default_home = profile_env / ".hermes"
+        (default_home / "config.yaml").write_text(
+            "model:\n  provider: nous\n  default: some/model\n"
+        )
+        profile_dir = create_profile("coder", no_alias=True)
+
+        (default_home / "config.yaml").write_text(
+            "model:\n  provider: other\n  default: changed/model\n"
+        )
+
+        cfg = yaml.safe_load((profile_dir / "config.yaml").read_text())
+        assert cfg["model"]["provider"] == "nous"
+        assert cfg["model"]["default"] == "some/model"
 
 
 
@@ -160,7 +190,6 @@ class TestCreateProfile:
         assert cloned_config["model"] == "test"
         assert (profile_dir / ".env").read_text().strip() == "KEY=val"
         assert (profile_dir / "SOUL.md").read_text() == "Be helpful."
-        assert "work_profile" not in cloned_config.get("skills", {})
 
 
 
@@ -193,30 +222,42 @@ class TestNoSkillsOptOut:
 
 
     def test_delete_marker_re_enables_seeding(self, profile_env, monkeypatch):
-        """Deleting .no-bundled-skills opts the profile back in."""
+        """Deleting .no-bundled-skills opts the profile back into a full sync.
+
+        The sync subprocess runs in BOTH states: with the marker present,
+        sync_skills() itself seeds only the essential skills and reports
+        ``skipped_opt_out``; without it, a normal full sync happens.
+        """
         import subprocess as _sp
 
         profile_dir = create_profile("orchestrator", no_alias=True, no_skills=True)
         assert has_bundled_skills_opt_out(profile_dir) is True
 
-        # First call: opted out, returns skipped dict without touching subprocess
+        # Marker present: the subprocess still runs (essential-only seeding
+        # happens inside sync_skills) and its skipped_opt_out flag surfaces.
         called = []
+        stdout_by_call = [
+            '{"copied": ["hermes-agent"], "skipped_opt_out": true}',
+            '{"copied": []}',
+        ]
         monkeypatch.setattr(
             "subprocess.run",
             lambda *a, **kw: (called.append(a), _sp.CompletedProcess(
-                args=a, returncode=0, stdout='{"copied": []}', stderr=""
+                args=a, returncode=0,
+                stdout=stdout_by_call[min(len(called) - 1, 1)], stderr="",
             ))[1],
         )
         r1 = seed_profile_skills(profile_dir, quiet=True)
         assert r1.get("skipped_opt_out") is True
-        assert called == []
+        assert r1.get("copied") == ["hermes-agent"]
+        assert len(called) == 1
 
-        # Delete marker → next call runs the real path
+        # Delete marker → next call is a normal full sync.
         (profile_dir / NO_BUNDLED_SKILLS_MARKER).unlink()
         assert has_bundled_skills_opt_out(profile_dir) is False
         r2 = seed_profile_skills(profile_dir, quiet=True)
         assert r2 == {"copied": []}
-        assert len(called) == 1
+        assert len(called) == 2
 
 
 # ===================================================================
@@ -1134,4 +1175,5 @@ class TestResolveProfileEnvSpelling:
         # No HERMES_HOME: the platform default root applies (existing contract).
         monkeypatch.delenv("HERMES_HOME", raising=False)
         assert Path(resolve_profile_env("default")) == _get_default_hermes_home()
+
 

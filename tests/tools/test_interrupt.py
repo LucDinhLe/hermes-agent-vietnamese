@@ -27,6 +27,20 @@ class TestInterruptModule:
         set_interrupt(False)
         assert not is_interrupted()
 
+    def test_is_thread_interrupted_checks_target_tid_not_caller(self):
+        from tools.interrupt import (
+            set_interrupt, is_interrupted, is_thread_interrupted, _interrupted_threads, _lock,
+        )
+        with _lock:
+            _interrupted_threads.clear()
+        other_tid = threading.get_ident() + 1
+        set_interrupt(True, thread_id=other_tid)
+        assert not is_interrupted()
+        assert is_thread_interrupted(other_tid)
+        assert is_thread_interrupted(None) is False
+        set_interrupt(False, thread_id=other_tid)
+        assert not is_thread_interrupted(other_tid)
+
 
     def test_clear_current_thread_interrupt_leaves_other_threads(self):
         """clear_current_thread_interrupt only touches the calling thread."""
@@ -91,10 +105,6 @@ class TestPreToolCheck:
         # for any attribute access, which would short-circuit the interrupt
         # skip path before any cancelled-tool messages are appended.
         agent._incremental_persistence_failed = False
-        # A real AIAgent initializes this explicitly.  Bare MagicMock would
-        # otherwise fabricate a governor and deny the batch before the
-        # interrupt pre-flight path can emit its cancelled results.
-        agent._active_turn_governor = None
 
         # Import and call the method
         import types

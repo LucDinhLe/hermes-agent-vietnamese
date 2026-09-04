@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import os
 import re
-import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -51,6 +50,9 @@ ALLOWLIST = {
 EXCLUDED_DIR_PARTS = {
     "tests", ".venv", ".git", ".worktrees", "node_modules", "website",
     "docs", "scripts", "examples", "apps",
+    # Compiled bytecode is not source. Sibling test processes also create
+    # and delete these directories while this scan walks the tree.
+    "__pycache__",
 }
 
 # A safe_load within this many lines of a config.yaml reference is treated
@@ -61,97 +63,28 @@ SAFE_LOAD_RE = re.compile(r"\bsafe_load\s*\(")
 CONFIG_YAML_RE = re.compile(r"""["']config\.yaml["']""")
 
 
-def _tracked_python_paths(repo_root: Path) -> tuple[Path, ...] | None:
-    """Return Git-tracked Python paths, or ``None`` for source archives."""
-    if not (repo_root / ".git").exists():
-        return None
-    try:
-        completed = subprocess.run(
-            ["git", "ls-files", "-z", "--", "*.py"],
-            cwd=repo_root,
-            capture_output=True,
-            check=False,
-            timeout=10,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    if completed.returncode != 0:
-        return None
-    return tuple(
-        Path(os.fsdecode(raw_path))
-        for raw_path in completed.stdout.split(b"\0")
-        if raw_path
-    )
-
-
-def _iter_source_files(repo_root: Path = REPO_ROOT):
-    """Yield stable source files, including from Git-less source archives."""
-    tracked_paths = _tracked_python_paths(repo_root)
-    if tracked_paths is not None:
-        for rel in tracked_paths:
+def _iter_source_files():
+    # This uses os.walk with a pruned dirnames, and not rglob. rglob descends
+    # into every directory and filters after that, so it calls scandir() on
+    # __pycache__ trees that this guard never inspects. Sibling test processes
+    # create and delete those entries during the run.
+    #
+    # A directory that disappears in the middle of a walk raises
+    # FileNotFoundError out of rglob. The test then fails for a reason that it
+    # does not assert.
+    #
+    # The prune skips those trees. The onerror callback ignores a directory
+    # that disappears anyway.
+    for dirpath, dirnames, filenames in os.walk(REPO_ROOT, onerror=lambda _e: None):
+        dirnames[:] = [d for d in dirnames if d not in EXCLUDED_DIR_PARTS]
+        for name in filenames:
+            if not name.endswith(".py"):
+                continue
+            path = Path(dirpath) / name
+            rel = path.relative_to(REPO_ROOT)
             if any(part in EXCLUDED_DIR_PARTS for part in rel.parts):
                 continue
-            yield rel, repo_root / rel
-        return
-
-    def ignore_disappearing_directory(_error: OSError) -> None:
-        # Parallel test workers may remove __pycache__ directories while this
-        # guard walks the repository. A vanished directory is not source and
-        # must not turn this lint guard into a flaky full-suite failure.
-        return None
-
-    for current_root, directories, filenames in os.walk(
-        repo_root,
-        topdown=True,
-        onerror=ignore_disappearing_directory,
-    ):
-        directories[:] = sorted(
-            directory
-            for directory in directories
-            if directory not in EXCLUDED_DIR_PARTS
-        )
-        for filename in sorted(filenames):
-            if not filename.endswith(".py"):
-                continue
-            path = Path(current_root) / filename
-            yield path.relative_to(repo_root), path
-
-
-def test_source_walk_ignores_a_directory_removed_by_parallel_cleanup(
-    monkeypatch,
-    tmp_path,
-):
-    source = tmp_path / "stable.py"
-    source.write_text("VALUE = 1\n", encoding="utf-8")
-
-    def disappearing_walk(root, *, topdown, onerror):
-        assert Path(root) == tmp_path
-        assert topdown is True
-        onerror(FileNotFoundError("parallel cleanup removed __pycache__"))
-        yield str(root), [], [source.name]
-
-    monkeypatch.setattr(os, "walk", disappearing_walk)
-
-    assert list(_iter_source_files(tmp_path)) == [(Path("stable.py"), source)]
-
-
-def test_source_walk_uses_git_index_instead_of_untracked_nested_clones(
-    monkeypatch,
-    tmp_path,
-):
-    (tmp_path / ".git").mkdir()
-    source = tmp_path / "stable.py"
-    source.write_text("VALUE = 1\n", encoding="utf-8")
-    nested = tmp_path / ".local-clone" / "unsafe.py"
-    nested.parent.mkdir()
-    nested.write_text("yaml.safe_load('config.yaml')\n", encoding="utf-8")
-
-    def git_ls_files(*_args, **_kwargs):
-        return subprocess.CompletedProcess([], 0, stdout=b"stable.py\0", stderr=b"")
-
-    monkeypatch.setattr(subprocess, "run", git_ls_files)
-
-    assert list(_iter_source_files(tmp_path)) == [(Path("stable.py"), source)]
+            yield rel, path
 
 
 def test_no_raw_config_yaml_reads_outside_owner_modules():

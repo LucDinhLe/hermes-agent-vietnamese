@@ -29,7 +29,7 @@ from contextvars import ContextVar
 import logging
 import threading
 import time
-from typing import Any, Collection, Dict, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 
 from tools.registry import (
     CHECK_FN_CACHE_BYPASS,
@@ -325,7 +325,6 @@ def get_tool_definitions(
     disabled_toolsets: Optional[List[str]] = None,
     quiet_mode: bool = False,
     skip_tool_search_assembly: bool = False,
-    tool_profile: str = "full",
 ) -> List[Dict[str, Any]]:
     """
     Get tool definitions for model API calls with toolset-based filtering.
@@ -341,10 +340,6 @@ def get_tool_definitions(
             tool_search / tool_describe bridge handlers so they can read the
             real catalog, not the already-collapsed one. Public callers should
             leave this False.
-        tool_profile: ``lean`` defers built-in tools behind Tool Search;
-            ``full`` preserves the legacy eager core surface. The default is
-            ``full`` for backwards-compatible library callers. Session
-            construction always passes its resolved, persisted profile.
 
     Returns:
         Filtered list of OpenAI-format tool definitions.
@@ -376,7 +371,6 @@ def get_tool_definitions(
                 cfg_fp,
                 bool(os.environ.get("HERMES_KANBAN_TASK")),
                 bool(skip_tool_search_assembly),
-                str(tool_profile or "full").strip().lower(),
                 _is_delegated_child_context(),
                 _is_dispatcher_owned_worker(),
                 profile_scope,
@@ -392,13 +386,8 @@ def get_tool_definitions(
             # schemas are treated as read-only by all known callers.
             return list(cached)
 
-    result = _compute_tool_definitions(
-        enabled_toolsets,
-        disabled_toolsets,
-        quiet_mode,
-        skip_tool_search_assembly=skip_tool_search_assembly,
-        tool_profile=tool_profile,
-    )
+    result = _compute_tool_definitions(enabled_toolsets, disabled_toolsets, quiet_mode,
+                                       skip_tool_search_assembly=skip_tool_search_assembly)
     if quiet_mode and cache_key is not None:
         # Cache the freshly-computed list, but hand callers a shallow copy so
         # downstream mutations (e.g. run_agent appending memory/LCM tool
@@ -430,7 +419,6 @@ def _compute_tool_definitions(
     disabled_toolsets: Optional[List[str]] = None,
     quiet_mode: bool = False,
     skip_tool_search_assembly: bool = False,
-    tool_profile: str = "full",
 ) -> List[Dict[str, Any]]:
     """Uncached implementation of :func:`get_tool_definitions`."""
     # Determine which tool names the caller wants
@@ -604,6 +592,54 @@ def _compute_tool_definitions(
         ]
         available_tool_names.discard("browser_exec")
 
+    # delegate_task's child-restrictions rule names sibling tools (clarify,
+    # memory, cronjob). Warning about tools this session doesn't even have
+    # teaches ghost vocabulary — filter the list to tools actually present
+    # and drop the line entirely when none apply. Two source variants exist
+    # (depth-derived): the depth-off line also names delegate_task itself;
+    # the depth-on line lists only the siblings. Pattern order matters —
+    # the sibling list is a substring of the full list.
+    # Same session-level seam as the browser_exec gate above.
+    if "delegate_task" in available_tool_names:
+        blocked_present = [
+            t for t in ("clarify", "memory", "cronjob") if t in available_tool_names
+        ]
+        if len(blocked_present) < 3:
+            full_offvariant = "delegate_task, clarify, memory, or cronjob"
+            full_onvariant = "clarify, memory, or cronjob"
+            for i, td in enumerate(filtered_tools):
+                fn = td.get("function", {})
+                desc = fn.get("description", "")
+                if fn.get("name") != "delegate_task":
+                    continue
+                if full_offvariant in desc:
+                    full, keep_self = full_offvariant, True
+                elif full_onvariant in desc:
+                    full, keep_self = full_onvariant, False
+                else:
+                    break
+                names = (["delegate_task"] if keep_self else []) + blocked_present
+                if blocked_present:
+                    if len(names) == 1:
+                        replacement = names[0]
+                    elif len(names) == 2:
+                        replacement = f"{names[0]} or {names[1]}"
+                    else:
+                        replacement = ", ".join(names[:-1]) + ", or " + names[-1]
+                    desc = desc.replace(full, replacement)
+                else:
+                    # No sibling tools here — drop the restriction line
+                    # (both variants end at the following "\n").
+                    start = desc.find("- Children cannot call " + full)
+                    if start != -1:
+                        end = desc.index("\n", start) + 1
+                        desc = desc[:start] + desc[end:]
+                filtered_tools[i] = {
+                    **td,
+                    "function": {**fn, "description": desc},
+                }
+                break
+
     if not quiet_mode:
         if filtered_tools:
             tool_names = [t["function"]["name"] for t in filtered_tools]
@@ -637,26 +673,14 @@ def _compute_tool_definitions(
     # has already normalized schemas, and the assembly is idempotent in
     # case some caller invokes get_tool_definitions twice.
     try:
-        from tools.tool_search import (
-            TOOL_PROFILE_FULL,
-            assemble_tool_defs,
-            load_config as _load_ts_config,
-            normalize_tool_profile,
-        )
+        from tools.tool_search import assemble_tool_defs, load_config as _load_ts_config
         ts_cfg = _load_ts_config()
-        resolved_profile = normalize_tool_profile(
-            tool_profile,
-            default=TOOL_PROFILE_FULL,
-        )
-        if not skip_tool_search_assembly and (
-            resolved_profile != TOOL_PROFILE_FULL or ts_cfg.enabled != "off"
-        ):
+        if not skip_tool_search_assembly and ts_cfg.enabled != "off":
             context_length = _resolve_active_context_length()
             assembly = assemble_tool_defs(
                 filtered_tools,
                 context_length=context_length,
                 config=ts_cfg,
-                profile=resolved_profile,
             )
             if assembly.activated and not quiet_mode:
                 _forms = {"full": "catalog listing embedded",
@@ -1229,10 +1253,6 @@ def handle_function_call(
     tool_request_middleware_trace: Optional[List[Dict[str, Any]]] = None,
     enabled_toolsets: Optional[List[str]] = None,
     disabled_toolsets: Optional[List[str]] = None,
-    tool_profile: str = "full",
-    tool_catalog_defs: Optional[List[Dict[str, Any]]] = None,
-    capability_skills: Optional[Collection[str]] = None,
-    capability_mcp_tools: Optional[Collection[str]] = None,
 ) -> str:
     """
     Main function call dispatcher that routes calls to the tool registry.
@@ -1254,11 +1274,6 @@ def handle_function_call(
                        matching ``get_tool_definitions`` semantics.
         disabled_toolsets: The session's disabled toolsets, applied as a
                        subtraction when scoping the bridge catalog.
-        tool_profile: Frozen ``lean``/``full`` session profile used for Tool
-                       Search classification.
-        tool_catalog_defs: Frozen pre-assembly schemas for this session. When
-                       supplied, bridge reads never rebuild from mutable
-                       ambient config or registry state.
 
     Returns:
         Function result as a JSON string.
@@ -1268,23 +1283,6 @@ def handle_function_call(
     if not isinstance(function_args, dict):
         function_args = {}
     _tool_middleware_trace = list(tool_request_middleware_trace or [])
-
-    if capability_skills is not None and function_name == "skill_manage":
-        return tool_error(
-            "skill_manage is not available inside a task-scoped capability "
-            "receipt. Recommend capability changes for user approval and a "
-            "new session/agent instead.",
-            error_type="capability_scope_read_only",
-        )
-    if (
-        capability_mcp_tools is not None
-        and function_name.startswith("mcp__")
-        and function_name not in set(capability_mcp_tools)
-    ):
-        return tool_error(
-            f"MCP tool '{function_name}' is not assigned to this session/agent.",
-            error_type="capability_scope_denied",
-        )
 
     # ── Tool Search bridge dispatch ──────────────────────────────────
     # tool_search and tool_describe are pure catalog reads — handle them
@@ -1315,45 +1313,32 @@ def handle_function_call(
         _ts_mod = None
 
     if _ts_mod is not None and _ts_mod.is_bridge_tool(function_name):
-        if tool_catalog_defs is not None:
-            current_defs = list(tool_catalog_defs)
-        else:
-            try:
-                # Use skip_tool_search_assembly=True so we see the real catalog,
-                # not the already-collapsed bridge-only list (the bridge would
-                # otherwise be searching only itself).
-                #
-                # Scope the catalog to the session's toolsets so the bridge can
-                # only surface and invoke tools the session was actually granted.
-                current_defs = get_tool_definitions(
-                    enabled_toolsets=enabled_toolsets,
-                    disabled_toolsets=disabled_toolsets,
-                    quiet_mode=True,
-                    skip_tool_search_assembly=True,
-                    tool_profile=tool_profile,
-                ) or []
-            except Exception:
-                current_defs = []
-        if capability_skills is not None:
-            current_defs = [
-                definition
-                for definition in current_defs
-                if (definition.get("function") or {}).get("name") != "skill_manage"
-            ]
-        if capability_mcp_tools is not None:
-            allowed_mcp = set(capability_mcp_tools)
-            current_defs = [
-                definition
-                for definition in current_defs
-                if not str((definition.get("function") or {}).get("name", "")).startswith("mcp__")
-                or (definition.get("function") or {}).get("name") in allowed_mcp
-            ]
+        try:
+            # Use skip_tool_search_assembly=True so we see the real catalog,
+            # not the already-collapsed bridge-only list (the bridge would
+            # otherwise be searching only itself).
+            #
+            # Scope the catalog to the session's toolsets so the bridge can
+            # only surface and invoke tools the session was actually granted.
+            # Without this, a restricted-toolset session (subagent, kanban
+            # worker, curated gateway session) would see and be able to call
+            # the entire process registry via the bridge. Passing the same
+            # enabled/disabled toolsets the session was assembled with keeps
+            # the deferred catalog identical to the deferrable subset of the
+            # session's own tool list, and avoids polluting the process-global
+            # _last_resolved_tool_names with out-of-scope tools.
+            current_defs = get_tool_definitions(
+                enabled_toolsets=enabled_toolsets,
+                disabled_toolsets=disabled_toolsets,
+                quiet_mode=True, skip_tool_search_assembly=True,
+            ) or []
+        except Exception:
+            current_defs = []
         if function_name == _ts_mod.TOOL_SEARCH_NAME:
             return _return_bridge_result(
                 _ts_mod.dispatch_tool_search(
                     function_args or {},
                     current_tool_defs=current_defs,
-                    profile=tool_profile,
                 )
             )
         if function_name == _ts_mod.TOOL_DESCRIBE_NAME:
@@ -1361,14 +1346,10 @@ def handle_function_call(
                 _ts_mod.dispatch_tool_describe(
                     function_args or {},
                     current_tool_defs=current_defs,
-                    profile=tool_profile,
                 )
             )
         if function_name == _ts_mod.TOOL_CALL_NAME:
-            underlying_name, underlying_args, err = _ts_mod.resolve_underlying_call(
-                function_args or {},
-                profile=tool_profile,
-            )
+            underlying_name, underlying_args, err = _ts_mod.resolve_underlying_call(function_args or {})
             if err or not underlying_name:
                 return _return_bridge_result(
                     tool_error(err or "tool_call could not be resolved")
@@ -1379,10 +1360,7 @@ def handle_function_call(
             # additionally rejects any tool the session was not granted, so a
             # restricted session can never invoke an out-of-scope tool through
             # the bridge even if the catalog scoping above regressed.
-            _scoped_deferrable = _ts_mod.scoped_deferrable_names(
-                current_defs,
-                profile=tool_profile,
-            )
+            _scoped_deferrable = _ts_mod.scoped_deferrable_names(current_defs)
             if underlying_name not in _scoped_deferrable:
                 return _return_bridge_result(
                     tool_error(
@@ -1414,10 +1392,6 @@ def handle_function_call(
                 tool_request_middleware_trace=list(_tool_middleware_trace),
                 enabled_toolsets=enabled_toolsets,
                 disabled_toolsets=disabled_toolsets,
-                tool_profile=tool_profile,
-                tool_catalog_defs=current_defs,
-                capability_skills=capability_skills,
-                capability_mcp_tools=capability_mcp_tools,
             )
 
     _tool_original_args = dict(function_args)
@@ -1568,19 +1542,6 @@ def handle_function_call(
                 # Prefer the caller-provided list so subagents can't overwrite
                 # the parent's tool set via the process-global.
                 sandbox_enabled = enabled_tools if enabled_tools is not None else _last_resolved_tool_names
-                if capability_skills is not None:
-                    sandbox_enabled = [
-                        name
-                        for name in sandbox_enabled
-                        if name not in {"skills_list", "skill_view", "skill_manage"}
-                    ]
-                if capability_mcp_tools is not None:
-                    allowed_mcp = set(capability_mcp_tools)
-                    sandbox_enabled = [
-                        name
-                        for name in sandbox_enabled
-                        if not str(name).startswith("mcp__") or name in allowed_mcp
-                    ]
                 def _dispatch(next_args: Dict[str, Any]) -> Any:
                     return registry.dispatch(
                         function_name, next_args,
@@ -1590,18 +1551,11 @@ def handle_function_call(
                     )
             else:
                 def _dispatch(next_args: Dict[str, Any]) -> Any:
-                    capability_kwargs = (
-                        {"capability_skills": frozenset(capability_skills)}
-                        if function_name in {"skills_list", "skill_view"}
-                        and capability_skills is not None
-                        else {}
-                    )
                     return registry.dispatch(
                         function_name, next_args,
                         task_id=task_id,
                         session_id=session_id,
                         user_task=user_task,
-                        **capability_kwargs,
                     )
             if skip_tool_execution_middleware:
                 result = _dispatch(function_args)

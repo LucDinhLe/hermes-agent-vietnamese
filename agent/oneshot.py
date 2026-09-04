@@ -84,34 +84,10 @@ def _commit_message_template(variables: Dict[str, Any]) -> Tuple[str, str]:
     return _COMMIT_INSTRUCTIONS, "\n\n".join(parts)
 
 
-_REASONING_SUMMARY_VI_INSTRUCTIONS = (
-    "Bạn tóm tắt phần suy luận CÔNG KHAI mà một model đã thực sự trả về. "
-    "Viết bằng tiếng Việt rõ ràng, ngắn gọn và trung thành với nguồn.\n"
-    "Quy tắc bắt buộc:\n"
-    "- Chỉ tóm tắt nội dung có trong nguồn; không thêm dữ kiện, kết luận hay "
-    "suy đoán mới.\n"
-    "- Không cố khôi phục, suy đoán hoặc mô tả chain-of-thought ẩn, encrypted "
-    "thinking hay dữ liệu provider không công bố.\n"
-    "- Giữ các bước quyết định, giả định, kiểm tra và cảnh báo quan trọng; bỏ "
-    "lặp lại và chi tiết vụn.\n"
-    "- Không sửa hay viết lại câu trả lời cuối của assistant.\n"
-    "- Trả về duy nhất bản tóm tắt tiếng Việt, không có lời dẫn hay code fence."
-)
-
-
-def _reasoning_summary_vi_template(variables: Dict[str, Any]) -> Tuple[str, str]:
-    reasoning = _truncate(str(variables.get("reasoning") or ""), 64000)
-    return (
-        _REASONING_SUMMARY_VI_INSTRUCTIONS,
-        "Phần suy luận công khai cần tóm tắt:\n\n" + reasoning,
-    )
-
-
 # Registry of named templates. Add an entry here to give a new surface a
 # consistent, reusable prompt without teaching every caller the prompt text.
 PROMPT_TEMPLATES: Dict[str, PromptTemplate] = {
     "commit_message": _commit_message_template,
-    "reasoning_summary_vi": _reasoning_summary_vi_template,
 }
 
 

@@ -15,7 +15,6 @@ sidecar source.
 from __future__ import annotations
 
 import json
-import shutil
 import subprocess
 from pathlib import Path
 from typing import Dict, Tuple
@@ -23,11 +22,6 @@ from typing import Dict, Tuple
 import pytest
 
 _MODULE = Path("plugins/platforms/photon/sidecar/send-format.mjs").resolve()
-
-pytestmark = pytest.mark.skipif(
-    shutil.which("node") is None,
-    reason="Photon sidecar routing tests require Node.js",
-)
 
 _CASES: Dict[str, Tuple[str, str, str]] = {
     # name: (format, text, expected builder)

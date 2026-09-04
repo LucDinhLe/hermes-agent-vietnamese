@@ -102,17 +102,6 @@ collect_sandbox_logs() {
   [ -d "$src" ] || return 0
   mkdir -p "$dest"
   cp -a "$src/." "$dest/" 2>/dev/null || true
-
-  # npm writes the useful failure detail (unfinished timers, versions, the
-  # final stack) under ~/.npm/_logs rather than to stderr. The sandbox is
-  # disposable, so preserve those files beside proxy.log before teardown;
-  # otherwise errors such as "Exit handler never called" lose the evidence
-  # needed to distinguish an npm defect from a network or installer failure.
-  local npm_logs="$SANDBOX_ROOT/home/.npm/_logs"
-  if [ -d "$npm_logs" ]; then
-    mkdir -p "$dest/npm-logs"
-    cp -a "$npm_logs/." "$dest/npm-logs/" 2>/dev/null || true
-  fi
   # Print it, not just archive it: a rejected TLS handshake here is the whole
   # explanation for a failure that otherwise reads as a bare `curl: (35)`, and
   # whoever is reading the job log should not have to download an artifact to

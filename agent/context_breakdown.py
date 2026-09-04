@@ -86,19 +86,12 @@ def _strip_blocks(text: str, *blocks: str) -> str:
     return out.strip()
 
 
-def _nonnegative_int(value: Any, default: int = 0) -> int:
-    """Return a privacy-safe numeric telemetry value, never a mock/string."""
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return default
-    return max(0, int(value))
-
-
 def compute_session_context_breakdown(
     agent: Any,
     messages: Optional[List[dict]] = None,
 ) -> Dict[str, Any]:
     """Return a Cursor-style context usage breakdown for one live agent."""
-    from agent.model_metadata import estimate_messages_tokens_rough, get_published_model_context_window
+    from agent.model_metadata import estimate_messages_tokens_rough
     from agent.system_prompt import build_system_prompt_parts
 
     parts = build_system_prompt_parts(agent)
@@ -133,53 +126,27 @@ def compute_session_context_breakdown(
     ]
 
     estimated_total = sum(tokens for _, _, tokens in categories)
-    system_context_tokens = sum(
-        tokens for category_id, _, tokens in categories
-        if category_id != "conversation"
-    )
 
     comp = getattr(agent, "context_compressor", None)
     context_max = int(getattr(comp, "context_length", 0) or 0) if comp else 0
+    # Prefer the usage-anchored figure: provider-exact prompt+completion of
+    # the last response plus a delta estimate of anything appended since —
+    # fresher than the raw last_prompt_tokens (which lags messages appended
+    # after the response) and far more accurate than the heuristic total.
+    from agent.model_metadata import anchored_context_tokens
+
+    anchored_used = anchored_context_tokens(
+        messages or [], getattr(agent, "_usage_anchor", None)
+    )
     measured_used = int(getattr(comp, "last_prompt_tokens", 0) or 0) if comp else 0
-    context_used = measured_used if measured_used > 0 else estimated_total
-    context_measurement = "measured" if measured_used > 0 else "estimated"
+    if anchored_used is not None:
+        context_used = anchored_used
+    else:
+        context_used = measured_used if measured_used > 0 else estimated_total
     context_percent = (
         max(0, min(100, round(context_used / context_max * 100)))
         if context_max
         else 0
-    )
-    model = getattr(agent, "model", "") or ""
-    published = get_published_model_context_window(model)
-    published_context_max = int(published["tokens"]) if published else context_max
-    published_context_percent = (
-        max(0, min(100, round(context_used / published_context_max * 100)))
-        if published_context_max
-        else 0
-    )
-    compact_threshold_tokens = int(getattr(comp, "threshold_tokens", 0) or 0) if comp else 0
-    compact_threshold_percent = (
-        max(0, round(compact_threshold_tokens / context_max * 100))
-        if context_max and compact_threshold_tokens
-        else 0
-    )
-    effective_context_source = getattr(agent, "_effective_context_source", "runtime")
-    if not isinstance(effective_context_source, str) or not effective_context_source.strip():
-        effective_context_source = "runtime"
-    else:
-        effective_context_source = effective_context_source.strip()
-    logical_history_tokens = max(
-        conversation_tokens,
-        _nonnegative_int(getattr(agent, "_logical_history_tokens", 0)),
-    )
-    compaction_count = _nonnegative_int(
-        getattr(
-            agent,
-            "_context_compaction_count",
-            getattr(comp, "compression_count", 0) if comp else 0,
-        )
-    )
-    native_compaction_downgraded = (
-        getattr(agent, "_native_compaction_downgraded", False) is True
     )
 
     return {
@@ -196,27 +163,8 @@ def compute_session_context_breakdown(
         "context_max": context_max,
         "context_percent": context_percent,
         "context_used": context_used,
-        "context_measurement": context_measurement,
-        "active_context_tokens": context_used,
-        "system_context_tokens": system_context_tokens,
-        "conversation_context_tokens": conversation_tokens,
-        "logical_history_tokens": logical_history_tokens,
-        "compaction_count": compaction_count,
-        "native_compaction_downgraded": native_compaction_downgraded,
-        "effective_context_max": context_max,
-        "effective_context_source": effective_context_source,
-        "effective_remaining_tokens": max(0, context_max - context_used),
         "estimated_total": estimated_total,
-        "model": model,
-        "published_context_max": published_context_max,
-        "published_context_percent": published_context_percent,
-        "published_context_reference": published["reference"] if published else "",
-        "published_context_source": published["source"] if published else "runtime",
-        "remaining_tokens": max(0, published_context_max - context_used),
-        "compact_recommended": bool(compact_threshold_tokens and context_used >= compact_threshold_tokens),
-        "compact_threshold_percent": compact_threshold_percent,
-        "compact_threshold_tokens": compact_threshold_tokens,
-        "tokens_until_compact": max(0, compact_threshold_tokens - context_used) if compact_threshold_tokens else 0,
+        "model": getattr(agent, "model", "") or "",
     }
 
 

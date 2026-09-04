@@ -3,49 +3,12 @@ from types import SimpleNamespace
 from agent.usage_pricing import (
     CanonicalUsage,
     format_cost_label,
-    estimate_reference_api_cost,
     estimate_usage_cost,
     get_pricing_entry,
     normalize_usage,
     resolve_billing_route,
 )
 from decimal import Decimal
-
-
-def test_current_openai_gpt55_and_gpt56_prices_match_official_docs():
-    expected = {
-        "gpt-5.5": ("5.00", "0.50", "30.00"),
-        "gpt-5.6-sol": ("5.00", "0.50", "30.00"),
-        "gpt-5.6-terra": ("2.00", "0.20", "12.00"),
-        "gpt-5.6-luna": ("0.20", "0.02", "1.20"),
-    }
-    for model, (input_rate, cache_rate, output_rate) in expected.items():
-        entry = get_pricing_entry(model, provider="openai")
-        assert entry is not None, model
-        assert entry.input_cost_per_million == Decimal(input_rate), model
-        assert entry.cache_read_cost_per_million == Decimal(cache_rate), model
-        assert entry.output_cost_per_million == Decimal(output_rate), model
-
-
-def test_openai_long_context_multiplier_is_applied_per_request():
-    result = estimate_usage_cost(
-        "gpt-5.6-terra",
-        CanonicalUsage(input_tokens=300_000, output_tokens=10_000),
-        provider="openai",
-    )
-    assert result.amount_usd == Decimal("1.380")
-    assert any("long-context" in note for note in result.notes)
-
-
-def test_codex_subscription_keeps_invoice_zero_and_exposes_api_reference():
-    usage = CanonicalUsage(input_tokens=100_000, output_tokens=10_000)
-    billed = estimate_usage_cost("gpt-5.6-luna", usage, provider="openai-codex")
-    reference = estimate_reference_api_cost("gpt-5.6-luna", usage, provider="openai-codex")
-    assert billed.status == "included"
-    assert billed.amount_usd == Decimal("0")
-    assert reference.status == "estimated"
-    assert reference.amount_usd == Decimal("0.032")
-    assert any("API-equivalent" in note for note in reference.notes)
 
 
 
@@ -803,3 +766,104 @@ def test_normalize_usage_nested_details_win_over_qwen_flat_top_level():
 
     assert normalized.cache_read_tokens == 900
     assert normalized.input_tokens == 1100
+
+
+# ── Context-tiered pricing (Gemini Pro >200k prompts, #93469) ─────────────
+
+
+def test_gemini_31_pro_below_tier_threshold_uses_base_rates():
+    """Prompts at or below 200k tokens bill at the base rates — the tier
+    fields must not change any below-threshold estimate."""
+    result = estimate_usage_cost(
+        "gemini-3.1-pro",
+        CanonicalUsage(input_tokens=100_000, output_tokens=10_000),
+        provider="google",
+    )
+    # 100k * $2/M + 10k * $12/M
+    assert result.amount_usd == Decimal("0.32")
+
+    at_threshold = estimate_usage_cost(
+        "gemini-3.1-pro",
+        CanonicalUsage(input_tokens=200_000, output_tokens=10_000),
+        provider="google",
+    )
+    # Exactly 200k is still the lower tier (Google bills "> 200k" higher).
+    # 200k * $2/M + 10k * $12/M
+    assert at_threshold.amount_usd == Decimal("0.52")
+
+
+def test_gemini_31_pro_above_tier_threshold_uses_tiered_rates_whole_request():
+    """Once the prompt exceeds 200k tokens the >200k rates ($4 input /
+    $18 output per million) apply to the ENTIRE request, not just the
+    marginal tokens — matching Google's billing semantics (#93469).
+
+    Before the fix this request priced at 250k*$2/M + 10k*$12/M = $0.62,
+    under-counting input 2x and output 1.5x."""
+    result = estimate_usage_cost(
+        "gemini-3.1-pro",
+        CanonicalUsage(input_tokens=250_000, output_tokens=10_000),
+        provider="google",
+    )
+    # 250k * $4/M + 10k * $18/M
+    assert result.amount_usd == Decimal("1.18")
+    assert result.status == "estimated"
+
+
+def test_gemini_31_pro_cache_read_tokens_count_toward_tier_and_tier_rate():
+    """prompt_tokens (input + cache read + cache write) drives tier selection,
+    and cache reads above the threshold bill at the $0.40/M tier rate."""
+    result = estimate_usage_cost(
+        "gemini-3.1-pro",
+        CanonicalUsage(input_tokens=150_000, cache_read_tokens=100_000),
+        provider="google",
+    )
+    # prompt = 250k > 200k → 150k * $4/M + 100k * $0.40/M
+    assert result.amount_usd == Decimal("0.64")
+
+
+def test_gemini_31_pro_preview_alias_shares_tiered_pricing():
+    """The provider-emitted preview id aliases the canonical row, so it must
+    pick up the tier fields too."""
+    result = estimate_usage_cost(
+        "gemini-3.1-pro-preview",
+        CanonicalUsage(input_tokens=250_000, output_tokens=10_000),
+        provider="google",
+    )
+    assert result.amount_usd == Decimal("1.18")
+
+
+def test_gemini_25_pro_tiered_rates_with_cache_read_fallback():
+    """gemini-2.5-pro tiers at the same 200k threshold ($2.50 input / $15
+    output above). Its snapshot has no tiered cache-read rate, so cache reads
+    fall back to the base $0.125/M even above the threshold."""
+    result = estimate_usage_cost(
+        "gemini-2.5-pro",
+        CanonicalUsage(input_tokens=250_000, output_tokens=10_000),
+        provider="google",
+    )
+    # 250k * $2.50/M + 10k * $15/M
+    assert result.amount_usd == Decimal("0.775")
+
+    with_cache = estimate_usage_cost(
+        "gemini-2.5-pro",
+        CanonicalUsage(input_tokens=150_000, cache_read_tokens=100_000),
+        provider="google",
+    )
+    # prompt = 250k > 200k → 150k * $2.50/M + 100k * $0.125/M (base fallback)
+    assert with_cache.amount_usd == Decimal("0.3875")
+
+
+def test_flat_entries_unaffected_by_tier_machinery():
+    """Entries without tier fields keep pricing every token at the flat rate
+    no matter how large the prompt is."""
+    entry = get_pricing_entry("gemini-3.1-flash-lite", provider="google")
+    assert entry is not None
+    assert entry.tier_threshold_tokens is None
+
+    result = estimate_usage_cost(
+        "gemini-3.1-flash-lite",
+        CanonicalUsage(input_tokens=250_000, output_tokens=10_000),
+        provider="google",
+    )
+    # 250k * $0.25/M + 10k * $1.50/M
+    assert result.amount_usd == Decimal("0.0775")

@@ -36,15 +36,10 @@ def _seed_skill(hermes_home, name, description):
 
 @pytest.fixture
 def isolated_home(tmp_path, monkeypatch):
-    from agent.prompt_builder import clear_skills_system_prompt_cache
-
     hermes_home = tmp_path / ".hermes"
     hermes_home.mkdir()
     monkeypatch.setenv("HERMES_HOME", str(hermes_home))
     monkeypatch.chdir(tmp_path)  # avoid picking up the repo's AGENTS.md
-    # Each test models a fresh CLI invocation. Avoid an earlier test's
-    # in-process skills snapshot hiding skills seeded into this profile.
-    clear_skills_system_prompt_cache(clear_snapshot=True)
     return hermes_home
 
 
@@ -69,20 +64,13 @@ def test_runs_offline_without_credentials(isolated_home, monkeypatch):
 
 
 
-def test_skills_breakdown_shape_sorted_and_attributed(isolated_home, monkeypatch):
+def test_skills_breakdown_shape_sorted_and_attributed(isolated_home):
     """Per-skill breakdown reports index-line + on-disk SKILL.md bytes.
 
     Seeded before the first build (skills prompt is cached per-process).
     """
     _seed_skill(isolated_home, "small-skill", "short desc")
     _seed_skill(isolated_home, "big-skill", "a much longer description " * 20)
-    # The default lean profile intentionally ships no always-on skills index.
-    # Use the explicit full profile here because this test measures attribution
-    # when that index is enabled.
-    monkeypatch.setattr(
-        "tools.tool_search.resolve_session_tool_profile",
-        lambda **_kwargs: "full",
-    )
     data = compute_prompt_breakdown("cli")
     skills = data["skills_breakdown"]
     names = {s["name"] for s in skills}

@@ -2,6 +2,8 @@
 
 import shutil
 import json
+import os
+import stat
 import pytest
 from pathlib import Path
 from unittest.mock import patch
@@ -48,6 +50,18 @@ class TestReadWriteManifest:
             result = _read_manifest()
 
         assert result == {"old-skill": "", "new-skill": "abc123"}
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits are platform-specific")
+    def test_write_manifest_preserves_existing_file_mode(self, tmp_path):
+        manifest_file = tmp_path / ".bundled_manifest"
+        manifest_file.write_text("old-skill:oldhash\n", encoding="utf-8")
+        os.chmod(manifest_file, 0o660)
+
+        with patch("tools.skills_sync.MANIFEST_FILE", manifest_file):
+            _write_manifest({"new-skill": "newhash"})
+
+        assert manifest_file.read_text(encoding="utf-8") == "new-skill:newhash\n"
+        assert stat.S_IMODE(manifest_file.stat().st_mode) == 0o660
 
 
 class TestDirHash:
@@ -97,127 +111,6 @@ class TestDiscoverBundledSkills:
         assert [name for name, _ in _discover_bundled_skills(tmp_path)] == ["umbrella"]
 
 
-class TestAllowedCatalogSync:
-    def test_new_bundled_skill_is_disabled_for_an_existing_allowlist(
-        self, tmp_path, monkeypatch
-    ):
-        from hermes_cli.capability_profile import apply_work_profile
-        from hermes_cli.config import load_config, save_config
-
-        hermes_home = tmp_path / "profile"
-        skills_dir = hermes_home / "skills"
-        bundled = tmp_path / "bundled"
-        old_skill = bundled / "general" / "old-skill"
-        old_skill.mkdir(parents=True)
-        (old_skill / "SKILL.md").write_text(
-            "---\nname: old-skill\ndescription: Existing\n---\n",
-            encoding="utf-8",
-        )
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
-
-        patches = (
-            patch("tools.skills_sync.HERMES_HOME", hermes_home),
-            patch("tools.skills_sync.SKILLS_DIR", skills_dir),
-            patch("tools.skills_sync.MANIFEST_FILE", skills_dir / ".bundled_manifest"),
-            patch("tools.skills_sync._get_bundled_dir", return_value=bundled),
-            patch(
-                "tools.skills_sync._get_optional_dir",
-                return_value=tmp_path / "no-optional-skills",
-            ),
-        )
-        from contextlib import ExitStack
-
-        with ExitStack() as stack:
-            for item in patches:
-                stack.enter_context(item)
-            sync_skills(quiet=True)
-            config = {}
-            apply_work_profile(
-                config,
-                installed_skills={"old-skill"},
-                allowed_skills={"old-skill"},
-                work_areas=[],
-                common_tasks=[],
-                skipped=False,
-            )
-            save_config(config)
-
-            new_skill = bundled / "general" / "future-skill"
-            new_skill.mkdir(parents=True)
-            (new_skill / "SKILL.md").write_text(
-                "---\nname: future-skill\ndescription: New\n---\n",
-                encoding="utf-8",
-            )
-            result = sync_skills(quiet=True)
-            saved = load_config()
-
-        assert "future-skill" in result["copied"]
-        assert saved["skills"]["allowed"] == ["old-skill"]
-        assert "future-skill" in saved["skills"]["disabled"]
-
-    def test_config_write_failure_blocks_new_bundled_skill_copy(
-        self, tmp_path, monkeypatch
-    ):
-        from hermes_cli.capability_profile import apply_work_profile
-        from hermes_cli.config import save_config
-
-        hermes_home = tmp_path / "profile"
-        skills_dir = hermes_home / "skills"
-        bundled = tmp_path / "bundled"
-        old_skill = bundled / "general" / "old-skill"
-        old_skill.mkdir(parents=True)
-        (old_skill / "SKILL.md").write_text(
-            "---\nname: old-skill\ndescription: Existing\n---\n",
-            encoding="utf-8",
-        )
-        monkeypatch.setenv("HERMES_HOME", str(hermes_home))
-
-        patches = (
-            patch("tools.skills_sync.HERMES_HOME", hermes_home),
-            patch("tools.skills_sync.SKILLS_DIR", skills_dir),
-            patch("tools.skills_sync.MANIFEST_FILE", skills_dir / ".bundled_manifest"),
-            patch("tools.skills_sync._get_bundled_dir", return_value=bundled),
-            patch(
-                "tools.skills_sync._get_optional_dir",
-                return_value=tmp_path / "no-optional-skills",
-            ),
-        )
-        from contextlib import ExitStack
-
-        with ExitStack() as stack:
-            for item in patches:
-                stack.enter_context(item)
-            sync_skills(quiet=True)
-            config = {}
-            apply_work_profile(
-                config,
-                installed_skills={"old-skill"},
-                allowed_skills={"old-skill"},
-                work_areas=[],
-                common_tasks=[],
-                skipped=False,
-            )
-            save_config(config)
-
-            future_skill = bundled / "general" / "future-skill"
-            future_skill.mkdir(parents=True)
-            (future_skill / "SKILL.md").write_text(
-                "---\nname: future-skill\ndescription: New\n---\n",
-                encoding="utf-8",
-            )
-            monkeypatch.setattr(
-                "hermes_cli.config.save_config",
-                lambda *_args, **_kwargs: (_ for _ in ()).throw(
-                    RuntimeError("config write failed")
-                ),
-            )
-
-            with pytest.raises(RuntimeError, match="config write failed"):
-                sync_skills(quiet=True)
-
-        assert not (skills_dir / "general" / "future-skill").exists()
-
-
 class TestReadSkillName:
     def test_name_from_frontmatter_with_dir_name_fallbacks(self, tmp_path):
         skill_md = tmp_path / "SKILL.md"
@@ -248,7 +141,7 @@ class TestComputeRelativeDest:
     def test_preserves_category_structure(self):
         bundled = Path("/repo/skills")
         dest = _compute_relative_dest(Path("/repo/skills/mlops/axolotl"), bundled)
-        assert dest.parts[-2:] == ("mlops", "axolotl")
+        assert str(dest).endswith("mlops/axolotl")
         # Flat (uncategorized) skills keep their own name.
         assert _compute_relative_dest(Path("/repo/skills/simple"), bundled).name == "simple"
 
@@ -1043,3 +936,69 @@ class TestUpdateBackupRecovery:
             result2 = sync_skills(quiet=True)
         assert "old-skill" in result2["updated"]
         assert result2["user_modified"] == []
+
+
+class TestCallTimeDirResolution:
+    """Regression for #65828: skills_sync bound SKILLS_DIR/MANIFEST_FILE/
+    HERMES_HOME at import, so a long-lived dashboard/TUI process serving a
+    console skills command for another profile resolved (and for
+    reset_bundled_skill DELETED) against whichever home was live at import.
+    The accessors must follow set_hermes_home_override() at call time, while
+    an explicitly patched module global (tests, _profile_scope retargeting)
+    still wins.
+    """
+
+    def test_accessors_follow_hermes_home_override(self, tmp_path):
+        from hermes_constants import set_hermes_home_override, reset_hermes_home_override
+        import tools.skills_sync as ss
+
+        profile_home = tmp_path / "profiles" / "research"
+        token = set_hermes_home_override(str(profile_home))
+        try:
+            assert ss._hermes_home() == profile_home
+            assert ss._skills_dir() == profile_home / "skills"
+            assert ss._manifest_file() == profile_home / "skills" / ".bundled_manifest"
+        finally:
+            reset_hermes_home_override(token)
+
+    def test_explicit_module_patch_wins_over_override(self, tmp_path):
+        from hermes_constants import set_hermes_home_override, reset_hermes_home_override
+        import tools.skills_sync as ss
+
+        patched = tmp_path / "patched-skills"
+        token = set_hermes_home_override(str(tmp_path / "other-profile"))
+        try:
+            with patch("tools.skills_sync.SKILLS_DIR", patched):
+                assert ss._skills_dir() == patched
+                # MANIFEST_FILE unpatched -> derives from the patched skills dir.
+                assert ss._manifest_file() == patched / ".bundled_manifest"
+        finally:
+            reset_hermes_home_override(token)
+
+    def test_rmtree_guard_anchors_on_overridden_profile(self, tmp_path):
+        """The #48200 strict-child rmtree guard must anchor on the OVERRIDDEN
+        profile's skills root. Under the stale import-time binding the guard
+        was computed against the wrong home (#65828's sharpest edge): a
+        legitimate delete in the scoped profile would be refused, and a stale
+        path under the import-time home would pass the guard."""
+        from hermes_constants import set_hermes_home_override, reset_hermes_home_override
+        import tools.skills_sync as ss
+
+        profile_home = tmp_path / "profiles" / "worker"
+        victim = profile_home / "skills" / "doomed-skill"
+        victim.mkdir(parents=True)
+        (victim / "SKILL.md").write_text("---\nname: doomed-skill\n---\n", encoding="utf-8")
+
+        token = set_hermes_home_override(str(profile_home))
+        try:
+            # Allowed: strict child of the overridden profile's skills root.
+            ss._rmtree_writable(victim)
+            assert not victim.exists()
+
+            # Refused: a path under the import-time home is OUTSIDE the
+            # overridden profile's skills root now.
+            foreign = ss._SKILLS_DIR_AT_IMPORT / "some-skill"
+            with pytest.raises(ValueError):
+                ss._rmtree_writable(foreign)
+        finally:
+            reset_hermes_home_override(token)
