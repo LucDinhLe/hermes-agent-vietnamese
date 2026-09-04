@@ -66,8 +66,11 @@ Chỉ tiếp tục khi nguồn tải, tên tệp và SHA-256 đúng như phần 
    - **OpenAI OAuth (ChatGPT):** đăng nhập tài khoản ChatGPT có quyền dùng Codex.
    - **Claude Pro / Max:** đăng nhập qua Claude Code.
    - **Google Gemini:** nhập khóa API tạo tại Google AI Studio.
+   - **Google (tài khoản Google):** đăng nhập Google trong trình duyệt, dùng cùng cửa với Gemini CLI qua Google Cloud Code Assist và gói/hạn mức Google của bạn. Đây không phải nhà cung cấp chính thức của Hermes; khóa API Gemini ở trên vẫn là lối được hỗ trợ đầy đủ.
    - **Nhà cung cấp khác:** nhập tài khoản, API key hoặc endpoint tương ứng.
 4. Chọn model, tạo phiên đầu tiên và giao một việc thử không quan trọng.
+
+Nếu máy đã có bản Hermes cũ, bộ cài này cài song song chứ không ghi đè. Lần mở đầu tiên, nếu tìm thấy dữ liệu Hermes cũ, ứng dụng sẽ hỏi trước khi sao chép (không xóa) cấu hình và lịch sử sang; bản cũ vẫn còn nguyên để quay lại nếu cần.
 
 Nếu chưa có tài khoản hoặc khóa API, chọn **Tôi sẽ chọn nhà cung cấp sau**. Sau đó mở **Cài đặt → Model/Nhà cung cấp** để kết nối. Bộ cài không kèm tài khoản model, API key hoặc hạn mức trả phí.
 

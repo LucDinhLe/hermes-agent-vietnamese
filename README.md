@@ -51,13 +51,16 @@ Hermes có các lựa chọn kết nối ChatGPT qua OpenAI OAuth, Claude qua Cl
 
 Ứng dụng không tặng kèm tài khoản, hạn mức hay model AI. Hãy chọn model mà kết nối của bạn hỗ trợ. Xem [cách kết nối từng nhà cung cấp](README.vi.md#kết-nối-chatgpt-claude-và-gemini) hoặc [hướng dẫn xử lý lỗi kết nối](README.vi.md#xử-lý-lỗi-kết-nối-thường-gặp).
 
+Cài đặt → Tài khoản có thêm lựa chọn đăng nhập bằng tài khoản Google, đi qua cùng cửa xác thực với Gemini CLI (mã nguồn mở của Google) và dùng gói/hạn mức Google của chính bạn. Đây không phải nhà cung cấp chính thức của Hermes; Google có thể thay đổi hoặc đóng cửa này bất cứ lúc nào, bạn tự chấp nhận rủi ro đó khi bật lựa chọn. Khóa API Gemini vẫn là lối được hỗ trợ đầy đủ.
+
 ## Dữ liệu và sử dụng an toàn
 
 Hermes có thể đọc/sửa tệp, chạy công cụ và thao tác trên máy theo quyền được cấp. Bắt đầu với tệp thử hoặc bản sao, kiểm tra kết quả và cân nhắc trước những thao tác quan trọng. Bản cộng đồng này chưa có bảo hành thương mại.
 
 Khi bạn dùng AI hoặc dịch vụ đã kết nối, dữ liệu cần thiết được gửi đến dịch vụ đó. Bộ cài không chứa tài khoản, khóa API hay lịch sử riêng của người đóng gói. Xem [thông tin về quyền riêng tư và trách nhiệm sử dụng](DISCLAIMER.md).
 
-- **Khi cập nhật**, tải bộ cài đầy đủ từ [bản mới nhất](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/latest). Hiện chưa có cập nhật tự động.
+- **Khi cập nhật**, ứng dụng tự kiểm tra bản mới mỗi ngày (hoặc bấm "Kiểm tra ngay" trong mục Giới thiệu) và báo tên tệp, kích thước, mã SHA-256 kèm nút mở trang tải. Ứng dụng không tự tải hay tự cài, bạn vẫn tải bộ cài đầy đủ từ [bản mới nhất](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/latest) rồi tự chạy.
+- **Khi cài bản mới**, bộ cài dùng mã sản phẩm và thư mục dữ liệu riêng nên cài song song với bản cũ, không ghi đè. Lần mở đầu tiên, nếu máy có dữ liệu Hermes cũ, ứng dụng sẽ hỏi trước khi sao chép cấu hình và lịch sử sang; dữ liệu bản cũ không bị xóa hay di chuyển, bản cũ vẫn dùng được để quay lại nếu cần.
 - **Khi cài đè**, dữ liệu được giữ theo thiết kế, nhưng vẫn cần [sao lưu và kiểm tra bản sao](docs/sao-luu-khoi-phuc.md). Không chọn gỡ toàn bộ nếu muốn giữ lịch sử và cấu hình.
 - **Khi Windows cảnh báo**, kiểm tra nguồn tải và mã tệp. Nếu phần mềm bảo vệ báo mối đe dọa cụ thể, dừng cài và báo lỗi; không tắt bảo vệ toàn máy. Xem [chính sách ký mã](CODE_SIGNING_POLICY.md).
 
@@ -66,6 +69,8 @@ Khi bạn dùng AI hoặc dịch vụ đã kết nối, dữ liệu cần thiế
 Gặp vấn đề khi sử dụng? [Gửi báo lỗi](https://github.com/LucDinhLe/hermes-agent-vietnamese/issues) kèm phiên bản, hệ điều hành, các bước gặp lỗi và ảnh đã che thông tin riêng. Vấn đề bảo mật cần theo [hướng dẫn báo riêng](SECURITY.md).
 
 Hermes Vietnamese là dự án cá nhân vì cộng đồng do [Lê Đình Lực](https://github.com/LucDinhLe) phát triển từ [Hermes Agent của Nous Research](https://github.com/NousResearch/hermes-agent) theo [giấy phép MIT](LICENSE). Đây là bản phân phối độc lập, không phải bản phát hành chính thức của Nous Research hoặc các nhà cung cấp AI.
+
+Phần lõi Hermes trong bản này giữ nguyên từng byte so với bản gốc của Nous Research; dự án chỉ duy trì lớp vỏ Việt hóa (ứng dụng, tài liệu, công cụ đóng gói). `scripts/engine-sync.mjs check` là bước kiểm tra tự động xác nhận lõi khớp bản gốc.
 
 - [Ghi chú phát hành](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2).
 - [Mã nguồn của bản phát hành](https://github.com/LucDinhLe/hermes-agent-vietnamese/tree/v2026.9.2) và [phạm vi bảo trì](MAINTAINERS.md).
