@@ -2,6 +2,10 @@
 
 ## Cập nhật 2026-09-04: tài liệu Latest 2026.9.2
 
+- Theo phản hồi chủ dự án, phần giới thiệu được viết lại cho người dùng, bỏ
+  so sánh d14 và chi tiết nghiệm thu khỏi luồng đọc chính. Ghi chú phát hành và
+  hồ sơ kỹ thuật giữ lịch sử riêng; không đổi quy tắc nghiệm thu hoặc bộ cài.
+
 - Latest thực tế là v2026.9.2, community pilot chỉ Windows x64, chưa ký số.
   Source b51f306eae2370adc774b63f198ab12990bcf063; lifecycle33798311695 đạt cả
   currentuser/allusers. Xem [hồ sơ hiện hành](docs/release-2026.9.2-public-sync.md).

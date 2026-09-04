@@ -1,81 +1,72 @@
 # Hermes Vietnamese
 
-**Ứng dụng AI dành cho người Việt, giúp làm việc với tệp, trình duyệt, công cụ và nhiều nhà cung cấp model trong một cửa sổ.**
+**Trợ lý AI trên máy tính, giúp bạn làm việc với tài liệu, tìm thông tin và thực hiện công việc qua trò chuyện bằng tiếng Việt.**
 
-Hermes Vietnamese đóng gói Hermes Agent thành ứng dụng Desktop có giao diện Việt/Anh. Dự án cá nhân vì cộng đồng do [Lê Đình Lực](https://github.com/LucDinhLe) phát triển từ [Hermes Agent của Nous Research](https://github.com/NousResearch/hermes-agent), giữ [giấy phép MIT](LICENSE) và ghi công dự án gốc. Đây là bản phân phối độc lập.
+Bạn mô tả việc cần làm, chọn model AI của mình và làm việc cùng Hermes trong một cửa sổ. Ứng dụng có giao diện Việt/Anh và bộ cài đóng gói sẵn môi trường cần thiết, giúp bạn bắt đầu mà không phải tự thiết lập môi trường lập trình.
+
+## Bạn có thể làm gì với Hermes?
+
+- **Làm việc với tài liệu và tệp.** Nhờ AI đọc, tóm tắt, soạn nội dung hoặc hỗ trợ chỉnh sửa các tệp bạn cho phép truy cập.
+- **Tìm hiểu và tổng hợp thông tin.** Tra cứu trên web, sử dụng trình duyệt và gom kết quả phục vụ công việc.
+- **Theo dõi công việc qua nhiều phiên.** Tách các chủ đề thành phiên riêng, tổ chức theo dự án và quay lại lịch sử khi cần.
+- **Thực hiện công việc lặp lại.** Sử dụng kỹ năng, công cụ và tác vụ theo lịch khi đã cấu hình.
+- **Chọn dịch vụ AI phù hợp.** Kết nối nhà cung cấp bằng tài khoản hoặc khóa API của bạn; có thể dùng máy chủ model cục bộ nếu đã chuẩn bị.
+
+Hermes phù hợp với người làm nội dung, đào tạo, nghiên cứu, vận hành và người muốn có trợ lý AI hỗ trợ công việc hằng ngày. Khả năng thực hiện từng việc phụ thuộc model, công cụ đã kết nối và quyền bạn cấp.
+
+## Tải và bắt đầu
 
 <p align="center">
   <a href="https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2"><img src="https://img.shields.io/badge/Tải_bản_2026.9.2-Windows_x64-F97316?style=for-the-badge" alt="Tải Hermes Vietnamese 2026.9.2 Windows x64"></a>
-  <a href="README.vi.md">Hướng dẫn cài đặt và kết nối</a> · <a href="LICENSE">Giấy phép MIT</a>
 </p>
 
 <!-- current-release:start -->
-> **Latest hiện tại là [2026.9.2](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2), chỉ phát hành Windows x64.** Đây là community pilot chưa ký số, chưa phải stable. Bộ cài đã qua nghiệm thu cả kiểu cài cho một người dùng và toàn máy. Cập nhật bằng bộ cài đầy đủ, không có cập nhật tự động nền.
+> **Bản tải mới nhất là [2026.9.2](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2), dành cho Windows x64.** Đây là bản dùng thử cộng đồng (community pilot), chưa ký số và chưa phải stable. Windows có thể hiển thị cảnh báo khi tải hoặc cài. Chưa có bộ cài cho macOS, Linux hoặc Windows ARM64 trong bản phát hành này.
 
-| Tệp | Tải xuống |
-| --- | --- |
-| Bộ cài Windows x64 | [Hermes-2026.9.2-win-x64.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/Hermes-2026.9.2-win-x64.exe) |
-| Cùng bộ cài, tên tương thích đường tải cũ | [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/Hermes-Vietnamese-Windows-x64-Setup.exe) |
-| Mã kiểm tra toàn vẹn | [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/SHA256SUMS.txt) |
+**[Tải bộ cài Windows x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/Hermes-2026.9.2-win-x64.exe)** · [Hướng dẫn cài đặt và kết nối](README.vi.md)
 
-Chỉ tải **một** trong hai tệp `.exe`. Cả hai có cùng nội dung, kích thước **252118156 byte** và SHA-256:
+<details>
+<summary>Kiểm tra tệp tải về</summary>
+
+Bộ cài `Hermes-2026.9.2-win-x64.exe` có kích thước **252118156 byte**. Đối chiếu mã SHA-256 với [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/SHA256SUMS.txt):
 
 ```text
 1ae55b4a3280e92d4a297f85d81cbb6bcc0a19170da8d9122755d19f40c43015
 ```
+
+[Tệp tải thay thế Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/Hermes-Vietnamese-Windows-x64-Setup.exe) có cùng nội dung và mã kiểm tra. Chỉ cần tải một trong hai tệp.
+
+</details>
 <!-- current-release:end -->
 
-## Có gì trong 2026.9.2?
+1. **Cài ứng dụng.** Tải bộ cài, kiểm tra nguồn và mã tệp, rồi làm theo hướng dẫn. Nếu đang dùng Hermes, [sao lưu dữ liệu](docs/sao-luu-khoi-phuc.md) và đóng các công việc đang chạy trước khi cài đè.
+2. **Kết nối AI.** Mở Hermes, chọn nhà cung cấp và kết nối bằng tài khoản hoặc khóa API của chính bạn. Internet cần thiết cho đăng nhập và sử dụng dịch vụ AI trực tuyến.
+3. **Bắt đầu một phiên.** Chọn model, bấm dấu `+` ở thanh tab và giao một việc nhỏ, chẳng hạn “Đọc tài liệu này và tóm tắt các việc cần làm”.
 
-- Tiếp nối bản d14, sửa tạo phiên bằng dấu `+`, gửi tin đầu tiên, định tuyến model và ngữ cảnh ảnh cho Advisor.
-- Đóng kèm Python 3.12.10 cùng thư viện bắt buộc. Lần khởi động lõi đầu tiên không cần tự cài Git/Python/Node.js hoặc tải `install.ps1` từ GitHub.
-- Giữ phạm vi và thư mục cài trước đó khi nâng cấp; có gỡ ứng dụng giữ dữ liệu hoặc xóa dữ liệu theo lựa chọn rõ ràng.
-- Dùng cách đánh số **năm.tháng.lần cập nhật trong tháng**. `2026.9.2` là lần cập nhật thứ hai của tháng 9/2026; ví dụ tiếp theo là `2026.9.3`, `2026.10.1`.
+Bạn có thể làm theo [hướng dẫn cài Windows bằng hình ảnh](docs/cai-dat-windows-bang-anh.md).
 
-[Nghiệm thu bộ cài thực tế](https://github.com/LucDinhLe/hermes-agent-vietnamese/actions/runs/33798311695) đã đạt cài mới, gateway, ba tab tạo bằng dấu cộng, gửi tin và dùng công cụ với nhà cung cấp mô phỏng, giữ lịch sử sau mở lại, nâng cấp từ bản trước, sửa chữa, gỡ/cài lại và quay lui. Các phép thử này không xác nhận quyền truy cập model của từng tài khoản thật.
+## Tài khoản AI của bạn
 
-## Từ tải về đến giao việc
+Hermes có các lựa chọn kết nối ChatGPT qua OpenAI OAuth, Claude qua Claude Code, Gemini bằng khóa API và những nhà cung cấp khác. Mỗi lựa chọn có điều kiện truy cập, hạn mức và chi phí riêng.
 
-1. **Tải và cài.** Kiểm tra máy Windows x64, tải bộ cài phía trên, đối chiếu SHA-256 rồi mở tệp. Nếu đang dùng Hermes, sao lưu trước và đóng các phiên/gateway đang làm việc. Không chọn gỡ toàn bộ dữ liệu để nâng cấp.
-2. **Kết nối model.** Mở Hermes, chọn ngôn ngữ và kết nối tài khoản hoặc khóa API của chính bạn. Lõi đã có trong bộ cài; tải tệp, đăng nhập, dùng dịch vụ AI và một số tính năng tùy chọn vẫn cần Internet.
-3. **Giao một việc nhỏ.** Chọn model, tạo phiên mới bằng dấu `+` và thử một yêu cầu đơn giản trước khi giao việc quan trọng.
+Ứng dụng không tặng kèm tài khoản, hạn mức hay model AI. Hãy chọn model mà kết nối của bạn hỗ trợ. Xem [cách kết nối từng nhà cung cấp](README.vi.md#kết-nối-chatgpt-claude-và-gemini) hoặc [hướng dẫn xử lý lỗi kết nối](README.vi.md#xử-lý-lỗi-kết-nối-thường-gặp).
 
-Xem [hướng dẫn cài đặt và kết nối](README.vi.md), [cài Windows bằng hình ảnh](docs/cai-dat-windows-bang-anh.md) và [sao lưu/khôi phục](docs/sao-luu-khoi-phuc.md).
+## Dữ liệu và sử dụng an toàn
 
-## Model và tài khoản
+Hermes có thể đọc/sửa tệp, chạy công cụ và thao tác trên máy theo quyền được cấp. Bắt đầu với tệp thử hoặc bản sao, kiểm tra kết quả và cân nhắc trước những thao tác quan trọng. Bản cộng đồng này chưa có bảo hành thương mại.
 
-| Kết nối | Bạn cần có |
-| --- | --- |
-| ChatGPT qua OpenAI OAuth | Tài khoản có quyền truy cập model qua kết nối Codex tương ứng |
-| Claude Pro/Max qua Claude Code | Tài khoản và cầu nối Claude Code được cấu hình hợp lệ |
-| Google Gemini | Khóa API Google AI Studio hoặc cấu hình Google Vertex AI |
-| Nhà cung cấp khác | Tài khoản, khóa API hoặc điểm cuối tương ứng |
-| Model cục bộ | Máy chủ model do bạn chuẩn bị; bộ cài không chứa sẵn model |
+Khi bạn dùng AI hoặc dịch vụ đã kết nối, dữ liệu cần thiết được gửi đến dịch vụ đó. Bộ cài không chứa tài khoản, khóa API hay lịch sử riêng của người đóng gói. Xem [thông tin về quyền riêng tư và trách nhiệm sử dụng](DISCLAIMER.md).
 
-Hermes không tặng kèm tài khoản, hạn mức hay mở khóa model. Đăng nhập ChatGPT thành công không có nghĩa mọi model thấy trong một ứng dụng khác đều dùng được qua Hermes. Nếu Luna hoặc model khác báo `404`, kiểm tra đúng nhà cung cấp, mã model và quyền tài khoản. Model Advisor và model trả lời phiên là hai lựa chọn riêng. Xem [xử lý lỗi kết nối](README.vi.md#xử-lý-lỗi-kết-nối-thường-gặp).
+- **Khi cập nhật**, tải bộ cài đầy đủ từ [bản mới nhất](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/latest). Hiện chưa có cập nhật tự động.
+- **Khi cài đè**, dữ liệu được giữ theo thiết kế, nhưng vẫn cần [sao lưu và kiểm tra bản sao](docs/sao-luu-khoi-phuc.md). Không chọn gỡ toàn bộ nếu muốn giữ lịch sử và cấu hình.
+- **Khi Windows cảnh báo**, kiểm tra nguồn tải và mã tệp. Nếu phần mềm bảo vệ báo mối đe dọa cụ thể, dừng cài và báo lỗi; không tắt bảo vệ toàn máy. Xem [chính sách ký mã](CODE_SIGNING_POLICY.md).
 
-## Các nền tảng khác và bản trước
+## Hỗ trợ và thông tin dự án
 
-**2026.9.2 chưa có bộ cài macOS, Linux hoặc Windows ARM64.** Không dùng bộ cài x64 để suy ra đã hỗ trợ ARM64.
+Gặp vấn đề khi sử dụng? [Gửi báo lỗi](https://github.com/LucDinhLe/hermes-agent-vietnamese/issues) kèm phiên bản, hệ điều hành, các bước gặp lỗi và ảnh đã che thông tin riêng. Vấn đề bảo mật cần theo [hướng dẫn báo riêng](SECURITY.md).
 
-[vi-v0.32.1-18](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18) được giữ làm bản lịch sử và đường quay lui Windows x64. Các gói Windows ARM64/Linux của đợt đó chỉ có bằng chứng build, chưa có nghiệm thu sử dụng tương đương bản mới. macOS cũ chưa đạt yêu cầu ký/công chứng và kiểm tra Gatekeeper cho người dùng thường; không khuyến nghị cài hoặc vượt cơ chế bảo vệ để thử.
+Hermes Vietnamese là dự án cá nhân vì cộng đồng do [Lê Đình Lực](https://github.com/LucDinhLe) phát triển từ [Hermes Agent của Nous Research](https://github.com/NousResearch/hermes-agent) theo [giấy phép MIT](LICENSE). Đây là bản phân phối độc lập, không phải bản phát hành chính thức của Nous Research hoặc các nhà cung cấp AI.
 
-## Ký số, cập nhật và dữ liệu
-
-- **Chưa ký số.** Windows có thể cảnh báo `Publisher: Unknown` hoặc tệp chưa được tải phổ biến. Kiểm tra nguồn và mã băm trước khi quyết định tiếp tục. Nếu Defender nêu tên mối đe dọa cụ thể, dừng cài và báo lỗi; không tắt bảo vệ toàn máy.
-- **Hồ sơ ký số.** Dự án đang hoàn thiện để nộp lại hồ sơ; đợt này không có xác nhận được duyệt hoặc chữ ký mới. [Chính sách ký mã](CODE_SIGNING_POLICY.md) ghi rõ trạng thái.
-- **Cập nhật thủ công.** Dùng bộ cài đầy đủ từ [Latest](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/latest). Chưa cung cấp `latest*.yml` hoặc luồng tự cập nhật cho pilot này.
-- **Giữ dữ liệu khi cài đè.** Lịch sử, cấu hình và bộ nhớ nằm riêng với ứng dụng. Nâng cấp không chủ động xóa dữ liệu; vẫn cần [sao lưu và kiểm tra bản sao](docs/sao-luu-khoi-phuc.md) trước khi thay đổi. Chế độ gỡ toàn bộ sẽ xóa dữ liệu đã chọn.
-
-## Quyền riêng tư và phạm vi sử dụng
-
-Bộ cài không chứa tài khoản, khóa API hoặc lịch sử riêng của người đóng gói. Dự án không vận hành máy chủ tập trung thu thập thông tin đăng nhập. Khi bạn dùng AI, công cụ web hoặc dịch vụ đã kết nối, dữ liệu cần thiết được gửi đến dịch vụ đó theo cấu hình và quyền đã cấp.
-
-Hermes có thể đọc/sửa tệp, chạy lệnh, dùng trình duyệt, ghi nhớ, học kỹ năng, giao việc cho agent phụ và chạy lịch khi được cấu hình. Hãy kiểm tra quyền và kết quả trước thao tác quan trọng. Phần mềm được cung cấp theo nguyên trạng; bản cộng đồng này chưa có bảo hành thương mại hay chứng nhận stable. Xem [miễn trừ và quyền riêng tư](DISCLAIMER.md).
-
-## Mã nguồn và hỗ trợ
-
-- [Mã nguồn chính xác của bộ cài 2026.9.2](https://github.com/LucDinhLe/hermes-agent-vietnamese/tree/v2026.9.2). Nhánh `main` chứa trang giới thiệu cập nhật nhưng chưa hợp nhất toàn bộ mã sản phẩm calendar; muốn kiểm tra/build đúng bản phát hành phải dùng tag này.
-- [Ghi chú phát hành và bằng chứng](docs/release-2026.9.2-public-sync.md).
-- [Báo lỗi](https://github.com/LucDinhLe/hermes-agent-vietnamese/issues), kèm phiên bản, hệ điều hành, bước lỗi và ảnh đã che thông tin riêng.
-- [Báo vấn đề bảo mật](SECURITY.md), [phạm vi bảo trì](MAINTAINERS.md), [tài liệu Hermes gốc](https://hermes-agent.nousresearch.com/docs/).
+- [Ghi chú phát hành](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2).
+- [Mã nguồn của bản phát hành](https://github.com/LucDinhLe/hermes-agent-vietnamese/tree/v2026.9.2) và [phạm vi bảo trì](MAINTAINERS.md).
+- [Hồ sơ kỹ thuật và kiểm thử](docs/release-2026.9.2-public-sync.md).

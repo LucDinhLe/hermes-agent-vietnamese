@@ -18,7 +18,7 @@ Hai tệp `.exe` đều có kích thước **252118156 byte**, SHA-256:
 
 Trên Windows, mở **Cài đặt → Hệ thống → Giới thiệu**, xem **Loại hệ thống**. Đợt này có bộ cài Windows x64; máy ARM64 và hệ điều hành 32-bit không nằm trong phạm vi đã nghiệm thu. Các lượt kiểm thử tự động chạy trên Windows x64 của GitHub; không có cam kết đã thử mọi bản Windows hoặc mọi chính sách máy cơ quan.
 
-2026.9.2 chưa có gói macOS/Linux/Windows ARM64. [vi-v0.32.1-18](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18) là bản lịch sử, không phải Latest. Windows ARM64/Linux cũ chỉ có bằng chứng build. macOS cũ chưa đạt yêu cầu tin cậy cho người dùng thường; không khuyến nghị vượt Gatekeeper để cài.
+2026.9.2 chưa có bộ cài macOS, Linux hoặc Windows ARM64. Chỉ dùng bộ cài phù hợp với máy và không vượt cơ chế bảo vệ của hệ điều hành để thử một gói không được hỗ trợ.
 
 ## Cài nhanh trong ba bước
 
@@ -78,11 +78,11 @@ Dùng danh mục nhà cung cấp của đúng bản đã cài. Mỗi kết nối
 
 ### Advisor hỏi lại thông tin đã có trong ảnh
 
-Kiểm tra ảnh đã đính kèm thành công và thử trong một phiên mới. Bản này có sửa ngữ cảnh ảnh cho Advisor, nhưng kết quả vẫn phụ thuộc model và kết nối. Nếu lỗi lặp lại, gửi ảnh đã che dữ liệu riêng cùng bước tái hiện.
+Kiểm tra ảnh đã đính kèm thành công và thử trong một phiên mới. Kết quả đọc ảnh phụ thuộc model và kết nối. Nếu lỗi lặp lại, gửi ảnh đã che dữ liệu riêng cùng bước tái hiện.
 
 ### Bấm dấu cộng không tạo được phiên
 
-Kiểm tra phiên bản đang chạy, đóng/mở lại đúng ứng dụng sau nâng cấp và chờ gateway kết nối. 2026.9.2 đã qua phép thử ba tab mới và gửi tin trên bộ cài thực tế. Nếu lỗi còn xảy ra, ghi rõ phiên bản, nguồn gateway và ảnh thanh tab; không xóa lịch sử để thử chữa lỗi.
+Kiểm tra phiên bản đang chạy, đóng/mở lại đúng ứng dụng sau nâng cấp và chờ gateway kết nối. Nếu lỗi còn xảy ra, ghi rõ phiên bản, nguồn gateway và ảnh thanh tab; không xóa lịch sử để thử chữa lỗi.
 
 ### Khóa API hoặc xác thực bị từ chối
 
@@ -94,7 +94,7 @@ Xác nhận đang chạy đúng bản 2026.9.2 từ đường dẫn cài hiện 
 
 ## Trạng thái ký số và cảnh báo khi cài
 
-2026.9.2 chưa ký số, Authenticode `NotSigned`. Dự án đang hoàn thiện để nộp lại hồ sơ ký số; chưa có xác nhận chấp thuận hay chữ ký mới trong đợt này. Xem [chính sách ký mã](CODE_SIGNING_POLICY.md).
+2026.9.2 chưa ký số nên Windows có thể hiển thị nhà phát hành chưa xác định hoặc cảnh báo uy tín. Xem [chính sách ký mã](CODE_SIGNING_POLICY.md).
 
 Chỉ cân nhắc tiếp tục qua cảnh báo uy tín khi nguồn tải và SHA-256 khớp. Mã băm xác nhận đúng tệp đã công bố, không bảo đảm phần mềm không có lỗi. Nếu Defender phát hiện mối đe dọa cụ thể hoặc máy cơ quan chặn bằng chính sách, dừng và liên hệ người quản trị. Không tắt bảo vệ toàn máy.
 
@@ -123,7 +123,7 @@ Mở **Trung tâm chỉ huy → Bảo trì → Tạo bản sao lưu**, chờ ho�
 
 ## Phiên bản và nguồn gốc
 
-Quy ước **năm.tháng.lần cập nhật trong tháng** bắt đầu với 2026.9.2; phần cuối không phải ngày. [Tag v2026.9.2](https://github.com/LucDinhLe/hermes-agent-vietnamese/tree/v2026.9.2) là mã nguồn chính xác của bộ cài. Nhánh main hiện cập nhật tài liệu nhưng chưa hợp nhất toàn bộ mã sản phẩm calendar.
+Số phiên bản có dạng **năm.tháng.lần cập nhật trong tháng**; phần cuối không phải ngày. Bạn có thể xem [ghi chú phát hành](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2) và [mã nguồn tương ứng](https://github.com/LucDinhLe/hermes-agent-vietnamese/tree/v2026.9.2).
 
 ## Riêng tư và hỗ trợ
 

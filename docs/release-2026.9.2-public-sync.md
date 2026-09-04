@@ -76,3 +76,23 @@ Quay lui tài liệu bằng revert commit đồng bộ nếu cần; không đổ
 rollback tài liệu. Rollback sản phẩm vẫn là Windows x64 vi-v0.32.1-18.
 Bước tiếp theo ngoài phạm vi việc này là cài đè trên máy chủ dự án sau khi được
 phép tạm dừng gateway nền và có bản sao lưu mới đã xác minh. Chưa thực hiện.
+
+## Hiệu chỉnh cách giới thiệu theo phản hồi chủ dự án
+
+Chủ dự án yêu cầu phần mô tả dành cho người dùng, không kể lịch sử kỹ thuật
+hoặc so sánh với bản trước. README trình bày công dụng, đối tượng phù hợp,
+cách bắt đầu, tài khoản và an toàn dữ liệu. Chi tiết xác minh tệp nằm trong
+mục mở rộng; cảnh báo unsigned/pilot và phạm vi Windows x64 vẫn hiện rõ.
+Hướng dẫn sử dụng bỏ các câu kể lại sửa lỗi và trạng thái nhánh nguồn.
+Ghi chú phát hành cùng hồ sơ này vẫn giữ lịch sử và bằng chứng riêng.
+
+Đây là chỉnh metadata theo quyền công bố đã có, không thay quy tắc nghiệm thu,
+tag, source, asset, byte bộ cài hoặc số phiên bản. Mô tả ngắn của kho dùng
+công dụng sản phẩm thay cho số phiên bản và lịch sử sửa lỗi.
+
+Kiểm tra trước công bố: 14/14 regression đạt, validator bốn tài liệu đạt,
+đối chiếu Latest thật đạt, diff không lỗi khoảng trắng. Nhánh main trước sửa
+là `14016dccc0cf99d55fd383d911d9ab582fc54339`; ba asset giữ nguyên ID,
+kích thước, SHA-256 và thời điểm cập nhật đã ghi ở trên. Hậu kiểm công khai
+tiếp tục đối chiếu nội dung và danh tính release; không chạy lại bộ cài cho
+thay đổi thuần tài liệu này.

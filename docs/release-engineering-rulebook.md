@@ -248,6 +248,10 @@ Chỉ dùng user/hồ sơ cô lập. Không đọc, nhập hoặc khôi phục d
       bản tải mặc định.
 - [ ] Mọi link tải dùng đúng tên asset thật.
 - [ ] Mô tả public phân biệt pilot, build-only và stable.
+- [ ] Phần giới thiệu viết cho người dùng: việc ứng dụng giúp làm, cách bắt đầu,
+      điều kiện sử dụng và giới hạn cần biết. So sánh phiên bản, lịch sử sửa lỗi,
+      trạng thái nhánh nguồn và bằng chứng kiểm thử nằm trong ghi chú phát hành
+      hoặc hồ sơ kỹ thuật riêng. Quy tắc trình bày này không thay cổng nghiệm thu.
 - [ ] Nếu chỉ sửa tài liệu sau release, asset count, ID, size và digest vẫn giữ
       nguyên; thay đổi được ghi là metadata-only.
 
