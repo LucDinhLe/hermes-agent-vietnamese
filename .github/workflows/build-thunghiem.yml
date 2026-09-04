@@ -80,6 +80,17 @@ jobs:
       - name: Kiểm thử cleanup uninstaller trên Windows thật
         run: npm run --prefix apps/desktop test:desktop:platforms -- electron/desktop-uninstall.test.ts electron/release-notice.test.ts
 
+      - name: Cây làm việc phải sạch trước khi dựng (in ra rồi dọn tệp phụ của bước cài/test)
+        shell: bash
+        run: |
+          git status --porcelain=v1 --untracked-files=normal | tee /tmp/status-before.txt
+          if [ -s /tmp/status-before.txt ]; then
+            echo "::warning::npm ci / vitest để lại thay đổi ở trên; khôi phục tệp theo dõi và xoá tệp lạ (không đụng tệp bị ignore như node_modules)"
+            git checkout -- .
+            git clean -fdq
+          fi
+          test -z "$(git status --porcelain=v1 --untracked-files=normal)"
+
       - name: Dựng runtime và bộ cài NSIS
         shell: bash
         env:
