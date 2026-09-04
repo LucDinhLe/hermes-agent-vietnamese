@@ -1,4 +1,32 @@
-# Quy trình phát hành Hermes Vietnamese đa nền tảng
+# Quy trình phát hành Hermes Vietnamese
+
+## Bản hiện hành 2026.9.2
+
+Latest hiện là [v2026.9.2](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2),
+community pilot **chỉ Windows x64**, chưa ký số và không có automatic update feed.
+Hợp đồng hiện hành nằm ở `.github/public-release.json`; xem
+[bằng chứng và kế hoạch đồng bộ](release-2026.9.2-public-sync.md).
+
+Ngoại lệ Windows-only được chủ dự án duyệt cho đợt này. Không dùng mô tả ma trận
+sáu target bên dưới làm bằng chứng có sáu bộ cài 2026.9.2. Native build một lần,
+staging draft, nghiệm thu đúng byte cả currentuser/allusers rồi mới promote.
+Source sản phẩm nằm ở tag v2026.9.2; workflow nghiệm thu calendar nằm ở commit
+harness ghi trong descriptor. Không chạy workflow legacy để rebuild tag này.
+
+Từ đợt này dùng `YYYY.M.N`, với N là số cập nhật trong tháng, không phải ngày.
+Tag tương ứng `vYYYY.M.N`. Giữ tag `vi-v*` cũ cho lịch sử và rollback.
+
+Sau mỗi promotion, bắt buộc đồng bộ main/README, hướng dẫn, release notes,
+descriptor và mô tả kho; chạy `node scripts/check-public-docs.mjs --live`.
+Chỉ sửa tài liệu thì giữ nguyên mọi asset ID, size, digest, tag và source commit.
+Windows/macOS/Linux ngoài phạm vi đã nghiệm thu phải ghi giới hạn riêng.
+
+## Quy trình legacy và mục tiêu đa nền tảng
+
+Các phần dưới mô tả dòng phát hành `vi-v*` trước calendar và mục tiêu stable;
+không phải hướng dẫn cập nhật tự động cho pilot 2026.9.2. Pilot hiện dùng bộ cài
+đầy đủ; không có `latest*.yml`. Chữ ký và nghiệm thu từng target vẫn bắt buộc
+trước khi mở phạm vi stable tương ứng.
 
 ## Hồ sơ vận hành hiện tại
 

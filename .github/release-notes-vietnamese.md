@@ -1,56 +1,40 @@
-<p align="center">
-  <img src="https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/vi-v0.32.1-18/assets/banner.png" alt="Hermes Vietnamese" width="100%">
-</p>
+# Hermes Vietnamese 2026.9.2
 
-## Hermes Vietnamese v32.1 — pilot đa nền tảng
+<!-- current-release:start -->
+> **Latest hiện tại là [2026.9.2](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2), chỉ phát hành Windows x64.** Đây là community pilot chưa ký số, chưa phải stable. Bộ cài đã qua nghiệm thu cả kiểu cài cho một người dùng và toàn máy. Cập nhật bằng bộ cài đầy đủ, không có cập nhật tự động nền.
 
-Lớp phát hành của artifact: **community-prerelease, chưa phải stable**.
+| Tệp | Tải xuống |
+| --- | --- |
+| Bộ cài Windows x64 | [Hermes-2026.9.2-win-x64.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/Hermes-2026.9.2-win-x64.exe) |
+| Cùng bộ cài, tên tương thích đường tải cũ | [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/Hermes-Vietnamese-Windows-x64-Setup.exe) |
+| Mã kiểm tra toàn vẹn | [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/SHA256SUMS.txt) |
 
-`vi-v0.32.1-18` giữ nguyên phạm vi sản phẩm v32.1 và bổ sung bộ cài native cho
-Windows, macOS và Linux. Đây là bản pilot đa nền tảng để lấy phản hồi; bản tải
-mặc định/Latest vẫn là `vi-v0.32.1-17` trong thời gian candidate này được kiểm
-và công khai riêng. Mọi gate an toàn phiên/dự án của v32.1 tiếp tục bắt buộc.
+Chỉ tải **một** trong hai tệp `.exe`. Cả hai có cùng nội dung, kích thước **252118156 byte** và SHA-256:
 
-## Trạng thái bằng chứng theo nền tảng
+```text
+1ae55b4a3280e92d4a297f85d81cbb6bcc0a19170da8d9122755d19f40c43015
+```
+<!-- current-release:end -->
 
-- **Windows x64: exact-artifact smoke đạt** toàn bộ vòng đời v32.1, gồm cài mới,
-  runtime/gateway/onboarding, phiên và Dự án, mở lại, safe tool, cập nhật từ
-  v32, repair, hai chế độ gỡ cài đặt, rollback và không còn process dư.
-- **Windows ARM64: BUILD-ONLY-PILOT**; build native và kiểm cấu trúc/kiến trúc
-  đạt, nhưng chưa có smoke trên máy người dùng.
-- **macOS Apple Silicon: BUILD-ONLY-PILOT**; build native đạt, nhưng chưa có
-  smoke trên máy người dùng.
-- **macOS Intel: BUILD-ONLY-PILOT**; build native đạt, nhưng chưa có smoke trên
-  máy người dùng.
-- **Linux x64: BUILD-ONLY-PILOT**; build AppImage/DEB/RPM native đạt, nhưng chưa
-  có smoke trên máy người dùng.
-- **Linux ARM64: BUILD-ONLY-PILOT**; build AppImage/DEB/RPM native đạt, nhưng
-  chưa có smoke trên máy người dùng.
+## Thay đổi
 
-Build xanh chỉ chứng minh đúng byte và cấu trúc trên runner native. Năm target
-`BUILD-ONLY-PILOT` chưa được mô tả như đã tương thích thực tế; người dùng nên
-giữ bản cũ và gửi lỗi kèm hệ điều hành/kiến trúc nếu thử nghiệm.
+- Sửa tạo phiên bằng dấu cộng, gửi tin đầu tiên, định tuyến model và ngữ cảnh ảnh Advisor từ dòng d14.
+- Đóng kèm Python 3.12.10 và thư viện bắt buộc; không tải install.ps1 để khởi động lõi lần đầu.
+- Giữ phạm vi/thư mục cài khi nâng cấp, sửa trình gỡ Windows với các lựa chọn giữ hoặc xóa dữ liệu.
+- Đánh số năm.tháng.lần cập nhật trong tháng; tiếp theo có thể là 2026.9.3 hoặc 2026.10.1.
 
-## Sửa lỗi phiên và Dự án được giữ nguyên
+## Bằng chứng và giới hạn
 
-- Dữ liệu phiên/tin nhắn tiếp tục nằm trong `state.db`; Ẩn hoặc Xóa Dự án chỉ
-  thay đổi metadata trong `projects.db`.
-- Khi mở lại Hermes, giao diện trở về toàn bộ Dự án và phiên; scope của một Dự
-  án không được lưu qua lần chạy sau.
-- Dự án đang mở vẫn có hàng Dự án, menu và nút xổ xuống; danh sách đầy đủ có
-  lối **Tất cả dự án** rõ ràng.
-- Tự dò kho mã, tự lưu trữ phiên và tự dọn phiên đều tắt mặc định.
-- Hermes không tự tải phiên, Dự án hoặc bản sao lưu lên đám mây Hermes.
+[Nghiệm thu exact installer](https://github.com/LucDinhLe/hermes-agent-vietnamese/actions/runs/33798311695) đạt cả currentuser/allusers: cài mới, gateway, ba tab bằng dấu cộng, gửi tin, công cụ mô phỏng, giữ lịch sử khi mở lại, nâng cấp từ vi-v0.32.1-18, repair, gỡ giữ dữ liệu, cài lại, rollback và gỡ toàn bộ dữ liệu đã chọn.
 
-## Ký số và giới hạn
+Source bất biến `b51f306eae2370adc774b63f198ab12990bcf063`; harness `d4847fe844b426bfac9ee0b295993e95fbbe80a7`. Bộ cài dựng native Windows x64, kiểm thử trên Windows x64 GitHub. Không nhận đã thử mọi máy Windows hay quyền Luna/Gemini/Claude của mọi tài khoản.
 
-- Không dùng SignPath theo quyết định phát hành hiện tại; Windows có
-  Authenticode `NotSigned`, chưa ký số và có thể hiện `Publisher: Unknown`,
-  SmartScreen hoặc Smart App Control. Không tắt bảo vệ toàn máy để cài.
-- Dự án chưa tham gia Apple Developer Program; macOS chưa có Developer ID,
-  notarization hoặc stapling và Gatekeeper có thể chặn/cảnh báo.
-- Linux dùng SHA-256, chưa có kho APT/RPM riêng hoặc chữ ký GPG của kho.
-- Community prerelease chưa ký có `updateFeedEnabled=false`; không có update
-  feed tự động và không được gọi là stable/final.
-- Mọi tệp phải đối chiếu với `SHA256SUMS.txt` của chính release này. Nếu một
-  target lỗi, dừng dùng candidate và quay về `vi-v0.32.1-17`.
+2026.9.2 chưa có macOS, Linux hoặc Windows ARM64. Các gói cũ thuộc bản lịch sử [vi-v0.32.1-18](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-18); macOS cũ chưa đạt yêu cầu ký/công chứng cho người dùng thường.
+
+## Cài đè và quay lui
+
+Sao lưu, kiểm tra bản sao, chờ công việc xong rồi đóng ứng dụng/gateway nền trước khi cài. Cài đè giữ dữ liệu theo thiết kế; không chọn gỡ toàn bộ để nâng cấp. Kiểm tra lịch sử và kết nối sau cài. Bản quay lui Windows x64 là vi-v0.32.1-18; giữ bản sao dữ liệu mới hơn trước mọi lần khôi phục.
+
+Xem [hướng dẫn cài đặt](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/README.vi.md) và [sao lưu/khôi phục](https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/docs/sao-luu-khoi-phuc.md).
+
+Bản cộng đồng chưa ký số. Không tắt Defender/SmartScreen trên toàn máy; nếu phát hiện mối đe dọa cụ thể, dừng và báo lỗi. Dự án đang hoàn thiện để nộp lại hồ sơ ký số, chưa có chữ ký mới hoặc xác nhận chấp thuận trong đợt này. Không có update feed tự động.

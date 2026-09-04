@@ -1,0 +1,44 @@
+name: Public release documentation
+
+on:
+  push:
+    paths:
+      - 'README*.md'
+      - 'CODE_SIGNING_POLICY.md'
+      - 'docs/**'
+      - '.github/public-release.json'
+      - '.github/release-notes-vietnamese.md'
+      - '.github/workflows/public-docs-check.yml'
+      - 'scripts/check-public-docs*'
+  pull_request:
+    paths:
+      - 'README*.md'
+      - 'CODE_SIGNING_POLICY.md'
+      - 'docs/**'
+      - '.github/public-release.json'
+      - '.github/release-notes-vietnamese.md'
+      - '.github/workflows/public-docs-check.yml'
+      - 'scripts/check-public-docs*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 26
+      - run: node --test scripts/check-public-docs.test.mjs scripts/validate-public-release-contract.test.mjs
+      - run: node scripts/check-public-docs.mjs
+      # Read public state only on main; a preparation branch may describe a draft.
+      - if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: node scripts/check-public-docs.mjs --live
+        env:
+          GH_TOKEN: ${{ github.token }}

@@ -29,9 +29,8 @@ test('Vietnamese release tags map to deterministic Electron SemVer', () => {
   assert.throws(() => parseVietnameseReleaseTag('v0.20.0'), /vi-vX.Y.Z-N/)
 })
 
-test('v32.1 public descriptor binds the immutable candidate and previous v32 release', () => {
+test('legacy source descriptor resolves its own candidate independently of current public Latest', () => {
   const desktopPackage = JSON.parse(fs.readFileSync(new URL('../apps/desktop/package.json', import.meta.url), 'utf8'))
-  const publicRelease = JSON.parse(fs.readFileSync(new URL('../.github/public-release.json', import.meta.url), 'utf8'))
   const runtime = spawnSync(
     process.env.PYTHON || 'python',
     ['-c', 'import hermes_cli; print(hermes_cli.__version__)'],
@@ -41,19 +40,6 @@ test('v32.1 public descriptor binds the immutable candidate and previous v32 rel
   const candidate = resolveVietnameseReleaseCandidate(expectedCandidateTag)
 
   assert.equal(runtime.status, 0, runtime.stderr)
-  assert.equal(publicRelease.tag, 'vi-v0.32.1-18')
-  assert.equal(publicRelease.previousTag, 'vi-v0.32.1-17')
-  assert.equal(publicRelease.releaseClass, 'community-pilot')
-  assert.equal(publicRelease.artifactProvenanceClass, 'community-prerelease')
-  assert.equal(publicRelease.featuredCandidate.tag, 'vi-v0.32.1-18')
-  assert.equal(publicRelease.featuredCandidate.releaseClass, 'community-prerelease')
-  assert.equal(publicRelease.featuredCandidate.published, true)
-  assert.equal(publicRelease.featuredCandidate.downloadFiles.length, 12)
-  assert.equal(publicRelease.windowsX64.authenticode, 'NotSigned')
-  assert.equal(publicRelease.windowsX64.size, 340657001)
-  assert.equal(publicRelease.windowsX64.sha256, '565e1313162505999238b9c3b4f1422ec37256a1da153bae5149b5795c83c5ac')
-  assert.deepEqual(publicRelease.downloadFiles, publicRelease.featuredCandidate.downloadFiles)
-  assert.equal(compareVietnameseReleaseTags(publicRelease.tag, publicRelease.previousTag), 1)
   assert.equal(candidate.tag, expectedCandidateTag)
   assert.equal(candidate.productVersion, VI_PRODUCT_RELEASE.productVersion)
   assert.equal(candidate.baseVersion, VI_PRODUCT_RELEASE.technicalVersion)
@@ -211,17 +197,6 @@ test('prerelease promotion requires the exact prepared public candidate', () => 
         tag: featuredCandidate.tag
       }),
     /target published state/
-  )
-})
-
-test('public descriptor prepares the exact v32.1 multi-platform pilot', () => {
-  const publicRelease = JSON.parse(fs.readFileSync(new URL('../.github/public-release.json', import.meta.url), 'utf8'))
-  assert.deepEqual(
-    validateFeaturedCandidatePromotion({
-      featuredCandidate: publicRelease.featuredCandidate,
-      tag: 'vi-v0.32.1-18'
-    }),
-    { published: true, tag: 'vi-v0.32.1-18' }
   )
 })
 

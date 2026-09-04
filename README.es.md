@@ -1,3 +1,5 @@
+> This is an upstream Hermes Agent translation retained for reference. For this independent Vietnamese distribution, use the [current release and platform status](README.md) and [installation guide](README.vi.md). Upstream download links below are not the Vietnamese installer.
+
 <p align="center">
   <img src="assets/banner.png" alt="Hermes Agent" width="100%">
 </p>

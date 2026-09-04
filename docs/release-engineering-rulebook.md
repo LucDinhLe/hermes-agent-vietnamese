@@ -1,4 +1,4 @@
-# Quy tắc phát hành Hermes Vietnamese 1.1
+# Quy tắc phát hành Hermes Vietnamese 1.2
 
 Tài liệu này là hợp đồng kỹ thuật cho việc đóng gói, kiểm thử, staging, công bố,
 cập nhật và quay lui Hermes Vietnamese. `docs/community-release.md` mô tả cách
@@ -42,7 +42,9 @@ chuỗi trên.
 ### Community pilot
 
 - Có thể chưa ký số khi cảnh báo cài đặt và giới hạn được công bố nổi bật.
-- Sáu target phải build trên runner native và đối chiếu manifest.
+- Mỗi target được công bố phải build native và đối chiếu manifest. Dòng legacy
+  mặc định sáu target; đợt calendar 2026.9.2 được chủ dự án duyệt chỉ Windows x64.
+  Không quảng cáo các target bị loại như đã có artifact mới.
 - Windows x64 phải vượt exact-artifact smoke trên máy thật theo
   `docs/community-release.md`.
 - Target chưa có máy thật phải mang nhãn `BUILD-ONLY-PILOT`, không được mô tả
@@ -234,6 +236,14 @@ Chỉ dùng user/hồ sơ cô lập. Không đọc, nhập hoặc khôi phục d
 ### H. Điều hướng công khai
 
 - [ ] GitHub `Latest` trả đúng tag trong `.github/public-release.json`.
+- [ ] Dùng `YYYY.M.N` (năm, tháng, số cập nhật trong tháng), tag `vYYYY.M.N`
+      cho dòng calendar. Không đổi số phiên bản chỉ ở nhãn hiển thị.
+- [ ] Kiểm độc lập tài liệu trên nhánh mặc định với source tag của artifact;
+      không giả định push nhánh build hoặc promote release đã cập nhật README.
+- [ ] Chạy `node scripts/check-public-docs.mjs` và hậu kiểm `--live`; đối chiếu
+      nhãn, URL, kích thước, digest, tên tương thích và phạm vi nền tảng.
+- [ ] Đồng bộ cả hướng dẫn bằng ảnh, chú thích ảnh cũ, signing policy, mô tả
+      kho và hướng dẫn dữ liệu. Không phát tán link cũ như nút tải hiện hành.
 - [ ] README/README.vi/hướng dẫn cài và release notes không trỏ bản rollback như
       bản tải mặc định.
 - [ ] Mọi link tải dùng đúng tên asset thật.

@@ -12,13 +12,17 @@ Chỉ tiếp tục khi đủ ba điều kiện:
 
 ## 1. Chọn đúng bộ cài
 
-1. Mở [bản phát hành vi-v0.32.1-17](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/vi-v0.32.1-17).
-2. Trong phần **Assets**, chọn:
-   - Máy Windows x64 thông dụng: `Hermes-Vietnamese-Windows-x64-Setup.exe`.
-   - V32.1 hiện chỉ phát hành artifact đã nghiệm thu cho máy Windows x64.
-3. Chỉ tải tệp từ kho `LucDinhLe/hermes-agent-vietnamese` trên GitHub.
+<!-- current-release:start -->
+Latest là [2026.9.2](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2), community pilot Windows x64 chưa ký số, chưa phải stable.
 
-Với bản v32.1 Windows x64, tệp đúng có kích thước `340.644.403` byte và SHA-256 `7e3e5870228254fec634140391fe01042e50f1b483d9d53ff171636837d65884`.
+1. Tải [Hermes-2026.9.2-win-x64.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/Hermes-2026.9.2-win-x64.exe).
+2. Tên tương thích [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/Hermes-Vietnamese-Windows-x64-Setup.exe) có cùng nội dung. Chỉ chạy một tệp.
+3. Đối chiếu [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/SHA256SUMS.txt) của cùng bản phát hành.
+
+Hai bộ cài có kích thước **252118156 byte**, SHA-256 `1ae55b4a3280e92d4a297f85d81cbb6bcc0a19170da8d9122755d19f40c43015`. Cập nhật thủ công, không có cập nhật tự động nền.
+<!-- current-release:end -->
+
+Ảnh bên dưới minh họa cảnh báo Edge từ bản cũ; tên tệp trong ảnh có thể khác 2026.9.2. Dùng tên và mã kiểm tra phía trên làm chuẩn. Bản này chưa có bộ cài ARM64.
 
 Nếu chưa biết máy dùng x64 hay ARM64, nhấn `Windows + I`, chọn **Hệ thống → Giới thiệu** và xem dòng **Loại hệ thống**.
 
@@ -49,7 +53,7 @@ Nếu Edge tự thêm `(1)`, `(2)` vào tên vì tệp đã từng được tả
 ## 3. Mở bộ cài
 
 1. Khi Edge báo tải xong, bấm biểu tượng thư mục hoặc mở thư mục **Downloads/Tải xuống**.
-2. Mở `Hermes-Vietnamese-Windows-x64-Setup.exe` hoặc bản ARM64 tương ứng.
+2. Mở `Hermes-2026.9.2-win-x64.exe` hoặc tệp tên tương thích đã xác minh ở phần 1.
 3. Nếu Windows SmartScreen hiện cửa sổ **Windows protected your PC**, kiểm tra lại nguồn và SHA-256 rồi chọn **More info/Thông tin thêm → Run anyway/Vẫn chạy**.
 
 Chỉ tiếp tục khi nguồn tải, tên tệp và SHA-256 đúng như phần 1. Nếu Microsoft Defender Antivirus nêu tên một mối đe dọa cụ thể, hãy dừng lại, giữ ảnh chụp và [gửi báo lỗi](https://github.com/LucDinhLe/hermes-agent-vietnamese/issues). Không tắt Defender, SmartScreen hoặc chính sách bảo mật của toàn máy để cài Hermes.
@@ -57,7 +61,7 @@ Chỉ tiếp tục khi nguồn tải, tên tệp và SHA-256 đúng như phần 
 ## 4. Hoàn tất thiết lập ba bước
 
 1. Chọn **Tiếng Việt** hoặc **English**.
-2. Chọn cài Hermes trên máy và chờ ứng dụng chuẩn bị môi trường chạy. Lần đầu cần Internet và có thể mất vài phút.
+2. Chờ ứng dụng chuẩn bị lõi đóng gói sẵn. Python và thư viện bắt buộc có trong bộ cài; Internet vẫn cần cho đăng nhập, AI và tính năng mạng/tùy chọn.
 3. Tại **Kết nối model**, chọn một trong các đường phù hợp:
    - **OpenAI OAuth (ChatGPT):** đăng nhập tài khoản ChatGPT có quyền dùng Codex.
    - **Claude Pro / Max:** đăng nhập qua Claude Code.
@@ -72,6 +76,8 @@ Nếu chưa có tài khoản hoặc khóa API, chọn **Tôi sẽ chọn nhà cu
 Bạn có thể đối chiếu mã SHA-256 bằng tệp `SHA256SUMS.txt` trong cùng bản phát hành. Mỗi bản có mã riêng, vì vậy không dùng mã của bản cũ để kiểm tra bản mới. Trên Windows, mở PowerShell trong thư mục tải xuống và chạy `Get-FileHash .\Hermes-Vietnamese-Windows-x64-Setup.exe -Algorithm SHA256`, rồi so kết quả với tệp tổng kiểm tra.
 
 ## Nếu vẫn không cài được
+
+Trước khi cài đè, [sao lưu và kiểm tra bản sao](sao-luu-khoi-phuc.md), chờ công việc kết thúc rồi đóng ứng dụng/gateway nền. Không chọn gỡ toàn bộ dữ liệu để nâng cấp.
 
 - **Chỉ thấy Delete và Cancel:** bấm mũi tên `▼` cạnh **Delete**, rồi chọn **Keep anyway**.
 - **Chỉ thấy menu Delete/Keep:** chọn **Keep**, sau đó làm tiếp màn hình xác nhận nếu Edge hỏi lại.

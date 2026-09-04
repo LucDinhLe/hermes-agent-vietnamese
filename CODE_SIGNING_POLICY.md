@@ -2,7 +2,9 @@
 
 ## Trạng thái
 
-Dự án đã nộp hồ sơ xin chương trình ký mã miễn phí dành cho phần mềm mã nguồn mở của SignPath Foundation và đang chờ xét duyệt. Trong thời gian chờ, các bản phát hành hiện tại chưa có chữ ký số xác minh nhà phát hành. Người dùng chỉ nên xem một tệp là đã được ký khi trang phát hành tương ứng ghi rõ trạng thái ký và chữ ký số của tệp xác minh thành công.
+Ngày 2026-09-04, bản Latest [2026.9.2](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2) chỉ phát hành Windows x64 và có Authenticode `NotSigned`. Dự án đang hoàn thiện tài liệu/quy trình để nộp lại hồ sơ chương trình ký mã nguồn mở. Chưa có xác nhận hồ sơ được chấp thuận hoặc chữ ký mới trong đợt này; việc công khai bản cập nhật không đồng nghĩa đã nộp lại hồ sơ.
+
+Chỉ xem một tệp là đã ký khi trang phát hành ghi rõ và chữ ký thực tế xác minh thành công. Bản macOS cũ chưa đạt yêu cầu ký/công chứng và kiểm tra Gatekeeper cho người dùng thường; đợt 2026.9.2 không cung cấp macOS. Không khuyến nghị vô hiệu hóa bảo vệ để chạy các gói cũ.
 
 Chứng thư ký mã dùng để xác minh nguồn phát hành và tính toàn vẹn của tệp. Đây không phải giấy phép sử dụng phần mềm của Microsoft hoặc Apple. Trạng thái hiện tại cũng không có nghĩa hai công ty này đã từ chối dự án. Windows SmartScreen đánh giá cả chữ ký và uy tín của tệp; macOS Gatekeeper sử dụng Developer ID cùng quy trình notarization riêng của Apple.
 
