@@ -1,25 +1,27 @@
 {
-  "tag": "v2026.9.3",
-  "version": "2026.9.3",
+  "tag": "v2026.9.4",
+  "version": "2026.9.4",
   "versionScheme": "year.month.monthly-update",
-  "previousTag": "v2026.9.2",
-  "rollbackTag": "v2026.9.2",
+  "previousTag": "v2026.9.3",
+  "rollbackTag": "v2026.9.3",
   "releaseClass": "community-pilot",
-  "artifactProvenanceClass": "github-actions-windows-composite",
-  "sourceCommit": "ca66d24a60722643204b7add59117cf84649b92d",
+  "artifactProvenanceClass": "github-actions-composite",
+  "sourceCommit": "dba6096d552d33a6fd24f1a55a3d618530e5800c",
   "supportedTargets": [
-    "windows-x64"
+    "windows-x64",
+    "macos-arm64",
+    "linux-x64"
   ],
   "updateFeedEnabled": true,
   "windowsX64": {
-    "filename": "Hermes-2026.9.3-win-x64.exe",
-    "compatibilityFilename": "Hermes-Vietnamese-Windows-x64-Setup.exe",
-    "size": 345527696,
-    "sha256": "cc2798452d5c3d87fd0029c28af9e26f51b7406265707bb654521d2b1362e250",
-    "authenticode": "NotSigned"
+    "filename": "Hermes-2026.9.4-win-x64.exe",
+    "size": 345852734,
+    "sha256": "3cd30aaad47167c439bb6637af3c531ceffc4e2f74d7a808e3a9c105e3938990",
+    "authenticode": "NotSigned",
+    "compatibilityFilename": "Hermes-Vietnamese-Windows-x64-Setup.exe"
   },
   "lifecycle": {
-    "runId": 33893738196,
+    "runId": 33930157952,
     "workflow": "build-release.yml",
     "conclusion": "success"
   },
@@ -30,8 +32,11 @@
     "edge-keep-anyway-v25.jpg"
   ],
   "downloadFiles": [
-    "Hermes-2026.9.3-win-x64.exe",
-    "Hermes-Vietnamese-Windows-x64-Setup.exe"
+    "Hermes-2026.9.4-win-x64.exe",
+    "Hermes-Vietnamese-Windows-x64-Setup.exe",
+    "Hermes-2026.9.4-mac-arm64.dmg",
+    "Hermes-2026.9.4-linux-x86_64.AppImage",
+    "Hermes-2026.9.4-linux-amd64.deb"
   ],
   "documentationFiles": [
     "README.md",
@@ -39,14 +44,25 @@
     "docs/cai-dat-windows-bang-anh.md",
     ".github/release-notes-vietnamese.md"
   ],
-  "legacyPlatforms": {
-    "tag": "vi-v0.32.1-18",
-    "windowsArm64": "historical-build-only",
-    "linux": "historical-build-only",
-    "macos": "not-recommended-for-real-users"
-  },
   "engine": {
     "tag": "v2026.8.31",
     "commit": "29112bef099274229cadff79cdff7bf7b99c4b77"
+  },
+  "macosArm64": {
+    "filename": "Hermes-2026.9.4-mac-arm64.dmg",
+    "size": 385594943,
+    "sha256": "8ebc605c66c9cc8eeed6fc314b71cbdabeedea6c62c297035296729571284d8c",
+    "codesign": "AdHoc",
+    "minimumSystemVersion": "12.0"
+  },
+  "linuxX64": {
+    "filename": "Hermes-2026.9.4-linux-x86_64.AppImage",
+    "size": 397516248,
+    "sha256": "26cfec58e6776f49d5e65cbdd62908119349f7406a4fc549bc417d839134249d",
+    "deb": {
+      "filename": "Hermes-2026.9.4-linux-amd64.deb",
+      "size": 320996796,
+      "sha256": "fc513d2a836ee5c6ca9762a627bb14b01d5a2cb4e09b234fd81439b61018e351"
+    }
   }
 }
