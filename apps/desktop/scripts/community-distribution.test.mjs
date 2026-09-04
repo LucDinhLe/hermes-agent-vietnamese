@@ -10,27 +10,25 @@ const repoRoot = resolve(import.meta.dirname, '..', '..', '..')
 const communityRepo = 'LucDinhLe/hermes-agent-vietnamese'
 const upstreamRepo = 'NousResearch/hermes-agent'
 
-const distributionFiles = [
-  'apps/desktop/electron/bootstrap-runner.ts',
-  'scripts/install.ps1',
-  'scripts/install.sh',
-  'hermes_cli/update_cmd.py',
-  'hermes_cli/banner.py'
-]
+// Hợp đồng composite (engine.lock): lõi ở gốc kho là upstream nguyên bản, nên
+// install.ps1/install.sh/update_cmd.py/banner.py trỏ NousResearch là ĐÚNG.
+// Chỉ vỏ desktop mới trỏ kho cộng đồng.
+const shellDistributionFiles = ['apps/desktop/electron/bootstrap-runner.ts']
+const engineDistributionFiles = ['scripts/install.ps1', 'scripts/install.sh', 'hermes_cli/update_cmd.py']
 
-test('community installers and update paths use the Vietnamese repository', () => {
-  for (const relativePath of distributionFiles) {
+test('desktop shell update paths use the Vietnamese repository', () => {
+  for (const relativePath of shellDistributionFiles) {
     const source = readFileSync(resolve(repoRoot, relativePath), 'utf8')
     assert.match(source, new RegExp(communityRepo.replace('/', '\\/')))
+    assert.doesNotMatch(source, new RegExp(upstreamRepo.replace('/', '\\/')))
   }
 })
 
-test('fresh-install entry points do not download source from upstream', () => {
-  const entryPoints = ['apps/desktop/electron/bootstrap-runner.ts', 'scripts/install.ps1', 'scripts/install.sh']
-
-  for (const relativePath of entryPoints) {
+test('engine install/update scripts stay upstream-pristine (engine.lock)', () => {
+  for (const relativePath of engineDistributionFiles) {
     const source = readFileSync(resolve(repoRoot, relativePath), 'utf8')
-    assert.doesNotMatch(source, new RegExp(upstreamRepo.replace('/', '\\/')))
+    assert.match(source, new RegExp(upstreamRepo.replace('/', '\\/')))
+    assert.doesNotMatch(source, new RegExp(communityRepo.replace('/', '\\/')))
   }
 })
 
@@ -57,8 +55,8 @@ test('packaged upgrades retain the installed identity and disclose the MIT licen
   assert.equal(pkg.build.productName, metadata.technicalIdentity.packageProductName)
   assert.equal(pkg.build.executableName, metadata.technicalIdentity.executableName)
   assert.deepEqual(pkg.build.protocols[0].schemes, [metadata.technicalIdentity.protocol])
-  assert.equal(pkg.build.nsis.shortcutName, metadata.displayName)
-  assert.equal(pkg.build.nsis.uninstallDisplayName, metadata.displayName)
+  assert.ok(pkg.build.nsis.shortcutName.startsWith(metadata.displayName)) // hậu tố '(thử nghiệm)' cho kênh pre-release
+  assert.ok(pkg.build.nsis.uninstallDisplayName.startsWith(metadata.displayName))
   assert.equal(pkg.build.mac.extendInfo.CFBundleDisplayName, metadata.displayName)
   assert.equal(pkg.build.mac.extendInfo.CFBundleExecutable, metadata.technicalIdentity.executableName)
   assert.equal(pkg.build.dmg.title, `Install ${metadata.displayName}`)
@@ -73,7 +71,8 @@ test('packaged upgrades retain the installed identity and disclose the MIT licen
   assert.equal(pkg.build.publish[0].owner, metadata.updateRepository.owner)
   assert.equal(pkg.build.publish[0].repo, metadata.updateRepository.repo)
   assert.match(main, /const APP_NAME = process\.env\.HERMES_DESKTOP_APP_NAME \|\| 'Hermes Vietnamese'/)
-  assert.match(main, /app\.setAppUserModelId\('com\.nousresearch\.hermes'\)/)
+  assert.match(main, /app\.setAppUserModelId\('vn\.lucledinh\.hermes-vietnamese'\)/)
+  assert.equal(pkg.build.nsis.guid, metadata.technicalIdentity.nsisGuid)
   assert.doesNotMatch(main, /title: 'Hermes'/)
   assert.match(exeIdentity, /product-metadata\.json/)
   assert.match(exeIdentity, /ProductName: displayName/)

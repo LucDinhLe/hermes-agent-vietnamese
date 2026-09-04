@@ -8,7 +8,7 @@ $ProgressPreference = 'SilentlyContinue'
 Set-StrictMode -Version 2.0
 
 $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-$ProductId = '48ae4bdc-0f8d-5252-af1e-bf7c0a8c3649'
+$ProductId = 'f55add5f-6655-5c1d-b8e3-d7252a8a4152'
 $ProductKey = "HKCU:\Software\$ProductId"
 $UninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$ProductId"
 $StateRoot = $null
@@ -162,8 +162,8 @@ function Get-InstallState {
   Assert-True (-not [string]::IsNullOrWhiteSpace($installLocation)) 'registered InstallLocation is empty'
   $installLocation = [System.IO.Path]::GetFullPath($installLocation).TrimEnd('\')
   Assert-GuestPath $installLocation $env:LOCALAPPDATA 'registered Hermes install'
-  $binary = Join-Path $installLocation 'Hermes.exe'
-  Assert-True (Test-Path -LiteralPath $binary -PathType Leaf) 'registered Hermes.exe is missing'
+  $binary = Join-Path $installLocation 'HermesVietnamese.exe'
+  Assert-True (Test-Path -LiteralPath $binary -PathType Leaf) 'registered HermesVietnamese.exe is missing'
   $uninstallString = [string]$uninstall.UninstallString
   $uninstaller = $null
   if ($uninstallString -match '^"([^"]+)"') {
@@ -211,11 +211,11 @@ function Write-InstallDiagnostics {
     $registry[$entry.Key] = [bool](Test-Path -LiteralPath $entry.Value)
   }
   $installPaths = @(
-    (Join-Path $env:LOCALAPPDATA 'Programs\Hermes'),
-    (Join-Path $env:ProgramFiles 'Hermes')
+    (Join-Path $env:LOCALAPPDATA 'Programs\Hermes Vietnamese'),
+    (Join-Path $env:ProgramFiles 'Hermes Vietnamese')
   )
   if (-not [string]::IsNullOrWhiteSpace(${env:ProgramFiles(x86)})) {
-    $installPaths += Join-Path ${env:ProgramFiles(x86)} 'Hermes'
+    $installPaths += Join-Path ${env:ProgramFiles(x86)} 'Hermes Vietnamese'
   }
   $paths = @($installPaths | ForEach-Object {
     [ordered]@{ path = $_; exists = [bool](Test-Path -LiteralPath $_) }
@@ -354,7 +354,7 @@ function Assert-InPlaceTransition {
   $beforeDir = [System.IO.Path]::GetFullPath([string]$Before.InstallDir).TrimEnd('\')
   $afterDir = [System.IO.Path]::GetFullPath([string]$After.InstallDir).TrimEnd('\')
   Assert-True ([string]::Equals($beforeDir, $afterDir, [StringComparison]::OrdinalIgnoreCase)) "$Stage installed side-by-side instead of replacing the registered product"
-  Assert-True (-not (Test-Path -LiteralPath (Join-Path $beforeDir 'Hermes.exe')) -or (Join-Path $beforeDir 'Hermes.exe') -eq [string]$After.Binary) "$Stage left a superseded registered executable"
+  Assert-True (-not (Test-Path -LiteralPath (Join-Path $beforeDir 'HermesVietnamese.exe')) -or (Join-Path $beforeDir 'HermesVietnamese.exe') -eq [string]$After.Binary) "$Stage left a superseded registered executable"
   Add-Event 'in-place-install-transition' @{ stage = $Stage; sameRegisteredInstallDir = $true }
 }
 

@@ -30,9 +30,10 @@ import path from 'node:path'
 
 const UNINSTALL_MODES = ['gui', 'lite', 'full']
 // electron-builder derives this stable NSIS key from
-// build.appId=com.nousresearch.hermes. It is the per-user install identity,
+// build.appId=vn.lucledinh.hermes-vietnamese (uuid v5, khớp nsis.guid trong
+// package.json). It is the per-user install identity,
 // not a release-version key, and must remain stable across upgrades.
-const WINDOWS_NSIS_APP_KEY = '48ae4bdc-0f8d-5252-af1e-bf7c0a8c3649'
+const WINDOWS_NSIS_APP_KEY = 'f55add5f-6655-5c1d-b8e3-d7252a8a4152'
 
 /**
  * Map an uninstall mode to the `python -m hermes_cli.uninstall` argv (after the

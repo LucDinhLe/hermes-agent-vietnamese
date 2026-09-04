@@ -708,24 +708,29 @@ if (INSTALL_STAMP) {
   )
 }
 
-// HERMES_HOME — the user-facing root for everything Hermes-related. Mirrors
-// scripts/install.ps1's $HermesHome and scripts/install.sh's $HERMES_HOME.
+// HERMES_HOME — thư mục dữ liệu của Hermes Vietnamese (bản composite, cài cạnh).
 //
-// Defaults:
-//   Windows: %LOCALAPPDATA%\hermes (matches install.ps1)
-//   macOS / Linux: ~/.hermes (matches install.sh)
+// Mặc định:
+//   Windows: %LOCALAPPDATA%\hermes-vietnamese
+//   macOS / Linux: ~/.hermes-vietnamese
+// Ghi đè: HERMES_VI_HOME (env hoặc registry User trên Windows).
 //
-// Special case for Windows: if the user has a legacy ~/.hermes directory
-// (e.g., from a prior pip install or a manual setup) AND no
-// %LOCALAPPDATA%\hermes yet, prefer the legacy path so we don't orphan their
-// existing config / sessions / .env. New installs go to %LOCALAPPDATA%.
+// Không đọc HERMES_HOME và không dùng lại ~/.hermes hay %LOCALAPPDATA%\hermes
+// của bản Hermes cũ: dữ liệu cũ được giữ nguyên để người dùng quay lui; việc
+// nhập dữ liệu từ bản cũ là một bước tường minh (kế hoạch composite, bước 7).
 //
-// HERMES_DESKTOP_USER_DATA_DIR (used by test:desktop:fresh) puts the sandbox
-// HERMES_HOME beneath the throwaway userData dir so a fresh-install run never
-// touches the user's real ~/.hermes / %LOCALAPPDATA%\hermes.
+// HERMES_DESKTOP_USER_DATA_DIR (test:desktop:fresh) đặt HERMES_HOME sandbox
+// dưới userData tạm để lần chạy fresh-install không đụng dữ liệu thật.
+const HERMES_VI_HOME_DIR_WINDOWS = 'hermes-vietnamese'
+const HERMES_VI_HOME_DIR_POSIX = '.hermes-vietnamese'
+
 function resolveHermesHome() {
-  if (process.env.HERMES_HOME) {
-    return normalizeHermesHomeRoot(process.env.HERMES_HOME)
+  // Hermes Vietnamese dùng thư mục dữ liệu riêng và biến ghi đè riêng
+  // (HERMES_VI_HOME) để cài cạnh Hermes gốc/bản cũ mà không đụng dữ liệu của
+  // chúng. HERMES_HOME của bản cũ cố ý KHÔNG được đọc ở đây; backend con vẫn
+  // nhận HERMES_HOME = giá trị đã giải quyết (bootstrap-runner.ts).
+  if (process.env.HERMES_VI_HOME) {
+    return normalizeHermesHomeRoot(process.env.HERMES_VI_HOME)
   }
 
   if (USER_DATA_OVERRIDE) {
@@ -733,13 +738,9 @@ function resolveHermesHome() {
   }
 
   if (IS_WINDOWS) {
-    // A GUI app launched from Explorer inherits the environment block captured
-    // at login, so a HERMES_HOME set via `setx` AFTER login is invisible in
-    // process.env even though the CLI (a fresh shell) sees it. Without this the
-    // backend silently falls back to %LOCALAPPDATA%\hermes and reports "No
-    // inference provider configured" despite a valid configured home (#45471).
-    // Consult the live User-scoped registry value before the default below.
-    const fromRegistry = readWindowsUserEnvVar('HERMES_HOME')
+    // GUI app kế thừa môi trường lúc đăng nhập, nên đọc thêm registry User
+    // (xem #45471) — nhưng chỉ khoá HERMES_VI_HOME.
+    const fromRegistry = readWindowsUserEnvVar('HERMES_VI_HOME')
 
     if (fromRegistry) {
       return normalizeHermesHomeRoot(fromRegistry)
@@ -747,19 +748,10 @@ function resolveHermesHome() {
   }
 
   if (IS_WINDOWS && process.env.LOCALAPPDATA) {
-    const localappdata = path.join(process.env.LOCALAPPDATA, 'hermes')
-    const legacy = path.join(app.getPath('home'), '.hermes')
-
-    // Migrate transparently to LOCALAPPDATA, but honour an existing legacy
-    // ~/.hermes setup (no LOCALAPPDATA install yet) so users don't lose state.
-    if (!directoryExists(localappdata) && directoryExists(legacy)) {
-      return legacy
-    }
-
-    return localappdata
+    return path.join(process.env.LOCALAPPDATA, HERMES_VI_HOME_DIR_WINDOWS)
   }
 
-  return path.join(app.getPath('home'), '.hermes')
+  return path.join(app.getPath('home'), HERMES_VI_HOME_DIR_POSIX)
 }
 
 const HERMES_HOME = resolveHermesHome()
@@ -1246,12 +1238,12 @@ app.setName(APP_NAME)
 // Windows toast notifications silently no-op unless an AppUserModelID is set:
 // `new Notification().show()` returns without error and nothing appears. The
 // AUMID must match the installed Start Menu shortcut's AUMID, which
-// electron-builder derives from the build `appId` (com.nousresearch.hermes) —
+// electron-builder derives from the build `appId` (vn.lucledinh.hermes-vietnamese) —
 // keep this string in sync with package.json `build.appId`. macOS/Linux don't
 // need this, so gate it on Windows. (Fixes: desktop approval/turn notifications
 // never firing on Windows.)
 if (IS_WINDOWS) {
-  app.setAppUserModelId('com.nousresearch.hermes')
+  app.setAppUserModelId('vn.lucledinh.hermes-vietnamese')
 }
 
 // Seed the native About panel with the live Hermes version. This is refreshed
@@ -15544,7 +15536,7 @@ ipcMain.handle('hermes:vscode-theme:search', async (_event, query) => searchMark
 // running app. Three delivery paths: macOS 'open-url',
 // Win/Linux running-app 'second-instance' (argv), Win/Linux cold-start argv.
 // ---------------------------------------------------------------------------
-const HERMES_PROTOCOL = 'hermes'
+const HERMES_PROTOCOL = 'hermes-vi'
 let _pendingDeepLink = null
 let _rendererReadyForDeepLink = false
 

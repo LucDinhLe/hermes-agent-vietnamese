@@ -1,6 +1,6 @@
 {
   "name": "hermes",
-  "productName": "Hermes",
+  "productName": "Hermes Vietnamese",
   "private": true,
   "version": "0.32.1",
   "description": "Hermes Vietnamese, the MIT-licensed community desktop distribution of Hermes Agent.",
@@ -186,14 +186,14 @@
   },
   "build": {
     "electronVersion": "42.8.0",
-    "appId": "com.nousresearch.hermes",
-    "productName": "Hermes",
-    "executableName": "Hermes",
+    "appId": "vn.lucledinh.hermes-vietnamese",
+    "productName": "Hermes Vietnamese",
+    "executableName": "HermesVietnamese",
     "protocols": [
       {
         "name": "Hermes Vietnamese Protocol",
         "schemes": [
-          "hermes"
+          "hermes-vi"
         ]
       }
     ],
@@ -254,7 +254,7 @@
       "entitlementsInherit": "electron/entitlements.mac.inherit.plist",
       "extendInfo": {
         "CFBundleDisplayName": "Hermes Vietnamese",
-        "CFBundleExecutable": "Hermes",
+        "CFBundleExecutable": "HermesVietnamese",
         "CFBundleName": "Hermes",
         "NSAudioCaptureUsageDescription": "Hermes Vietnamese uses audio capture for voice conversations.",
         "NSCameraUsageDescription": "Hermes Vietnamese uses the camera when a plugin or feature you enable requests it.",
@@ -304,7 +304,7 @@
       "desktop": {
         "entry": {
           "Name": "Hermes Vietnamese",
-          "StartupWMClass": "Hermes"
+          "StartupWMClass": "HermesVietnamese"
         }
       },
       "target": [
@@ -317,9 +317,10 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
-      "shortcutName": "Hermes Vietnamese",
-      "uninstallDisplayName": "Hermes Vietnamese",
-      "warningsAsErrors": false
+      "shortcutName": "Hermes Vietnamese (thử nghiệm)",
+      "uninstallDisplayName": "Hermes Vietnamese (thử nghiệm)",
+      "warningsAsErrors": false,
+      "guid": "f55add5f-6655-5c1d-b8e3-d7252a8a4152"
     }
   }
 }
