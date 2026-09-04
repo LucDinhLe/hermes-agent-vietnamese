@@ -83,6 +83,10 @@ jobs:
       - name: Cây làm việc phải sạch trước khi dựng (in ra rồi dọn tệp phụ của bước cài/test)
         shell: bash
         run: |
+          # Upstream có hai tệp chỉ khác nhau chữ hoa/thường (contributors/emails/agent@Agents-Mac-mini.local
+          # và agent@agents-Mac-mini.local); Windows không phân biệt nên luôn báo "modified".
+          # Đánh dấu skip-worktree để git status và build script bỏ qua; nội dung lõi không đổi.
+          git ls-files contributors/emails | grep -i 'agents-mac-mini' | while read -r f; do git update-index --skip-worktree -- "$f"; done
           git status --porcelain=v1 --untracked-files=normal | tee /tmp/status-before.txt
           if [ -s /tmp/status-before.txt ]; then
             echo "::warning::npm ci / vitest để lại thay đổi ở trên; khôi phục tệp theo dõi và xoá tệp lạ (không đụng tệp bị ignore như node_modules)"
