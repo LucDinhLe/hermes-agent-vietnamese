@@ -92,6 +92,17 @@ Có 21 tệp (12 tệp nguồn + 9 tệp test đi kèm), gom thành 11 thay đ�
 
 > Lưu ý: mục #10 và #11 không khớp hoàn toàn với ví dụ "khoá cwd cron" nêu trong đề bài — đã rà toàn bộ 300 tệp bằng từ khoá `cwd`, `os.chdir`, `working directory` và không thấy tệp nào khoá cwd cho cron rõ ràng hơn hai mục trên. Có thể ví dụ đó đã được giải quyết ở một tệp ngoài phạm vi 300 tệp lõi (ví dụ `cron/scheduler.py`, không nằm trong danh sách fork sửa), cần Luc xác nhận lại.
 
+## Quyết định của Luc (04/09/2026)
+
+Bỏ toàn bộ 21 tệp nhóm RED ở bản thử nghiệm 1, dùng lõi upstream v2026.8.31 nguyên bản. Lý do: mục tiêu bản 1 là chứng minh giao diện chạy trên lõi nguyên bản; mỗi vá lõi giữ lại sẽ phải vá lại ở mỗi lần nâng. Việc kế thừa:
+
+- Mục 9 (mặc định `display.language = "vi"`) chuyển sang vỏ desktop: ghi vào cấu hình người dùng ở lần chạy đầu, không chạm lõi (làm ở bước 3).
+- Mục 1, 2, 3 (SQLite busy retry, khoá ghi metrics, doctor phát hiện WAL reset) sẽ gửi upstream dưới dạng pull request sau khi bản thử nghiệm đứng được; kho hưởng lại qua lần nâng lõi kế tiếp.
+- Mục 5, 6 (Bedrock probe, ngưỡng nén Codex) ghi vào ghi chú phát hành như hạn chế đã biết.
+- Mục 7 (bảng giá) upstream tự cập nhật.
+
+Nhóm RED sau quyết định: 0 tệp còn hiệu lực trong lõi.
+
 ## Nhóm YELLOW (đưa về plugin ở bản thử nghiệm 2)
 
 **Advisor (giám sát/khuyên nền, đọc-chỉ)**
