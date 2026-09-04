@@ -239,14 +239,16 @@ jobs:
           git config user.name "hermes-vietnamese-ci"
           git config user.email "LucDinhLe@users.noreply.github.com"
           if [ "$CHANNEL" = thunghiem ]; then
-            if git fetch origin feed/thunghiem 2>/dev/null; then
-              git worktree add feedwt FETCH_HEAD
-            else
-              git worktree add --detach feedwt
-              ( cd feedwt && git checkout --orphan feed/thunghiem && git rm -rfq . && git clean -fdxq )
-            fi
+            # Nhánh feed chỉ mang đúng một tệp JSON sinh ra từ bản dựng, lịch sử không có giá trị,
+            # nên mỗi lần ghi lại từ đầu rồi đẩy đè. Cách này miễn nhiễm với việc nhánh cũ đã lệch
+            # (trước đây fetch hỏng làm CI tạo lịch sử mồ côi mới rồi bị từ chối non-fast-forward).
+            git worktree add --detach feedwt
+            ( cd feedwt \
+              && git checkout --orphan feed-thunghiem-tmp \
+              && git rm -rfq --cached . \
+              && find . -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} + )
             cp out/public-release-thunghiem.json feedwt/public-release-thunghiem.json
-            ( cd feedwt && git add public-release-thunghiem.json && git -c commit.gpgsign=false commit -q -m "feed(thunghiem): $RELEASE_TAG" && git push origin HEAD:refs/heads/feed/thunghiem )
+            ( cd feedwt && git add public-release-thunghiem.json && git -c commit.gpgsign=false commit -q -m "feed(thunghiem): $RELEASE_TAG" && git push --force origin HEAD:refs/heads/feed/thunghiem )
           else
             # Ghi feed + tài liệu đã render lên main (tag đã được kiểm là nằm trên main)
             git fetch -q origin main
