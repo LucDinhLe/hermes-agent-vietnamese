@@ -666,15 +666,33 @@ function spawnBash(scriptPath, args, { emit, stageName, abortSignal, hermesHome 
 // a repair/update path and must not let an old packaged app detach the checkout
 // back to the commit baked into that app. All-zero fallback stamps are never
 // passed as -Commit/--commit — only the branch is used (#50823 / #50864 review).
-function buildPinArgs(installStamp, { pinCommit = true } = {}) {
-  const args = []
+/**
+ * Composite (engine.lock): the Python core that install.ps1/install.sh clones is the
+ * pristine upstream tag recorded in the stamp's `engine` field, not the shell's own
+ * commit. The install script itself is fetched from the shell repo (it is byte-identical
+ * to upstream's), but `-Commit/-Branch` must point at upstream, otherwise repair
+ * would ask NousResearch for a commit that only exists in the shell repo.
+ */
+function pinSourceForStamp(installStamp) {
+  const engine = installStamp && installStamp.engine
 
-  if (pinCommit && installStamp && isPinnedCommit(installStamp.commit)) {
-    args.push('-Commit', installStamp.commit)
+  if (engine && typeof engine.commit === 'string' && isPinnedCommit(engine.commit) && typeof engine.tag === 'string') {
+    return { commit: engine.commit, branch: engine.tag }
   }
 
-  if (installStamp && installStamp.branch) {
-    args.push('-Branch', installStamp.branch)
+  return installStamp ? { commit: installStamp.commit, branch: installStamp.branch } : { commit: null, branch: null }
+}
+
+function buildPinArgs(installStamp, { pinCommit = true } = {}) {
+  const args = []
+  const pin = pinSourceForStamp(installStamp)
+
+  if (pinCommit && isPinnedCommit(pin.commit)) {
+    args.push('-Commit', pin.commit)
+  }
+
+  if (pin.branch) {
+    args.push('-Branch', pin.branch)
   }
 
   return args
@@ -682,13 +700,14 @@ function buildPinArgs(installStamp, { pinCommit = true } = {}) {
 
 function buildPosixPinArgs({ installStamp, activeRoot, hermesHome, pinCommit = true }) {
   const args = ['--dir', activeRoot, '--hermes-home', hermesHome]
+  const pin = pinSourceForStamp(installStamp)
 
-  if (installStamp && installStamp.branch) {
-    args.push('--branch', installStamp.branch)
+  if (pin.branch) {
+    args.push('--branch', pin.branch)
   }
 
-  if (pinCommit && installStamp && isPinnedCommit(installStamp.commit)) {
-    args.push('--commit', installStamp.commit)
+  if (pinCommit && isPinnedCommit(pin.commit)) {
+    args.push('--commit', pin.commit)
   }
 
   return args
@@ -1042,6 +1061,7 @@ export {
   isPinnedCommit,
   // Exposed for testability
   parseStageResult,
+  pinSourceForStamp,
   resolveCheckoutHead,
   resolveInstallScript,
   resolveLocalInstallScript,

@@ -121,6 +121,19 @@ def _compute_distance(base_version: str | None, release_date: str | None) -> int
     return None
 
 
+def _read_engine_lock() -> dict | None:
+    lock_path = _REPO_ROOT / "engine.lock"
+    try:
+        data = json.loads(lock_path.read_text(encoding="utf-8"))
+        engine = data.get("engine") or {}
+        tag, commit, repo = engine.get("tag"), engine.get("commit"), engine.get("repository")
+        if isinstance(tag, str) and isinstance(commit, str) and isinstance(repo, str):
+            return {"tag": tag, "commit": commit, "repository": repo}
+    except (OSError, ValueError):
+        pass
+    return None
+
+
 def build_stamp(
     *,
     commit: str | None = None,
@@ -224,6 +237,9 @@ def build_stamp(
         "dirty": dirty,
         "source": source,
         "distribution": distribution,
+        # Kiến trúc composite: lõi Python là upstream nguyên bản ghim trong engine.lock.
+        # Bootstrap/repair của vỏ dùng trường này để clone đúng tag/commit upstream.
+        "engine": _read_engine_lock(),
         "baseVersion": base_version,
         "displayVersion": display_version,
         "distance": distance,
