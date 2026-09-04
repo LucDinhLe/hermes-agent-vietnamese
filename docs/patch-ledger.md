@@ -96,7 +96,7 @@ Có 21 tệp (12 tệp nguồn + 9 tệp test đi kèm), gom thành 11 thay đ�
 
 Bỏ toàn bộ 21 tệp nhóm RED ở bản thử nghiệm 1, dùng lõi upstream v2026.8.31 nguyên bản. Lý do: mục tiêu bản 1 là chứng minh giao diện chạy trên lõi nguyên bản; mỗi vá lõi giữ lại sẽ phải vá lại ở mỗi lần nâng. Việc kế thừa:
 
-- Mục 9 (mặc định `display.language = "vi"`) chuyển sang vỏ desktop: ghi vào cấu hình người dùng ở lần chạy đầu, không chạm lõi (làm ở bước 3).
+- Mục 9 (mặc định `display.language = "vi"`): đã kiểm ở bước 3, vỏ desktop sẵn có `FIRST_RUN_LOCALE = 'vi'` (apps/desktop/src/i18n/context.tsx) và ghi `display.language` vào cấu hình backend qua PUT /api/config khi người dùng chọn ngôn ngữ. Không cần chạm lõi. Lưu ý: cả upstream lẫn fork đều không có `locales/vi.yaml`, nên thông điệp tĩnh phía backend (nhắc phê duyệt trong CLI) vẫn tiếng Anh như trước, không phải hồi quy.
 - Mục 1, 2, 3 (SQLite busy retry, khoá ghi metrics, doctor phát hiện WAL reset) sẽ gửi upstream dưới dạng pull request sau khi bản thử nghiệm đứng được; kho hưởng lại qua lần nâng lõi kế tiếp.
 - Mục 5, 6 (Bedrock probe, ngưỡng nén Codex) ghi vào ghi chú phát hành như hạn chế đã biết.
 - Mục 7 (bảng giá) upstream tự cập nhật.
