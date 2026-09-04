@@ -23,6 +23,7 @@ import {
   Wrench,
   Zap
 } from '@/lib/icons'
+import { viFeature } from '@/lib/vi-features'
 import { type BackendOwner, backendOwnerKey } from '@/store/backend-owner'
 import { notifyError } from '@/store/notifications'
 
@@ -291,13 +292,17 @@ function SettingsViewInner({
         label: t.settings.nav.apiKeys,
         onSelect: () => setActiveView('keys')
       },
-      {
-        active: activeView === 'work-profile',
-        icon: Layers3,
-        id: 'work-profile',
-        label: t.settings.nav.workProfile,
-        onSelect: () => setActiveView('work-profile')
-      },
+      ...(viFeature('work-profile')
+        ? [
+            {
+              active: activeView === 'work-profile',
+              icon: Layers3,
+              id: 'work-profile' as const,
+              label: t.settings.nav.workProfile,
+              onSelect: () => setActiveView('work-profile')
+            }
+          ]
+        : []),
       {
         active: activeView === 'plugins',
         icon: Package,
@@ -396,7 +401,7 @@ function SettingsViewInner({
             <BillingSettings />
           ) : activeView === 'plugins' ? (
             <PluginsSettings />
-          ) : activeView === 'work-profile' ? (
+          ) : activeView === 'work-profile' && viFeature('work-profile') ? (
             <WorkProfileSettings backendOwner={backendOwner} />
           ) : (
             <SessionsSettings backendOwner={backendOwner} />

@@ -10,6 +10,7 @@ import { useI18n } from '@/i18n'
 import { Check, ChevronDown, ChevronLeft, KeyRound, Loader2 } from '@/lib/icons'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { cn } from '@/lib/utils'
+import { viFeature } from '@/lib/vi-features'
 import { $desktopBoot, type DesktopBootState } from '@/store/boot'
 import {
   $desktopOnboarding,
@@ -254,7 +255,7 @@ export function DesktopOnboardingOverlay({
   }, [connectionId, profile])
 
   useEffect(() => {
-    if (!enabled || onboarding.manual) {
+    if (!enabled || onboarding.manual || !viFeature('work-profile')) {
       setWorkProfileRequired(false)
 
       return

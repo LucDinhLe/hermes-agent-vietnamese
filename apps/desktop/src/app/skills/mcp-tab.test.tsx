@@ -41,6 +41,9 @@ vi.mock('../hooks/use-config-record', () => ({
 }))
 
 vi.mock('@/store/notifications', () => ({ notify: vi.fn(), notifyError: vi.fn() }))
+// Bảng phân công MCP cần route /api/mcp/assignments, lõi nguyên bản không có
+// (engine.lock). Test này kiểm hành vi khi cờ vỏ bật.
+vi.mock('@/lib/vi-features', () => ({ viFeature: () => true }))
 
 function view(profile: string) {
   return (
