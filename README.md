@@ -51,8 +51,6 @@ Hermes có các lựa chọn kết nối ChatGPT qua OpenAI OAuth, Claude qua Cl
 
 Ứng dụng không tặng kèm tài khoản, hạn mức hay model AI. Hãy chọn model mà kết nối của bạn hỗ trợ. Xem [cách kết nối từng nhà cung cấp](README.vi.md#kết-nối-chatgpt-claude-và-gemini) hoặc [hướng dẫn xử lý lỗi kết nối](README.vi.md#xử-lý-lỗi-kết-nối-thường-gặp).
 
-Cài đặt → Tài khoản có thêm lựa chọn đăng nhập bằng tài khoản Google, đi qua cùng cửa xác thực với Gemini CLI (mã nguồn mở của Google) và dùng gói/hạn mức Google của chính bạn. Đây không phải nhà cung cấp chính thức của Hermes; Google có thể thay đổi hoặc đóng cửa này bất cứ lúc nào, bạn tự chấp nhận rủi ro đó khi bật lựa chọn. Khóa API Gemini vẫn là lối được hỗ trợ đầy đủ.
-
 ## Dữ liệu và sử dụng an toàn
 
 Hermes có thể đọc/sửa tệp, chạy công cụ và thao tác trên máy theo quyền được cấp. Bắt đầu với tệp thử hoặc bản sao, kiểm tra kết quả và cân nhắc trước những thao tác quan trọng. Bản cộng đồng này chưa có bảo hành thương mại.

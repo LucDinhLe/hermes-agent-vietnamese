@@ -758,7 +758,12 @@ function resolveHermesHome() {
 const HERMES_HOME = resolveHermesHome()
 
 // ── Cầu nối tài khoản Google (vỏ, không sửa lõi) ────────────────────────────
+// TẠM TẮT trong 2026.9.3: Google chỉ mở cửa Gemini theo tài khoản cho những tài khoản đủ
+// điều kiện "Gemini Code Assist for individuals"; tài khoản không đủ điều kiện nhận 403 nên
+// tính năng chưa dùng được cho người dùng phổ thông. Bật lại bằng HERMES_VI_GOOGLE_BRIDGE=1
+// (giao diện đi kèm cờ VITE_VI_FEATURES=google-account lúc build).
 // Backend cục bộ gần nhất (baseUrl + token) để cầu nối đăng ký custom endpoint vào lõi.
+const GOOGLE_BRIDGE_ENABLED = process.env.HERMES_VI_GOOGLE_BRIDGE === '1'
 let googleBridgeBackend: { baseUrl: string; token: string } | null = null
 let googleBridgeInstance: GoogleBridge | null = null
 
@@ -800,11 +805,38 @@ function googleBridge(): GoogleBridge {
   return googleBridgeInstance
 }
 
-ipcMain.handle('hermes:google:status', () => googleBridge().status())
-ipcMain.handle('hermes:google:sign-in', () => googleBridge().signIn())
-ipcMain.handle('hermes:google:sign-out', () => googleBridge().signOut())
-ipcMain.handle('hermes:google:activate', () => googleBridge().activate())
-ipcMain.handle('hermes:google:set-project', (_event, project) => googleBridge().setProject(typeof project === 'string' ? project : null))
+// Khi cầu nối tắt, giao diện không hỏi trạng thái nữa; các kênh IPC vẫn trả lời để bản build
+// bật cờ giao diện mà quên bật cầu nối không bị treo.
+const googleBridgeOff = () => ({ available: false as const })
+
+ipcMain.handle('hermes:google:status', () => (GOOGLE_BRIDGE_ENABLED ? googleBridge().status() : googleBridgeOff()))
+ipcMain.handle('hermes:google:sign-in', () => (GOOGLE_BRIDGE_ENABLED ? googleBridge().signIn() : googleBridgeOff()))
+ipcMain.handle('hermes:google:sign-out', () => (GOOGLE_BRIDGE_ENABLED ? googleBridge().signOut() : googleBridgeOff()))
+ipcMain.handle('hermes:google:activate', () => (GOOGLE_BRIDGE_ENABLED ? googleBridge().activate() : googleBridgeOff()))
+ipcMain.handle('hermes:google:set-project', (_event, project) =>
+  GOOGLE_BRIDGE_ENABLED ? googleBridge().setProject(typeof project === 'string' ? project : null) : googleBridgeOff()
+)
+
+// Bản trước có thể đã lưu token Google của người dùng; cầu nối tắt thì xoá tệp đó đi thay vì
+// để một chứng thực nằm không trong thư mục dữ liệu.
+function discardGoogleBridgeStateWhenDisabled() {
+  if (GOOGLE_BRIDGE_ENABLED) {
+    return
+  }
+
+  for (const name of ['google-account.json', 'google-bridge.json']) {
+    try {
+      const file = path.join(HERMES_HOME, name)
+
+      if (fs.existsSync(file)) {
+        fs.rmSync(file, { force: true })
+        rememberLog(`[google-bridge] cầu nối đang tắt, đã xoá ${name}`)
+      }
+    } catch {
+      /* không quan trọng */
+    }
+  }
+}
 
 function pathWithHermesManagedNode(...entries) {
   const managed = hermesManagedNodePathEntries(HERMES_HOME).filter(directoryExists)
@@ -10977,7 +11009,11 @@ async function startHermes() {
     // Backend chính đã sẵn sàng: cầu nối Google (nếu đã đăng nhập) chạy server loopback và
     // ghi custom endpoint vào cấu hình lõi. Không chặn khởi động.
     googleBridgeBackend = { baseUrl, token: authToken }
-    void googleBridge().ensureRunning()
+
+    if (GOOGLE_BRIDGE_ENABLED) {
+      void googleBridge().ensureRunning()
+    }
+
     const wsProbe = await probeGatewayWebSocket(wsUrl, { WebSocketImpl: globalThis.WebSocket })
 
     if (!wsProbe.ok) {
@@ -15715,6 +15751,7 @@ function offerLegacyImport() {
 
 app.whenReady().then(() => {
   offerLegacyImport()
+  discardGoogleBridgeStateWhenDisabled()
   // Warm the login-shell PATH resolution immediately so it usually completes
   // before the backend start path awaits the same single-flight promise.
   void ensureLoginShellPath()

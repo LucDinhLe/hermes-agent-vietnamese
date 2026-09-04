@@ -42,7 +42,7 @@ export function GoogleAccountRow({ onChanged }: { onChanged?: () => void }) {
 
   const api = bridge()
 
-  if (!api || !status) {
+  if (!api || !status || !status.available) {
     return null
   }
 

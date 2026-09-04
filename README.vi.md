@@ -65,14 +65,6 @@ Cầu nối này khác Anthropic API key. Không coi gói Claude web là hạn m
 
 Hermes hỗ trợ đường Gemini API; việc người khác dùng được Gemini không chứng minh một tài khoản/model khác sẽ dùng được. Gói Gemini trên web và quyền API cần được kiểm tra riêng. Google Vertex AI là lựa chọn nâng cao cho người đã cấu hình dự án Google Cloud. Bản này không hướng dẫn nhập lại mã OAuth Gemini CLI vào Hermes.
 
-### Google (tài khoản Google)
-
-1. Mở **Cài đặt → Tài khoản**, chọn dòng **Google (tài khoản Google)**.
-2. Hoàn tất đăng nhập Google trong trình duyệt hiện ra.
-3. Trong Hermes, lựa chọn này xuất hiện dưới tên điểm cuối riêng `google-account` với các model gemini-2.5-pro (mặc định), gemini-2.5-flash, gemini-3-pro-preview, gemini-3-flash-preview, gemini-3.1-pro-preview, gemini-3.1-flash-lite, gemini-3.5-flash.
-
-Lựa chọn này đi qua cùng cửa xác thực với Gemini CLI (công cụ dòng lệnh mã nguồn mở của Google, giấy phép Apache-2.0). Trình duyệt mở ra để đăng nhập Google, sau đó Hermes gọi Gemini qua Google Cloud Code Assist bằng gói/hạn mức Google của chính bạn. Đây không phải nhà cung cấp chính thức của Hermes; Google có thể thay đổi hoặc đóng cửa này bất cứ lúc nào, bạn tự chấp nhận rủi ro đó khi bật lựa chọn. Mã đăng nhập được lưu ở dạng mã hóa (qua keychain hệ điều hành) trong thư mục dữ liệu của ứng dụng. Khóa API Gemini ở mục trên vẫn là lối được hỗ trợ đầy đủ.
-
 ### Nhà cung cấp khác và model cục bộ
 
 Dùng danh mục nhà cung cấp của đúng bản đã cài. Mỗi kết nối có yêu cầu tài khoản, hạn mức và điều khoản riêng. Với model cục bộ hoặc điểm cuối tương thích, bạn phải chuẩn bị máy chủ model; bộ cài không chứa sẵn model AI.

@@ -557,7 +557,10 @@ export interface DesktopUpdateCommit {
   at: number
 }
 
-export interface DesktopGoogleBridgeStatus {
+/** Cầu nối tắt (bản phát hành không bật HERMES_VI_GOOGLE_BRIDGE) chỉ trả về available: false. */
+export type DesktopGoogleBridgeStatus = { available: false } | DesktopGoogleBridgeReady
+
+export interface DesktopGoogleBridgeReady {
   available: true
   signedIn: boolean
   email: string | null

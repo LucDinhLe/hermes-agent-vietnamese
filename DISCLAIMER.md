@@ -20,8 +20,6 @@ Bộ cài phát hành không chứa tài khoản, khóa API, mã OAuth hoặc d�
 
 Khi người dùng chủ động cấu hình hoặc sử dụng một tính năng có kết nối mạng, dữ liệu cần thiết có thể được chuyển tới dịch vụ đã chọn. Các dịch vụ đó có thể gồm nhà cung cấp AI, công cụ web và tìm kiếm, trình duyệt, nền tảng nhắn tin, GitHub và nguồn phụ thuộc công khai. Việc xử lý dữ liệu chịu sự điều chỉnh của điều khoản sử dụng và chính sách quyền riêng tư của từng dịch vụ tương ứng.
 
-Lựa chọn đăng nhập bằng tài khoản Google trong Hermes đi qua cùng cửa xác thực với Gemini CLI (công cụ dòng lệnh mã nguồn mở của Google, giấy phép Apache-2.0) và Google Cloud Code Assist, dùng gói/hạn mức Google của chính người dùng. Đây không phải nhà cung cấp chính thức của Hermes; Google có thể thay đổi điều khoản hoặc đóng cửa này bất cứ lúc nào mà không báo trước, người dùng tự chấp nhận rủi ro đó khi bật lựa chọn. Khóa API Gemini vẫn là lối được hỗ trợ đầy đủ.
-
 ## Miễn trừ đối với hệ thống và thuật toán
 
 Hermes được cung cấp theo giấy phép MIT với nguyên trạng phần mềm, không kèm cam kết bảo hành rõ ràng hoặc ngụ ý. Dự án cộng đồng không bảo đảm:

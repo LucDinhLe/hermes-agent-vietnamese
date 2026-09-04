@@ -66,7 +66,6 @@ Chỉ tiếp tục khi nguồn tải, tên tệp và SHA-256 đúng như phần 
    - **OpenAI OAuth (ChatGPT):** đăng nhập tài khoản ChatGPT có quyền dùng Codex.
    - **Claude Pro / Max:** đăng nhập qua Claude Code.
    - **Google Gemini:** nhập khóa API tạo tại Google AI Studio.
-   - **Google (tài khoản Google):** đăng nhập Google trong trình duyệt, dùng cùng cửa với Gemini CLI qua Google Cloud Code Assist và gói/hạn mức Google của bạn. Đây không phải nhà cung cấp chính thức của Hermes; khóa API Gemini ở trên vẫn là lối được hỗ trợ đầy đủ.
    - **Nhà cung cấp khác:** nhập tài khoản, API key hoặc endpoint tương ứng.
 4. Chọn model, tạo phiên đầu tiên và giao một việc thử không quan trọng.
 
