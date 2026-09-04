@@ -204,10 +204,14 @@ def build_stamp(
         # The packaged app and its updater use valid SemVer X.Y.Z-vi.N.
         # Keep About/version surfaces on that exact release identity instead
         # of the source checkout's unrelated X.Y.Z+distance display string.
-        display_version = (
-            f"{tag_match.group(1)}.{tag_match.group(2)}.{tag_match.group(3)}"
-            f"-vi.{tag_match.group(4)}"
-        )
+        if _CALVER_RELEASE_TAG_RE.fullmatch(tag):
+            # Kênh composite: phiên bản hiển thị = tag bỏ "v" (2026.9.3 hoặc 2026.9.3-thunghiem.N)
+            display_version = tag[1:]
+        else:
+            display_version = (
+                f"{tag_match.group(1)}.{tag_match.group(2)}.{tag_match.group(3)}"
+                f"-vi.{tag_match.group(4)}"
+            )
         update_feed_enabled = release_class == "stable"
         update_channel = "stable" if update_feed_enabled else "community-prerelease"
 
