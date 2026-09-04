@@ -226,7 +226,11 @@ if (release.upstreamVersion !== pyprojectVersion) {
   )
 }
 
-const targets = { linux: '--linux AppImage deb rpm', darwin: '--mac dmg zip', win32: '--win nsis' }[process.platform]
+// HERMES_BUILD_TARGETS ghi đè mục tiêu electron-builder (ví dụ "--linux AppImage deb" để bỏ rpm,
+// hay "--mac dmg" để chỉ ra dmg); mặc định giữ nguyên như bản gốc.
+const targets =
+  process.env.HERMES_BUILD_TARGETS?.trim() ||
+  { linux: '--linux AppImage deb rpm', darwin: '--mac dmg zip', win32: '--win nsis' }[process.platform]
 if (!targets) {
   fail(`unsupported platform: ${process.platform}`)
 }

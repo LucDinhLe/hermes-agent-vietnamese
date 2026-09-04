@@ -1,19 +1,13 @@
 # Hermes Vietnamese 2026.9.3
 
 <!-- current-release:start -->
-> **Latest hiện tại là [2026.9.3](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.3), chỉ phát hành Windows x64.** Đây là community pilot chưa ký số, chưa phải stable. Ứng dụng báo khi có bản mới kèm SHA-256, không tự tải hay tự cài.
+> **Latest hiện tại là [2026.9.3](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.3), dành cho Windows x64.** Đây là community pilot chưa phải stable; Windows chưa ký số. Ứng dụng báo khi có bản mới kèm SHA-256, không tự tải hay tự cài.
 
-| Tệp | Tải xuống |
-| --- | --- |
-| Bộ cài Windows x64 | [Hermes-2026.9.3-win-x64.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-2026.9.3-win-x64.exe) |
-| Cùng bộ cài, tên tương thích đường tải cũ | [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-Vietnamese-Windows-x64-Setup.exe) |
-| Mã kiểm tra toàn vẹn | [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/SHA256SUMS.txt) |
-
-Chỉ tải **một** trong hai tệp `.exe`. Cả hai có cùng nội dung, kích thước **345527696 byte** và SHA-256:
-
-```text
-cc2798452d5c3d87fd0029c28af9e26f51b7406265707bb654521d2b1362e250
-```
+| Nền tảng | Tải xuống | Kích thước (byte) | SHA-256 |
+| --- | --- | --- | --- |
+| Windows x64 | [Hermes-2026.9.3-win-x64.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-2026.9.3-win-x64.exe) | 345527696 | `cc2798452d5c3d87fd0029c28af9e26f51b7406265707bb654521d2b1362e250` |
+| Windows x64, tên tương thích cũ | [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-Vietnamese-Windows-x64-Setup.exe) | 345527696 | `cc2798452d5c3d87fd0029c28af9e26f51b7406265707bb654521d2b1362e250` |
+| Mã kiểm tra toàn vẹn | [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/SHA256SUMS.txt) | | |
 <!-- current-release:end -->
 
 ## Thay đổi
