@@ -78,6 +78,8 @@ jobs:
           cache-dependency-glob: uv.lock
 
       - name: Lõi phải khớp engine.lock
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/engine-sync.mjs check
 
       - name: Cài phụ thuộc từ lockfile

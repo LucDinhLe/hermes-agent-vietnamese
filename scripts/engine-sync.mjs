@@ -23,12 +23,51 @@ const overlay = Object.entries(lock.shellOverlay)
 const isOverlay = (file) =>
   overlay.some((o) => (o.endsWith('/') ? file.startsWith(o) : file === o))
 
+// GitHub chặn tốc độ (HTTP 429) với lượt tải ẩn danh từ máy chạy CI, nên ưu tiên URL có token
+// của workflow rồi mới tới URL trần, và thử lại vài lượt có giãn cách.
+function engineFetchUrls() {
+  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || ''
+  const urls = []
+
+  if (token && lock.engine.repository.startsWith('https://github.com/')) {
+    urls.push(lock.engine.repository.replace('https://', `https://x-access-token:${token}@`))
+  }
+
+  urls.push(lock.engine.repository)
+
+  return urls
+}
+
+function fetchEngineTag() {
+  const urls = engineFetchUrls()
+  const refspec = `refs/tags/${lock.engine.tag}:refs/tags/${lock.engine.tag}`
+  let last
+
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    for (const url of urls) {
+      try {
+        git('fetch', '--depth', '1', url, refspec)
+
+        return
+      } catch (error) {
+        last = error
+        const detail = String(error?.stderr || error?.message || '')
+        console.warn(`[engine-sync] lượt ${attempt} tải lõi thất bại: ${detail.split('\n')[0]}`)
+      }
+    }
+
+    execFileSync(process.execPath, ['-e', `setTimeout(()=>{}, ${attempt * 15000})`], { stdio: 'ignore' })
+  }
+
+  throw last
+}
+
 function ensureEngineCommit() {
   try {
     git('cat-file', '-e', `${lock.engine.commit}^{commit}`)
   } catch {
     console.log(`[engine-sync] tải ${lock.engine.tag} từ ${lock.engine.repository}`)
-    git('fetch', '--depth', '1', lock.engine.repository, `refs/tags/${lock.engine.tag}:refs/tags/${lock.engine.tag}`)
+    fetchEngineTag()
   }
   const resolved = git('rev-parse', `${lock.engine.tag}^{commit}`)
   if (resolved !== lock.engine.commit) {
