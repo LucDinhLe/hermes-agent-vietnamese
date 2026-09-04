@@ -1153,6 +1153,8 @@ export const vi = defineLocale({
         tierLabel: 'Bậc',
         caveat: 'Dùng chung cửa với Gemini CLI. Google có thể thay đổi hoặc đóng cửa này; đây không phải nhà cung cấp chính thức của Hermes.',
         errorPrefix: 'Đăng nhập Google gặp lỗi'
+        ,projectPlaceholder: 'Mã dự án Google Cloud (ví dụ my-project-123456)'
+        ,projectSave: 'Lưu dự án'
       },
       haveApiKey: 'Bạn có khóa API không?',
       intro:

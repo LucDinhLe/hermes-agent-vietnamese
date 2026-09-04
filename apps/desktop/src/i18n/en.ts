@@ -1068,6 +1068,8 @@ export const en: Translations = {
         tierLabel: 'Tier',
         caveat: 'This uses the same door as Gemini CLI. Google may change or close it; it is not an official Hermes provider.',
         errorPrefix: 'Google sign-in problem'
+        ,projectPlaceholder: 'Google Cloud project ID (e.g. my-project-123456)'
+        ,projectSave: 'Save project'
       },
       haveApiKey: 'Have an API key instead?',
       intro:

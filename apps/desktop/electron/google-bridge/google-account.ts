@@ -43,6 +43,8 @@ export interface GoogleAccountState {
   /** dự án Cloud Code Assist đã xác định (có thể null với bậc miễn phí quản lý) */
   project: string | null
   tier: string | null
+  /** dự án do người dùng tự nhập khi Google đòi (bậc legacy/standard) */
+  projectOverride?: string | null
 }
 
 export type FetchLike = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal }) => Promise<{
@@ -310,19 +312,58 @@ export class GoogleAccount {
    * Xác định dự án Code Assist (loadCodeAssist, onboardUser cho lần đầu). Kết quả lưu lại;
    * bậc miễn phí dùng dự án do Google quản lý nên project có thể là chuỗi rỗng.
    */
+  /** Dự án do người dùng nhập (ưu tiên) hoặc biến môi trường, giống Gemini CLI. */
+  get projectOverride(): string | null {
+    return this.state?.projectOverride ?? process.env.GOOGLE_CLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT_ID ?? null
+  }
+
+  /** Đặt (hoặc xoá) dự án Google Cloud rồi buộc xác định lại bậc ở lần gọi sau. */
+  setProject(project: string | null): void {
+    const value = project?.trim() || null
+    this.state = { ...(this.state as GoogleAccountState), projectOverride: value, project: null, tier: null }
+    this.deps.save(this.state)
+  }
+
+  private async onboard(tierId: string, explicit: string | null): Promise<string | null> {
+    const isFree = tierId === 'free-tier'
+
+    interface Lro { name?: string; done?: boolean; response?: { cloudaicompanionProject?: { id?: string } } }
+
+    let lro = await this.caPost<Lro>('onboardUser', {
+      tierId,
+      cloudaicompanionProject: isFree ? undefined : explicit ?? undefined,
+      metadata: { ...CLIENT_METADATA, duetProject: isFree ? undefined : explicit ?? undefined }
+    })
+
+    for (let i = 0; !lro.done && lro.name && i < 24; i += 1) {
+      await new Promise(r => setTimeout(r, 5000))
+      const token = await this.accessToken()
+      const res = await this.deps.fetch(`${CODE_ASSIST_BASE}/${lro.name}`, { headers: { authorization: `Bearer ${token}` } })
+      lro = (await res.json()) as Lro
+    }
+
+    return lro.response?.cloudaicompanionProject?.id ?? null
+  }
+
+  /**
+   * Xác định dự án Code Assist (loadCodeAssist, onboardUser cho lần đầu). Kết quả lưu lại;
+   * bậc miễn phí dùng dự án do Google quản lý nên project có thể null. Khi Google trả về bậc
+   * đòi dự án mà người dùng chưa nhập, thử một lượt bậc miễn phí trước khi báo lỗi, vì nhiều
+   * tài khoản Gmail vẫn dùng được Gemini theo tài khoản.
+   */
   async ensureProject(): Promise<{ project: string | null; tier: string | null }> {
     if (this.state?.tier) {
       return { project: this.state.project, tier: this.state.tier }
     }
 
-    const explicit = process.env.GOOGLE_CLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT_ID || undefined
+    const explicit = this.projectOverride
 
     interface Tier { id?: string; name?: string; isDefault?: boolean }
     interface LoadRes { currentTier?: Tier | null; allowedTiers?: Tier[] | null; cloudaicompanionProject?: string | null; paidTier?: Tier | null }
 
     const load = await this.caPost<LoadRes>('loadCodeAssist', {
-      cloudaicompanionProject: explicit,
-      metadata: { ...CLIENT_METADATA, duetProject: explicit }
+      cloudaicompanionProject: explicit ?? undefined,
+      metadata: { ...CLIENT_METADATA, duetProject: explicit ?? undefined }
     })
 
     let project: string | null = null
@@ -334,28 +375,23 @@ export class GoogleAccount {
     } else {
       const chosen = (load.allowedTiers ?? []).find(t => t.isDefault) ?? { id: 'legacy-tier' }
       tier = chosen.id ?? 'legacy-tier'
-      const isFree = tier === 'free-tier'
+      project = (await this.onboard(tier, explicit)) ?? explicit ?? null
 
-      interface Lro { name?: string; done?: boolean; response?: { cloudaicompanionProject?: { id?: string } } }
-
-      let lro = await this.caPost<Lro>('onboardUser', {
-        tierId: tier,
-        cloudaicompanionProject: isFree ? undefined : explicit,
-        metadata: { ...CLIENT_METADATA, duetProject: isFree ? undefined : explicit }
-      })
-
-      for (let i = 0; !lro.done && lro.name && i < 24; i += 1) {
-        await new Promise(r => setTimeout(r, 5000))
-        const token = await this.accessToken()
-        const res = await this.deps.fetch(`${CODE_ASSIST_BASE}/${lro.name}`, { headers: { authorization: `Bearer ${token}` } })
-        lro = (await res.json()) as Lro
+      if (!project && tier !== 'free-tier') {
+        // Google xếp tài khoản vào bậc đòi dự án nhưng người dùng chưa có; thử bậc miễn phí.
+        try {
+          const freeProject = await this.onboard('free-tier', null)
+          tier = 'free-tier'
+          project = freeProject
+        } catch (error) {
+          throw new Error(
+            `Google xếp tài khoản vào bậc "${tier}" nên cần một dự án Google Cloud. ` +
+              `Bậc Google cho phép: ${(load.allowedTiers ?? []).map(t => t.id).join(', ') || 'không có'}. ` +
+              `Thử bậc miễn phí cũng không được (${error instanceof Error ? error.message : String(error)}). ` +
+              'Hãy nhập mã dự án Google Cloud ở ô bên dưới rồi thử lại.'
+          )
+        }
       }
-
-      project = lro.response?.cloudaicompanionProject?.id ?? explicit ?? null
-    }
-
-    if (!project && tier !== 'free-tier') {
-      throw new Error('Tài khoản này cần dự án Google Cloud (đặt GOOGLE_CLOUD_PROJECT) hoặc chưa đủ điều kiện dùng Gemini theo tài khoản')
     }
 
     this.state = { ...(this.state as GoogleAccountState), project, tier }

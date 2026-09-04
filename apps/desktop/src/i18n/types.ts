@@ -924,6 +924,8 @@ export interface Translations {
         tierLabel: string
         caveat: string
         errorPrefix: string
+        projectPlaceholder: string
+        projectSave: string
       }
       haveApiKey: string
       intro: string

@@ -237,3 +237,35 @@ test('sseLines: tách dòng qua ranh giới chunk, bỏ \\r', async () => {
 
   assert.deepEqual(lines, ['data: a', 'data: b', '', 'x'])
 })
+
+test('ensureProject: Google xếp bậc đòi dự án nhưng không cấp project → thử lại bậc miễn phí; setProject dùng mã người dùng nhập', async () => {
+  const base = { tokens: { access_token: 'AT', refresh_token: 'RT', expiry_date: Number.MAX_SAFE_INTEGER }, project: null, tier: null }
+  const s = store({ ...base })
+  const calls: { url: string; body: Record<string, unknown> }[] = []
+
+  const fetch: FetchLike = async (url, init) => {
+    const body = JSON.parse(init?.body ?? '{}') as Record<string, unknown>
+    calls.push({ url, body })
+
+    if (url.endsWith(':loadCodeAssist')) {
+      return { ok: true, status: 200, text: async () => '', json: async () => ({ allowedTiers: [{ id: 'legacy-tier', isDefault: true }] }) }
+    }
+
+    if (url.endsWith(':onboardUser')) {
+      return { ok: true, status: 200, text: async () => '', json: async () => ({ done: true, response: {} }) }
+    }
+
+    throw new Error(`unexpected ${url}`)
+  }
+
+  const acct = new GoogleAccount({ fetch, load: s.load, save: s.save, openExternal: async () => {} })
+  assert.deepEqual(await acct.ensureProject(), { project: null, tier: 'free-tier' }, 'rơi về bậc miễn phí thay vì báo lỗi')
+  assert.deepEqual(calls.map(c => c.body.tierId).filter(Boolean), ['legacy-tier', 'free-tier'])
+
+  acct.setProject('  du-an-cua-toi  ')
+  assert.equal(acct.projectOverride, 'du-an-cua-toi')
+  assert.equal(s.get()?.tier, null, 'nhập dự án thì xác định lại bậc')
+  calls.length = 0
+  await acct.ensureProject()
+  assert.equal(calls[0].body.cloudaicompanionProject, 'du-an-cua-toi')
+})

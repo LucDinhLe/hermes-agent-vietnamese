@@ -443,6 +443,7 @@ declare global {
         signIn: () => Promise<DesktopGoogleBridgeStatus>
         signOut: () => Promise<DesktopGoogleBridgeStatus>
         activate: () => Promise<DesktopGoogleBridgeStatus>
+        setProject: (project: string | null) => Promise<DesktopGoogleBridgeStatus>
       }
       updates: {
         check: (opts?: { force?: boolean }) => Promise<DesktopUpdateStatus>
@@ -563,6 +564,7 @@ export interface DesktopGoogleBridgeStatus {
   tier: string | null
   project: string | null
   serverPort: number | null
+  projectOverride: string | null
   endpointId: string
   models: string[]
   defaultModel: string

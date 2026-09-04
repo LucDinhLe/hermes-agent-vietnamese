@@ -410,7 +410,8 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     status: () => ipcRenderer.invoke('hermes:google:status'),
     signIn: () => ipcRenderer.invoke('hermes:google:sign-in'),
     signOut: () => ipcRenderer.invoke('hermes:google:sign-out'),
-    activate: () => ipcRenderer.invoke('hermes:google:activate')
+    activate: () => ipcRenderer.invoke('hermes:google:activate'),
+    setProject: project => ipcRenderer.invoke('hermes:google:set-project', project)
   },
   updates: {
     check: opts => ipcRenderer.invoke('hermes:updates:check', opts),

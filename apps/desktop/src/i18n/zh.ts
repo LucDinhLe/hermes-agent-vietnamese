@@ -1254,6 +1254,8 @@ export const zh: Translations = {
         tierLabel: '等级',
         caveat: '与 Gemini CLI 走同一入口。Google 可能更改或关闭它；这不是 Hermes 官方提供商。',
         errorPrefix: 'Google 登录问题'
+        ,projectPlaceholder: 'Google Cloud 项目 ID（例如 my-project-123456）'
+        ,projectSave: '保存项目'
       },
       haveApiKey: '改用 API 密钥？',
       intro: '使用订阅登录，无需复制 API 密钥。Hermes 会在应用中为你完成浏览器登录。',

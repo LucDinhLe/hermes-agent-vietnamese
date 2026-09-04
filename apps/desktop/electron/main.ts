@@ -804,6 +804,7 @@ ipcMain.handle('hermes:google:status', () => googleBridge().status())
 ipcMain.handle('hermes:google:sign-in', () => googleBridge().signIn())
 ipcMain.handle('hermes:google:sign-out', () => googleBridge().signOut())
 ipcMain.handle('hermes:google:activate', () => googleBridge().activate())
+ipcMain.handle('hermes:google:set-project', (_event, project) => googleBridge().setProject(typeof project === 'string' ? project : null))
 
 function pathWithHermesManagedNode(...entries) {
   const managed = hermesManagedNodePathEntries(HERMES_HOME).filter(directoryExists)

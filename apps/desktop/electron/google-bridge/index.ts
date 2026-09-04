@@ -32,6 +32,8 @@ export interface GoogleBridgeStatus {
   tier: string | null
   project: string | null
   serverPort: number | null
+  /** dự án Google Cloud người dùng đã nhập (nếu có) */
+  projectOverride: string | null
   endpointId: string
   models: string[]
   defaultModel: string
@@ -144,6 +146,7 @@ export class GoogleBridge {
       tier: this.account.tier,
       project: this.account.project,
       serverPort: this.server?.port ?? null,
+      projectOverride: this.account.projectOverride,
       endpointId: GOOGLE_BRIDGE_ENDPOINT_ID,
       models: GOOGLE_BRIDGE_MODELS,
       defaultModel: GOOGLE_BRIDGE_DEFAULT_MODEL,
@@ -243,6 +246,23 @@ export class GoogleBridge {
     this.deps.log(`[google-bridge] đã đăng ký custom endpoint ${GOOGLE_BRIDGE_ENDPOINT_ID} → ${baseUrl}`)
 
     return true
+  }
+
+  /** Nhập mã dự án Google Cloud rồi thử xác định lại bậc và bật cầu nối. */
+  async setProject(project: string | null): Promise<GoogleBridgeStatus> {
+    this.lastError = null
+    this.account.setProject(project)
+
+    try {
+      await this.account.ensureProject()
+      await this.startServer()
+      await this.registerEndpoint()
+    } catch (error) {
+      this.lastError = error instanceof Error ? error.message : String(error)
+      this.deps.log(`[google-bridge] setProject: ${this.lastError}`)
+    }
+
+    return this.status()
   }
 
   async signIn(): Promise<GoogleBridgeStatus> {

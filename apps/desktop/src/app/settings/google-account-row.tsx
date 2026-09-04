@@ -19,7 +19,8 @@ export function GoogleAccountRow({ onChanged }: { onChanged?: () => void }) {
   const { t } = useI18n()
   const g = t.settings.providers.googleAccount
   const [status, setStatus] = useState<Status | null>(null)
-  const [busy, setBusy] = useState<'in' | 'out' | 'default' | null>(null)
+  const [busy, setBusy] = useState<'in' | 'out' | 'default' | 'project' | null>(null)
+  const [project, setProject] = useState('')
 
   const refresh = useCallback(async () => {
     const api = bridge()
@@ -56,6 +57,20 @@ export function GoogleAccountRow({ onChanged }: { onChanged?: () => void }) {
       setBusy(null)
     }
   }
+
+  const saveProject = async () => {
+    setBusy('project')
+
+    try {
+      setStatus(await api.setProject(project.trim() || null))
+      onChanged?.()
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  // Một số tài khoản được Google xếp vào bậc đòi dự án Google Cloud; khi đó cho nhập mã dự án.
+  const needsProject = status.signedIn && Boolean(status.lastError) && !status.serverPort
 
   return (
     <div className="grid gap-2 rounded-[6px] px-3 py-2.5" data-testid="google-account-row">
@@ -103,6 +118,19 @@ export function GoogleAccountRow({ onChanged }: { onChanged?: () => void }) {
         <p className="text-xs leading-5 text-destructive">
           {g.errorPrefix}: {status.lastError}
         </p>
+      )}
+      {needsProject && (
+        <div className="flex items-center gap-2">
+          <input
+            className="min-w-0 flex-1 rounded-[6px] bg-(--ui-bg-quaternary) px-2 py-1.5 text-xs outline-none placeholder:text-muted-foreground"
+            onChange={event => setProject(event.target.value)}
+            placeholder={g.projectPlaceholder}
+            value={project || status.projectOverride || ''}
+          />
+          <Button disabled={busy !== null} onClick={() => void saveProject()} size="sm" type="button" variant="outline">
+            {busy === 'project' ? <Loader2 className="size-3.5 animate-spin" /> : g.projectSave}
+          </Button>
+        </div>
       )}
       <p className="text-[11px] leading-4 text-(--ui-text-tertiary)">{g.caveat}</p>
     </div>
