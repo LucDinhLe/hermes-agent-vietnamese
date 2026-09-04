@@ -203,7 +203,7 @@ jobs:
           mnt="$(hdiutil attach -nobrowse -readonly "$dmg" | awk -F'\t' '/\/Volumes\//{print $NF}' | tail -1)"
           echo "dmg gắn tại: $mnt"
           app="$(ls -d "$mnt"/*.app | head -1)"
-          cp -R "$app" "$RUNNER_TEMP/HermesVietnamese.app"
+          ditto "$app" "$RUNNER_TEMP/HermesVietnamese.app"
           hdiutil detach "$mnt" -quiet || true
           app="$RUNNER_TEMP/HermesVietnamese.app"
           # Gatekeeper trên máy chủ: chữ ký hợp lệ nhưng chưa notarize → spctl từ chối là ĐÚNG mong đợi.
