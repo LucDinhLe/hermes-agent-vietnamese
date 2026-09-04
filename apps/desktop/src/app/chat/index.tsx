@@ -24,6 +24,7 @@ import { NEW_SESSION_TITLE, quickModelOptions, sessionTitle } from '@/lib/chat-r
 import { useIncrementalExternalStoreRuntime } from '@/lib/incremental-external-store-runtime'
 import { modelOptionsQueryKey, requestModelOptions } from '@/lib/model-options'
 import { cn } from '@/lib/utils'
+import { viFeature } from '@/lib/vi-features'
 import { activeBackendOwner, type BackendOwner, sameBackendOwner } from '@/store/backend-owner'
 import { migrateSessionDraft } from '@/store/composer'
 import { migrateQueuedPrompts, parkQueuedPrompts } from '@/store/composer-queue'
@@ -418,13 +419,18 @@ export const ChatView = memo(function ChatView({
   const projectTree = useStore($projectTree)
   const projectTreeOwner = useStore($projectTreeOwner)
 
-  const storedSession = selectedSessionId && (!backendOwner || sameBackendOwner(activeBackendOwner(), backendOwner))
-    ? sessions.find(session => sessionMatchesStoredId(session, selectedSessionId))
-    : null
+  const storedSession =
+    selectedSessionId && (!backendOwner || sameBackendOwner(activeBackendOwner(), backendOwner))
+      ? sessions.find(session => sessionMatchesStoredId(session, selectedSessionId))
+      : null
 
   const leadProfile =
-    (backendOwner?.profile ?? sessionEventProfile(activeSessionId) ?? storedSession?.profile ?? activeGatewayProfile).trim() ||
-    'default'
+    (
+      backendOwner?.profile ??
+      sessionEventProfile(activeSessionId) ??
+      storedSession?.profile ??
+      activeGatewayProfile
+    ).trim() || 'default'
 
   const leadConnectionId = backendOwner?.connectionId ?? sessionConnectionId(activeSessionId)
 
@@ -440,11 +446,11 @@ export const ChatView = memo(function ChatView({
     profileScope !== ALL_PROFILES &&
     projectTreeOwner?.scope === 'profile' &&
     leadConnectionId &&
-      activeConnectionId &&
-      leadConnectionId === activeConnectionId &&
-      leadConnectionId === projectTreeOwner.connectionId &&
-      leadProfile === projectTreeOwner.profile &&
-      leadProfile === activeGatewayProfile
+    activeConnectionId &&
+    leadConnectionId === activeConnectionId &&
+    leadConnectionId === projectTreeOwner.connectionId &&
+    leadProfile === projectTreeOwner.profile &&
+    leadProfile === activeGatewayProfile
   )
 
   const projectKey = projectTreeMatchesLead && projectTree.length ? (projectIdForCwd(currentCwd) ?? '') : ''
@@ -657,22 +663,24 @@ export const ChatView = memo(function ChatView({
         />
       )}
 
-      <SessionAdvisorBar
-        busy={busy}
-        enabled={advisorEnabled}
-        gateway={gateway}
-        gatewayConnectionId={leadConnectionId || activeConnectionId || null}
-        gatewayOpen={gatewayOpen}
-        leadConnectionId={leadConnectionId}
-        leadProfile={leadProfile}
-        model={currentModel}
-        projectKey={projectKey}
-        projectResolutionKnown={projectTreeMatchesLead}
-        provider={currentProvider}
-        sessionId={activeSessionId}
-        storedSessionId={selectedSessionId}
-        usage={currentUsage}
-      />
+      {viFeature('advisor') && (
+        <SessionAdvisorBar
+          busy={busy}
+          enabled={advisorEnabled}
+          gateway={gateway}
+          gatewayConnectionId={leadConnectionId || activeConnectionId || null}
+          gatewayOpen={gatewayOpen}
+          leadConnectionId={leadConnectionId}
+          leadProfile={leadProfile}
+          model={currentModel}
+          projectKey={projectKey}
+          projectResolutionKnown={projectTreeMatchesLead}
+          provider={currentProvider}
+          sessionId={activeSessionId}
+          storedSessionId={selectedSessionId}
+          usage={currentUsage}
+        />
+      )}
 
       {/* Mounted for the primary AND every tile, each scoped to its own session
           so a tiled/background session's blocking prompt surfaces instead of

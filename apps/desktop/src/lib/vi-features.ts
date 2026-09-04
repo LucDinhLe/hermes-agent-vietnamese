@@ -8,6 +8,7 @@
 export type ViFeature =
   | 'work-profile' // /api/skills/work-profile*, /api/skills/discover
   | 'mcp-assignments' // /api/mcp/assignments
+  | 'advisor' // gateway config.set key=advisor, task 'advisor' trong /api/models/auxiliary (Advisor riêng của fork)
 
 const raw: string = (import.meta.env?.VITE_VI_FEATURES as string | undefined) ?? ''
 

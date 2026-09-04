@@ -107,3 +107,8 @@ Thu hẹp vào các tệp "hợp đồng backend" theo yêu cầu:
 4. Schema sự kiện WS (`/api/ws` frame `type`) — chưa liệt kê đối chiếu đầy đủ danh sách loại sự kiện lõi phát ra so với những gì `apps/desktop/src/contrib/events.ts` và các nơi tiêu thụ khác kỳ vọng (do dùng cơ chế fan-out tổng quát `'*'`, rủi ro thấp nhưng chưa loại trừ).
 5. Pipeline build/đóng gói của `apps/desktop` (electron-builder scripts) có gọi trực tiếp `hermes_cli.install_manifest`/`hermes_cli.version_info` đã mất hay không — nằm ngoài phạm vi tĩnh `apps/desktop/src`+`electron` thuần, chưa kiểm.
 6. `/api/plugins/kanban/*` — mới so khớp tên route, chưa so khớp payload/behavior chi tiết giữa plugin fork dùng và plugin lõi 8.31 (cả hai đều có `plugins/kanban/dashboard/plugin_api.py` nhưng chưa diff nội dung).
+
+
+## Bổ sung 04/09 (sau khi Luc cài thử bản thunghiem.1)
+
+Quét tĩnh chỉ so route HTTP. Thực tế còn một kênh thứ hai là RPC qua WebSocket gateway (`gateway.request(method, params)`). So lại: giao diện dùng 18 method, lõi 8.31 có 188, thiếu duy nhất `preview.interact.respond` (chỉ gọi khi lõi phát sự kiện `preview.interact.request`, lõi upstream không phát, vô hại). Riêng `config.set` với `key: 'advisor'` (thanh Advisor theo phiên) là khoá của fork; lõi 8.31 trả `unknown config key: advisor` và giao diện hiện "Không lưu được giá trị mặc định của model". Sửa: thanh Advisor theo phiên ẩn sau cờ `VITE_VI_FEATURES=advisor` (tính năng "Advisor riêng" đã quyết tạm ẩn). Advisor của upstream 8.31 là MoA reference advisors, khái niệm khác, không dùng chung khoá.
