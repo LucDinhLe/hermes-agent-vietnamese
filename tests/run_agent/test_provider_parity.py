@@ -344,14 +344,13 @@ class TestBuildApiKwargsAIGateway:
         assert "reasoning" in extra
         assert extra["reasoning"]["enabled"] is True
 
-    def test_includes_lean_tool_search_bridge(self, monkeypatch):
+    def test_includes_tools(self, monkeypatch):
         agent = _make_agent(monkeypatch, "ai-gateway", base_url="https://ai-gateway.vercel.sh/v1", model="gpt-4o")
         messages = [{"role": "user", "content": "hi"}]
         kwargs = agent._build_api_kwargs(messages)
         assert "tools" in kwargs
         tool_names = [t["function"]["name"] for t in kwargs["tools"]]
-        assert tool_names == ["tool_search", "tool_describe", "tool_call"]
-        assert "web_search" not in tool_names
+        assert "web_search" in tool_names
 
 
 class TestBuildApiKwargsNousPortal:
@@ -422,7 +421,7 @@ class TestBuildApiKwargsCustomEndpoint:
 
         kwargs = agent._build_api_kwargs(messages)
 
-        assert kwargs["tools"][0]["function"]["name"] == "tool_search"
+        assert kwargs["tools"][0]["function"]["name"] == "web_search"
         assert "input" not in kwargs
         assert kwargs.get("extra_body", {}) == {}
 

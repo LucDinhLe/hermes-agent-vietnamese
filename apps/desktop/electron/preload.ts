@@ -406,8 +406,15 @@ contextBridge.exposeInMainWorld('hermesDesktop', {
     summary: () => ipcRenderer.invoke('hermes:uninstall:summary'),
     run: mode => ipcRenderer.invoke('hermes:uninstall:run', { mode })
   },
+  google: {
+    status: () => ipcRenderer.invoke('hermes:google:status'),
+    signIn: () => ipcRenderer.invoke('hermes:google:sign-in'),
+    signOut: () => ipcRenderer.invoke('hermes:google:sign-out'),
+    activate: () => ipcRenderer.invoke('hermes:google:activate'),
+    setProject: project => ipcRenderer.invoke('hermes:google:set-project', project)
+  },
   updates: {
-    check: () => ipcRenderer.invoke('hermes:updates:check'),
+    check: opts => ipcRenderer.invoke('hermes:updates:check', opts),
     apply: opts => ipcRenderer.invoke('hermes:updates:apply', opts),
     getBranch: () => ipcRenderer.invoke('hermes:updates:branch:get'),
     setBranch: name => ipcRenderer.invoke('hermes:updates:branch:set', name),

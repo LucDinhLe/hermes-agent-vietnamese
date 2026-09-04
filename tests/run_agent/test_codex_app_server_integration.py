@@ -21,22 +21,6 @@ import run_agent
 from agent.transports.codex_app_server_session import CodexAppServerSession, TurnResult
 
 
-@pytest.fixture(autouse=True)
-def exercise_legacy_runtime_contracts_outside_v32_policy(monkeypatch):
-    """Keep transport wiring tests independent from the v32 dispatch gate.
-
-    Governed user turns now fail closed before entering codex app-server because
-    the subprocess does not expose every physical model attempt.  This module
-    still verifies the dormant transport's projection/persistence/lifecycle
-    contracts; the fail-closed production policy has dedicated regression
-    coverage in test_provider_turn_governor_gaps.py.
-    """
-    monkeypatch.setattr(
-        "agent.turn_budget.require_observable_model_runtime",
-        lambda **_kwargs: None,
-    )
-
-
 @pytest.fixture
 def fake_session(monkeypatch):
     """Replace CodexAppServerSession with a stub that returns a fixed
@@ -186,11 +170,7 @@ class TestRunConversationCodexPath:
         assert agent.context_compressor.last_prompt_tokens == 300_000
         assert agent.context_compressor.awaiting_real_usage_after_compression is False
         assert agent.context_compressor._ineffective_compression_count == 1
-        # The transport-contract fixture permits this otherwise dormant path,
-        # so the shared Governor also emits its normal live meter event.  Keep
-        # the compaction assertion scoped to the event it owns.
-        compress_events = [event for event in events if event[0] == "session:compress"]
-        assert compress_events == [
+        assert events == [
             (
                 "session:compress",
                 {
@@ -205,9 +185,6 @@ class TestRunConversationCodexPath:
                 },
             )
         ]
-        budget_events = [event for event in events if event[0] == "turn:budget"]
-        assert budget_events
-        assert budget_events[-1][1]["turn_budget"]["model_calls"] == 1
 
     def test_projected_messages_are_spliced(self, fake_session):
         agent = _make_codex_agent()

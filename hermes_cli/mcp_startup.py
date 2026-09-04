@@ -18,24 +18,15 @@ def _has_configured_mcp_servers() -> bool:
 
         raw_config = read_raw_config() or {}
         mcp_servers = raw_config.get("mcp_servers")
-        if isinstance(mcp_servers, dict):
-            for entry in mcp_servers.values():
-                if not isinstance(entry, dict):
-                    continue
-                enabled = entry.get("enabled", True)
-                if isinstance(enabled, str):
-                    enabled = enabled.strip().lower() not in {
-                        "false", "0", "no", "off",
-                    }
-                if enabled is not False:
-                    return True
+        if isinstance(mcp_servers, dict) and len(mcp_servers) > 0:
+            return True
         from hermes_cli.agent_plugins import has_enabled_agent_plugin_mcp
 
         return has_enabled_agent_plugin_mcp(raw_config)
     except Exception:
-        # Permission boundary: inability to prove an explicitly configured
-        # server must not authorize discovery, process spawn, or network I/O.
-        return False
+        # Be conservative: if config probing fails, try discovery in the
+        # background so startup still can't block.
+        return True
 
 
 def start_background_mcp_discovery(*, logger, thread_name: str) -> None:
@@ -68,9 +59,9 @@ def start_background_mcp_discovery(*, logger, thread_name: str) -> None:
             _mcp_discovery_started = False
             _mcp_discovery_thread = None
 
+        _mcp_discovery_started = True
         if not _has_configured_mcp_servers():
             return
-        _mcp_discovery_started = True
 
         # Capture the caller's context-local HERMES_HOME override (profile
         # scoping in multi-profile processes like the dashboard/desktop

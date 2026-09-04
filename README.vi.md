@@ -1,7 +1,7 @@
 # Hướng dẫn cài đặt và kết nối Hermes Vietnamese
 
 <!-- current-release:start -->
-**Latest hiện tại là [2026.9.2](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2), chỉ dành cho Windows x64.** Bản community pilot chưa ký số, chưa phải stable; cập nhật thủ công bằng bộ cài đầy đủ.
+**Latest hiện tại là [2026.9.2](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2), chỉ dành cho Windows x64.** Bản community pilot chưa ký số, chưa phải stable. Cập nhật thủ công bằng bộ cài đầy đủ, không có cập nhật tự động nền.
 
 - [Hermes-2026.9.2-win-x64.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/Hermes-2026.9.2-win-x64.exe).
 - [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/Hermes-Vietnamese-Windows-x64-Setup.exe), cùng nội dung với tên tương thích cũ. Chỉ chạy một bộ cài.
@@ -26,8 +26,10 @@ Trên Windows, mở **Cài đặt → Hệ thống → Giới thiệu**, xem **L
 
 1. Tải một bộ cài ở đầu trang và đối chiếu mã SHA-256.
 2. Nếu đang dùng Hermes, thực hiện phần [cập nhật và sao lưu](#cập-nhật-sao-lưu-và-gỡ-cài-đặt) trước.
-3. Mở bộ cài và làm theo hướng dẫn. Cài mới có thể chọn phạm vi một người dùng hoặc toàn máy; nâng cấp giữ phạm vi và vị trí đã có. Cài toàn máy có thể yêu cầu quyền quản trị Windows.
+3. Mở bộ cài và làm theo hướng dẫn. Cài mới có thể chọn phạm vi một người dùng hoặc toàn máy. Cài toàn máy có thể yêu cầu quyền quản trị Windows.
 4. Mở Hermes, chọn ngôn ngữ nếu được hỏi và chờ chuẩn bị lõi đóng gói sẵn.
+
+Bản này dùng mã sản phẩm và thư mục dữ liệu riêng với các bản Hermes cũ, nên cài song song thay vì ghi đè; lối tắt "Hermes Vietnamese" có thể thay tên lối tắt cũ, nhưng bản cũ vẫn còn nguyên trong danh sách Ứng dụng và vẫn mở được. Lần mở đầu tiên, nếu máy có dữ liệu Hermes cũ, ứng dụng hỏi "Nhập dữ liệu từ bản Hermes cũ?" rồi sao chép (không xóa hay di chuyển) cấu hình, phiên làm việc, trí nhớ, kỹ năng và các thiết lập khác sang thư mục mới. Bản cũ giữ nguyên nên luôn dùng được để quay lại nếu cần.
 
 Python 3.12.10 và thư viện bắt buộc đã ở trong bộ cài. Bạn không cần tự cài môi trường lập trình hoặc tải `install.ps1` để khởi động lõi. Internet vẫn cần cho tải bộ cài, xác thực, dịch vụ AI và một số công cụ tùy chọn.
 
@@ -72,11 +74,10 @@ Dùng danh mục nhà cung cấp của đúng bản đã cài. Mỗi kết nối
 ### HTTP 404 model, bao gồm Luna
 
 - Kiểm tra model ở **ô nhập của phiên** và nhà cung cấp/gateway đang chọn.
-- Tên model ở thanh **Advisor** có thể khác model trả lời chính; đổi Advisor không tự đổi model của phiên.
 - Làm mới danh sách model hoặc chọn model được kết nối đó xác nhận hỗ trợ. `404` có thể do sai mã, định tuyến hoặc thiếu quyền; chỉ ảnh lỗi chưa đủ để chọn một nguyên nhân chắc chắn.
 - Không đăng khóa API, mã OAuth hay toàn bộ cấu hình để nhờ hỗ trợ.
 
-### Advisor hỏi lại thông tin đã có trong ảnh
+### Đọc ảnh đính kèm không ra đúng nội dung
 
 Kiểm tra ảnh đã đính kèm thành công và thử trong một phiên mới. Kết quả đọc ảnh phụ thuộc model và kết nối. Nếu lỗi lặp lại, gửi ảnh đã che dữ liệu riêng cùng bước tái hiện.
 
@@ -109,7 +110,7 @@ Chỉ cân nhắc tiếp tục qua cảnh báo uy tín khi nguồn tải và SHA
 
 Cài đè giữ dữ liệu theo thiết kế và đã được kiểm thử trên hồ sơ cô lập. Vẫn cần bản sao lưu cho dữ liệu thật. Nếu có lỗi, giữ nhật ký và dùng bản sao đã xác minh để phục hồi; bản quay lui Windows x64 là `vi-v0.32.1-18`. Không khôi phục đè khi chưa sao lưu dữ liệu mới hơn.
 
-Đợt pilot này không có luồng tự cập nhật hoặc tệp `latest*.yml`. Tải bằng bộ cài đầy đủ; không dùng `git pull` hay cập nhật lõi riêng để thay phiên bản ứng dụng.
+Đợt pilot này không có luồng tự tải hay tự cài. Ứng dụng chỉ tự kiểm tra bản mới mỗi ngày (hoặc bấm "Kiểm tra ngay" trong mục Giới thiệu) và báo tên tệp, kích thước, mã SHA-256 kèm nút mở trang tải; việc tải và chạy bộ cài vẫn do bạn tự thực hiện. Bản cũ hơn dùng cơ chế kiểm tra khác nên có thể không thấy được thông báo này; nếu vậy, hãy tự vào trang phát hành để tải bản mới. Không dùng `git pull` hay cập nhật lõi riêng để thay phiên bản ứng dụng.
 
 ### Sao lưu
 
@@ -121,12 +122,14 @@ Mở **Trung tâm chỉ huy → Bảo trì → Tạo bản sao lưu**, chờ ho�
 - **Gỡ GUI + agent, giữ dữ liệu** trong Hermes loại ứng dụng/runtime, giữ dữ liệu người dùng để cài lại.
 - **Gỡ toàn bộ** xóa cả vùng dữ liệu đã chọn. Chỉ dùng khi đã đọc cảnh báo, kiểm tra sao lưu và thực sự muốn xóa.
 
+Vì bản này dùng thư mục dữ liệu riêng với các bản Hermes cũ, gỡ bản mới không đụng tới dữ liệu hay bản cài cũ; bản cũ vẫn còn nguyên nếu bạn muốn quay lại tạm thời.
+
 ## Phiên bản và nguồn gốc
 
 Số phiên bản có dạng **năm.tháng.lần cập nhật trong tháng**; phần cuối không phải ngày. Bạn có thể xem [ghi chú phát hành](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.2) và [mã nguồn tương ứng](https://github.com/LucDinhLe/hermes-agent-vietnamese/tree/v2026.9.2).
 
 ## Riêng tư và hỗ trợ
 
-Hermes Vietnamese là dự án cá nhân độc lập của [Lê Đình Lực](https://github.com/LucDinhLe), dựa trên Hermes Agent của Nous Research theo [MIT](LICENSE). Bộ cài không mang tài khoản, khóa hay lịch sử của người đóng gói. Dịch vụ AI và công cụ mạng bạn dùng có chính sách dữ liệu riêng.
+Hermes Vietnamese là dự án cá nhân độc lập của [Lê Đình Lực](https://github.com/LucDinhLe), dựa trên Hermes Agent của Nous Research theo [MIT](LICENSE). Phần lõi giữ nguyên từng byte so với bản gốc, dự án chỉ duy trì lớp vỏ Việt hóa. Bộ cài không mang tài khoản, khóa hay lịch sử của người đóng gói. Dịch vụ AI và công cụ mạng bạn dùng có chính sách dữ liệu riêng.
 
 Xem [miễn trừ và quyền riêng tư](DISCLAIMER.md), [báo bảo mật](SECURITY.md), [báo lỗi](https://github.com/LucDinhLe/hermes-agent-vietnamese/issues). Khi báo lỗi, ghi bản đang chạy, hệ điều hành, kiến trúc, bước tái hiện và ảnh đã che thông tin cá nhân. Phần mềm được cung cấp theo nguyên trạng, chưa có bảo hành thương mại.

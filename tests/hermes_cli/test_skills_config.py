@@ -36,37 +36,6 @@ class TestSaveDisabledSkills:
         assert config["skills"]["disabled"] == ["skill-a", "skill-z"]
         mock_save.assert_called_once()
 
-    @patch("hermes_cli.skills_config.save_config")
-    def test_manual_toggle_updates_allowlist_for_completed_work_profile(self, mock_save):
-        from hermes_cli.skills_config import save_disabled_skills
-
-        config = {
-            "skills": {
-                "allowed": ["skill-a", "skill-b"],
-                "disabled": [],
-                "work_profile": {"completed": True, "version": 1},
-            }
-        }
-
-        save_disabled_skills(config, {"skill-b"})
-        assert config["skills"]["allowed"] == ["skill-a"]
-        assert config["skills"]["disabled"] == ["skill-b"]
-
-        save_disabled_skills(config, set())
-        assert config["skills"]["allowed"] == ["skill-a", "skill-b"]
-        assert config["skills"]["disabled"] == []
-        assert mock_save.call_count == 2
-
-    @patch("hermes_cli.skills_config.save_config")
-    def test_manual_toggle_preserves_legacy_profile_without_allowlist(self, mock_save):
-        from hermes_cli.skills_config import save_disabled_skills
-
-        config = {"skills": {"disabled": []}}
-        save_disabled_skills(config, {"skill-b"})
-
-        assert config == {"skills": {"disabled": ["skill-b"]}}
-        mock_save.assert_called_once()
-
 
 # ---------------------------------------------------------------------------
 # _is_skill_disabled

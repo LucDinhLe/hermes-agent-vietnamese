@@ -46,12 +46,10 @@ def source() -> str:
 
 def _install_uv_body(source: str) -> str:
     """Extract the text of Install-Uv up to the next top-level function."""
-    function = re.search(r"^function Install-Uv\s*\{", source, flags=re.MULTILINE)
-    assert function is not None, "Install-Uv function not found"
-    start = function.start()
-    tail = source[function.end() :]
+    start = source.index("function Install-Uv")
+    tail = source[start + 1 :]
     match = re.search(r"^function ", tail, flags=re.MULTILINE)
-    end = function.end() + (match.start() if match else len(tail))
+    end = start + 1 + (match.start() if match else len(tail))
     return source[start:end]
 
 

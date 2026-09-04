@@ -20,6 +20,7 @@ import { useI18n } from '@/i18n'
 import { Check, ChevronDown, ChevronRight, KeyRound, Loader2, Terminal, Trash2 } from '@/lib/icons'
 import { normalize } from '@/lib/text'
 import { cn } from '@/lib/utils'
+import { viFeature } from '@/lib/vi-features'
 import type { BackendOwner } from '@/store/backend-owner'
 import { notify, notifyError } from '@/store/notifications'
 import { $desktopOnboarding, startManualLocalEndpoint, startManualProviderOAuth } from '@/store/onboarding'
@@ -30,6 +31,7 @@ import { useBackendOwnerGuard } from '../hooks/use-backend-owner-guard'
 import { isKeyVar, ProviderKeyRows } from './credential-key-ui'
 import { CustomEndpointsSettings } from './custom-endpoints-settings'
 import { SettingsCategoryHeading, useEnvCredentials } from './env-credentials'
+import { GoogleAccountRow } from './google-account-row'
 import { providerGroup, providerMeta, providerPriority } from './helpers'
 import { SettingsContent, SettingsSkeleton } from './primitives'
 
@@ -543,6 +545,9 @@ export function ProvidersSettings({
         onWantApiKey={() => onViewChange('keys')}
         providers={oauthProviders}
       />
+      {/* Vỏ Hermes Vietnamese: tài khoản Google qua cửa Gemini CLI (custom endpoint, không sửa lõi).
+          Tạm ẩn sau cờ vì Google chỉ mở cửa này cho tài khoản đủ điều kiện Gemini Code Assist cá nhân. */}
+      {viFeature('google-account') && <GoogleAccountRow onChanged={onConfigSaved} />}
     </SettingsContent>
   )
 }

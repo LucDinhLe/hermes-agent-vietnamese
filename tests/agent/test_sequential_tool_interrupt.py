@@ -54,23 +54,17 @@ def _fast_polls(monkeypatch):
 
 
 def test_interrupt_abandons_noncooperative_tool(monkeypatch, fake_agent, _fast_polls):
-    """A blocking tool is abandoned while its worker is still non-cooperative."""
+    """A blocking tool is abandoned within ~poll+grace once interrupted."""
 
-    release = threading.Event()
-    worker_finished = threading.Event()
+    started = threading.Event()
 
     def _fake_middleware(agent_arg, **kwargs):
-        # Model an interrupt arriving after dispatch without a second helper
-        # thread whose scheduling can be starved on saturated CI hosts.
-        fake_agent._interrupt_requested = True
-        try:
-            release.wait(60)  # non-cooperative: never checks is_interrupted()
-            return _ManagedToolResult(
-                result="late result", args={}, middleware_trace=[],
-                blocked=False, dispatched=True,
-            )
-        finally:
-            worker_finished.set()
+        started.set()
+        time.sleep(30)  # non-cooperative: never checks is_interrupted()
+        return _ManagedToolResult(
+            result="late result", args={}, middleware_trace=[],
+            blocked=False, dispatched=True,
+        )
 
     monkeypatch.setattr(
         tool_executor, "_run_agent_tool_execution_middleware", _fake_middleware
@@ -79,25 +73,29 @@ def test_interrupt_abandons_noncooperative_tool(monkeypatch, fake_agent, _fast_p
         tool_executor, "_resolve_sequential_tool_timeout", lambda: None
     )
 
-    try:
-        managed = _run_sequential_tool_execution_middleware(
-            fake_agent,
-            function_name="image_generate",
-            function_args={"prompt": "x"},
-            effective_task_id="t",
-            tool_call_id="call_1",
-            execute=lambda a: "unused",
-        )
-        abandoned_while_running = not worker_finished.is_set()
-    finally:
-        release.set()
+    def _interrupt_soon():
+        started.wait(5)
+        time.sleep(0.1)
+        fake_agent._interrupt_requested = True
+
+    threading.Thread(target=_interrupt_soon, daemon=True).start()
+
+    t0 = time.monotonic()
+    managed = _run_sequential_tool_execution_middleware(
+        fake_agent,
+        function_name="image_generate",
+        function_args={"prompt": "x"},
+        effective_task_id="t",
+        tool_call_id="call_1",
+        execute=lambda a: "unused",
+    )
+    elapsed = time.monotonic() - t0
 
     assert isinstance(managed.result, _ToolCancelledResult)
     assert "cancelled" in str(managed.result)
-    # This is stronger and scheduler-independent compared with a wall-clock
-    # threshold: returning before the deliberately blocked worker finishes
-    # proves the executor abandoned it instead of joining it.
-    assert abandoned_while_running
+    # poll (0.05s) + interrupt delay (0.1s) + grace (3s) + slack — nowhere
+    # near the 30s tool runtime.
+    assert elapsed < 10.0
     # The executor emitted the terminal post_tool_call itself.
     assert any(kw.get("status") == "cancelled" for kw in _fast_polls)
 

@@ -126,18 +126,13 @@ class SharedMetricsStore:
         """Increment one allowlisted counter for the current UTC day."""
         self._validate_counter(metric_name, dimensions, resource)
         with self._connection() as connection:
-            # Acquire the writer lock before the UPSERT. A deferred
-            # transaction can race two connections through their initial read
-            # state and then fail the lock upgrade immediately, bypassing the
-            # configured SQLite busy timeout under concurrent model calls.
-            with write_txn(connection):
-                self._record_counter_in_transaction(
-                    connection,
-                    metric_name,
-                    dimensions,
-                    resource,
-                    period_start=_utc_now().date().isoformat(),
-                )
+            self._record_counter_in_transaction(
+                connection,
+                metric_name,
+                dimensions,
+                resource,
+                period_start=_utc_now().date().isoformat(),
+            )
 
     @staticmethod
     def _validate_counter(

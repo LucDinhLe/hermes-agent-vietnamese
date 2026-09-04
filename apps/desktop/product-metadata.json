@@ -11,22 +11,28 @@
   },
   "upstream": {
     "productName": "Hermes Agent",
-    "version": "0.20.4",
+    "version": "0.21.0",
+    "commit": "29112bef099274229cadff79cdff7bf7b99c4b77",
     "publisher": "Nous Research",
-    "repository": "NousResearch/hermes-agent"
+    "repository": "NousResearch/hermes-agent",
+    "pinnedBy": "engine.lock",
+    "tag": "v2026.8.31"
   },
   "license": {
     "spdx": "MIT",
     "url": "https://github.com/LucDinhLe/hermes-agent-vietnamese/blob/main/LICENSE"
   },
   "technicalIdentity": {
-    "appId": "com.nousresearch.hermes",
-    "packageProductName": "Hermes",
-    "executableName": "Hermes",
-    "protocol": "hermes",
-    "windowsAppUserModelId": "com.nousresearch.hermes",
-    "windowsHermesHomeName": "hermes",
-    "posixHermesHomeName": ".hermes"
+    "appId": "vn.lucledinh.hermes-vietnamese",
+    "packageProductName": "Hermes Vietnamese",
+    "executableName": "HermesVietnamese",
+    "protocol": "hermes-vi",
+    "windowsAppUserModelId": "vn.lucledinh.hermes-vietnamese",
+    "windowsHermesHomeName": "hermes-vietnamese",
+    "posixHermesHomeName": ".hermes-vietnamese",
+    "nsisGuid": "f55add5f-6655-5c1d-b8e3-d7252a8a4152",
+    "homeEnvOverride": "HERMES_VI_HOME",
+    "_note": "Chốt 27/08/2026, áp 04/09/2026 (bước 4 kế hoạch composite). Cài cạnh bản Hermes cũ (com.nousresearch.hermes) và bản gốc Nous, không đụng dữ liệu của chúng."
   },
   "updateRepository": {
     "owner": "LucDinhLe",

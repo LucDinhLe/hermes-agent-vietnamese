@@ -814,6 +814,11 @@ export const vi = defineLocale({
       cantReach: 'Chúng tôi không thể truy cập máy chủ cập nhật.',
       tapCheck: 'Nhấn vào "Kiểm tra ngay" để tìm kiếm thông tin cập nhật.',
       updateReady: count => `Một bản cập nhật mới đã sẵn sàng (${count} thay đổi bao gồm).`,
+      notifyOnlyReady: version => `Đã có phiên bản ${version}. Ứng dụng không tự cài: bạn tải bộ cài, đối chiếu SHA-256 rồi chạy.`,
+      openDownloadPage: 'Mở trang tải',
+      notifyOnlyDesc:
+        'Hermes Vietnamese chỉ báo khi có phiên bản mới. Ứng dụng không tự tải hay tự cài; bạn tải bộ cài từ GitHub Releases và kiểm mã tệp trước khi chạy.',
+      checksumLine: (filename, sizeMb, sha256) => `${filename} · ${sizeMb} MB · SHA-256 ${sha256}`,
       lastChecked: age => `Đã kiểm tra lần cuối ${age}`,
       justNowSuffix: ' · vừa rồi',
       automaticUpdates: 'Cập nhật tự động',
@@ -1137,6 +1142,20 @@ export const vi = defineLocale({
     },
     providers: {
       connectAccount: 'Kết nối tài khoản',
+      googleAccount: {
+        title: 'Google (tài khoản Google)',
+        subtitle: 'Đăng nhập bằng tài khoản Google theo đúng cửa của Gemini CLI, Gemini chạy theo gói Google của bạn.',
+        signIn: 'Đăng nhập Google',
+        signOut: 'Đăng xuất',
+        makeDefault: 'Đặt làm mặc định',
+        signingIn: 'Đang chờ trình duyệt…',
+        connected: 'Đã kết nối',
+        tierLabel: 'Bậc',
+        caveat: 'Dùng chung cửa với Gemini CLI. Google có thể thay đổi hoặc đóng cửa này; đây không phải nhà cung cấp chính thức của Hermes.',
+        errorPrefix: 'Đăng nhập Google gặp lỗi'
+        ,projectPlaceholder: 'Mã dự án Google Cloud (ví dụ my-project-123456)'
+        ,projectSave: 'Lưu dự án'
+      },
       haveApiKey: 'Bạn có khóa API không?',
       intro:
         'Đăng nhập bằng đăng ký — không có khóa API để sao chép. Hermes chạy tính năng đăng nhập vào trình duyệt cho bạn, ngay trong ứng dụng.',

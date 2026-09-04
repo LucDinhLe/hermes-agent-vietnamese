@@ -74,7 +74,6 @@ def test_install_sh_discards_runtime_lockfile_churn_before_stash(
     script = (
         "set -e\n"
         'log_info() { echo "INFO: $*"; }\n'
-        "use_public_https_origin_for_managed_install() { :; }\n"
         'INSTALL_DIR="$PWD"\n'
         f"{_extract_install_sh_function('discard_update_lockfile_churn')}\n"
         "run() {\n"

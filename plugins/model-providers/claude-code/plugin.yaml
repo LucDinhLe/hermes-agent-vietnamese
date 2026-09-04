@@ -1,5 +1,0 @@
-name: claude-code-provider
-kind: model-provider
-version: 1.0.0
-description: Official Claude Code subscription process bridge
-author: Lê Đình Lực

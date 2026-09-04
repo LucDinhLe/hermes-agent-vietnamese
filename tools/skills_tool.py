@@ -174,6 +174,20 @@ _ENV_VAR_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _REMOTE_ENV_BACKENDS = frozenset(
     {"docker", "singularity", "modal", "ssh", "daytona", "vercel_sandbox"}
 )
+
+
+def _is_remote_env_backend(backend: str) -> bool:
+    """Built-in remote backends plus plugin backends declaring is_remote."""
+    if backend in _REMOTE_ENV_BACKENDS:
+        return True
+    if not backend or backend == "local":
+        return False
+    try:
+        from agent.terminal_env_registry import provider_flag
+
+        return bool(provider_flag(backend, "is_remote", False))
+    except Exception:
+        return False
 _secret_capture_callback = None
 
 
@@ -801,11 +815,7 @@ def _sort_skills(skills: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return sorted(skills, key=lambda s: (s.get("category") or "", s["name"]))
 
 
-def skills_list(
-    category: str = None,
-    task_id: str = None,
-    allowed_skills: frozenset[str] | None = None,
-) -> str:
+def skills_list(category: str = None, task_id: str = None) -> str:
     """
     List all available skills (progressive disclosure tier 1 - minimal metadata).
 
@@ -839,11 +849,6 @@ def skills_list(
                 all_skills.append(plugin_skill)
         except Exception:
             logger.debug("Plugin skill listing failed", exc_info=True)
-
-        if allowed_skills is not None:
-            all_skills = [
-                skill for skill in all_skills if skill.get("name") in allowed_skills
-            ]
 
         if not all_skills:
             return json.dumps(
@@ -1537,7 +1542,11 @@ def skill_view(
                     },
                     ensure_ascii=False,
                 )
-            if not target_file.exists():
+            # Gate on is_file(), not exists(): a directory (e.g. requesting
+            # 'references' bare) must take the not-found listing branch, not
+            # fall through to read_text() and surface a raw [Errno 21]
+            # "Is a directory" OS error. Matches the plugin-skill branch above.
+            if not target_file.is_file():
                 # List available files in the skill directory, organized by type
                 available_files = {
                     "references": [],
@@ -1909,7 +1918,7 @@ def skill_view(
                 missing_items,
                 setup_help,
             )
-            if backend in _REMOTE_ENV_BACKENDS and setup_note:
+            if _is_remote_env_backend(backend) and setup_note:
                 setup_note = f"{setup_note} {backend.upper()}-backed skills need these requirements available inside the remote environment as well."
             if setup_note:
                 result["setup_note"] = setup_note
@@ -2014,9 +2023,7 @@ registry.register(
     toolset="skills",
     schema=SKILLS_LIST_SCHEMA,
     handler=lambda args, **kw: skills_list(
-        category=args.get("category"),
-        task_id=kw.get("task_id"),
-        allowed_skills=kw.get("capability_skills"),
+        category=args.get("category"), task_id=kw.get("task_id")
     ),
     check_fn=check_skills_requirements,
     emoji="📚",
@@ -2134,14 +2141,6 @@ def _skill_view_with_bump(args, **kw):
     """Invoke skill_view, then bump view_count on success. Best-effort: a
     telemetry failure never breaks the tool call."""
     name = args.get("name", "")
-    capability_skills = kw.get("capability_skills")
-    if capability_skills is not None and name not in capability_skills:
-        return tool_error(
-            f"Skill '{name}' is not assigned to this agent. "
-            "Return it as a recommendation for user approval instead of loading it.",
-            error_type="skill_not_assigned",
-            skill=name,
-        )
     task_id = kw.get("task_id")
     # ── Repeat-view dedup ────────────────────────────────────────────
     # Mirrors read_file's unchanged-stub: when this session already

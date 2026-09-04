@@ -99,7 +99,6 @@ def test_install_sh_clears_unmerged_index_then_stashes(tmp_path: Path) -> None:
     script = (
         "set -e\n"
         'log_info() { echo "INFO: $*"; }\n'
-        "use_public_https_origin_for_managed_install() { :; }\n"
         f'INSTALL_DIR="{repo}"\n'
         f"{_extract_install_sh_function('discard_update_lockfile_churn')}\n"
         "run() {\n"
@@ -167,9 +166,8 @@ def test_install_ps1_stops_venv_resident_processes_before_parking_venv() -> None
     """
     text = INSTALL_PS1.read_text()
 
-    # Never kill every process named hermes.exe: the Desktop shell has the same
-    # image name and may be the parent driving this managed-runtime refresh.
-    assert 'taskkill /F /T /IM hermes.exe' not in text
+    # The hermes.exe tree-kill is preserved (kills spawned child processes too).
+    assert 'taskkill /F /T /IM hermes.exe' in text
 
     # The venv path-prefix sweep exists. It must match by case-insensitive
     # StartsWith, NOT PowerShell -like: a venv path containing wildcard

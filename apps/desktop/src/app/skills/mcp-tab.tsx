@@ -40,6 +40,7 @@ import { type McpImportEntry, parseMcpImport } from '@/lib/mcp-import'
 import { NEEDS_AUTH_RE, PROBE_TTL_MS, probeCache, probeKey, serverFingerprint } from '@/lib/mcp-probe-cache'
 import { countEnabledTools, isToolEnabled, toggleToolInServer } from '@/lib/mcp-tool-filter'
 import { cn } from '@/lib/utils'
+import { viFeature } from '@/lib/vi-features'
 import { notify, notifyError } from '@/store/notifications'
 import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
 import { $activeSessionId } from '@/store/session'
@@ -486,7 +487,7 @@ function ScopedMcpTab({ connectionId, gateway, profile }: McpTabProps) {
   })
 
   const assignmentQuery = useQuery({
-    enabled: !!activeSessionId,
+    enabled: !!activeSessionId && viFeature('mcp-assignments'),
     queryKey: ['mcp-assignments', sourceKey, scopeProfileKey, activeSessionId],
     queryFn: () => getMcpAssignments(activeSessionId!, profile ?? appProfile ?? null, connectionId),
     staleTime: 30_000

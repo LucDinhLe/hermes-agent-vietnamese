@@ -24,7 +24,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from gateway.turn_lease import SessionTurnLeaseRegistry, TurnLeaseTimeoutError
+from gateway.turn_lease import (
+    DEFAULT_LEASE_WAIT,
+    SessionTurnLeaseRegistry,
+    TurnLeaseTimeoutError,
+)
 
 
 def _run(coro):
@@ -94,6 +98,16 @@ def test_distinct_sessions_do_not_contend():
 # ---------------------------------------------------------------------------
 # Timeout safety
 # ---------------------------------------------------------------------------
+
+
+def test_default_wait_cannot_head_of_line_block_platform_updates_for_minutes():
+    """A contended topic must fail/queue promptly, not pin Telegram's updater.
+
+    Telegram dispatches updates sequentially. Awaiting a held session lease for
+    1,800 seconds blocks unrelated topics behind the waiter even though their
+    sessions do not share a transcript.
+    """
+    assert DEFAULT_LEASE_WAIT == 5.0
 
 
 def test_timeout_fails_closed_instead_of_authorizing_an_unserialized_turn():
@@ -200,10 +214,7 @@ async def test_full_dispatch_rejects_lease_timeout_without_running_goal_hook(
     runner._post_turn_goal_continuation = AsyncMock()
 
     try:
-        # The lease's own 20 ms clock is the behavior under test. This outer
-        # watchdog only catches a genuine dispatch hang; leave enough headroom
-        # for loaded Windows/WSL shards to finish unrelated bootstrap work.
-        response = await asyncio.wait_for(runner._handle_message(_event()), timeout=10)
+        response = await asyncio.wait_for(runner._handle_message(_event()), timeout=1)
     finally:
         assert runner._turn_leases.release(holder) is True
 

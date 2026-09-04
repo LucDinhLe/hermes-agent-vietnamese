@@ -79,6 +79,10 @@ const PROFILE_SCOPED_PREFIXES = [
   "/api/messaging/platforms",
   "/api/messaging/telegram/onboarding",
   "/api/messaging/whatsapp/onboarding",
+  // OAuth/account state is profile-owned too: status, login sessions, polling,
+  // cancellation, and disconnect must all follow the selected management
+  // profile rather than silently targeting the dashboard process's profile.
+  "/api/providers/oauth",
   "/api/model/info",
   "/api/model/set",
   "/api/model/auxiliary",
@@ -2180,6 +2184,7 @@ export interface ProfileInfo {
   gateway_running: boolean;
   description: string;
   description_auto: boolean;
+  display_name?: string;
   distribution_name: string | null;
   distribution_version: string | null;
   distribution_source: string | null;

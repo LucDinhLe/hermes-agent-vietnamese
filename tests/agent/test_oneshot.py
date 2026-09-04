@@ -37,18 +37,6 @@ class TestRenderTemplate:
         assert "do not repeat" in regen
         assert "feat: prior" not in plain
 
-    def test_reasoning_summary_vi_is_bounded_and_forbids_hidden_reasoning(self):
-        instructions, user = render_template(
-            "reasoning_summary_vi",
-            {"reasoning": "public step " * 10000},
-        )
-
-        assert "chain-of-thought ẩn" in instructions
-        assert "không thêm dữ kiện" in instructions
-        assert user.startswith("Phần suy luận công khai")
-        assert user.endswith("…(truncated)")
-        assert len(user.encode("utf-8")) < 66000
-
 
 class TestRunOneshot:
     def _mock_response(self, content):

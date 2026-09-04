@@ -52,7 +52,6 @@ gemini = GeminiProfile(
     name="gemini",
     aliases=("google", "google-gemini", "google-ai-studio"),
     api_mode="chat_completions",
-    display_name="Google AI Studio (API)",
     env_vars=("GOOGLE_API_KEY", "GEMINI_API_KEY"),
     base_url="https://generativelanguage.googleapis.com/v1beta",
     auth_type="api_key",

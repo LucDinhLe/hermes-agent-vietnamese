@@ -437,8 +437,16 @@ declare global {
       onBootstrapEvent: (callback: (payload: DesktopBootstrapEvent) => void) => () => void
       getVersion: () => Promise<DesktopVersionInfo>
       getRemoteDisplayReason?: () => Promise<string | null>
+      /** Cầu nối tài khoản Google (vỏ Hermes Vietnamese, qua cửa Gemini CLI) */
+      google?: {
+        status: () => Promise<DesktopGoogleBridgeStatus>
+        signIn: () => Promise<DesktopGoogleBridgeStatus>
+        signOut: () => Promise<DesktopGoogleBridgeStatus>
+        activate: () => Promise<DesktopGoogleBridgeStatus>
+        setProject: (project: string | null) => Promise<DesktopGoogleBridgeStatus>
+      }
       updates: {
-        check: () => Promise<DesktopUpdateStatus>
+        check: (opts?: { force?: boolean }) => Promise<DesktopUpdateStatus>
         apply: (opts?: DesktopUpdateApplyOptions) => Promise<DesktopUpdateApplyResult>
         getBranch: () => Promise<{ branch: string }>
         setBranch: (name: string) => Promise<{ branch: string }>
@@ -549,8 +557,35 @@ export interface DesktopUpdateCommit {
   at: number
 }
 
+/** Cầu nối tắt (bản phát hành không bật HERMES_VI_GOOGLE_BRIDGE) chỉ trả về available: false. */
+export type DesktopGoogleBridgeStatus = { available: false } | DesktopGoogleBridgeReady
+
+export interface DesktopGoogleBridgeReady {
+  available: true
+  signedIn: boolean
+  email: string | null
+  tier: string | null
+  project: string | null
+  serverPort: number | null
+  projectOverride: string | null
+  endpointId: string
+  models: string[]
+  defaultModel: string
+  lastError: string | null
+}
+
 export interface DesktopUpdateStatus {
   supported: boolean
+  /** Bản đóng gói Hermes Vietnamese: chỉ báo, không tự tải/cài (release-notice.ts). */
+  notifyOnly?: boolean
+  releaseChannel?: 'latest' | 'thunghiem'
+  downloadUrl?: string | null
+  releaseUrl?: string | null
+  filename?: string | null
+  size?: number | null
+  sha256?: string | null
+  feedEnabled?: boolean
+  fromCache?: boolean
   mechanism?: 'app-updater' | 'git'
   channel?: 'main' | 'stable'
   updateAvailable?: boolean

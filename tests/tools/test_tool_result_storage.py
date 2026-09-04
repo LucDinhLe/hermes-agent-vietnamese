@@ -1,6 +1,5 @@
 """Tests for tools/tool_result_storage.py -- 3-layer tool result persistence."""
 
-import hashlib
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -19,8 +18,10 @@ from tools.tool_result_storage import (
     _resolve_storage_dir,
     _safe_result_filename,
     _write_to_sandbox,
+    cleanup_spillover_cache,
     enforce_turn_budget,
     generate_preview,
+    get_spillover_dir,
     maybe_persist_tool_result,
 )
 
@@ -181,62 +182,6 @@ class TestMaybePersistToolResult:
         )
         assert result == content
 
-    def test_json_object_is_normalized_before_byte_accounting(self):
-        result = maybe_persist_tool_result(
-            content={"z": 2, "message": "ổn"},
-            tool_name="plugin_tool",
-            tool_use_id="tc_object",
-            env=None,
-            threshold=float("inf"),
-        )
-        assert result == '{"message":"ổn","z":2}'
-        assert isinstance(result, str)
-
-    def test_multibyte_content_is_capped_by_utf8_bytes(self):
-        env = MagicMock()
-        env.execute.return_value = {"output": "", "returncode": 0}
-        content = "🦞" * 2_500  # 10,000 UTF-8 bytes, only 2,500 characters
-        result = maybe_persist_tool_result(
-            content=content,
-            tool_name="terminal",
-            tool_use_id="tc_utf8",
-            env=env,
-        )
-        assert PERSISTED_OUTPUT_TAG in result
-        assert len(result.encode("utf-8")) < 10 * 1024
-
-    def test_pointer_contains_bytes_and_sha256(self):
-        env = MagicMock()
-        env.execute.return_value = {"output": "", "returncode": 0}
-        content = "result\n" * 4_000
-        result = maybe_persist_tool_result(
-            content=content,
-            tool_name="terminal",
-            tool_use_id="tc_digest",
-            env=env,
-            threshold=1,
-        )
-        assert f"SHA-256: {hashlib.sha256(content.encode('utf-8')).hexdigest()}" in result
-        assert f"{len(content.encode('utf-8')):,} bytes" in result
-
-    def test_no_env_uses_recoverable_local_artifact(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(
-            "tools.tool_result_storage._local_storage_dir",
-            lambda: tmp_path,
-        )
-        content = "recover me\n" * 2_000
-        result = maybe_persist_tool_result(
-            content=content,
-            tool_name="terminal",
-            tool_use_id="tc_local",
-            env=None,
-            threshold=1,
-        )
-        artifact = tmp_path / "tc_local.txt"
-        assert artifact.read_text(encoding="utf-8") == content
-        assert str(artifact) in result
-        assert "Full output could not be saved" not in result
-
     def test_above_threshold_with_env_persists(self):
         env = MagicMock()
         env.execute.return_value = {"output": "", "returncode": 0}
@@ -251,13 +196,17 @@ class TestMaybePersistToolResult:
         assert PERSISTED_OUTPUT_TAG in result
         assert "tc_456.txt" in result
         assert len(result) < len(content)
-        env.execute.assert_called_once()
 
     def test_persists_full_content_as_is(self):
         """Content is persisted verbatim — no JSON extraction."""
         import json
         env = MagicMock()
-        env.execute.return_value = {"output": "", "returncode": 0}
+        # Readability probe fails -> falls back to the in-sandbox write.
+        env.execute.side_effect = [
+            {"output": "", "returncode": 1},
+            {"output": "", "returncode": 0},
+        ]
+        env.get_temp_dir.return_value = ""
         raw = "line1\nline2\n" * 5_000
         content = json.dumps({"output": raw, "exit_code": 0, "error": None})
         result = maybe_persist_tool_result(
@@ -275,7 +224,11 @@ class TestMaybePersistToolResult:
 
     def test_tool_use_id_cannot_escape_storage_dir(self):
         env = MagicMock()
-        env.execute.return_value = {"output": "", "returncode": 0}
+        # Readability probe fails -> in-sandbox write is the reference path.
+        env.execute.side_effect = [
+            {"output": "", "returncode": 1},
+            {"output": "", "returncode": 0},
+        ]
         env.get_temp_dir.return_value = ""
         content = "x" * 60_000
         result = maybe_persist_tool_result(
@@ -345,16 +298,6 @@ class TestEnforceTurnBudget:
         result = enforce_turn_budget([], env=None, config=BudgetConfig(turn_budget=200_000))
         assert result == []
 
-    def test_turn_budget_counts_utf8_bytes(self):
-        env = MagicMock()
-        env.execute.return_value = {"output": "", "returncode": 0}
-        msgs = [
-            {"role": "tool", "tool_call_id": "t1", "content": "🦞" * 2_000},
-            {"role": "tool", "tool_call_id": "t2", "content": "🦞" * 2_000},
-        ]
-        enforce_turn_budget(msgs, env=env, config=BudgetConfig(turn_budget=10_000))
-        assert any(PERSISTED_OUTPUT_TAG in m["content"] for m in msgs)
-
 
 # ── Per-tool threshold integration ────────────────────────────────────
 
@@ -366,16 +309,16 @@ class TestPerToolThresholds:
         assert hasattr(registry, "get_max_result_size")
 
 
-    def test_read_file_registry_value_is_capped_by_v32_budget(self):
-        """Legacy registry metadata cannot exempt read_file from the 10 KiB cap."""
+    def test_read_file_registry_cap_is_100k(self):
+        """Regression test: read_file must have a 100_000 char registry cap (Layer 2 safety net)."""
         from tools.registry import registry
         try:
             import tools.file_tools  # noqa: F401
             val = registry.get_max_result_size("read_file")
             assert val == 100_000, (
-                f"registry metadata changed unexpectedly: {val!r}"
+                f"read_file registry cap must be 100_000, got {val!r}. "
+                "float('inf') is not allowed — it disables the Layer 2 result-size guard."
             )
-            assert BudgetConfig().resolve_threshold("read_file") == DEFAULT_RESULT_SIZE_CHARS
         except ImportError:
             pytest.skip("file_tools not importable in test env")
 
@@ -387,3 +330,172 @@ class TestPerToolThresholds:
             assert val == 100_000
         except ImportError:
             pytest.skip("file_tools not importable in test env")
+
+
+# ── Host-side spillover ($HERMES_HOME/cache/spillover) ────────────────
+
+class TestSpillover:
+    @pytest.fixture(autouse=True)
+    def _isolated_home(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HERMES_HOME", str(tmp_path / ".hermes"))
+        # Reset the once-per-process prune flag so each test is independent.
+        import tools.tool_result_storage as trs
+        monkeypatch.setattr(trs, "_spillover_pruned_once", False)
+        yield
+
+    def test_env_none_persists_to_spillover(self):
+        """No active sandbox env (MCP-only / cron session) must persist
+        host-side instead of inline-truncating — the guglielmo bundle bug."""
+        content = "x" * 60_000
+        result = maybe_persist_tool_result(
+            content=content,
+            tool_name="tool_call",
+            tool_use_id="tc_mcp_1",
+            env=None,
+            threshold=30_000,
+        )
+        assert PERSISTED_OUTPUT_TAG in result
+        assert "could not be saved" not in result
+        spill_file = get_spillover_dir() / "tc_mcp_1.txt"
+        assert spill_file.exists()
+        assert spill_file.read_text(encoding="utf-8") == content
+        assert str(spill_file) in result
+
+    def test_local_env_persists_to_spillover_not_sandbox(self):
+        """LocalEnvironment routes host-side: no env.execute() shell-out."""
+        from tools.environments.local import LocalEnvironment
+
+        env = MagicMock(spec=LocalEnvironment)
+        content = "y" * 60_000
+        result = maybe_persist_tool_result(
+            content=content,
+            tool_name="terminal",
+            tool_use_id="tc_local_1",
+            env=env,
+            threshold=30_000,
+        )
+        assert PERSISTED_OUTPUT_TAG in result
+        assert (get_spillover_dir() / "tc_local_1.txt").exists()
+        env.execute.assert_not_called()
+
+    def test_remote_env_probe_success_references_mounted_path(self):
+        """Remote env: host-side write is canonical; when the sandbox can read
+        the mounted/synced spillover path, the reference uses it and no
+        in-sandbox copy is written."""
+        env = MagicMock()  # not a LocalEnvironment
+        env.execute.return_value = {"output": "", "returncode": 0}  # probe OK
+        content = "z" * 60_000
+        result = maybe_persist_tool_result(
+            content=content,
+            tool_name="terminal",
+            tool_use_id="tc_remote_1",
+            env=env,
+            threshold=30_000,
+        )
+        assert PERSISTED_OUTPUT_TAG in result
+        # Canonical host copy always exists now.
+        assert (get_spillover_dir() / "tc_remote_1.txt").exists()
+        # Only the readability probe ran — no cat-into-sandbox call.
+        assert env.execute.call_count == 1
+        assert "test -r" in env.execute.call_args[0][0]
+
+    def test_remote_env_probe_failure_falls_back_to_sandbox_write(self):
+        """Persistent containers without the spillover mount still get a
+        readable in-sandbox copy."""
+        env = MagicMock()
+        env.execute.side_effect = [
+            {"output": "", "returncode": 1},  # probe: not readable
+            {"output": "", "returncode": 0},  # cat > sandbox path
+        ]
+        env.get_temp_dir.return_value = "/tmp"
+        content = "z" * 60_000
+        result = maybe_persist_tool_result(
+            content=content,
+            tool_name="terminal",
+            tool_use_id="tc_remote_2",
+            env=env,
+            threshold=30_000,
+        )
+        assert PERSISTED_OUTPUT_TAG in result
+        assert "/tmp/hermes-results/tc_remote_2.txt" in result
+        assert env.execute.call_count == 2
+        # Host canonical copy exists regardless.
+        assert (get_spillover_dir() / "tc_remote_2.txt").exists()
+
+    def test_spillover_write_failure_falls_back_to_inline(self, monkeypatch):
+        import tools.tool_result_storage as trs
+        monkeypatch.setattr(trs, "_write_to_spillover", lambda *a, **k: None)
+        content = "w" * 60_000
+        result = maybe_persist_tool_result(
+            content=content,
+            tool_name="tool_call",
+            tool_use_id="tc_fail_1",
+            env=None,
+            threshold=30_000,
+        )
+        assert "could not be saved" in result
+        assert PERSISTED_OUTPUT_TAG not in result
+
+    def test_cleanup_spillover_cache_removes_old_keeps_new(self):
+        import os
+        import time as _time
+
+        spill_dir = get_spillover_dir()
+        spill_dir.mkdir(parents=True, exist_ok=True)
+        old = spill_dir / "old.txt"
+        new = spill_dir / "new.txt"
+        old.write_text("old")
+        new.write_text("new")
+        stale = _time.time() - (48 * 3600)
+        os.utime(old, (stale, stale))
+
+        removed = cleanup_spillover_cache(max_age_hours=24)
+
+        assert removed == 1
+        assert not old.exists()
+        assert new.exists()
+
+    def test_cleanup_missing_dir_returns_zero(self):
+        assert cleanup_spillover_cache() == 0
+
+    def test_first_spill_prunes_expired_files(self):
+        """The once-per-process prune fires on the first host-side spill."""
+        import os
+        import time as _time
+
+        spill_dir = get_spillover_dir()
+        spill_dir.mkdir(parents=True, exist_ok=True)
+        old = spill_dir / "ancient.txt"
+        old.write_text("ancient")
+        stale = _time.time() - (48 * 3600)
+        os.utime(old, (stale, stale))
+
+        maybe_persist_tool_result(
+            content="v" * 60_000,
+            tool_name="tool_call",
+            tool_use_id="tc_prune_1",
+            env=None,
+            threshold=30_000,
+        )
+
+        assert not old.exists()
+        assert (spill_dir / "tc_prune_1.txt").exists()
+
+
+# ── recovery hint in the persisted preview ────────────────────────────
+
+class TestRecoveryHint:
+    def test_preview_teaches_recovery_not_refetch(self):
+        msg = _build_persisted_message(
+            preview="preview text",
+            has_more=True,
+            original_size=60_000,
+            file_path="/tmp/hermes-results/r.txt",
+        )
+        assert "Recovery:" in msg
+        assert "execute_code" in msg
+        assert "re-request" in msg
+        # Structure preserved: tag, size, path, read_file guidance all intact.
+        assert msg.startswith(PERSISTED_OUTPUT_TAG)
+        assert msg.endswith(PERSISTED_OUTPUT_CLOSING_TAG)
+        assert "read_file" in msg

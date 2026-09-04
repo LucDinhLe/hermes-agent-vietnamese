@@ -361,7 +361,7 @@ export async function checkBackendUpdates(): Promise<DesktopUpdateStatus | null>
   }
 }
 
-export async function checkUpdates(): Promise<DesktopUpdateStatus | null> {
+export async function checkUpdates(opts: { force?: boolean } = {}): Promise<DesktopUpdateStatus | null> {
   const bridge = window.hermesDesktop?.updates
 
   if (!bridge || $updateChecking.get()) {
@@ -371,7 +371,7 @@ export async function checkUpdates(): Promise<DesktopUpdateStatus | null> {
   $updateChecking.set(true)
 
   try {
-    const status = await bridge.check()
+    const status = await bridge.check(opts)
     $updateStatus.set(status)
     maybeNotifyUpdateAvailable(status)
     void refreshDesktopVersion()

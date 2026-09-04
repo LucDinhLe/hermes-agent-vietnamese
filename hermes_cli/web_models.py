@@ -330,6 +330,9 @@ class SessionImport(BaseModel):
 class SessionRename(BaseModel):
     title: Optional[str] = None
     archived: Optional[bool] = None
+    # Generic visibility flag. This is also used by process-light cross-profile
+    # reconciliation, where the primary backend opens the owner's state.db.
+    hidden: Optional[bool] = None
     # Durable "keep" flag mirrored from the Desktop sidebar's pins; pinned
     # sessions are exempt from the sessions.auto_archive stale sweep.
     pinned: Optional[bool] = None
@@ -339,6 +342,17 @@ class SessionRename(BaseModel):
     unread: Optional[bool] = None
     # Mutate a session belonging to another profile (opens its state.db). Omit
     # for the current/default profile.
+    profile: Optional[str] = None
+
+
+class SessionOwnerBackfill(BaseModel):
+    """Body for POST /api/sessions/owner-backfill (#94724 legacy migration).
+
+    ``profile`` scopes WHICH profile's state.db is stamped (same semantics as
+    every other session route); the stamped value is always that store's own
+    serving-profile identity — the caller cannot inject an arbitrary owner.
+    """
+
     profile: Optional[str] = None
 
 
@@ -398,10 +412,7 @@ class CronJobUpdate(BaseModel):
 
 class AutomationBlueprintInstantiate(BaseModel):
     blueprint: str                      # blueprint key, e.g. "morning-brief"
-    values: Dict[str, Any] = {}         # filled slot values from the form
-    # Optional localized display name supplied by a graphical client. The
-    # blueprint key remains the semantic identity; older clients omit this.
-    name: Optional[str] = None
+    values: Dict[str, Any] = {}      # filled slot values from the form
 
 
 # --- from web_server.py (originally lines 13002-13019) ---
@@ -642,25 +653,6 @@ class SkillToggle(BaseModel):
     profile: Optional[str] = None
 
 
-class WorkProfileRecommendRequest(BaseModel):
-    work_areas: List[str] = []
-    common_tasks: List[str] = []
-    profile: Optional[str] = None
-
-
-class WorkProfileApplyRequest(BaseModel):
-    allowed_skills: List[str] = []
-    work_areas: List[str] = []
-    common_tasks: List[str] = []
-    skipped: bool = False
-    profile: Optional[str] = None
-
-
-class TaskSkillDiscoveryRequest(BaseModel):
-    task: str
-    profile: Optional[str] = None
-
-
 # --- from web_server.py (originally lines 15883-15893) ---
 
 class SkillCreate(BaseModel):
@@ -760,3 +752,4 @@ class _PluginProvidersPutBody(BaseModel):
 
 class _PluginVisibilityBody(BaseModel):
     hidden: bool
+

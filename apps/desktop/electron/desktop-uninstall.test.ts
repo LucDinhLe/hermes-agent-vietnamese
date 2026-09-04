@@ -350,10 +350,10 @@ test('buildWindowsCleanupScript waits (bounded) for PID, runs uninstall, rmdir b
   assert.match(script, /if %userdata_tries% geq 10 goto rmuserdatadone/)
   // Remove only this per-user NSIS registration. A sibling HKLM install or a
   // differently located HKCU install must not match the exact InstallLocation.
-  assert.match(script, /HKCU\\Software\\48ae4bdc-0f8d-5252-af1e-bf7c0a8c3649/)
+  assert.match(script, /HKCU\\Software\\f55add5f-6655-5c1d-b8e3-d7252a8a4152/)
   assert.match(
     script,
-    /HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\48ae4bdc-0f8d-5252-af1e-bf7c0a8c3649/
+    /HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\f55add5f-6655-5c1d-b8e3-d7252a8a4152/
   )
   assert.match(script, /reg query "%HERMES_INSTALL_KEY%" \/v InstallLocation/)
   assert.match(

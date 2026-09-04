@@ -444,17 +444,6 @@ if [ ! -f "$SANDBOX_ROOT/root/certs/ca.pem" ]; then
     exit 1
   fi
 fi
-
-# Every HTTPS client inside the sandbox talks to the local MITM proxy, whose
-# leaf certificates are signed by ca.pem. Keep the host roots in the same
-# bundle as well: tools that bypass proxy environment variables still need to
-# validate the real Internet. In particular, NODE_EXTRA_CA_CERTS must include
-# the sandbox CA; pointing it at real-ca.pem alone makes npm retry rejected
-# proxy TLS connections for about a minute and then surface the misleading
-# "Exit handler never called" crash.
-cat "$SANDBOX_ROOT/root/certs/real-ca.pem" \
-    "$SANDBOX_ROOT/root/certs/ca.pem" \
-    > "$SANDBOX_ROOT/root/certs/combined-ca.pem"
 GIT_UPLOAD_PACK="$(command -v git-upload-pack)"
 sed "s|@GIT_UPLOAD_PACK@|$GIT_UPLOAD_PACK|" "$SANDBOX_ASSETS/ssh-shim.sh" \
   > "$SANDBOX_ROOT/root/usr/bin/ssh"

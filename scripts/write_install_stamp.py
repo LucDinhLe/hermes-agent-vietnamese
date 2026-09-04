@@ -39,6 +39,8 @@ _REPO_ROOT = Path(__file__).parent.parent.resolve()
 # so these date tags cannot masquerade as the v0.x.y SemVer boundaries.
 _SEMVER_TAG_RE = re.compile(r"^v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
 _VI_RELEASE_TAG_RE = re.compile(r"^vi-v(0|[1-9]\d{0,2})\.(\d+)\.(\d+)-(0|[1-9]\d*)$")
+# Kênh composite (04/09/2026): tag lịch vYYYY.M.D[-thunghiem.N]
+_CALVER_RELEASE_TAG_RE = re.compile(r"^v\d{4}\.\d{1,2}\.\d{1,3}(?:-thunghiem\.\d{1,4})?$")
 _BUNDLED_RELEASE_CLASSES = {"community-prerelease", "stable"}
 _LEGACY_CALVER_TAG_RE = re.compile(r"^v20\d{2}\.\d+\.\d+(?:\.\d+)?$")
 
@@ -119,6 +121,19 @@ def _compute_distance(base_version: str | None, release_date: str | None) -> int
     return None
 
 
+def _read_engine_lock() -> dict | None:
+    lock_path = _REPO_ROOT / "engine.lock"
+    try:
+        data = json.loads(lock_path.read_text(encoding="utf-8"))
+        engine = data.get("engine") or {}
+        tag, commit, repo = engine.get("tag"), engine.get("commit"), engine.get("repository")
+        if isinstance(tag, str) and isinstance(commit, str) and isinstance(repo, str):
+            return {"tag": tag, "commit": commit, "repository": repo}
+    except (OSError, ValueError):
+        pass
+    return None
+
+
 def build_stamp(
     *,
     commit: str | None = None,
@@ -187,11 +202,11 @@ def build_stamp(
     update_channel = None
     update_feed_enabled = False
     if payload:
-        tag_match = tag and _VI_RELEASE_TAG_RE.fullmatch(tag)
+        tag_match = tag and (_VI_RELEASE_TAG_RE.fullmatch(tag) or _CALVER_RELEASE_TAG_RE.fullmatch(tag))
         if not tag_match:
             raise SystemExit(
                 "write_install_stamp: HERMES_DESKTOP_BUNDLED=1 requires "
-                f"HERMES_PAYLOAD_TAG=vi-vX.Y.Z-N (got {tag!r})"
+                f"HERMES_PAYLOAD_TAG=vi-vX.Y.Z-N or vYYYY.M.D[-thunghiem.N] (got {tag!r})"
             )
         if release_class not in _BUNDLED_RELEASE_CLASSES:
             raise SystemExit(
@@ -202,10 +217,14 @@ def build_stamp(
         # The packaged app and its updater use valid SemVer X.Y.Z-vi.N.
         # Keep About/version surfaces on that exact release identity instead
         # of the source checkout's unrelated X.Y.Z+distance display string.
-        display_version = (
-            f"{tag_match.group(1)}.{tag_match.group(2)}.{tag_match.group(3)}"
-            f"-vi.{tag_match.group(4)}"
-        )
+        if _CALVER_RELEASE_TAG_RE.fullmatch(tag):
+            # Kênh composite: phiên bản hiển thị = tag bỏ "v" (2026.9.3 hoặc 2026.9.3-thunghiem.N)
+            display_version = tag[1:]
+        else:
+            display_version = (
+                f"{tag_match.group(1)}.{tag_match.group(2)}.{tag_match.group(3)}"
+                f"-vi.{tag_match.group(4)}"
+            )
         update_feed_enabled = release_class == "stable"
         update_channel = "stable" if update_feed_enabled else "community-prerelease"
 
@@ -218,6 +237,9 @@ def build_stamp(
         "dirty": dirty,
         "source": source,
         "distribution": distribution,
+        # Kiến trúc composite: lõi Python là upstream nguyên bản ghim trong engine.lock.
+        # Bootstrap/repair của vỏ dùng trường này để clone đúng tag/commit upstream.
+        "engine": _read_engine_lock(),
         "baseVersion": base_version,
         "displayVersion": display_version,
         "distance": distance,

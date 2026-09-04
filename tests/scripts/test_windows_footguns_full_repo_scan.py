@@ -33,11 +33,7 @@ def test_full_repo_scan_has_no_unsuppressed_windows_footguns():
         [sys.executable, str(SCRIPT), "--all"],
         capture_output=True,
         text=True,
-        # The checker intentionally reads every tracked Python file. Under the
-        # canonical high-parallelism suite, filesystem bandwidth is shared by
-        # many test workers; keep this as a hang watchdog, not a 60-second
-        # performance assertion that can kill a healthy, still-progressing scan.
-        timeout=180,
+        timeout=60,
         stdin=subprocess.DEVNULL,
     )
     assert result.returncode == 0, (

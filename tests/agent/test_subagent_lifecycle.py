@@ -25,14 +25,18 @@ class FakeChild:
         self.model = "test-model"
         self.interrupted = False
         self.interrupt_kind = None
+        self.interrupt_message = None
+        self.tool_reason = None
 
     def interrupt(self, _reason):
         self.interrupted = True
         self.interrupt_kind = "soft"
 
-    def hard_interrupt(self, _reason):
+    def hard_interrupt(self, reason, *, tool_reason=None):
         self.interrupted = True
         self.interrupt_kind = "hard"
+        self.interrupt_message = reason
+        self.tool_reason = tool_reason
 
 
 @pytest.fixture
@@ -90,6 +94,8 @@ def test_cancel_uses_explicit_hard_interrupt(lifecycle):
     assert lifecycle.cancel(handle, reason="explicit user cancel").accepted
 
     assert record.agent.interrupt_kind == "hard"
+    assert "explicit user cancel" in record.agent.interrupt_message
+    assert record.agent.tool_reason == "subagent cancellation requested"
     lifecycle.wait(handle, timeout_seconds=1)
 
 
@@ -169,11 +175,6 @@ def test_agent_turn_binds_and_clears_lifecycle_parent(monkeypatch):
 
     monkeypatch.setattr("agent.conversation_loop.run_conversation", run_conversation)
 
-    result = agent.run_conversation("hello")
-
-    assert result["final_response"] == "ok"
-    assert result["turn_budget"]["model_calls"] == 0
-    assert result["turn_budget"]["tool_calls"] == 0
-    assert result["turn_budget"]["paused"] is False
+    assert agent.run_conversation("hello") == {"final_response": "ok"}
     assert observed == [agent]
     assert get_active_subagent_parent() is None

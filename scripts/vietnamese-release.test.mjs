@@ -24,9 +24,27 @@ test('Vietnamese release tags map to deterministic Electron SemVer', () => {
     tag: 'vi-v0.20.0-15',
     baseVersion: '0.20.0',
     iteration: 15,
+    calver: false,
+    channel: 'legacy',
     appVersion: '0.20.0-vi.15'
   })
   assert.throws(() => parseVietnameseReleaseTag('v0.20.0'), /vi-vX.Y.Z-N/)
+})
+
+test('calver tags (composite channel) keep the version string and pick the channel from the suffix', () => {
+  assert.deepEqual(parseVietnameseReleaseTag('v2026.9.3-thunghiem.1'), {
+    tag: 'v2026.9.3-thunghiem.1',
+    baseVersion: '2026.9.3',
+    iteration: 1,
+    calver: true,
+    channel: 'thunghiem',
+    appVersion: '2026.9.3-thunghiem.1'
+  })
+  assert.equal(parseVietnameseReleaseTag('v2026.9.3').channel, 'latest')
+  assert.equal(parseVietnameseReleaseTag('v2026.9.3').appVersion, '2026.9.3')
+  assert.throws(() => parseVietnameseReleaseTag('v2026.9.3-beta.1'))
+  // calver không bị khoá theo technicalVersion legacy của product-metadata
+  assert.equal(resolveVietnameseReleaseCandidate('v2026.9.3-thunghiem.1').appVersion, '2026.9.3-thunghiem.1')
 })
 
 test('legacy source descriptor resolves its own candidate independently of current public Latest', () => {

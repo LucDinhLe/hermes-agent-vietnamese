@@ -60,11 +60,7 @@ def test_blueprint_instantiate_create_job_off_loop(monkeypatch, loop_probe):
 
     def fake_call(profile, fn, *args, **kwargs):
         probe("call")
-        return {
-            "id": "bp-job-1",
-            "kwargs_seen": sorted(kwargs.keys()),
-            "name_seen": kwargs.get("name"),
-        }
+        return {"id": "bp-job-1", "kwargs_seen": sorted(kwargs.keys())}
 
     monkeypatch.setattr(web_server, "_call_cron_for_profile", fake_call)
     monkeypatch.setattr(web_server, "_has_valid_session_token", lambda req: True)
@@ -80,17 +76,12 @@ def test_blueprint_instantiate_create_job_off_loop(monkeypatch, loop_probe):
     client = TestClient(web_server.app)
     resp = client.post(
         "/api/cron/blueprints/instantiate",
-        json={
-            "blueprint": "morning-brief",
-            "name": "Bản tin buổi sáng",
-            "values": {},
-        },
+        json={"blueprint": "morning-brief", "values": {}},
     )
     assert resp.status_code == 200
     body = resp.json()
     # **spec kwargs must arrive at create_job intact through the partial.
     assert body["kwargs_seen"] == ["name", "prompt", "schedule"]
-    assert body["name_seen"] == "Bản tin buổi sáng"
     assert ("call", False) in seen, (
         f"_call_cron_for_profile must run off the event loop; proof: {seen}"
     )

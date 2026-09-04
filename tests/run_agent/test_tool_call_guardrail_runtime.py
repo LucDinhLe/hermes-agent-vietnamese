@@ -2,7 +2,6 @@
 
 import json
 import uuid
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -43,7 +42,6 @@ def _make_agent(*tool_names: str, max_iterations: int = 10, config: dict | None 
         patch("run_agent.check_toolset_requirements", return_value={}),
         patch("hermes_cli.config.load_config", return_value=config or {}),
         patch("hermes_cli.config.load_config_readonly", return_value=config or {}),
-        patch("tools.tool_search.resolve_session_tool_profile", return_value="full"),
         patch("run_agent.OpenAI"),
     ):
         agent = AIAgent(
@@ -295,7 +293,7 @@ def test_relay_rewrite_precedes_sequential_policy_approval_checkpoint_and_dispat
     assert observed["start"] == expected
     assert observed["dispatch"] == expected
     assert observed["checkpoint"] == [
-        (str(Path("/approved/path")), "before write_file")
+        ("/approved/path", "before write_file")
     ]
 
 

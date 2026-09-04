@@ -58,9 +58,7 @@ class TestZombieReproduction:
         finally:
             for pid in pids:
                 try:
-                    # Windows exposes SIGTERM but not SIGKILL. Either signal
-                    # is sufficient for this test's best-effort cleanup.
-                    os.kill(pid, getattr(signal, "SIGKILL", signal.SIGTERM))
+                    os.kill(pid, signal.SIGKILL)
                 except (ProcessLookupError, PermissionError):
                     pass
 
@@ -475,39 +473,6 @@ class TestDelegationCleanup:
         relay_host = MagicMock()
         monkeypatch.setattr(relay_runtime, "get_runtime", lambda **_kwargs: relay_host)
         monkeypatch.setattr("tools.delegate_tool._get_child_timeout", lambda: 0.1)
-
-        class _StartedThenTimeoutFuture:
-            def __init__(self, fn, args):
-                self._thread = threading.Thread(
-                    target=fn,
-                    args=args,
-                    daemon=True,
-                )
-                self._thread.start()
-
-            def result(self, timeout=None):
-                from concurrent.futures import TimeoutError as FuturesTimeoutError
-
-                # This regression is specifically about a timeout after the
-                # relay turn owns its session. Synchronize that boundary
-                # directly instead of assuming a worker starts within 100 ms.
-                assert child_started.wait(timeout=30)
-                raise FuturesTimeoutError()
-
-        class _StartedThenTimeoutExecutor:
-            def __init__(self, **_kwargs):
-                pass
-
-            def submit(self, fn, *args):
-                return _StartedThenTimeoutFuture(fn, args)
-
-            def shutdown(self, wait=False):
-                pass
-
-        monkeypatch.setattr(
-            "tools.daemon_pool.DaemonThreadPoolExecutor",
-            _StartedThenTimeoutExecutor,
-        )
 
         def run_conversation(**kwargs):
             lease = relay_runtime.SESSION_COORDINATOR.acquire_conversation(

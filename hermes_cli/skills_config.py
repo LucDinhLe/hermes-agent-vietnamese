@@ -52,40 +52,28 @@ def get_disabled_skills(config: dict, platform: Optional[str] = None) -> Set[str
     skills_cfg = config.get("skills") or {}
     if not isinstance(skills_cfg, dict):
         return set()
+    from agent.skill_utils import ESSENTIAL_SKILLS
     global_disabled = _normalize_skill_names(skills_cfg.get("disabled"))
     if platform is None:
-        return global_disabled
+        return global_disabled - ESSENTIAL_SKILLS
     platform_disabled = cfg_get(skills_cfg, "platform_disabled", platform)
     if platform_disabled is None:
-        return global_disabled
-    return global_disabled | _normalize_skill_names(platform_disabled)
+        return global_disabled - ESSENTIAL_SKILLS
+    return (
+        global_disabled | _normalize_skill_names(platform_disabled)
+    ) - ESSENTIAL_SKILLS
 
 
 def save_disabled_skills(config: dict, disabled: Set[str], platform: Optional[str] = None):
-    """Persist disabled names and keep a completed work-profile allowlist aligned.
+    """Persist disabled skill names to config.
 
-    The global toggle surface predates capability profiles.  For a completed
-    work profile, a manual global disable also revokes the skill from
-    ``skills.allowed`` and a manual re-enable adds it back.  Platform-specific
-    overrides do not change the profile-wide permission warehouse.  Legacy
-    profiles without a completed work profile retain the old disabled-only
-    behavior.
+    Essential skills (e.g. ``hermes-agent``) are silently dropped from the
+    list — they cannot be disabled from any surface.
     """
+    from agent.skill_utils import ESSENTIAL_SKILLS
+    disabled = set(disabled) - ESSENTIAL_SKILLS
     config.setdefault("skills", {})
     if platform is None:
-        skills_cfg = config["skills"]
-        previous_disabled = _normalize_skill_names(skills_cfg.get("disabled"))
-        work_profile = skills_cfg.get("work_profile")
-        allowed_value = skills_cfg.get("allowed")
-        if (
-            isinstance(work_profile, dict)
-            and work_profile.get("completed") is True
-            and isinstance(allowed_value, (list, tuple, set, frozenset))
-        ):
-            allowed = _normalize_skill_names(allowed_value)
-            newly_disabled = set(disabled) - previous_disabled
-            newly_enabled = previous_disabled - set(disabled)
-            skills_cfg["allowed"] = sorted((allowed - newly_disabled) | newly_enabled)
         config["skills"]["disabled"] = sorted(disabled)
     else:
         config["skills"].setdefault("platform_disabled", {})

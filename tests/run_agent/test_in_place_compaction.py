@@ -123,7 +123,6 @@ class TestInPlaceCompaction:
             assert agent._last_compaction_in_place is True
             # Live transcript actually shrank.
             assert len(compressed) == 2
-            db.close()
 
     def test_in_place_alternation_preserved(self):
         """The compacted list must not introduce consecutive same-role messages."""
@@ -141,7 +140,6 @@ class TestInPlaceCompaction:
             )
             roles = [m["role"] for m in compressed if m.get("role") != "system"]
             assert all(roles[i] != roles[i + 1] for i in range(len(roles) - 1))
-            db.close()
 
 
     def test_rotation_still_preflushes(self):
@@ -163,7 +161,6 @@ class TestInPlaceCompaction:
                 approx_tokens=100_000, system_message="sys",
             )
             assert calls["n"] == 1
-            db.close()
 
 
 class TestRotationFallbackWhenFlagOff:
@@ -208,7 +205,6 @@ class TestRotationFallbackWhenFlagOff:
             ]
             # Rotation mode does NOT set the in-place signal.
             assert getattr(agent, "_last_compaction_in_place", False) is False
-            db.close()
 
 
 class TestInPlaceSignalForGateway:
@@ -238,7 +234,6 @@ class TestInPlaceSignalForGateway:
                 approx_tokens=100_000, system_message="sys",
             )
             assert a_rot._last_compaction_in_place is False
-            db.close()
 
 
 class TestInPlaceConfigDefault:
@@ -297,7 +292,62 @@ class TestInPlaceAntiGrowthGuard:
             # Session identity untouched.
             assert agent.session_id == sid
             assert db.get_session(sid)["end_reason"] is None
-            db.close()
+
+    def test_in_place_salvages_near_break_even_growth(self):
+        """Fat retained tool output + todo state should be salvaged and committed."""
+        from hermes_state import SessionDB
+        from agent.conversation_compression import compress_context
+        from agent.model_metadata import estimate_messages_tokens_rough
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = SessionDB(db_path=Path(tmp) / "t.db")
+            sid = "20260819_salvage"
+            _seed(db, sid, "salvage")
+            agent = _make_agent(db, sid, in_place=True)
+            agent._last_flushed_db_idx = 5
+
+            tool_calls = [
+                {"id": call_id, "function": {"name": "terminal", "arguments": "{}"}}
+                for call_id in ("c1", "c2", "c3")
+            ]
+            original = [
+                {"role": "user", "content": "do the work"},
+                {"role": "assistant", "content": "calling tools", "tool_calls": tool_calls},
+                {"role": "tool", "tool_call_id": "c1", "content": "OLD1 " + ("x" * 8000)},
+                {"role": "tool", "tool_call_id": "c2", "content": "OLD2 " + ("y" * 8000)},
+                {"role": "tool", "tool_call_id": "c3", "content": "keep-me " + ("z" * 100)},
+                {"role": "user", "content": "thanks"},
+            ]
+            grown = [
+                {"role": "user", "content": "[CONTEXT COMPACTION] " + ("S" * 200)},
+                {"role": "assistant", "content": "calling tools", "tool_calls": tool_calls},
+                {"role": "tool", "tool_call_id": "c1", "content": "OLD1 " + ("x" * 8000)},
+                {"role": "tool", "tool_call_id": "c2", "content": "OLD2 " + ("y" * 8000)},
+                {"role": "tool", "tool_call_id": "c3", "content": "keep-me " + ("z" * 100)},
+                {
+                    "role": "user",
+                    "content": "Current todos:\n- [ ] leftover",
+                    "_todo_snapshot_synthetic": True,
+                },
+            ]
+            assert estimate_messages_tokens_rough(grown) > estimate_messages_tokens_rough(original)
+            compressor = getattr(agent, "context_compressor")
+            compressor.compress = (
+                lambda messages, current_tokens=None, focus_topic=None, force=False: grown
+            )
+
+            compressed, _sp = compress_context(
+                agent, original, approx_tokens=100_000, system_message="sys"
+            )
+
+            assert getattr(agent, "_last_compaction_in_place") is True
+            assert estimate_messages_tokens_rough(compressed) < estimate_messages_tokens_rough(original)
+            tool_bodies = [m.get("content") for m in compressed if m.get("role") == "tool"]
+            assert any(isinstance(body, str) and body.startswith("keep-me") for body in tool_bodies)
+            assert any("cleared to save context space" in (body or "") for body in tool_bodies)
+            # Tool stubbing alone got under budget, so the todo snapshot (the
+            # only in-transcript todo re-injection) survives the salvage.
+            assert any(m.get("_todo_snapshot_synthetic") for m in compressed)
 
     def test_in_place_still_commits_shrinking_compression(self):
         """The guard must not block legitimate compressions — a result SMALLER
@@ -324,7 +374,6 @@ class TestInPlaceAntiGrowthGuard:
                 "[CONTEXT COMPACTION] summary of prior turns",
                 "recent reply",
             ]
-            db.close()
 
 
 class TestCompactedTurnsStaySearchable:
@@ -368,7 +417,6 @@ class TestCompactedTurnsStaySearchable:
             assert {m["id"] for m in after} == {1, 4}
             # Live context still excludes them.
             assert len(db.get_messages_as_conversation(sid)) == 2
-            db.close()
 
     def test_rewound_turns_stay_hidden(self):
         """Rewind/undo (active=0, compacted=0) must NOT leak into default
@@ -388,4 +436,3 @@ class TestCompactedTurnsStaySearchable:
                 "ZEBRAWORD", role_filter=["user", "assistant"], include_inactive=True
             )
             assert len(recovered) == 1
-            db.close()

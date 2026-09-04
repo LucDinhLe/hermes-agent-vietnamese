@@ -27,13 +27,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LucDinhLe/hermes-agent-vietnamese.git"
+    "url": "git+https://github.com/NousResearch/Hermes-Agent.git"
   },
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/LucDinhLe/hermes-agent-vietnamese/issues"
+    "url": "https://github.com/NousResearch/Hermes-Agent/issues"
   },
-  "homepage": "https://github.com/LucDinhLe/hermes-agent-vietnamese#readme",
+  "homepage": "https://github.com/NousResearch/Hermes-Agent#readme",
   "devDependencies": {
     "@eslint/js": "9.39.5",
     "typescript-eslint": "8.64.0",
@@ -59,7 +59,7 @@
     "tar": "7.5.22"
   },
   "engines": {
-    "node": ">=26.0.0",
+    "node": "^22.22.0 || ^24.11.0 || >=26.0.0",
     "npm": "<11.10.0 || >=11.17.0"
   },
   "allowScripts": {
@@ -67,7 +67,7 @@
     "esbuild@0.28.1": true,
     "node-pty@1.1.0": true,
     "electron-winstaller@5.4.0": true,
-    "electron@42.8.0": true,
+    "electron@40.10.2": true,
     "fsevents@2.3.2": true,
     "fsevents@2.3.3": true,
     "get-windows@9.3.0": true

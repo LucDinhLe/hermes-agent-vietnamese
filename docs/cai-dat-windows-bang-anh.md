@@ -19,7 +19,7 @@ Latest là [2026.9.2](https://github.com/LucDinhLe/hermes-agent-vietnamese/relea
 2. Tên tương thích [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/Hermes-Vietnamese-Windows-x64-Setup.exe) có cùng nội dung. Chỉ chạy một tệp.
 3. Đối chiếu [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.2/SHA256SUMS.txt) của cùng bản phát hành.
 
-Hai bộ cài có kích thước **252118156 byte**, SHA-256 `1ae55b4a3280e92d4a297f85d81cbb6bcc0a19170da8d9122755d19f40c43015`. Cập nhật thủ công, không có cập nhật tự động nền.
+Hai bộ cài có kích thước **252118156 byte**, SHA-256 `1ae55b4a3280e92d4a297f85d81cbb6bcc0a19170da8d9122755d19f40c43015`. Cập nhật thủ công bằng bộ cài đầy đủ, không có cập nhật tự động nền.
 <!-- current-release:end -->
 
 Ảnh bên dưới minh họa cảnh báo Edge từ bản cũ; tên tệp trong ảnh có thể khác 2026.9.2. Dùng tên và mã kiểm tra phía trên làm chuẩn. Bản này chưa có bộ cài ARM64.
@@ -68,6 +68,8 @@ Chỉ tiếp tục khi nguồn tải, tên tệp và SHA-256 đúng như phần 
    - **Google Gemini:** nhập khóa API tạo tại Google AI Studio.
    - **Nhà cung cấp khác:** nhập tài khoản, API key hoặc endpoint tương ứng.
 4. Chọn model, tạo phiên đầu tiên và giao một việc thử không quan trọng.
+
+Nếu máy đã có bản Hermes cũ, bộ cài này cài song song chứ không ghi đè. Lần mở đầu tiên, nếu tìm thấy dữ liệu Hermes cũ, ứng dụng sẽ hỏi trước khi sao chép (không xóa) cấu hình và lịch sử sang; bản cũ vẫn còn nguyên để quay lại nếu cần.
 
 Nếu chưa có tài khoản hoặc khóa API, chọn **Tôi sẽ chọn nhà cung cấp sau**. Sau đó mở **Cài đặt → Model/Nhà cung cấp** để kết nối. Bộ cài không kèm tài khoản model, API key hoặc hạn mức trả phí.
 

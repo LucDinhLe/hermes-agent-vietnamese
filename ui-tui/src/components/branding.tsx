@@ -378,9 +378,7 @@ export function SessionPanel({ info, maxWidth, sid, t }: SessionPanelProps) {
           <Text bold color={t.color.primary}>
             {t.brand.name}
             {info.version ? ` v${info.version}` : ''}
-            {info.version_branch ? ` · ${info.version_branch}` : ''}
-            {info.version_commit ? ` · ${info.version_commit.slice(0, 8)}` : ''}
-            {info.version_dirty ? ' · dirty' : ''}
+            {info.release_date ? ` (${info.release_date})` : ''}
           </Text>
         </Box>
       ) : (

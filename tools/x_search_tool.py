@@ -365,13 +365,6 @@ def x_search_tool(
         response: Optional[requests.Response] = None
         for attempt in range(max_retries + 1):
             try:
-                # This tool talks to the model-backed Responses API directly,
-                # bypassing Hermes' central chat transports. Reserve every
-                # physical attempt (including manual retries) at the last
-                # possible point before network I/O.
-                from agent.aux_accounting import reserve_aux_model_attempt
-
-                reserve_aux_model_attempt("x_search")
                 response = requests.post(
                     f"{base_url}/responses",
                     headers={
@@ -481,13 +474,6 @@ def x_search_tool(
             ensure_ascii=False,
         )
     except Exception as e:
-        # The canonical turn-budget signal must reach the conversation loop;
-        # converting it to an ordinary tool error would postpone the pause
-        # until another model attempt is made.
-        from agent.turn_budget import TurnBudgetExceeded
-
-        if isinstance(e, TurnBudgetExceeded):
-            raise
         logger.error("x_search failed: %s", e, exc_info=True)
         return json.dumps(
             {

@@ -57,15 +57,13 @@ READ_PREVIEW_SCHEMA = {
         "Read what's currently shown in the in-app browser / preview pane of the "
         "Hermes desktop GUI (the pane open_preview opens beside this chat). Call "
         "with no arguments for the first window of the active tab's content. "
-        "Returns JSON {kind, url, title, text, elements?, start, end, total_chars, note?}. "
-        "For a live URL, elements contains visible interactive controls as "
-        "{ref, role, name, disabled}; pass those refs to interact_preview. "
-        "A URL (Browser) tab's text is the rendered page's visible text — page "
+        "Returns JSON {kind, url, title, text, start, end, total_chars, note?}: "
+        "a URL (Browser) tab's text is the rendered page's visible text — page "
         "through longer pages with `start`/`count` (character offsets, capped "
         "per read); a file tab answers identity only (read the file with "
         "read_file); an artifact tab points back at the conversation. Use after "
         "open_preview, or whenever the user refers to what's on screen in the "
-        "browser ('what does this page say?')."
+        "browser ('what does this page say?'). To close the pane, use close_preview."
     ),
     "parameters": {
         "type": "object",
@@ -83,14 +81,5 @@ READ_PREVIEW_SCHEMA = {
 }
 
 
-registry.register(
-    name="read_preview",
-    toolset="desktop_ui",
-    schema=READ_PREVIEW_SCHEMA,
-    handler=lambda args, **kw: read_preview_tool(
-        start=args.get("start"),
-        count=args.get("count"),
-        callback=kw.get("callback"),
-    ),
-    emoji="🔍",
-)
+# Registration removed: consolidated into the `preview` tool (#95681);
+# this module keeps its functions for the agent-level preview action=read dispatch.

@@ -10,7 +10,7 @@ import random
 
 TIPS = [
     # --- Slash Commands ---
-    "/background <prompt> (alias /bg or /btw) runs a task in a separate session while your current one stays free.",
+    "/bg <prompt> runs a task in a separate session while your current one stays free; /btw <question> answers a side question about this conversation without interrupting it.",
     "/branch forks the current session so you can explore a different direction without losing progress.",
     "/compress manually compresses conversation context when things get long.",
     "/rollback lists filesystem checkpoints — restore files the agent modified to any prior state.",
@@ -69,7 +69,7 @@ TIPS = [
     "hermes chat -t web,terminal enables only specific toolsets for a focused session.",
     "hermes chat -s github-pr-workflow preloads a skill at launch.",
     "hermes chat -q \"query\" runs a single non-interactive query and exits.",
-    "hermes chat --max-turns 100 overrides the default 50-iteration failsafe per turn.",
+    "hermes chat --max-turns 1000 overrides the default 500-iteration limit per turn.",
     "hermes chat --checkpoints enables filesystem snapshots before every destructive file change.",
     "hermes --yolo bypasses all dangerous command approval prompts for the entire session.",
     "hermes chat --source telegram tags the session for filtering in hermes sessions list.",
@@ -112,7 +112,7 @@ TIPS = [
     "Set display.busy_input_mode: queue to queue messages instead of interrupting the agent, or steer to inject them mid-run via /steer.",
     "Set display.resume_display: minimal to skip the full conversation recap on session resume.",
     "Set compression.threshold: 0.50 to control when auto-compression fires (default: 50% of context).",
-    "Set agent.max_turns: 100 to raise the legacy loop failsafe; the per-turn Governor remains authoritative.",
+    "Set agent.max_turns: 1000 to let the agent take more tool-calling steps per turn.",
     "Set file_read_max_chars: 200000 to increase the max content per read_file call.",
     "Set approvals.mode: smart to let an LLM auto-approve safe commands and auto-deny dangerous ones.",
     "Set fallback_model in config.yaml to automatically fail over to a backup provider.",
@@ -175,7 +175,7 @@ TIPS = [
     "Skills can restrict to specific OS platforms — some only load on macOS or Linux.",
     "skills.external_dirs in config.yaml lets you load skills from custom directories.",
     "The agent can create its own skills as procedural memory using skill_manage.",
-    "The plan skill saves markdown plans under .hermes/plans/ in the active workspace.",
+    "/plan writes a markdown implementation plan to .hermes/plans/ without executing anything.",
 
     # --- Cron & Scheduling ---
     "Cron jobs can attach skills: hermes cron add --skill blogwatcher \"Check for new posts\".",
@@ -483,3 +483,30 @@ def get_random_tip(exclude_recent: int = 0) -> str:
             deduplication across sessions.
     """
     return random.choice(TIPS)
+
+
+# ---------------------------------------------------------------------------
+# Composer placeholders — short, task-oriented example prompts shown in the
+# empty input box to nudge new users toward high-value first actions (C-09,
+# inspired by opencode/codex rotating placeholders). Kept generic so they fit
+# any project or none — Hermes is not a coding-only agent.
+# ---------------------------------------------------------------------------
+
+COMPOSER_PLACEHOLDERS = [
+    "Ask anything, or type / for commands…",
+    "Summarize what's in this folder",
+    "Draft a reply to the last email in my inbox",
+    "Plan a feature, then build it step by step",
+    "Find and fix a failing test",
+    "Research this topic and write me a brief",
+    "What changed in this repo recently?",
+    "Turn these notes into a to-do list",
+    "Explain this error and how to fix it",
+    "Set a reminder or schedule a recurring task",
+    "Type / to browse commands, or Ctrl+P for the palette",
+]
+
+
+def get_random_composer_placeholder() -> str:
+    """Return a rotating task-oriented placeholder for the empty composer."""
+    return random.choice(COMPOSER_PLACEHOLDERS)

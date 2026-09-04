@@ -99,7 +99,6 @@ class TestFlushAfterCompression:
                 f"Expected 5 compressed messages in new session, got {len(new_rows)}. "
                 f"Compression persistence bug: messages not written to SQLite."
             )
-            db.close()
 
     def test_flush_with_stale_history_loses_messages(self):
         """Stale conversation_history no longer causes data loss."""
@@ -129,7 +128,6 @@ class TestFlushAfterCompression:
             rows = db.get_messages("new-session")
             assert len(rows) == 2
             assert [row["content"] for row in rows] == ["summary", "continuing..."]
-            db.close()
 
     def test_in_place_compression_rebaseline_prevents_duplicate_compacted_rows(self):
         """In-place compaction already persisted the compacted transcript.
@@ -192,7 +190,6 @@ class TestFlushAfterCompression:
                 "tool result",
                 "final answer",
             ]
-            db.close()
 
     def test_abort_after_in_place_compaction_preserves_flush_baseline(self):
         """An aborted retry must survive flush, restart, and resume."""
@@ -302,11 +299,14 @@ class TestFlushAfterCompression:
             # The transcript must also be large enough that the provider-less
             # static fallback net-shrinks it (middle drops must outweigh the
             # fixed compaction marker overhead), or the no-growth commit guard
-            # correctly refuses the rotation this test exercises.
+            # correctly refuses the rotation this test exercises. Sized for
+            # the lean tail default: the 10K-token tail floor must leave a
+            # substantial compressible middle (~2K chars/message × 40 ≈ 20K
+            # estimated tokens total).
             messages = [
                 {
                     "role": "user" if i % 2 == 0 else "assistant",
-                    "content": f"message {i} " + "x" * 200,
+                    "content": f"message {i} " + "x" * 2000,
                     "_db_persisted": True,
                 }
                 for i in range(40)
@@ -417,10 +417,7 @@ class TestStoredPromptCwdDrift:
             "Provider: openrouter\n"
         )
 
-        with patch(
-            "agent.conversation_loop.resolve_agent_cwd",
-            return_value="/project/new",
-        ):
+        with patch("os.getcwd", return_value="/project/new"):
             assert _stored_prompt_matches_runtime(agent, stored_prompt) is False, (
                 "Expected False when stored cwd differs from current cwd"
             )
@@ -438,10 +435,7 @@ class TestStoredPromptCwdDrift:
             "Provider: openrouter\n"
         )
 
-        with patch(
-            "agent.conversation_loop.resolve_agent_cwd",
-            return_value=current_cwd,
-        ):
+        with patch("os.getcwd", return_value=current_cwd):
             assert _stored_prompt_matches_runtime(agent, stored_prompt) is True, (
                 "Expected True when stored cwd matches current cwd"
             )
@@ -473,10 +467,7 @@ class TestStoredPromptCwdDrift:
             "Provider: openrouter\n"
         )
 
-        with patch(
-            "agent.conversation_loop.resolve_agent_cwd",
-            return_value=current_cwd,
-        ):
+        with patch("os.getcwd", return_value=current_cwd):
             assert _stored_prompt_matches_runtime(agent, stored_prompt) is True, (
                 "A project file that merely MENTIONS 'Current working "
                 "directory:' must not invalidate the prompt — that would "
@@ -502,10 +493,7 @@ class TestStoredPromptCwdDrift:
             "Provider: openrouter\n"
         )
 
-        with patch(
-            "agent.conversation_loop.resolve_agent_cwd",
-            return_value="/project/new",
-        ):
+        with patch("os.getcwd", return_value="/project/new"):
             assert _stored_prompt_matches_runtime(agent, stored_prompt) is False, (
                 "Embedded project text naming the new cwd must not mask real "
                 "drift in the host-info block"
@@ -543,4 +531,3 @@ class TestStoredPromptCwdDrift:
             assert "Platform: cli" in parts["volatile"], (
                 "Built prompt missing 'Platform: cli' — drift detection cannot read it"
             )
-            db.close()

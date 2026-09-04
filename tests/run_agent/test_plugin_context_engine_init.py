@@ -100,15 +100,11 @@ def test_active_context_engine_tools_survive_explicit_platform_toolsets():
             skip_memory=True,
         )
 
-    # Lean sessions defer injected context-engine tools to the on-demand
-    # bridge, but the frozen raw catalog must still retain the capability.
+    assert "stub_recover" in getattr(agent, "valid_tool_names", set())
     assert "stub_recover" in {
         tool.get("function", {}).get("name")
-        for tool in getattr(agent, "_tool_search_catalog_defs", [])
+        for tool in getattr(agent, "tools", [])
     }
-    assert {"tool_search", "tool_describe", "tool_call"} <= getattr(
-        agent, "valid_tool_names", set()
-    )
 
 
 def test_plugin_engine_update_model_args():

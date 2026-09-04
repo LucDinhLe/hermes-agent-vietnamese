@@ -31,15 +31,7 @@ import {
 import nodePty from 'node-pty'
 
 import { classifyActiveRuntime, shouldRefreshManagedRuntime } from './active-runtime-state'
-import {
-  applyAppUpdate,
-  checkAppUpdate,
-  COMMUNITY_RELEASES_API_URL,
-  decideDesktopUpdateRoute,
-  type DesktopUpdateRoute,
-  dispatchDesktopUpdateRoute,
-  selectInstallStampCandidates
-} from './app-updater'
+import { decideDesktopUpdateRoute, type DesktopUpdateRoute, selectInstallStampCandidates } from './app-updater'
 import { stopBackendChild as stopBackendChildImpl, stopBackendTreesForUpdate } from './backend-child'
 import { dashboardFallbackArgs, sourceDeclaresServe } from './backend-command'
 import { createBackendConnectionState } from './backend-connection-state'
@@ -204,6 +196,7 @@ import {
   switchBranch
 } from './git-worktree-ops'
 import { clearStaleGitLocks } from './gitlock'
+import { GoogleBridge } from './google-bridge'
 import { readAndConsumeHandoffResult } from './handoff-result'
 import {
   ATTACHMENT_UPLOAD_DEFAULT_MAX_BYTES,
@@ -228,6 +221,13 @@ import { snapHudBounds } from './hud-snap'
 import { createHudSnapShortcut } from './hud-snap-shortcut'
 import { buildHudWindowUrl } from './hud-url'
 import { imageContextMenuItems } from './image-context-menu'
+import {
+  findLegacyImportSource,
+  legacyHermesHomeCandidates,
+  planLegacyImport,
+  runLegacyImport,
+  writeLegacyImportMarker
+} from './legacy-import'
 import { createLinkTitleWindow, guardLinkTitleSession, readLinkTitleWindowTitle } from './link-title-window'
 import { ensureMainWindow } from './main-window-lifecycle'
 import { createMediaProtocolHandler, MEDIA_PROTOCOL } from './media-protocol'
@@ -286,6 +286,7 @@ import {
 } from './profile-session-routing'
 import { createQuickEntryShortcut, quickEntryWindowBounds, sanitizeQuickEntrySettings } from './quick-entry'
 import { type ActiveWork, mergeActiveWork, normalizeActiveWork, quitPromptFor } from './quit-guard'
+import { checkReleaseNotice, type ReleaseNotice } from './release-notice'
 import * as remoteLifecycle from './remote-lifecycle'
 import {
   RemoteLivenessTracker,
@@ -708,24 +709,29 @@ if (INSTALL_STAMP) {
   )
 }
 
-// HERMES_HOME — the user-facing root for everything Hermes-related. Mirrors
-// scripts/install.ps1's $HermesHome and scripts/install.sh's $HERMES_HOME.
+// HERMES_HOME — thư mục dữ liệu của Hermes Vietnamese (bản composite, cài cạnh).
 //
-// Defaults:
-//   Windows: %LOCALAPPDATA%\hermes (matches install.ps1)
-//   macOS / Linux: ~/.hermes (matches install.sh)
+// Mặc định:
+//   Windows: %LOCALAPPDATA%\hermes-vietnamese
+//   macOS / Linux: ~/.hermes-vietnamese
+// Ghi đè: HERMES_VI_HOME (env hoặc registry User trên Windows).
 //
-// Special case for Windows: if the user has a legacy ~/.hermes directory
-// (e.g., from a prior pip install or a manual setup) AND no
-// %LOCALAPPDATA%\hermes yet, prefer the legacy path so we don't orphan their
-// existing config / sessions / .env. New installs go to %LOCALAPPDATA%.
+// Không đọc HERMES_HOME và không dùng lại ~/.hermes hay %LOCALAPPDATA%\hermes
+// của bản Hermes cũ: dữ liệu cũ được giữ nguyên để người dùng quay lui; việc
+// nhập dữ liệu từ bản cũ là một bước tường minh (kế hoạch composite, bước 7).
 //
-// HERMES_DESKTOP_USER_DATA_DIR (used by test:desktop:fresh) puts the sandbox
-// HERMES_HOME beneath the throwaway userData dir so a fresh-install run never
-// touches the user's real ~/.hermes / %LOCALAPPDATA%\hermes.
+// HERMES_DESKTOP_USER_DATA_DIR (test:desktop:fresh) đặt HERMES_HOME sandbox
+// dưới userData tạm để lần chạy fresh-install không đụng dữ liệu thật.
+const HERMES_VI_HOME_DIR_WINDOWS = 'hermes-vietnamese'
+const HERMES_VI_HOME_DIR_POSIX = '.hermes-vietnamese'
+
 function resolveHermesHome() {
-  if (process.env.HERMES_HOME) {
-    return normalizeHermesHomeRoot(process.env.HERMES_HOME)
+  // Hermes Vietnamese dùng thư mục dữ liệu riêng và biến ghi đè riêng
+  // (HERMES_VI_HOME) để cài cạnh Hermes gốc/bản cũ mà không đụng dữ liệu của
+  // chúng. HERMES_HOME của bản cũ cố ý KHÔNG được đọc ở đây; backend con vẫn
+  // nhận HERMES_HOME = giá trị đã giải quyết (bootstrap-runner.ts).
+  if (process.env.HERMES_VI_HOME) {
+    return normalizeHermesHomeRoot(process.env.HERMES_VI_HOME)
   }
 
   if (USER_DATA_OVERRIDE) {
@@ -733,13 +739,9 @@ function resolveHermesHome() {
   }
 
   if (IS_WINDOWS) {
-    // A GUI app launched from Explorer inherits the environment block captured
-    // at login, so a HERMES_HOME set via `setx` AFTER login is invisible in
-    // process.env even though the CLI (a fresh shell) sees it. Without this the
-    // backend silently falls back to %LOCALAPPDATA%\hermes and reports "No
-    // inference provider configured" despite a valid configured home (#45471).
-    // Consult the live User-scoped registry value before the default below.
-    const fromRegistry = readWindowsUserEnvVar('HERMES_HOME')
+    // GUI app kế thừa môi trường lúc đăng nhập, nên đọc thêm registry User
+    // (xem #45471) — nhưng chỉ khoá HERMES_VI_HOME.
+    const fromRegistry = readWindowsUserEnvVar('HERMES_VI_HOME')
 
     if (fromRegistry) {
       return normalizeHermesHomeRoot(fromRegistry)
@@ -747,22 +749,94 @@ function resolveHermesHome() {
   }
 
   if (IS_WINDOWS && process.env.LOCALAPPDATA) {
-    const localappdata = path.join(process.env.LOCALAPPDATA, 'hermes')
-    const legacy = path.join(app.getPath('home'), '.hermes')
-
-    // Migrate transparently to LOCALAPPDATA, but honour an existing legacy
-    // ~/.hermes setup (no LOCALAPPDATA install yet) so users don't lose state.
-    if (!directoryExists(localappdata) && directoryExists(legacy)) {
-      return legacy
-    }
-
-    return localappdata
+    return path.join(process.env.LOCALAPPDATA, HERMES_VI_HOME_DIR_WINDOWS)
   }
 
-  return path.join(app.getPath('home'), '.hermes')
+  return path.join(app.getPath('home'), HERMES_VI_HOME_DIR_POSIX)
 }
 
 const HERMES_HOME = resolveHermesHome()
+
+// ── Cầu nối tài khoản Google (vỏ, không sửa lõi) ────────────────────────────
+// TẠM TẮT trong 2026.9.3: Google chỉ mở cửa Gemini theo tài khoản cho những tài khoản đủ
+// điều kiện "Gemini Code Assist for individuals"; tài khoản không đủ điều kiện nhận 403 nên
+// tính năng chưa dùng được cho người dùng phổ thông. Bật lại bằng HERMES_VI_GOOGLE_BRIDGE=1
+// (giao diện đi kèm cờ VITE_VI_FEATURES=google-account lúc build).
+// Backend cục bộ gần nhất (baseUrl + token) để cầu nối đăng ký custom endpoint vào lõi.
+const GOOGLE_BRIDGE_ENABLED = process.env.HERMES_VI_GOOGLE_BRIDGE === '1'
+let googleBridgeBackend: { baseUrl: string; token: string } | null = null
+let googleBridgeInstance: GoogleBridge | null = null
+
+function googleBridge(): GoogleBridge {
+  if (!googleBridgeInstance) {
+    googleBridgeInstance = new GoogleBridge({
+      hermesHome: HERMES_HOME,
+      secrets: {
+        encrypt: value => {
+          try {
+            if (safeStorage.isEncryptionAvailable()) {
+              return `ss:${safeStorage.encryptString(value).toString('base64')}`
+            }
+          } catch {
+            /* rơi xuống lưu thường, tệp 0600 */
+          }
+
+          return `plain:${Buffer.from(value, 'utf8').toString('base64')}`
+        },
+        decrypt: stored => {
+          if (stored.startsWith('ss:')) {
+            return safeStorage.decryptString(Buffer.from(stored.slice(3), 'base64'))
+          }
+
+          if (stored.startsWith('plain:')) {
+            return Buffer.from(stored.slice(6), 'base64').toString('utf8')
+          }
+
+          throw new Error('định dạng không nhận ra')
+        }
+      },
+      openExternal: url => shell.openExternal(url),
+      fetch: (input, init) => fetch(input, init),
+      log: rememberLog,
+      backend: () => googleBridgeBackend
+    })
+  }
+
+  return googleBridgeInstance
+}
+
+// Khi cầu nối tắt, giao diện không hỏi trạng thái nữa; các kênh IPC vẫn trả lời để bản build
+// bật cờ giao diện mà quên bật cầu nối không bị treo.
+const googleBridgeOff = () => ({ available: false as const })
+
+ipcMain.handle('hermes:google:status', () => (GOOGLE_BRIDGE_ENABLED ? googleBridge().status() : googleBridgeOff()))
+ipcMain.handle('hermes:google:sign-in', () => (GOOGLE_BRIDGE_ENABLED ? googleBridge().signIn() : googleBridgeOff()))
+ipcMain.handle('hermes:google:sign-out', () => (GOOGLE_BRIDGE_ENABLED ? googleBridge().signOut() : googleBridgeOff()))
+ipcMain.handle('hermes:google:activate', () => (GOOGLE_BRIDGE_ENABLED ? googleBridge().activate() : googleBridgeOff()))
+ipcMain.handle('hermes:google:set-project', (_event, project) =>
+  GOOGLE_BRIDGE_ENABLED ? googleBridge().setProject(typeof project === 'string' ? project : null) : googleBridgeOff()
+)
+
+// Bản trước có thể đã lưu token Google của người dùng; cầu nối tắt thì xoá tệp đó đi thay vì
+// để một chứng thực nằm không trong thư mục dữ liệu.
+function discardGoogleBridgeStateWhenDisabled() {
+  if (GOOGLE_BRIDGE_ENABLED) {
+    return
+  }
+
+  for (const name of ['google-account.json', 'google-bridge.json']) {
+    try {
+      const file = path.join(HERMES_HOME, name)
+
+      if (fs.existsSync(file)) {
+        fs.rmSync(file, { force: true })
+        rememberLog(`[google-bridge] cầu nối đang tắt, đã xoá ${name}`)
+      }
+    } catch {
+      /* không quan trọng */
+    }
+  }
+}
 
 function pathWithHermesManagedNode(...entries) {
   const managed = hermesManagedNodePathEntries(HERMES_HOME).filter(directoryExists)
@@ -1246,12 +1320,12 @@ app.setName(APP_NAME)
 // Windows toast notifications silently no-op unless an AppUserModelID is set:
 // `new Notification().show()` returns without error and nothing appears. The
 // AUMID must match the installed Start Menu shortcut's AUMID, which
-// electron-builder derives from the build `appId` (com.nousresearch.hermes) —
+// electron-builder derives from the build `appId` (vn.lucledinh.hermes-vietnamese) —
 // keep this string in sync with package.json `build.appId`. macOS/Linux don't
 // need this, so gate it on Windows. (Fixes: desktop approval/turn notifications
 // never firing on Windows.)
 if (IS_WINDOWS) {
-  app.setAppUserModelId('com.nousresearch.hermes')
+  app.setAppUserModelId('vn.lucledinh.hermes-vietnamese')
 }
 
 // Seed the native About panel with the live Hermes version. This is refreshed
@@ -2891,56 +2965,37 @@ async function checkStableChannelUpdates() {
   }
 }
 
-async function checkBundledUpdates() {
-  // checkForUpdates rejects on any network/feed failure. Map that to the
-  // structured shape the git paths return, so the renderer never sees a
-  // raw IPC rejection on an offline check.
-  try {
-    const response = await electronNet.fetch(COMMUNITY_RELEASES_API_URL, {
-      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'hermes-desktop-update' }
-    })
+// Bản đóng gói: cập nhật kiểu "chỉ báo" (notify-only). Không tải, không cài.
+// Mọi trạng thái đóng gói (kể cả stamp cũ/hỏng, payload thiếu) đều an toàn để
+// báo, vì không có hành động cài nào đi kèm. Chi tiết: electron/release-notice.ts.
+async function checkReleaseNoticeForApp(force: boolean): Promise<ReleaseNotice> {
+  return checkReleaseNotice({
+    currentVersion: app.getVersion(),
+    userDataDir: app.getPath('userData'),
+    force,
+    fetchJson: async url => {
+      const response = await electronNet.fetch(url, {
+        headers: { Accept: 'application/json', 'User-Agent': 'hermes-vietnamese-desktop-release-notice' },
+        cache: 'no-store'
+      })
 
-    if (!response.ok) {
-      throw new Error(`GitHub Releases returned HTTP ${response.status}`)
+      if (!response.ok) {
+        throw new Error(`Feed phát hành trả HTTP ${response.status}`)
+      }
+
+      return response.json()
     }
-
-    const releases = await response.json()
-
-    if (!Array.isArray(releases)) {
-      throw new Error('GitHub Releases returned an invalid response.')
-    }
-
-    return await checkAppUpdate(app.getVersion(), releases)
-  } catch (error) {
-    return {
-      supported: true,
-      mechanism: 'app-updater',
-      channel: 'stable',
-      error: 'fetch-failed',
-      message: firstLine(error instanceof Error ? error.message : String(error)) || 'Update feed check failed.',
-      fetchedAt: Date.now()
-    }
-  }
+  })
 }
 
-async function checkUpdates() {
+async function checkUpdates(opts: { force?: boolean } = {}) {
   const route = desktopUpdateRoute()
 
-  return dispatchDesktopUpdateRoute(route, {
-    appUpdater: () => checkBundledUpdates(),
-    blocked: blocked => ({
-      supported: false,
-      mechanism:
-        blocked.reason === 'community-feed-disabled'
-          ? 'disabled-community-prerelease'
-          : 'disabled-invalid-bundle-provenance',
-      updateAvailable: false,
-      message: blockedUpdateMessage(blocked),
-      releaseClass: blocked.releaseClass,
-      fetchedAt: Date.now()
-    }),
-    git: () => checkGitUpdates()
-  })
+  if (route.mechanism === 'git') {
+    return checkGitUpdates()
+  }
+
+  return checkReleaseNoticeForApp(opts.force === true)
 }
 
 async function checkGitUpdates() {
@@ -3673,58 +3728,24 @@ async function applyUpdates(opts: { stopSafeBlockers?: boolean } = {}) {
 
   const route = desktopUpdateRoute()
 
-  return dispatchDesktopUpdateRoute(route, {
-    appUpdater: () => applyBundledUpdate(),
-    blocked: blocked => {
-      throw new Error(blockedUpdateMessage(blocked))
-    },
-    git: () => applyGitUpdate(opts)
-  })
-}
+  if (route.mechanism === 'git') {
+    return applyGitUpdate(opts)
+  }
 
-async function applyBundledUpdate() {
-  // Bundled installs: download the new app from the GitHub Releases feed,
-  // then quit and install. After the relaunch, the marker-tag mismatch
-  // triggers the offline agent rebuild — no git, no venv mutation while
-  // the app runs, and the Windows setup-binary handoff is unnecessary.
-  updateInFlight = true
-  let installerHandoffStarted = false
+  // Notify-only: "Cập nhật" trên bản đóng gói chỉ mở trang tải của bản mới.
+  const notice = await checkReleaseNoticeForApp(false)
+  const target = notice.downloadUrl ?? notice.releaseUrl
 
-  try {
-    const result = await applyAppUpdate(
-      percent => emitUpdateProgress({ stage: 'download', message: 'Downloading the app update…', percent }),
-      () => {
-        // electron-updater closes every window before quitAndInstall returns.
-        // Mark this as a hand-off first so the active-work prompt and macOS
-        // keep-alive convention cannot strand the installer waiting for us.
-        installerHandoffStarted = true
-        isQuittingForHandoff = true
-        rememberLog('[updates] downloaded full app artifact; handing off to the platform installer')
-      }
-    )
+  if (!notice.updateAvailable || !target) {
+    return { ok: false, error: 'notify-only', message: 'Chưa có bản mới để tải.' }
+  }
 
-    if (installerHandoffStarted) {
-      // A wedged renderer/backend must not leave NSIS/ShipIt waiting forever
-      // for the old process. Graceful before-quit teardown gets 30 seconds;
-      // afterwards the platform installer already owns recovery + relaunch.
-      const forceExitTimer = setTimeout(() => {
-        rememberLog('[updates] installer hand-off did not exit in 30s; forcing process exit')
-        app.exit(0)
-      }, 30_000)
+  await shell.openExternal(target)
 
-      forceExitTimer.unref()
-    }
-
-    return result
-  } catch (error) {
-    // A thrown quitAndInstall means no platform hand-off owns recovery.
-    // Keep the working app usable instead of suppressing future quit guards.
-    installerHandoffStarted = false
-    isQuittingForHandoff = false
-
-    throw error
-  } finally {
-    updateInFlight = false
+  return {
+    ok: false,
+    error: 'notify-only',
+    message: `Đã mở trang tải ${notice.latestVersion ?? ''}. Kiểm SHA-256 rồi chạy bộ cài; ứng dụng không tự cài.`
   }
 }
 
@@ -4455,11 +4476,6 @@ function desktopUpdateRoute(): DesktopUpdateRoute {
   })
 }
 
-function blockedUpdateMessage(route: Extract<DesktopUpdateRoute, { mechanism: 'blocked' }>): string {
-  return route.reason === 'community-feed-disabled'
-    ? 'Updates are disabled for this unsigned community prerelease build.'
-    : 'Updates are disabled because this bundled release is missing valid update provenance.'
-}
 
 // Marker-independent: is the canonical install at ACTIVE_HERMES_ROOT actually
 // runnable right now? A complete CLI install (`install.sh --include-desktop`)
@@ -10989,6 +11005,15 @@ async function startHermes() {
 
     // Verify the WebSocket session token before declaring backend ready.
     const wsUrl = `ws://127.0.0.1:${port}/api/ws?token=${encodeURIComponent(authToken)}`
+
+    // Backend chính đã sẵn sàng: cầu nối Google (nếu đã đăng nhập) chạy server loopback và
+    // ghi custom endpoint vào cấu hình lõi. Không chặn khởi động.
+    googleBridgeBackend = { baseUrl, token: authToken }
+
+    if (GOOGLE_BRIDGE_ENABLED) {
+      void googleBridge().ensureRunning()
+    }
+
     const wsProbe = await probeGatewayWebSocket(wsUrl, { WebSocketImpl: globalThis.WebSocket })
 
     if (!wsProbe.ok) {
@@ -15170,8 +15195,8 @@ ipcMain.handle('hermes:terminal:cwd', async (_event, id) => {
 
 ipcMain.handle('hermes:terminal:dispose', (_event, id) => disposeTerminalSession(String(id || '')))
 
-ipcMain.handle('hermes:updates:check', async () =>
-  checkUpdates().catch(error => ({
+ipcMain.handle('hermes:updates:check', async (_event, payload) =>
+  checkUpdates(payload || {}).catch(error => ({
     supported: true,
     branch: readDesktopUpdateConfig().branch,
     error: 'check-failed',
@@ -15544,7 +15569,7 @@ ipcMain.handle('hermes:vscode-theme:search', async (_event, query) => searchMark
 // running app. Three delivery paths: macOS 'open-url',
 // Win/Linux running-app 'second-instance' (argv), Win/Linux cold-start argv.
 // ---------------------------------------------------------------------------
-const HERMES_PROTOCOL = 'hermes'
+const HERMES_PROTOCOL = 'hermes-vi'
 let _pendingDeepLink = null
 let _rendererReadyForDeepLink = false
 
@@ -15670,7 +15695,63 @@ app.on('open-url', (event, url) => {
   handleDeepLink(url)
 })
 
+// Nhập dữ liệu từ bản Hermes cũ (trước 2026.9.3) ở lần mở đầu. Chỉ sao chép, bản cũ giữ
+// nguyên; hỏi đúng một lần; chạy TRƯỚC khi backend hay cửa sổ chạm vào HERMES_HOME.
+function offerLegacyImport() {
+  if (process.env.HERMES_DESKTOP_USER_DATA_DIR || process.env.HERMES_VI_SKIP_LEGACY_IMPORT === '1') {
+    return
+  }
+
+  const source = findLegacyImportSource(
+    HERMES_HOME,
+    legacyHermesHomeCandidates(process.platform, process.env, app.getPath('home'))
+  )
+
+  if (!source) {
+    return
+  }
+
+  const entries = planLegacyImport(source)
+
+  const choice = dialog.showMessageBoxSync({
+    type: 'question',
+    title: 'Hermes Vietnamese',
+    message: 'Nhập dữ liệu từ bản Hermes cũ?',
+    detail:
+      `Tìm thấy dữ liệu của bản Hermes trước tại:\n${source}\n\n` +
+      `Sao chép sang bản này: ${entries.join(', ') || 'không có gì'}.\n` +
+      'Bản cũ và dữ liệu của nó được giữ nguyên, bạn vẫn mở lại được bản cũ bất cứ lúc nào.',
+    buttons: ['Nhập dữ liệu', 'Bắt đầu mới'],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true
+  })
+
+  if (choice !== 0) {
+    writeLegacyImportMarker(HERMES_HOME, { source, decision: 'skipped' })
+    rememberLog(`[legacy-import] người dùng chọn bắt đầu mới; nguồn ${source}`)
+
+    return
+  }
+
+  const result = runLegacyImport(source, HERMES_HOME, entries)
+  writeLegacyImportMarker(HERMES_HOME, { source, decision: 'imported', copied: result.copied, failed: result.failed })
+  rememberLog(`[legacy-import] đã sao chép ${result.copied.length} mục từ ${source}; lỗi ${result.failed.length}`)
+
+  if (result.failed.length) {
+    dialog.showMessageBoxSync({
+      type: 'warning',
+      title: 'Hermes Vietnamese',
+      message: 'Một số mục không sao chép được',
+      detail: result.failed.map(f => `${f.name}: ${f.error}`).join('\n'),
+      buttons: ['Tiếp tục']
+    })
+  }
+}
+
 app.whenReady().then(() => {
+  offerLegacyImport()
+  discardGoogleBridgeStateWhenDisabled()
   // Warm the login-shell PATH resolution immediately so it usually completes
   // before the backend start path awaits the same single-flight promise.
   void ensureLoginShellPath()

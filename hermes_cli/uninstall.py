@@ -336,12 +336,20 @@ def uninstall_gateway_service():
 # or open a new terminal anyway).
 
 
-def _hermes_path_markers(hermes_home: Path) -> list[str]:
-    """Path-entry substrings that identify Hermes-owned User-PATH entries."""
+def _hermes_path_markers(hermes_home: Path, *, include_managed_bin: bool = False) -> list[str]:
+    """Path-entry substrings that identify Hermes-owned User-PATH entries.
+
+    ``include_managed_bin`` adds the managed binary dir (``<root>\\bin``,
+    holding the hermes launchers and the managed uv) — only wanted when
+    that dir is about to be deleted (full uninstall from the default root),
+    so a keep-data uninstall leaves the still-working managed uv resolvable.
+    """
     root = str(hermes_home).rstrip("\\/")
     # Match on prefix so sub-entries (git\cmd, git\bin, git\usr\bin, node, etc.)
     # all get swept.  Also match the bare hermes-agent install dir.
     markers = [root + "\\hermes-agent", root + "\\git", root + "\\node", root + "\\venv"]
+    if include_managed_bin:
+        markers.append(root + "\\bin")
     # Also match if HERMES_HOME was customised to somewhere else — find-and-nuke
     # any entry whose path component contains "hermes".  We don't want to catch
     # unrelated entries like "chermes-foo" or "ephermeral", so we look for
@@ -349,11 +357,17 @@ def _hermes_path_markers(hermes_home: Path) -> list[str]:
     return markers
 
 
-def remove_path_from_windows_registry(hermes_home: Path) -> list[str]:
+def remove_path_from_windows_registry(hermes_home: Path, *, include_managed_bin: bool = False) -> list[str]:
     """Strip Hermes-owned entries from User-scope PATH in the registry.
 
     Returns the list of removed path entries.  Operates on HKCU\\Environment,
     same key the installer wrote to via ``[Environment]::SetEnvironmentVariable``.
+
+    ``include_managed_bin`` adds ``<hermes_home>\\bin`` (the managed binary
+    dir holding the hermes launchers and the managed uv) to the sweep. Only
+    pass it when that dir is actually being deleted — full uninstall from
+    the default root — so a keep-data uninstall leaves the still-working
+    managed uv resolvable.
     """
     try:
         import winreg
@@ -371,7 +385,7 @@ def remove_path_from_windows_registry(hermes_home: Path) -> list[str]:
                 return []
             # Preserve REG_EXPAND_SZ vs REG_SZ so unexpanded %VARS% survive.
             entries = [e for e in path_value.split(";") if e]
-            markers = _hermes_path_markers(hermes_home)
+            markers = _hermes_path_markers(hermes_home, include_managed_bin=include_managed_bin)
             kept: list[str] = []
             for entry in entries:
                 entry_norm = entry.rstrip("\\/")
@@ -427,6 +441,58 @@ def remove_portable_tooling_windows(hermes_home: Path) -> list[Path]:
                 removed.append(target)
             except Exception as e:
                 log_warn(f"Could not remove {target}: {e}")
+    return removed
+
+
+def remove_windows_bin_launchers(*, windows: bool | None = None) -> list[Path]:
+    """Delete the ``hermes`` launchers install.ps1 staged in the managed
+    binary dir (the default Hermes root's ``bin``, next to the managed uv).
+
+    Every uninstall mode deletes the code checkout, so the launchers —
+    which invoke ``<checkout>\\venv\\Scripts`` — would otherwise dangle:
+    ``hermes`` in a new terminal resolves to a launcher whose target is
+    gone and errors, which reads worse than command-not-found. The managed
+    uv (uv*.exe) in the same dir is left for keep-data reinstalls.
+
+    A launcher that IS this process's own trampoline is mandatory-locked
+    against deletion but not rename (same fact
+    ``_install_repair._quarantine_running_hermes_exe`` relies on), so
+    deletion falls back to renaming it aside with a non-executable suffix.
+
+    *windows* is an injectable platform verdict for tests (same pattern as
+    ``_install_repair.ensure_windows_bin_launchers``).
+    """
+    if windows is None:
+        windows = _is_windows()
+    if not windows:
+        return []
+    try:
+        # Lockstep launcher-name list — the same names install.ps1 and the
+        # startup heal stage into this dir.
+        from hermes_cli._install_repair import _WINDOWS_BIN_LAUNCHERS
+        from hermes_constants import get_default_hermes_root
+
+        bin_dir = get_default_hermes_root() / "bin"
+    except Exception as e:
+        log_warn(f"Could not locate the managed binary dir: {e}")
+        return []
+
+    removed: list[Path] = []
+    for name in _WINDOWS_BIN_LAUNCHERS:
+        for suffix in (".exe", ".cmd"):
+            launcher = bin_dir / f"{name}{suffix}"
+            if not launcher.exists():
+                continue
+            try:
+                launcher.unlink()
+                removed.append(launcher)
+            except OSError:
+                aside = launcher.with_name(f"{launcher.name}.uninstalled.{os.getpid()}")
+                try:
+                    os.rename(launcher, aside)
+                    removed.append(launcher)
+                except OSError as e:
+                    log_warn(f"Could not remove {launcher}: {e}")
     return removed
 
 
@@ -524,8 +590,7 @@ def run_gui_uninstall(args):
     )
 
     hermes_home = get_hermes_home()
-    packaged_app_paths = getattr(args, "packaged_app_paths", None)
-    summary = gui_install_summary(hermes_home, packaged_paths=packaged_app_paths)
+    summary = gui_install_summary(hermes_home)
     skip_confirm = bool(getattr(args, "yes", False))
 
     print()
@@ -570,7 +635,7 @@ def run_gui_uninstall(args):
     print()
     print(color("Uninstalling Chat GUI...", Colors.CYAN, Colors.BOLD))
     print()
-    uninstall_gui(hermes_home, packaged_app_paths=packaged_app_paths)
+    uninstall_gui(hermes_home)
 
     print()
     print(color("┌─────────────────────────────────────────────────────────┐", Colors.GREEN, Colors.BOLD))
@@ -622,7 +687,6 @@ def run_uninstall(args):
             full_uninstall=full_uninstall,
             remove_profiles=False,
             named_profiles=named_profiles,
-            packaged_app_paths=getattr(args, "packaged_app_paths", None),
         )
         return
 
@@ -728,7 +792,6 @@ def run_uninstall(args):
         full_uninstall=full_uninstall,
         remove_profiles=remove_profiles,
         named_profiles=named_profiles,
-        packaged_app_paths=getattr(args, "packaged_app_paths", None),
     )
 
 
@@ -763,7 +826,6 @@ def _perform_uninstall(
     full_uninstall: bool,
     remove_profiles: bool,
     named_profiles: list,
-    packaged_app_paths: "list[Path] | None" = None,
 ) -> None:
     """Execute the uninstall steps. Shared by the interactive and ``--yes``
     paths so the destructive sequence lives in exactly one place.
@@ -798,7 +860,14 @@ def _perform_uninstall(
         # Expand %LOCALAPPDATA% etc. in hermes_home so the marker matching is
         # against fully resolved paths — installer writes literal strings
         # like C:\Users\<u>\AppData\Local\hermes\git\cmd, not %LOCALAPPDATA%.
-        removed_path_entries = remove_path_from_windows_registry(Path(os.path.expandvars(str(hermes_home))))
+        # The managed binary dir (hermes\bin: launchers + managed uv) leaves
+        # the PATH only when the full wipe below is about to delete it;
+        # keep-data mode keeps the dir and the still-working uv resolvable.
+        sweep_managed_bin = full_uninstall and _is_default_hermes_home(hermes_home)
+        removed_path_entries = remove_path_from_windows_registry(
+            Path(os.path.expandvars(str(hermes_home))),
+            include_managed_bin=sweep_managed_bin,
+        )
         if removed_path_entries:
             for entry in removed_path_entries:
                 log_success(f"Removed from User PATH: {entry}")
@@ -821,6 +890,19 @@ def _perform_uninstall(
             log_success(f"Removed {wrapper}")
     else:
         log_info("No wrapper script found")
+
+    # 3a. Remove the Windows launchers from the managed binary dir. Both
+    #     modes delete the code checkout below, so a surviving launcher
+    #     would dangle — `hermes` in a new terminal would resolve and then
+    #     error on its missing venv target, worse than command-not-found.
+    if _is_windows():
+        log_info("Removing Windows hermes launchers...")
+        removed_launchers = remove_windows_bin_launchers()
+        if removed_launchers:
+            for launcher in removed_launchers:
+                log_success(f"Removed {launcher}")
+        else:
+            log_info("No Windows hermes launchers found")
 
     # 3b. Remove node/npm/npx symlinks the installer left in ~/.local/bin
     #     (only when they still point into this Hermes home's node dir, so we
@@ -845,7 +927,7 @@ def _perform_uninstall(
     log_info("Removing desktop Chat GUI artifacts...")
     try:
         from hermes_cli.gui_uninstall import uninstall_gui
-        gui_removed = uninstall_gui(hermes_home, packaged_app_paths=packaged_app_paths)
+        gui_removed = uninstall_gui(hermes_home)
         if not gui_removed:
             log_info("No desktop GUI artifacts found")
     except Exception as e:
@@ -920,9 +1002,9 @@ def _perform_uninstall(
         print()
         print("To reinstall later with your existing settings:")
         if _is_windows():
-            print(color("  iex (irm https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/scripts/install.ps1)", Colors.DIM))
+            print(color("  iex (irm https://hermes-agent.nousresearch.com/install.ps1)", Colors.DIM))
         else:
-            print(color("  curl -fsSL https://raw.githubusercontent.com/LucDinhLe/hermes-agent-vietnamese/main/scripts/install.sh | bash", Colors.DIM))
+            print(color("  curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash", Colors.DIM))
         print()
 
     if _is_windows():
@@ -939,15 +1021,11 @@ def _perform_uninstall(
 class _UninstallArgs:
     """Lightweight args namespace for the module entrypoint below."""
 
-    def __init__(self, *, mode: str, skip_packaged_apps: bool = False):
+    def __init__(self, *, mode: str):
         self.gui = mode == "gui"
         self.gui_summary = False
         self.full = mode == "full"
         self.yes = True  # the module entrypoint is always non-interactive
-        # The Desktop's detached cleanup already owns the exact running app
-        # path. An empty list prevents this Python phase from scanning sibling
-        # per-user/per-machine installs before the detached script runs.
-        self.packaged_app_paths = [] if skip_packaged_apps else None
 
 
 def main(argv=None) -> int:
@@ -973,13 +1051,8 @@ def main(argv=None) -> int:
         required=True,
         help="gui = Chat GUI only; lite = GUI + agent, keep data; full = everything",
     )
-    parser.add_argument(
-        "--skip-packaged-apps",
-        action="store_true",
-        help="leave packaged app removal to an exact-path detached cleanup",
-    )
     ns = parser.parse_args(argv)
-    args = _UninstallArgs(mode=ns.mode, skip_packaged_apps=ns.skip_packaged_apps)
+    args = _UninstallArgs(mode=ns.mode)
 
     if args.gui:
         run_gui_uninstall(args)

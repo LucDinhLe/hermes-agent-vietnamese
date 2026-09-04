@@ -7,33 +7,25 @@ review forks.
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from run_agent import AIAgent
 from agent.turn_finalizer import finalize_turn
 
 
-def _make_agent(
-    skip_background_review: bool = False,
-    *,
-    tool_profile: str = "lean",
-) -> AIAgent:
+def _make_agent(skip_background_review: bool = False) -> AIAgent:
     """Construct a minimally-configured AIAgent for unit testing."""
-    with patch(
-        "tools.tool_search.resolve_session_tool_profile",
-        return_value=tool_profile,
-    ):
-        return AIAgent(
-            model="openai/gpt-4o-mini",
-            provider="openrouter",
-            api_key="sk-dummy",
-            base_url="https://openrouter.ai/api/v1",
-            quiet_mode=True,
-            skip_context_files=True,
-            skip_memory=True,
-            skip_background_review=skip_background_review,
-            platform="cli",
-        )
+    return AIAgent(
+        model="openai/gpt-4o-mini",
+        provider="openrouter",
+        api_key="sk-dummy",
+        base_url="https://openrouter.ai/api/v1",
+        quiet_mode=True,
+        skip_context_files=True,
+        skip_memory=True,
+        skip_background_review=skip_background_review,
+        platform="cli",
+    )
 
 
 def _stub_agent_for_finalize(agent: AIAgent) -> None:
@@ -87,16 +79,15 @@ def _run_finalize(agent: AIAgent) -> None:
     )
 
 
-def test_default_lean_profile_skips_background_review() -> None:
-    """Fresh lean Q&A never spawns the hidden review model call."""
+def test_default_skip_background_review_is_false() -> None:
+    """Without an explicit override, AIAgent does NOT skip background review."""
     agent = _make_agent()
-    assert agent.tool_profile == "lean"
-    assert agent.skip_background_review is True
+    assert agent.skip_background_review is False
 
 
 def test_skip_background_review_flag_persists() -> None:
     """Passing skip_background_review=True records the flag on the instance."""
-    agent = _make_agent(skip_background_review=True, tool_profile="full")
+    agent = _make_agent(skip_background_review=True)
     assert agent.skip_background_review is True
 
 
@@ -112,9 +103,9 @@ def test_finalize_turn_skips_review_when_flag_set() -> None:
     agent._spawn_background_review.assert_not_called()
 
 
-def test_full_profile_fires_review_when_flag_unset() -> None:
-    """The explicit full profile preserves legacy background-review behavior."""
-    agent = _make_agent(skip_background_review=False, tool_profile="full")
+def test_finalize_turn_fires_review_when_flag_unset() -> None:
+    """Counterpart: with the flag off, finalize_turn DOES call _spawn_background_review."""
+    agent = _make_agent(skip_background_review=False)
     _stub_agent_for_finalize(agent)
     _run_finalize(agent)
     agent._spawn_background_review.assert_called_once()

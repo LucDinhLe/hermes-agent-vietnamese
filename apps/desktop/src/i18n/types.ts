@@ -532,6 +532,10 @@ export interface Translations {
       tapCheck: string
       updateReady: (count: number) => string
       updateReadyUnknown: string
+      notifyOnlyReady: (version: string) => string
+      openDownloadPage: string
+      notifyOnlyDesc: string
+      checksumLine: (filename: string, sizeMb: string, sha256: string) => string
       lastChecked: (age: string) => string
       justNowSuffix: string
       automaticUpdates: string
@@ -909,6 +913,20 @@ export interface Translations {
     }
     providers: {
       connectAccount: string
+      googleAccount: {
+        title: string
+        subtitle: string
+        signIn: string
+        signOut: string
+        makeDefault: string
+        signingIn: string
+        connected: string
+        tierLabel: string
+        caveat: string
+        errorPrefix: string
+        projectPlaceholder: string
+        projectSave: string
+      }
       haveApiKey: string
       intro: string
       connected: string

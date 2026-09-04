@@ -21,6 +21,34 @@ from rich.markup import escape as _escape
 from utils import base_url_host_matches
 
 
+def _single_query_clarify_callback(question: str, choices=None, multi_select=False) -> str:
+    """Clarify has no interactive surface in a single-query (-q) turn.
+
+    ``hermes chat -q`` runs one turn without ever building the
+    prompt_toolkit application, so the interactive clarify modal can never
+    be painted or answered — the CLI callback would poll its response queue
+    until ``agent.clarify_timeout`` expires (default 3600 s, 0 = unlimited)
+    while the gateway/cron/kanban-dispatcher caller sees a silent hang. The
+    oneshot path answers immediately via ``_oneshot_clarify_callback``;
+    single-query turns need the same headless behavior (#94943)."""
+    if choices:
+        if multi_select:
+            return (
+                f"[single-query mode: no user available to answer {question!r}. "
+                f"Pick the best subset from {choices} using your own judgment "
+                f"and continue.]"
+            )
+        return (
+            f"[single-query mode: no user available to answer {question!r}. "
+            f"Pick the best option from {choices} using your own judgment "
+            f"and continue.]"
+        )
+    return (
+        f"[single-query mode: no user available to answer {question!r}. Make "
+        f"the most reasonable assumption you can and continue.]"
+    )
+
+
 class CLIAgentSetupMixin:
     """Agent construction + session-resume display methods for ``HermesCLI``."""
 
@@ -500,6 +528,7 @@ class CLIAgentSetupMixin:
                 credential_pool=runtime.get("credential_pool"),
                 max_tokens=self.max_tokens,
                 max_iterations=self.max_turns,
+                run_budget_seconds=getattr(self, "run_budget_seconds", None),
                 enabled_toolsets=self.enabled_toolsets,
                 disabled_toolsets=self.disabled_toolsets,
                 verbose_logging=self.verbose,
@@ -520,7 +549,15 @@ class CLIAgentSetupMixin:
                 session_id=self.session_id,
                 platform="cli",
                 session_db=self._session_db,
-                clarify_callback=self._clarify_callback,
+                # A -q turn never builds the prompt_toolkit application, so
+                # the interactive modal can never be painted or answered —
+                # answer headless instead of polling until clarify_timeout
+                # (#94943; mirrors _oneshot_clarify_callback on the -z path).
+                clarify_callback=(
+                    _single_query_clarify_callback
+                    if getattr(self, "_single_query_mode", False)
+                    else self._clarify_callback
+                ),
                 reasoning_callback=self._current_reasoning_callback(),
 
                 fallback_model=self._fallback_model,
@@ -900,20 +937,20 @@ class CLIAgentSetupMixin:
             elif role == "user":
                 lines.append("  ● You: ", style=f"dim bold {_session_label_c}")
                 # Show first line inline, indent rest
-                msg_lines = text.splitlines()
+                msg_lines = text.splitlines() or [""]
                 lines.append(msg_lines[0] + "\n", style="dim")
                 for ml in msg_lines[1:]:
                     lines.append(f"         {ml}\n", style="dim")
             elif role == "assistant_last":
                 # Last assistant response shown in full, non-dim
                 lines.append("  ◆ Hermes: ", style=f"bold {_assistant_label_c}")
-                msg_lines = text.splitlines()
+                msg_lines = text.splitlines() or [""]
                 lines.append(msg_lines[0] + "\n", style="")
                 for ml in msg_lines[1:]:
                     lines.append(f"            {ml}\n", style="")
             else:
                 lines.append("  ◆ Hermes: ", style=f"dim bold {_assistant_label_c}")
-                msg_lines = text.splitlines()
+                msg_lines = text.splitlines() or [""]
                 lines.append(msg_lines[0] + "\n", style="dim")
                 for ml in msg_lines[1:]:
                     lines.append(f"            {ml}\n", style="dim")

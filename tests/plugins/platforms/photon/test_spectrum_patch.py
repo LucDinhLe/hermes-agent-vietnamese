@@ -12,11 +12,8 @@ import time
 import urllib.request
 from pathlib import Path
 
-import pytest
-
 
 _PATCHER = Path("plugins/platforms/photon/sidecar/patch-spectrum-mixed-attachments.mjs")
-_NODE_UNAVAILABLE = shutil.which("node") is None
 
 
 def _sidecar_env(port: int) -> dict[str, str]:
@@ -93,7 +90,6 @@ def _write_sidecar_fixture(tmp_path: Path, *, sdk_available: bool) -> Path:
     return sidecar
 
 
-@pytest.mark.skipif(_NODE_UNAVAILABLE, reason="Photon sidecar tests require Node.js")
 def test_sidecar_patch_failure_still_reaches_health_endpoint(tmp_path: Path) -> None:
     """The compatibility patch is optional when the SDK itself remains usable."""
     sidecar = _write_sidecar_fixture(tmp_path, sdk_available=True)
@@ -241,7 +237,6 @@ def _write_fixture(tmp_path: Path) -> Path:
     return chunk
 
 
-@pytest.mark.skipif(_NODE_UNAVAILABLE, reason="Photon sidecar tests require Node.js")
 def test_spectrum_patch_rewrites_the_imessage_mapper(tmp_path: Path) -> None:
     """The dependency patch must apply to the 8.x `@spectrum-ts/imessage` chunk
     and rewrite both inbound mappers to thread text through attachment bubbles."""

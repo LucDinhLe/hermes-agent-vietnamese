@@ -1,17 +1,6 @@
 """Tests for agent-settings copy in the interactive setup wizard."""
 
-from hermes_cli.setup import _apply_default_agent_settings, setup_agent_settings
-
-
-def test_recommended_agent_settings_use_finite_legacy_failsafe(monkeypatch, capsys):
-    config = {}
-    monkeypatch.setattr("hermes_cli.setup.remove_env_value", lambda *args: True)
-    monkeypatch.setattr("hermes_cli.setup.save_config", lambda *args: None)
-
-    _apply_default_agent_settings(config)
-
-    assert config["agent"]["max_turns"] == 50
-    assert "TurnGovernor is primary" in capsys.readouterr().out
+from hermes_cli.setup import setup_agent_settings
 
 
 def test_setup_agent_settings_uses_displayed_max_iterations_value(tmp_path, monkeypatch, capsys):

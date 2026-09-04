@@ -142,10 +142,7 @@ class TestReadJournalMode:
             holder.close()
 
     @pytest.mark.skipif(os.name == "nt", reason="chmod is a no-op on Windows")
-    @pytest.mark.skipif(
-        getattr(os, "geteuid", lambda: -1)() == 0,
-        reason="root ignores file permissions",
-    )
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores file permissions")
     def test_read_only_directory_is_still_readable(self, tmp_path):
         db = tmp_path / "state.db"
         _make_db(db, journal_mode="WAL")
@@ -390,10 +387,7 @@ class TestReportDatabaseJournalModes:
         assert "state.db: rollback journal mode" in out
 
     @pytest.mark.skipif(os.name == "nt", reason="chmod is a no-op on Windows")
-    @pytest.mark.skipif(
-        getattr(os, "geteuid", lambda: -1)() == 0,
-        reason="root ignores file permissions",
-    )
+    @pytest.mark.skipif(os.geteuid() == 0, reason="root ignores file permissions")
     def test_unreadable_database_does_not_crash(self, tmp_path, capsys):
         db = tmp_path / "state.db"
         _make_db(db)
@@ -434,114 +428,6 @@ class TestReportDatabaseJournalModes:
 
         assert _sidecars(tmp_path) == []
         assert db.read_bytes() == db_bytes
-
-    def test_fix_offline_wal_database(self, tmp_path, capsys, monkeypatch):
-        db = tmp_path / "state.db"
-        _make_db(db, journal_mode="WAL")
-        monkeypatch.setattr(
-            doctor, "_database_holder_pids", lambda _path: ([], None)
-        )
-
-        fixed = doctor._report_database_journal_modes(
-            tmp_path,
-            VULNERABLE,
-            should_fix=True,
-        )
-
-        assert fixed == 1
-        assert doctor._read_journal_mode(db) == ("rollback", None)
-        assert _sidecars(tmp_path) == []
-        assert "changed WAL to rollback journal mode" in capsys.readouterr().out
-
-    def test_fix_refuses_database_held_by_another_process(
-        self, tmp_path, capsys, monkeypatch
-    ):
-        db = tmp_path / "state.db"
-        _make_db(db, journal_mode="WAL")
-        monkeypatch.setattr(
-            doctor, "_database_holder_pids", lambda _path: ([1234], None)
-        )
-
-        fixed = doctor._report_database_journal_modes(
-            tmp_path,
-            VULNERABLE,
-            should_fix=True,
-        )
-
-        assert fixed == 0
-        assert doctor._read_journal_mode(db) == ("wal", None)
-        out = capsys.readouterr().out
-        assert "remains in WAL mode" in out
-        assert "close Hermes" in out
-
-    def test_exposed_database_is_added_to_action_summary(self, tmp_path):
-        db = tmp_path / "state.db"
-        _make_db(db, journal_mode="WAL")
-        issues = []
-
-        doctor._report_database_journal_modes(
-            tmp_path,
-            VULNERABLE,
-            issues=issues,
-        )
-
-        assert len(issues) == 1
-        assert "WAL-reset bug" in issues[0]
-        assert "doctor --fix" in issues[0]
-
-    def test_successful_fix_leaves_no_action_item(self, tmp_path, monkeypatch):
-        db = tmp_path / "state.db"
-        _make_db(db, journal_mode="WAL")
-        monkeypatch.setattr(
-            doctor, "_database_holder_pids", lambda _path: ([], None)
-        )
-        issues = []
-
-        fixed = doctor._report_database_journal_modes(
-            tmp_path,
-            VULNERABLE,
-            should_fix=True,
-            issues=issues,
-        )
-
-        assert fixed == 1
-        assert issues == []
-
-    def test_fix_does_not_downgrade_wal_on_fixed_sqlite(
-        self, tmp_path, capsys, monkeypatch
-    ):
-        db = tmp_path / "state.db"
-        _make_db(db, journal_mode="WAL")
-        monkeypatch.setattr(
-            doctor,
-            "_repair_wal_database",
-            lambda _path: pytest.fail("fixed SQLite must retain WAL"),
-        )
-
-        fixed = doctor._report_database_journal_modes(
-            tmp_path,
-            FIXED_VERSIONS[0],
-            should_fix=True,
-        )
-
-        assert fixed == 0
-        assert doctor._read_journal_mode(db) == ("wal", None)
-        assert "WAL journal mode" in capsys.readouterr().out
-
-
-class TestDatabaseHolderScan:
-    def test_detects_current_process_open_connection(self, tmp_path):
-        db = tmp_path / "state.db"
-        _make_db(db)
-        connection = sqlite3.connect(db)
-        try:
-            holders, error = doctor._database_holder_pids(db)
-        finally:
-            connection.close()
-
-        assert error is None
-        assert holders is not None
-        assert os.getpid() in holders
 
 
 class TestSizeAndRepairHint:

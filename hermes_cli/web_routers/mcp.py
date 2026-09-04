@@ -10,7 +10,6 @@ working unchanged.
 """
 
 import asyncio  # noqa: F401 — used by handlers
-import json
 import logging
 import secrets  # noqa: F401
 import threading  # noqa: F401
@@ -40,7 +39,6 @@ _mcp_install_action_name = late("_mcp_install_action_name")
 _mcp_oauth_callback_url = late("_mcp_oauth_callback_url")
 _mcp_server_summary = late("_mcp_server_summary")
 _normalize_mcp_server_create = late("_normalize_mcp_server_create")
-_open_session_db_for_profile = late("_open_session_db_for_profile")
 _profile_cli_args = late("_profile_cli_args")
 _profile_scope = late("_profile_scope")
 _require_token = late("_require_token")
@@ -73,70 +71,6 @@ async def list_mcp_servers(profile: Optional[str] = None):
         "servers": [
             _mcp_server_summary(name, cfg) for name, cfg in sorted(servers.items())
         ]
-    }
-
-
-@router.get("/api/mcp/assignments")
-async def get_mcp_assignments(
-    session_id: str,
-    profile: Optional[str] = None,
-):
-    """Read the validated exact MCP receipt for one profile-owned session."""
-    from agent.capability_router import (
-        CAPABILITY_RECEIPT_KEY,
-        MCP_CAPABILITY_RECEIPT_KEY,
-        validate_mcp_capability_record,
-    )
-
-    def _read():
-        db = _open_session_db_for_profile(profile, read_only=True)
-        try:
-            sid = db.resolve_session_id(session_id)
-            session = db.get_session(sid) if sid else None
-            if not session:
-                return None
-            raw_config = session.get("model_config")
-            try:
-                model_config = (
-                    json.loads(raw_config)
-                    if isinstance(raw_config, str)
-                    else raw_config
-                )
-            except (TypeError, ValueError):
-                model_config = None
-            if not isinstance(model_config, dict):
-                return sid, None
-            skill_record = model_config.get(CAPABILITY_RECEIPT_KEY)
-            nested = (
-                skill_record.get("mcp")
-                if isinstance(skill_record, dict)
-                else None
-            )
-            record = nested or model_config.get(MCP_CAPABILITY_RECEIPT_KEY)
-            return sid, validate_mcp_capability_record(record)
-        finally:
-            db.close()
-
-    result = await asyncio.to_thread(_read)
-    if result is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-    sid, payload = result
-    if payload is None:
-        return {
-            "session_id": sid,
-            "assigned": False,
-            "tools": [],
-            "servers": {},
-            "reasons": {},
-        }
-    return {
-        "session_id": sid,
-        "assigned": bool(payload["tools"]),
-        "tools": list(payload["tools"]),
-        "servers": {
-            server: list(names) for server, names in payload["servers"].items()
-        },
-        "reasons": payload["reasons"],
     }
 
 
@@ -569,8 +503,31 @@ async def install_mcp_catalog_entry(body: MCPCatalogInstall, profile: Optional[s
     if entry is None:
         raise HTTPException(status_code=404, detail=f"No catalog entry '{name}'")
 
-    # Persist any supplied env vars first (catalog entries declare which names
-    # they need; we only write the ones the user provided).
+    # Catalog credentials are a closed schema: configuring one MCP must not
+    # become a generic write primitive for unrelated process environment.
+    declared_env = {spec.name for spec in (entry.auth.env or [])}
+    undeclared_env = sorted(set(body.env) - declared_env)
+    if undeclared_env:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Catalog entry '{name}' does not declare environment "
+                f"variable(s): {', '.join(undeclared_env)}"
+            ),
+        )
+
+    # Validate the complete map before the first write. This preserves the
+    # existing writer/install flow while ensuring a mixed valid+invalid request
+    # cannot partially persist credentials.
+    from hermes_cli.config import validate_env_var_name_for_write
+
+    try:
+        for key in body.env:
+            validate_env_var_name_for_write(key)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    # Persist any supplied, declared env vars first.
     effective_profile = body.profile or profile
     if body.env:
         def _write_env():
