@@ -706,7 +706,8 @@ export const zhHant = defineLocale({
       updateReadyUnknown: '新更新已就緒。',
       notifyOnlyReady: version => `已有版本 ${version}。本應用不會自行安裝更新：請下載安裝檔、核對 SHA-256 後執行。`,
       openDownloadPage: '開啟下載頁面',
-      notifyOnlyDesc: 'Hermes Vietnamese 只會提醒新版本，不會自行下載或安裝；請從 GitHub Releases 下載安裝檔並核對校驗值。',
+      notifyOnlyDesc:
+        'Hermes Vietnamese 只會提醒新版本，不會自行下載或安裝；請從 GitHub Releases 下載安裝檔並核對校驗值。',
       checksumLine: (filename, sizeMb, sha256) => `${filename} · ${sizeMb} MB · SHA-256 ${sha256}`,
       lastChecked: age => `上次檢查：${age}`,
       justNowSuffix: ' · 剛剛',

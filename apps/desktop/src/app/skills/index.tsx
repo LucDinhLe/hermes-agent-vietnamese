@@ -199,10 +199,12 @@ interface SkillsViewProps extends React.ComponentProps<'section'> {
 
 export function SkillsView(props: SkillsViewProps) {
   const connection = useStore($connection)
+
   const connectionId =
     props.fixedConnectionId === undefined
       ? connection?.connectionId || (connection?.mode === 'local' ? 'local' : null)
       : props.fixedConnectionId
+
   const sourceKey = connectionId?.trim() || 'primary'
   const profileKey = normalizeProfileKey(props.fixedProfile)
 
@@ -669,7 +671,7 @@ function ScopedSkillsView({
           <SelectContent>
             {profiles.map(p => (
               <SelectItem key={p.name} value={p.name}>
-              {p.is_default ? t.skills.defaultProfile : p.name}
+                {p.is_default ? t.skills.defaultProfile : p.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -1084,18 +1086,10 @@ function ToolsetDetail({
         </div>
       )}
       {toolset.name === 'computer_use' && (
-        <ComputerUsePanel
-          connectionId={connectionId}
-          onConfiguredChange={onConfiguredChange}
-          profile={profile}
-        />
+        <ComputerUsePanel connectionId={connectionId} onConfiguredChange={onConfiguredChange} profile={profile} />
       )}
       {toolset.name === 'terminal' && (
-        <TerminalBackendPanel
-          connectionId={connectionId}
-          onConfiguredChange={onConfiguredChange}
-          profile={profile}
-        />
+        <TerminalBackendPanel connectionId={connectionId} onConfiguredChange={onConfiguredChange} profile={profile} />
       )}
       <ToolsetConfigPanel
         connectionId={connectionId}

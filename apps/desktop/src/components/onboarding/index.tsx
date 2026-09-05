@@ -346,12 +346,14 @@ export function DesktopOnboardingOverlay({
   // do we know whether to dismiss (true) or surface the picker (false).
   // EXCEPTION: manual mode (user opened the selector from a working app to
   // add/switch a provider) shows the overlay regardless of configured state.
-  if (!shouldRenderDesktopOnboarding({
-    configured: onboarding.configured,
-    firstRunSkipped: onboarding.firstRunSkipped,
-    manual: onboarding.manual,
-    showWorkProfile
-  })) {
+  if (
+    !shouldRenderDesktopOnboarding({
+      configured: onboarding.configured,
+      firstRunSkipped: onboarding.firstRunSkipped,
+      manual: onboarding.manual,
+      showWorkProfile
+    })
+  ) {
     return null
   }
 
@@ -373,9 +375,7 @@ export function DesktopOnboardingOverlay({
   // immediately — no runtime gate needed. Otherwise wait for the readiness
   // check (configured === false) before showing the picker.
   const ready =
-    showWorkProfile ||
-    onboarding.manual ||
-    (workProfileRequired !== null && enabled && onboarding.configured === false)
+    showWorkProfile || onboarding.manual || (workProfileRequired !== null && enabled && onboarding.configured === false)
 
   const showPicker = flow.status === 'idle' || flow.status === 'success'
   // The final "you're in" screen drops the card chrome and floats centered on

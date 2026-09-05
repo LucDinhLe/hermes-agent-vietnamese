@@ -126,9 +126,10 @@ export function McpInstallDeepLinkDialog() {
 
       const nextServers = { ...current, [trimmedName]: request.config }
       await saveMcpServers(nextServers, request.owner.profile, request.owner.connectionId)
-      hermesConfigCacheWriter(request.owner.profile, request.owner.connectionId)(previous =>
-        previous ? { ...previous, mcp_servers: nextServers } : previous
-      )
+      hermesConfigCacheWriter(
+        request.owner.profile,
+        request.owner.connectionId
+      )(previous => (previous ? { ...previous, mcp_servers: nextServers } : previous))
       notify({ kind: 'success', title: m.savedTitle, message: m.savedMessage(trimmedName) })
       $mcpInstallRequest.set(null)
 

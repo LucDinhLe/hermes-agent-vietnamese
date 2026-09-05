@@ -848,7 +848,8 @@ export const zh: Translations = {
       updateReadyUnknown: '新更新已就绪。',
       notifyOnlyReady: version => `已有版本 ${version}。本应用不会自行安装更新：请下载安装包、核对 SHA-256 后运行。`,
       openDownloadPage: '打开下载页面',
-      notifyOnlyDesc: 'Hermes Vietnamese 只会提醒新版本，不会自行下载或安装；请从 GitHub Releases 下载安装包并核对校验值。',
+      notifyOnlyDesc:
+        'Hermes Vietnamese 只会提醒新版本，不会自行下载或安装；请从 GitHub Releases 下载安装包并核对校验值。',
       checksumLine: (filename, sizeMb, sha256) => `${filename} · ${sizeMb} MB · SHA-256 ${sha256}`,
       lastChecked: age => `上次检查:${age}`,
       justNowSuffix: ' · 刚刚',
@@ -1253,9 +1254,9 @@ export const zh: Translations = {
         connected: '已连接',
         tierLabel: '等级',
         caveat: '与 Gemini CLI 走同一入口。Google 可能更改或关闭它；这不是 Hermes 官方提供商。',
-        errorPrefix: 'Google 登录问题'
-        ,projectPlaceholder: 'Google Cloud 项目 ID（例如 my-project-123456）'
-        ,projectSave: '保存项目'
+        errorPrefix: 'Google 登录问题',
+        projectPlaceholder: 'Google Cloud 项目 ID（例如 my-project-123456）',
+        projectSave: '保存项目'
       },
       haveApiKey: '改用 API 密钥？',
       intro: '使用订阅登录，无需复制 API 密钥。Hermes 会在应用中为你完成浏览器登录。',

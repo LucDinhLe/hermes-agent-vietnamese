@@ -15,8 +15,7 @@ export const $starmapError = atom<null | string>(null)
 let graphOwnerKey: string | null = null
 let inflight: { key: string; promise: Promise<void> } | null = null
 
-const ownerKey = (owner?: BackendOwner | null) =>
-  owner ? `${owner.connectionId}::${owner.profile}` : 'ambient'
+const ownerKey = (owner?: BackendOwner | null) => (owner ? `${owner.connectionId}::${owner.profile}` : 'ambient')
 
 export async function loadStarmapGraph(force = false, owner?: BackendOwner | null): Promise<void> {
   const key = ownerKey(owner)

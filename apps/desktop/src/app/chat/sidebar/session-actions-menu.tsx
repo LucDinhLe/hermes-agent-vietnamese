@@ -98,6 +98,7 @@ export async function renameSessionPreferringRpc(
   if (title && runtimeId && (connectionId || gateway)) {
     try {
       const params = { session_id: runtimeId, title }
+
       const result = connectionId
         ? await requestGatewayForAgent<SessionTitleResponse>(
             connectionId,

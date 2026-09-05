@@ -25,12 +25,7 @@ import { notifyError } from '@/store/notifications'
 import { clearPreviewArtifacts } from '@/store/preview-status'
 import { clearAllPrompts } from '@/store/prompts'
 import { $sessions, resolveComposerSessionKey, sessionMatchesStoredId } from '@/store/session'
-import {
-  $sessionStates,
-  sessionTileDelegate,
-  sessionTileIdentity,
-  type SessionTileOwner
-} from '@/store/session-states'
+import { $sessionStates, sessionTileDelegate, sessionTileIdentity, type SessionTileOwner } from '@/store/session-states'
 import { broadcastSessionsChanged } from '@/store/session-sync'
 import { clearSessionSubagents } from '@/store/subagents'
 import { clearSessionTodos } from '@/store/todos'
@@ -112,8 +107,9 @@ interface SessionTileActionsArgs {
 export function useSessionTileActions({ owner, runtimeId, scope, storedSessionId }: SessionTileActionsArgs) {
   const { t } = useI18n()
   const copy = t.desktop
+
   const requestGateway = useCallback(
-    <T,>(method: string, params: Record<string, unknown> = {}, timeoutMs?: number, signal?: AbortSignal) =>
+    <T>(method: string, params: Record<string, unknown> = {}, timeoutMs?: number, signal?: AbortSignal) =>
       requestGatewayForAgent<T>(owner.connectionId, owner.profile, method, params, timeoutMs, signal),
     [owner.connectionId, owner.profile]
   )
@@ -172,25 +168,28 @@ export function useSessionTileActions({ owner, runtimeId, scope, storedSessionId
   // A ⌘T tab's session is unlisted until its first turn persists — seed the
   // row from the user's first message so the tab and sidebar name it right
   // away (see listTileSessionRow).
-  const listTileSession = useCallback((preview: string) => {
-    const runtimeId = runtimeIdRef.current
-    const state = $sessionStates.get()[runtimeId]
+  const listTileSession = useCallback(
+    (preview: string) => {
+      const runtimeId = runtimeIdRef.current
+      const state = $sessionStates.get()[runtimeId]
 
-    // The visible session list belongs to the foreground owner. A background
-    // A tile must never seed a synthetic row into B's same-profile list.
-    if (!sameBackendOwner(activeBackendOwner(), owner)) {
-      return
-    }
+      // The visible session list belongs to the foreground owner. A background
+      // A tile must never seed a synthetic row into B's same-profile list.
+      if (!sameBackendOwner(activeBackendOwner(), owner)) {
+        return
+      }
 
-    listTileSessionRow({
-      cwd: state?.cwd,
-      model: state?.model,
-      preview,
-      runtimeId,
-      sessions: $sessions.get(),
-      storedSessionId: storedIdRef.current
-    })
-  }, [owner])
+      listTileSessionRow({
+        cwd: state?.cwd,
+        model: state?.model,
+        preview,
+        runtimeId,
+        sessions: $sessions.get(),
+        storedSessionId: storedIdRef.current
+      })
+    },
+    [owner]
+  )
 
   // Tile-side attachment staging: same upload rules as the primary submit
   // (skip synced/pathless, byte-upload files+images), against the tile scope.

@@ -5,8 +5,7 @@ import type { SessionInfo } from '@/types/hermes'
 
 import { messagingReturnPlan } from './return-to-session'
 
-const session = (id: string, root: string | null = null) =>
-  ({ id, _lineage_root_id: root }) as SessionInfo
+const session = (id: string, root: string | null = null) => ({ id, _lineage_root_id: root }) as SessionInfo
 
 describe('messagingReturnPlan', () => {
   it('returns to the focused session tile and transfers its draft to the durable primary scope', () => {

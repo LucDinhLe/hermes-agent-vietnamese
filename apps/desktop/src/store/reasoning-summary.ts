@@ -174,9 +174,7 @@ export function findReasoningSummary(
 
   return Object.values(records).find(
     record =>
-      record.profile === profileKey &&
-      record.sessionLineage === sessionLineage &&
-      record.sourceDigest === sourceDigest
+      record.profile === profileKey && record.sessionLineage === sessionLineage && record.sourceDigest === sourceDigest
   )
 }
 
@@ -252,13 +250,7 @@ export async function summarizeReasoningMessage({
   const profileKey = normalizeProfileKey(profile)
   const key = cacheKey(profileKey, sessionLineage, message.id, sourceDigest)
 
-  const cached = findReasoningSummary(
-    $reasoningSummaries.get(),
-    profileKey,
-    sessionLineage,
-    message.id,
-    sourceDigest
-  )
+  const cached = findReasoningSummary($reasoningSummaries.get(), profileKey, sessionLineage, message.id, sourceDigest)
 
   if (cached) {
     return cached

@@ -54,11 +54,17 @@ export const FEED_KEY_BY_TARGET: Record<ReleaseTarget, string> = {
 
 /** Mục tiêu của máy đang chạy; null khi bản phát hành không có tệp cho máy này. */
 export function releaseTargetFor(platform: string, arch: string): ReleaseTarget | null {
-  if (platform === 'win32' && arch === 'x64') {return 'windows-x64'}
+  if (platform === 'win32' && arch === 'x64') {
+    return 'windows-x64'
+  }
 
-  if (platform === 'darwin' && arch === 'arm64') {return 'macos-arm64'}
+  if (platform === 'darwin' && arch === 'arm64') {
+    return 'macos-arm64'
+  }
 
-  if (platform === 'linux' && arch === 'x64') {return 'linux-x64'}
+  if (platform === 'linux' && arch === 'x64') {
+    return 'linux-x64'
+  }
 
   return null
 }
@@ -169,7 +175,13 @@ export function parseReleaseFeed(raw: unknown): ReleaseFeed | null {
 export function buildReleaseNotice(
   currentVersion: string,
   feed: ReleaseFeed | null,
-  opts: { channel: ReleaseChannel; fromCache: boolean; fetchedAt: number; error?: string; target?: ReleaseTarget | null }
+  opts: {
+    channel: ReleaseChannel
+    fromCache: boolean
+    fetchedAt: number
+    error?: string
+    target?: ReleaseTarget | null
+  }
 ): ReleaseNotice {
   const base: ReleaseNotice = {
     supported: true,
@@ -247,7 +259,12 @@ export function readFreshCache(
   try {
     const rec = JSON.parse(fs.readFileSync(file, 'utf8')) as CacheRecord
 
-    if (rec.channel !== channel || typeof rec.fetchedAt !== 'number' || now - rec.fetchedAt >= ttlMs || now < rec.fetchedAt) {
+    if (
+      rec.channel !== channel ||
+      typeof rec.fetchedAt !== 'number' ||
+      now - rec.fetchedAt >= ttlMs ||
+      now < rec.fetchedAt
+    ) {
       return null
     }
 
@@ -283,7 +300,11 @@ export async function checkReleaseNotice(input: {
     const cached = readFreshCache(file, channel, now())
 
     if (cached) {
-      return buildReleaseNotice(input.currentVersion, cached.feed, { channel, fromCache: true, fetchedAt: cached.fetchedAt })
+      return buildReleaseNotice(input.currentVersion, cached.feed, {
+        channel,
+        fromCache: true,
+        fetchedAt: cached.fetchedAt
+      })
     }
   }
 

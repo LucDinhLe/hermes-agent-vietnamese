@@ -456,13 +456,7 @@ export function MessagingView({ setStatusbarItemGroup: _setStatusbarItemGroup, .
     <PageSearchShell
       {...props}
       leadingAction={
-        <Button
-          className="shrink-0 gap-1.5"
-          onClick={returnToSession}
-          size="sm"
-          type="button"
-          variant="ghost"
-        >
+        <Button className="shrink-0 gap-1.5" onClick={returnToSession} size="sm" type="button" variant="ghost">
           <Codicon aria-hidden name="arrow-left" />
           <span>{m.backToSession}</span>
         </Button>

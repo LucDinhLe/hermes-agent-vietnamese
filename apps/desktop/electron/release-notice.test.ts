@@ -49,27 +49,46 @@ test('parseReleaseFeed: chỉ nhận sha256 hợp lệ, bỏ trường lạ', ()
   assert.equal(parsed?.assets['windows-x64']?.sha256, 'a'.repeat(64))
   assert.equal(parsed?.assets['macos-arm64']?.filename, 'Hermes-2026.9.3-mac-arm64.dmg')
   assert.equal(parsed?.assets['linux-x64']?.sha256, 'c'.repeat(64))
-  assert.equal(parseReleaseFeed({ ...feed, windowsX64: { ...feed.windowsX64, sha256: 'xyz' } })?.assets['windows-x64'], undefined)
+  assert.equal(
+    parseReleaseFeed({ ...feed, windowsX64: { ...feed.windowsX64, sha256: 'xyz' } })?.assets['windows-x64'],
+    undefined
+  )
   // feed cũ chỉ có Windows vẫn đọc được
-  assert.deepEqual(Object.keys(parseReleaseFeed({ tag: 'v2026.9.3', version: '2026.9.3', updateFeedEnabled: true, windowsX64: feed.windowsX64 })?.assets ?? {}), ['windows-x64'])
+  assert.deepEqual(
+    Object.keys(
+      parseReleaseFeed({ tag: 'v2026.9.3', version: '2026.9.3', updateFeedEnabled: true, windowsX64: feed.windowsX64 })
+        ?.assets ?? {}
+    ),
+    ['windows-x64']
+  )
   assert.equal(parseReleaseFeed({ ...feed, version: 'vi-v0.32.1-18' }), null)
   assert.equal(parseReleaseFeed(null), null)
 })
 
 test('buildReleaseNotice: có bản mới → đủ tên tệp, kích thước, SHA-256, liên kết; không tự tải', () => {
-  const n = buildReleaseNotice('2026.9.2', parseReleaseFeed(feed), { channel: 'latest', fromCache: false, fetchedAt: 1, target: 'windows-x64' })
+  const n = buildReleaseNotice('2026.9.2', parseReleaseFeed(feed), {
+    channel: 'latest',
+    fromCache: false,
+    fetchedAt: 1,
+    target: 'windows-x64'
+  })
   assert.equal(n.notifyOnly, true)
   assert.equal(n.updateAvailable, true)
   assert.equal(n.sha256, 'a'.repeat(64))
   assert.equal(n.size, 252000000)
-  assert.equal(n.downloadUrl, 'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-2026.9.3-win-x64.exe')
+  assert.equal(
+    n.downloadUrl,
+    'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.3/Hermes-2026.9.3-win-x64.exe'
+  )
   assert.equal(n.releaseUrl, 'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.3')
   assert.equal(n.targetSha, 'v2026.9.3')
 })
 
 test('buildReleaseNotice: feed tắt → im lặng dù có bản mới; bản đang chạy mới hơn → im lặng', () => {
   const off = buildReleaseNotice('2026.9.2', parseReleaseFeed({ ...feed, updateFeedEnabled: false }), {
-    channel: 'latest', fromCache: false, fetchedAt: 1
+    channel: 'latest',
+    fromCache: false,
+    fetchedAt: 1
   })
 
   assert.equal(off.updateAvailable, false)
@@ -77,12 +96,21 @@ test('buildReleaseNotice: feed tắt → im lặng dù có bản mới; bản đ
   assert.equal(off.downloadUrl, null)
   assert.equal(off.latestVersion, '2026.9.3')
 
-  const newer = buildReleaseNotice('2026.9.4', parseReleaseFeed(feed), { channel: 'latest', fromCache: false, fetchedAt: 1 })
+  const newer = buildReleaseNotice('2026.9.4', parseReleaseFeed(feed), {
+    channel: 'latest',
+    fromCache: false,
+    fetchedAt: 1
+  })
   assert.equal(newer.updateAvailable, false)
 })
 
 test('buildReleaseNotice: lỗi mạng và feed hỏng trả về lỗi có cấu trúc', () => {
-  const err = buildReleaseNotice('2026.9.2', null, { channel: 'latest', fromCache: false, fetchedAt: 1, error: 'HTTP 503' })
+  const err = buildReleaseNotice('2026.9.2', null, {
+    channel: 'latest',
+    fromCache: false,
+    fetchedAt: 1,
+    error: 'HTTP 503'
+  })
   assert.equal(err.error, 'fetch-failed')
   assert.equal(err.updateAvailable, false)
   const bad = buildReleaseNotice('2026.9.2', null, { channel: 'latest', fromCache: false, fetchedAt: 1 })
@@ -101,17 +129,35 @@ test('checkReleaseNotice: cache 24 giờ bền qua khởi động lại, force b
 
   let clock = 1_000_000
 
-  const first = await checkReleaseNotice({ currentVersion: '2026.9.2', userDataDir: dir, force: false, fetchJson, now: () => clock })
+  const first = await checkReleaseNotice({
+    currentVersion: '2026.9.2',
+    userDataDir: dir,
+    force: false,
+    fetchJson,
+    now: () => clock
+  })
   assert.equal(first.fromCache, false)
   assert.equal(calls, 1)
 
   clock += 60 * 60 * 1000 // 1 giờ sau, "khởi động lại": gọi mới vẫn đọc cache trên đĩa
-  const second = await checkReleaseNotice({ currentVersion: '2026.9.2', userDataDir: dir, force: false, fetchJson, now: () => clock })
+  const second = await checkReleaseNotice({
+    currentVersion: '2026.9.2',
+    userDataDir: dir,
+    force: false,
+    fetchJson,
+    now: () => clock
+  })
   assert.equal(second.fromCache, true)
   assert.equal(second.updateAvailable, true)
   assert.equal(calls, 1)
 
-  const forced = await checkReleaseNotice({ currentVersion: '2026.9.2', userDataDir: dir, force: true, fetchJson, now: () => clock })
+  const forced = await checkReleaseNotice({
+    currentVersion: '2026.9.2',
+    userDataDir: dir,
+    force: true,
+    fetchJson,
+    now: () => clock
+  })
   assert.equal(forced.fromCache, false)
   assert.equal(calls, 2)
 
@@ -120,12 +166,23 @@ test('checkReleaseNotice: cache 24 giờ bền qua khởi động lại, force b
   assert.equal(calls, 3)
 
   // kênh thử nghiệm không đọc cache của kênh chính
-  await checkReleaseNotice({ currentVersion: '2026.9.2-thunghiem.1', userDataDir: dir, force: false, fetchJson, now: () => clock })
+  await checkReleaseNotice({
+    currentVersion: '2026.9.2-thunghiem.1',
+    userDataDir: dir,
+    force: false,
+    fetchJson,
+    now: () => clock
+  })
   assert.equal(calls, 4)
 
   const failing = await checkReleaseNotice({
-    currentVersion: '2026.9.2', userDataDir: dir, force: true,
-    fetchJson: async () => { throw new Error('offline') }, now: () => clock
+    currentVersion: '2026.9.2',
+    userDataDir: dir,
+    force: true,
+    fetchJson: async () => {
+      throw new Error('offline')
+    },
+    now: () => clock
   })
 
   assert.equal(failing.error, 'fetch-failed')
@@ -134,14 +191,29 @@ test('checkReleaseNotice: cache 24 giờ bền qua khởi động lại, force b
 
 test('buildReleaseNotice: chọn tệp theo máy đang chạy; máy không có tệp riêng vẫn thấy bản mới và trang tải', () => {
   const parsed = parseReleaseFeed(feed)
-  const mac = buildReleaseNotice('2026.9.2', parsed, { channel: 'latest', fromCache: false, fetchedAt: 1, target: 'macos-arm64' })
+  const mac = buildReleaseNotice('2026.9.2', parsed, {
+    channel: 'latest',
+    fromCache: false,
+    fetchedAt: 1,
+    target: 'macos-arm64'
+  })
   assert.equal(mac.filename, 'Hermes-2026.9.3-mac-arm64.dmg')
   assert.match(mac.downloadUrl ?? '', /mac-arm64\.dmg$/)
 
-  const linux = buildReleaseNotice('2026.9.2', parsed, { channel: 'latest', fromCache: false, fetchedAt: 1, target: 'linux-x64' })
+  const linux = buildReleaseNotice('2026.9.2', parsed, {
+    channel: 'latest',
+    fromCache: false,
+    fetchedAt: 1,
+    target: 'linux-x64'
+  })
   assert.equal(linux.sha256, 'c'.repeat(64))
 
-  const none = buildReleaseNotice('2026.9.2', parsed, { channel: 'latest', fromCache: false, fetchedAt: 1, target: null })
+  const none = buildReleaseNotice('2026.9.2', parsed, {
+    channel: 'latest',
+    fromCache: false,
+    fetchedAt: 1,
+    target: null
+  })
   assert.equal(none.updateAvailable, true)
   assert.equal(none.filename, null)
   assert.equal(none.downloadUrl, null)

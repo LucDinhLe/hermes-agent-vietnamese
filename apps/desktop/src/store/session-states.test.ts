@@ -182,13 +182,15 @@ describe('blankDraftTile', () => {
     expect(blankDraftTile(tiles, states)).toEqual(tiles[1])
   })
 
-  it('does not spend another source\'s same-profile blank draft', () => {
+  it("does not spend another source's same-profile blank draft", () => {
     const ownerA = { connectionId: 'source-a', profile: 'default' }
     const ownerB = { connectionId: 'source-b', profile: 'default' }
+
     const tiles: SessionTile[] = [
       { ...ownerA, runtimeId: 'run-a', storedSessionId: 'draft-a' },
       { ...ownerB, runtimeId: 'run-b', storedSessionId: 'draft-b' }
     ]
+
     const states = { 'run-a': state(0), 'run-b': state(0) }
 
     expect(blankDraftTile(tiles, states, ownerA)).toEqual(tiles[0])

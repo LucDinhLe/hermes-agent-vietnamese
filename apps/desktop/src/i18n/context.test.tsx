@@ -301,9 +301,7 @@ describe('I18nProvider', () => {
     await waitFor(() => expect(screen.getByTestId('locale').textContent).toBe('en'))
     fireEvent.click(screen.getByRole('button', { name: 'switch' }))
 
-    await waitFor(() =>
-      expect(saveConfig).toHaveBeenCalledWith({ display: { language: 'zh' } }, ownerA)
-    )
+    await waitFor(() => expect(saveConfig).toHaveBeenCalledWith({ display: { language: 'zh' } }, ownerA))
 
     view.rerender(
       <I18nProvider backendOwner={ownerB} configClient={configClient}>

@@ -49,7 +49,9 @@ export function WorkProfileSettings({ backendOwner }: { backendOwner: BackendOwn
 
     void Promise.all([getWorkProfile(profile, connectionId), getSkills(profile, connectionId)])
       .then(([state, installed]) => {
-        if (!active) {return}
+        if (!active) {
+          return
+        }
         setAreas(new Set(state.work_areas))
         setCommonTasks(state.common_tasks.join('\n'))
         setSkills(installed)
@@ -72,8 +74,11 @@ export function WorkProfileSettings({ backendOwner }: { backendOwner: BackendOwn
   const toggle = (set: Set<string>, value: string) => {
     const next = new Set(set)
 
-    if (next.has(value)) {next.delete(value)}
-    else {next.add(value)}
+    if (next.has(value)) {
+      next.delete(value)
+    } else {
+      next.add(value)
+    }
 
     return next
   }
@@ -122,7 +127,9 @@ export function WorkProfileSettings({ backendOwner }: { backendOwner: BackendOwn
     }
   }
 
-  if (loading) {return <SettingsSkeleton sections={[{ heading: true, rows: 3 }]} />}
+  if (loading) {
+    return <SettingsSkeleton sections={[{ heading: true, rows: 3 }]} />
+  }
 
   return (
     <SettingsContent>

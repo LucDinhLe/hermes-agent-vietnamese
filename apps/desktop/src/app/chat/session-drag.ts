@@ -194,9 +194,9 @@ export function startSessionDrag(
       if (pos === 'center' && host.chat) {
         const sameOwner = Boolean(
           surface &&
-            (payload.connectionId
-              ? surface.connectionId === payload.connectionId && surface.profile === (payload.profile || 'default')
-              : !surface.connectionId)
+          (payload.connectionId
+            ? surface.connectionId === payload.connectionId && surface.profile === (payload.profile || 'default')
+            : !surface.connectionId)
         )
 
         // @session currently serializes profile/id, which is not unique across
@@ -231,6 +231,7 @@ export function startSessionDrag(
         } else {
           openSessionTile(payload.id, split.pos, split.anchor, split.before)
         }
+
         // A tile for this session may already exist (openSessionTile is
         // idempotent — e.g. persisted from an earlier run): a drop must never
         // feel dead, so front/unhide/un-dismiss it either way.

@@ -313,6 +313,7 @@ export const host = {
     // Omitted source means "the live source now" for the plugin-host API.
     // An explicit null retains the legacy unscoped escape hatch.
     const targetConnectionId = connectionId === undefined ? activeConnectionId : explicitConnectionId
+
     const wasActive =
       targetConnectionId === activeConnectionId &&
       normalizeProfileKey(name) === normalizeProfileKey($activeGatewayProfile.get())
@@ -325,6 +326,7 @@ export const host = {
     if (targetConnectionId === null || targetConnectionId === 'local') {
       retireLocalProfileGateways(name)
     }
+
     await deleteProfile(name, targetConnectionId)
 
     // The profile rail paints from the shared $profiles cache; without a

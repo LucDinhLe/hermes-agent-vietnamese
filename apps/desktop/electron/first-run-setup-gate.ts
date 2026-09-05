@@ -63,9 +63,9 @@ export function createFirstRunSetupGate({
   const shouldGate = (backend?: FirstRunSetupBackend | null) =>
     Boolean(
       backend &&
-        backend.kind === 'bootstrap-needed' &&
-        backend.bootstrapReason !== 'packaged-runtime-refresh' &&
-        !localBootstrapConfirmed
+      backend.kind === 'bootstrap-needed' &&
+      backend.bootstrapReason !== 'packaged-runtime-refresh' &&
+      !localBootstrapConfirmed
     )
 
   const wait = async (backend?: FirstRunSetupBackend | null) => {

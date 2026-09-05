@@ -51,6 +51,7 @@ vi.mock('@/i18n', () => ({
 
 vi.mock('@/app/chat/profile-tag', () => ({ ProfileTag: () => null }))
 vi.mock('@/app/chat/session-drag', () => ({ startSessionDrag: vi.fn() }))
+
 // PlatformAvatar is intentionally NOT mocked (do not reintroduce this — see
 // #67500, Gille's third pass): it's a forwardRef component that spreads its
 // props onto the rendered span, and mocking it with a stand-in that spreads

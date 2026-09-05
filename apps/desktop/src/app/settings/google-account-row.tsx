@@ -12,7 +12,7 @@ import { Check, Loader2 } from '@/lib/icons'
 type Status = DesktopGoogleBridgeStatus
 
 function bridge() {
-  return typeof window !== 'undefined' ? window.hermesDesktop?.google ?? null : null
+  return typeof window !== 'undefined' ? (window.hermesDesktop?.google ?? null) : null
 }
 
 export function GoogleAccountRow({ onChanged }: { onChanged?: () => void }) {
@@ -94,7 +94,13 @@ export function GoogleAccountRow({ onChanged }: { onChanged?: () => void }) {
         <div className="flex shrink-0 items-center gap-2">
           {status.signedIn ? (
             <>
-              <Button disabled={busy !== null} onClick={() => void run('default')} size="sm" type="button" variant="outline">
+              <Button
+                disabled={busy !== null}
+                onClick={() => void run('default')}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
                 {busy === 'default' ? <Loader2 className="size-3.5 animate-spin" /> : g.makeDefault}
               </Button>
               <Button disabled={busy !== null} onClick={() => void run('out')} size="sm" type="button" variant="text">

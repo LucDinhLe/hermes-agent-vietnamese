@@ -81,6 +81,7 @@ export async function setAutoSpeakReplies(
     if (sameBackendOwner(owner, activeBackendOwner())) {
       $autoSpeakReplies.set(previous)
     }
+
     throw error
   }
 }

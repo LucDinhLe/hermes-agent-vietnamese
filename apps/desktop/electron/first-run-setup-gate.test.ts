@@ -57,7 +57,10 @@ test('automated fresh-install smoke tests continue locally without renderer inpu
   assert.equal(gate.isLocalBootstrapConfirmed(), true)
   assert.equal(gate.hasWaiter(), false)
   assert.deepEqual(prompts, [])
-  assert.equal(logs.some(message => message.includes('automated fresh-install smoke test')), true)
+  assert.equal(
+    logs.some(message => message.includes('automated fresh-install smoke test')),
+    true
+  )
 })
 
 test('first-run setup gate prompts once for concurrent waits', async () => {

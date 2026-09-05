@@ -69,10 +69,10 @@ describe('liveSessionScopes', () => {
   })
 
   it('binds primary events to a registered remote descriptor without adding a keep scope', () => {
-    recordPrimarySessionEventSource(
-      { session_id: 'rt-primary-remote' },
-      { connectionId: 'cloud-main', mode: 'remote' } as never
-    )
+    recordPrimarySessionEventSource({ session_id: 'rt-primary-remote' }, {
+      connectionId: 'cloud-main',
+      mode: 'remote'
+    } as never)
     publishSessionState('rt-primary-remote', state({ busy: true }))
 
     expect(sessionConnectionId('rt-primary-remote')).toBe('cloud-main')

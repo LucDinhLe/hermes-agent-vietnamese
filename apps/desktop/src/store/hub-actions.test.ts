@@ -25,6 +25,7 @@ describe('source-qualified hub actions', () => {
 
   it('keeps deferred same-profile actions isolated across backend sources', async () => {
     let finishSourceA: ((value: unknown) => void) | undefined
+
     const sourceAStatus = new Promise(resolve => {
       finishSourceA = resolve
     })

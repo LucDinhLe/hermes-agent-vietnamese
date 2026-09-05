@@ -56,7 +56,9 @@ function parseArgs(text: string): Record<string, unknown> {
   try {
     const parsed = JSON.parse(text) as unknown
 
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : { value: parsed }
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : { value: parsed }
   } catch {
     return { raw: text }
   }
@@ -120,7 +122,9 @@ export function toGeminiRequest(req: OpenAiChatRequest): GeminiRequest {
 
       for (const call of msg.tool_calls ?? []) {
         callNames.set(call.id, call.function.name)
-        parts.push({ functionCall: { id: call.id, name: call.function.name, args: parseArgs(call.function.arguments) } })
+        parts.push({
+          functionCall: { id: call.id, name: call.function.name, args: parseArgs(call.function.arguments) }
+        })
       }
 
       push('model', parts)
@@ -132,7 +136,10 @@ export function toGeminiRequest(req: OpenAiChatRequest): GeminiRequest {
       try {
         const parsed = JSON.parse(text) as unknown
 
-        response = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : { result: parsed }
+        response =
+          parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+            ? (parsed as Record<string, unknown>)
+            : { result: parsed }
       } catch {
         response = { result: text }
       }
@@ -157,7 +164,11 @@ export function toGeminiRequest(req: OpenAiChatRequest): GeminiRequest {
       {
         functionDeclarations: req.tools
           .filter(t => t.type === 'function' && t.function?.name)
-          .map(t => ({ name: t.function.name, description: t.function.description, parameters: sanitizeSchema(t.function.parameters) }))
+          .map(t => ({
+            name: t.function.name,
+            description: t.function.description,
+            parameters: sanitizeSchema(t.function.parameters)
+          }))
       }
     ]
 
@@ -169,22 +180,33 @@ export function toGeminiRequest(req: OpenAiChatRequest): GeminiRequest {
       out.toolConfig = { functionCallingConfig: { mode: 'ANY' } }
     } else if (choice && typeof choice === 'object' && (choice as { function?: { name?: string } }).function?.name) {
       out.toolConfig = {
-        functionCallingConfig: { mode: 'ANY', allowedFunctionNames: [(choice as { function: { name: string } }).function.name] }
+        functionCallingConfig: {
+          mode: 'ANY',
+          allowedFunctionNames: [(choice as { function: { name: string } }).function.name]
+        }
       }
     }
   }
 
   const gen: Record<string, unknown> = {}
 
-  if (typeof req.temperature === 'number') {gen.temperature = req.temperature}
+  if (typeof req.temperature === 'number') {
+    gen.temperature = req.temperature
+  }
 
-  if (typeof req.top_p === 'number') {gen.topP = req.top_p}
+  if (typeof req.top_p === 'number') {
+    gen.topP = req.top_p
+  }
 
   const maxTokens = req.max_completion_tokens ?? req.max_tokens
 
-  if (typeof maxTokens === 'number' && maxTokens > 0) {gen.maxOutputTokens = maxTokens}
+  if (typeof maxTokens === 'number' && maxTokens > 0) {
+    gen.maxOutputTokens = maxTokens
+  }
 
-  if (req.stop) {gen.stopSequences = Array.isArray(req.stop) ? req.stop : [req.stop]}
+  if (req.stop) {
+    gen.stopSequences = Array.isArray(req.stop) ? req.stop : [req.stop]
+  }
 
   if (Object.keys(gen).length) {
     out.generationConfig = gen
@@ -211,9 +233,10 @@ export function sanitizeSchema(schema: unknown): unknown {
       continue
     }
 
-    out[k] = k === 'properties' && v && typeof v === 'object'
-      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([pk, pv]) => [pk, sanitizeSchema(pv)]))
-      : sanitizeSchema(v)
+    out[k] =
+      k === 'properties' && v && typeof v === 'object'
+        ? Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([pk, pv]) => [pk, sanitizeSchema(pv)]))
+        : sanitizeSchema(v)
   }
 
   return out
@@ -223,7 +246,12 @@ export function sanitizeSchema(schema: unknown): unknown {
 
 export interface GeminiResponse {
   candidates?: { content?: { parts?: GeminiPart[] }; finishReason?: string }[]
-  usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number; thoughtsTokenCount?: number }
+  usageMetadata?: {
+    promptTokenCount?: number
+    candidatesTokenCount?: number
+    totalTokenCount?: number
+    thoughtsTokenCount?: number
+  }
 }
 
 export interface OpenAiUsage {
@@ -242,17 +270,32 @@ export function toOpenAiUsage(res: GeminiResponse | undefined): OpenAiUsage | un
   const prompt = u.promptTokenCount ?? 0
   const completion = (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0)
 
-  return { prompt_tokens: prompt, completion_tokens: completion, total_tokens: u.totalTokenCount ?? prompt + completion }
+  return {
+    prompt_tokens: prompt,
+    completion_tokens: completion,
+    total_tokens: u.totalTokenCount ?? prompt + completion
+  }
 }
 
-export function finishReasonToOpenAi(reason: string | undefined, hadToolCalls: boolean): 'stop' | 'length' | 'tool_calls' | 'content_filter' | null {
-  if (hadToolCalls) {return 'tool_calls'}
+export function finishReasonToOpenAi(
+  reason: string | undefined,
+  hadToolCalls: boolean
+): 'stop' | 'length' | 'tool_calls' | 'content_filter' | null {
+  if (hadToolCalls) {
+    return 'tool_calls'
+  }
 
-  if (!reason) {return null}
+  if (!reason) {
+    return null
+  }
 
-  if (reason === 'MAX_TOKENS') {return 'length'}
+  if (reason === 'MAX_TOKENS') {
+    return 'length'
+  }
 
-  if (reason === 'SAFETY' || reason === 'RECITATION' || reason === 'BLOCKLIST' || reason === 'PROHIBITED_CONTENT') {return 'content_filter'}
+  if (reason === 'SAFETY' || reason === 'RECITATION' || reason === 'BLOCKLIST' || reason === 'PROHIBITED_CONTENT') {
+    return 'content_filter'
+  }
 
   return 'stop'
 }
@@ -336,9 +379,13 @@ export function toOpenAiCompletion(id: string, model: string, chunks: GeminiResp
     const cand = chunk.candidates?.[0]
 
     for (const part of cand?.content?.parts ?? []) {
-      if (part.thought) {continue}
+      if (part.thought) {
+        continue
+      }
 
-      if (typeof part.text === 'string') {text += part.text}
+      if (typeof part.text === 'string') {
+        text += part.text
+      }
 
       if (part.functionCall) {
         toolCalls.push({
@@ -349,7 +396,9 @@ export function toOpenAiCompletion(id: string, model: string, chunks: GeminiResp
       }
     }
 
-    if (cand?.finishReason) {finish = cand.finishReason}
+    if (cand?.finishReason) {
+      finish = cand.finishReason
+    }
     usage = toOpenAiUsage(chunk) ?? usage
   }
 
@@ -361,7 +410,11 @@ export function toOpenAiCompletion(id: string, model: string, chunks: GeminiResp
     choices: [
       {
         index: 0,
-        message: { role: 'assistant', content: text || (toolCalls.length ? null : ''), ...(toolCalls.length ? { tool_calls: toolCalls } : {}) },
+        message: {
+          role: 'assistant',
+          content: text || (toolCalls.length ? null : ''),
+          ...(toolCalls.length ? { tool_calls: toolCalls } : {})
+        },
         finish_reason: finishReasonToOpenAi(finish, toolCalls.length > 0) ?? 'stop'
       }
     ],

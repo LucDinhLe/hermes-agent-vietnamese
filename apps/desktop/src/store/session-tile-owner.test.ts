@@ -88,6 +88,7 @@ describe('source-qualified session tile persistence', () => {
     const persisted = JSON.parse(window.localStorage.getItem(V3_KEY)!) as {
       legacyV2OwnerByProfile: Record<string, { connectionId: string; profile: string }>
     }
+
     expect(persisted.legacyV2OwnerByProfile.reviewer).toEqual({ connectionId: 'source-a', profile: 'reviewer' })
 
     vi.resetModules()

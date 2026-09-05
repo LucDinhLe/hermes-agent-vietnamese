@@ -15,12 +15,7 @@ import { type ComposerSuggestion, registerDraftProvider } from '@/store/composer
 import { requestGatewayForAgent } from '@/store/gateway'
 import { notifyError } from '@/store/notifications'
 
-import {
-  type BackendOwner,
-  backendOwnerKey,
-  sameBackendOwner,
-  sessionBackendOwner
-} from '../backend-owner'
+import { type BackendOwner, backendOwnerKey, sameBackendOwner, sessionBackendOwner } from '../backend-owner'
 
 /**
  * The MCP draft provider — the suggestion bus's founding member (PR #85036).
@@ -120,6 +115,7 @@ async function loadSuggestible(owner: BackendOwner): Promise<SuggestibleServer[]
           server: entry.name,
           url: entry.url
         }))
+
   suggestibleByOwner.set(key, { at: Date.now(), servers })
 
   return servers

@@ -78,6 +78,7 @@ export function useHudHandoff({ navigate, resumeSession }: HudHandoffParams): vo
       reloadPersistedDrafts()
 
       const selected = $selectedStoredSessionId.get()
+
       const encodedTile = hudSessionId?.startsWith(TILE_TARGET_PREFIX)
         ? parseSessionTileIdentity(hudSessionId.slice(TILE_TARGET_PREFIX.length))
         : null
@@ -93,7 +94,8 @@ export function useHudHandoff({ navigate, resumeSession }: HudHandoffParams): vo
       // — route to it and let the route resume do the rest, including loading
       // its draft as the composer's scope swaps.
       if (target && (target !== selected || (owner && !sameBackendOwner(activeBackendOwner(), owner)))) {
-        const delegate = focusOpenSession(target, owner ?? activeBackendOwner()) === 'tile' ? sessionTileDelegate() : null
+        const delegate =
+          focusOpenSession(target, owner ?? activeBackendOwner()) === 'tile' ? sessionTileDelegate() : null
 
         if (delegate && owner) {
           void delegate.resumeTile(target, owner).catch(() => undefined)

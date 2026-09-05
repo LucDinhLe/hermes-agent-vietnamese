@@ -717,9 +717,11 @@ export const ja = defineLocale({
       tapCheck: '更新を探すには「今すぐ確認」を押してください。',
       updateReady: count => `新しい更新の準備ができました (${count} 件の変更を含みます)。`,
       updateReadyUnknown: '新しい更新の準備ができました。',
-      notifyOnlyReady: version => `バージョン ${version} が公開されています。このアプリは自動で更新しません。インストーラーをダウンロードし、SHA-256 を確認してから実行してください。`,
+      notifyOnlyReady: version =>
+        `バージョン ${version} が公開されています。このアプリは自動で更新しません。インストーラーをダウンロードし、SHA-256 を確認してから実行してください。`,
       openDownloadPage: 'ダウンロードページを開く',
-      notifyOnlyDesc: 'Hermes Vietnamese は新しいバージョンを通知するだけで、自動でダウンロードやインストールは行いません。GitHub Releases からインストーラーを取得し、チェックサムを確認してください。',
+      notifyOnlyDesc:
+        'Hermes Vietnamese は新しいバージョンを通知するだけで、自動でダウンロードやインストールは行いません。GitHub Releases からインストーラーを取得し、チェックサムを確認してください。',
       checksumLine: (filename, sizeMb, sha256) => `${filename} · ${sizeMb} MB · SHA-256 ${sha256}`,
       lastChecked: age => `前回確認: ${age}`,
       justNowSuffix: ' · たった今',

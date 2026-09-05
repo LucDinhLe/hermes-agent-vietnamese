@@ -34,11 +34,7 @@ export const $transcriptTailBySessionId = atom<Record<string, TranscriptTailStat
 
 type TailPage = Pick<SessionMessagesResponse, 'messages' | 'pagination'>
 
-function tailStateFromPage(
-  page: TailPage,
-  profile?: null | string,
-  connectionId?: null | string
-): TranscriptTailState {
+function tailStateFromPage(page: TailPage, profile?: null | string, connectionId?: null | string): TranscriptTailState {
   const pagination = page.pagination
 
   // No pagination metadata is a legacy backend that ignored the paging query

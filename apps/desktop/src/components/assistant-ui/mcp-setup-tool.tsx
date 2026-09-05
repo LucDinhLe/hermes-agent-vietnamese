@@ -361,12 +361,7 @@ function McpSetupPending({ args }: ToolCallMessagePartProps) {
         return
       }
 
-      const res = await installMcpCatalogEntry(
-        server,
-        envDraft,
-        targetOwner.profile,
-        targetOwner.connectionId
-      )
+      const res = await installMcpCatalogEntry(server, envDraft, targetOwner.profile, targetOwner.connectionId)
 
       // Git-backed entries clone in the background — poll to completion so a
       // non-zero exit surfaces as a real failure instead of a false success.

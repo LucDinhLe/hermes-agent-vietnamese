@@ -447,6 +447,7 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
     return registerPreviewPageController(tabId, {
       interact: opts => {
         const webview = webviewRef.current
+
         if (!webview) {
           throw new Error('preview webview is not ready')
         }
@@ -459,6 +460,7 @@ export function PreviewPane({ embedded = false, onRestartServer, reloadRequest =
         if (!webview) {
           throw new Error('preview webview is not ready')
         }
+
         return readPreviewWebview(webview)
       }
     })

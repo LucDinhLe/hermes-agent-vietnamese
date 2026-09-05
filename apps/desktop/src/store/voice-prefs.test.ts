@@ -58,9 +58,10 @@ describe('setAutoSpeakReplies', () => {
   it('keeps a whole-config write on the captured source after a same-profile switch', async () => {
     let finishRead: ((value: { voice: { speed: number } }) => void) | undefined
     getHermesConfigRecord.mockImplementationOnce(
-      () => new Promise(resolve => {
-        finishRead = resolve
-      })
+      () =>
+        new Promise(resolve => {
+          finishRead = resolve
+        })
     )
     $connection.set({ connectionId: 'source-a', mode: 'remote', profile: 'default' } as HermesConnection)
 
@@ -71,10 +72,6 @@ describe('setAutoSpeakReplies', () => {
     await saving
 
     expect(getHermesConfigRecord).toHaveBeenCalledWith('default', 'source-a')
-    expect(saveHermesConfig).toHaveBeenCalledWith(
-      { voice: { auto_tts: true, speed: 1 } },
-      'default',
-      'source-a'
-    )
+    expect(saveHermesConfig).toHaveBeenCalledWith({ voice: { auto_tts: true, speed: 1 } }, 'default', 'source-a')
   })
 })

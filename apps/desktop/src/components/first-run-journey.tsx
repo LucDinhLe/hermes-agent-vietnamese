@@ -69,11 +69,7 @@ export function FirstRunJourney({ activeStep, className, showLanguage = false }:
             <p className="text-xs font-medium text-(--ui-text-secondary)">{t.install.chooseLanguage}</p>
             <p className="mt-0.5 text-xs text-(--ui-text-tertiary)">{t.install.noTerminalRequired}</p>
           </div>
-          <SegmentedControl
-            onChange={next => previewLocale(next)}
-            options={LANGUAGE_OPTIONS}
-            value={selectedLocale}
-          />
+          <SegmentedControl onChange={next => previewLocale(next)} options={LANGUAGE_OPTIONS} value={selectedLocale} />
         </div>
       ) : null}
     </div>

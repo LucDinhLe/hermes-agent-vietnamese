@@ -344,15 +344,15 @@ const ReasoningAccordionGroup: FC<{ children?: ReactNode; endIndex: number; star
 
   const lineage = storedSessionId ?? ''
 
-  const summary = sourceDigest
-    ? findReasoningSummary(summaries, profile, lineage, messageId, sourceDigest)
-    : undefined
+  const summary = sourceDigest ? findReasoningSummary(summaries, profile, lineage, messageId, sourceDigest) : undefined
 
-  const error = sourceDigest
-    ? errors[reasoningSummaryContextKey(profile, lineage, messageId, sourceDigest)]
-    : undefined
+  const error = sourceDigest ? errors[reasoningSummaryContextKey(profile, lineage, messageId, sourceDigest)] : undefined
 
-  const latency = summary ? (summary.latencyMs < 1000 ? `${summary.latencyMs} ms` : `${(summary.latencyMs / 1000).toFixed(1)} s`) : ''
+  const latency = summary
+    ? summary.latencyMs < 1000
+      ? `${summary.latencyMs} ms`
+      : `${(summary.latencyMs / 1000).toFixed(1)} s`
+    : ''
   const usageTokens = summary?.usage?.totalTokens
 
   return (

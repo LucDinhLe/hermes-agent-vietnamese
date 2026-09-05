@@ -60,10 +60,16 @@ export function useModelControls({ owner, queryClient, requestGateway }: ModelCo
         return { ...prev, provider, model, providers }
       }
 
-      queryClient.setQueryData<ModelOptionsResponse>(modelOptionsQueryKey(profile, sessionId, owner?.connectionId), patch)
+      queryClient.setQueryData<ModelOptionsResponse>(
+        modelOptionsQueryKey(profile, sessionId, owner?.connectionId),
+        patch
+      )
 
       if (includeGlobal) {
-        queryClient.setQueryData<ModelOptionsResponse>(modelOptionsQueryKey(profile, undefined, owner?.connectionId), patch)
+        queryClient.setQueryData<ModelOptionsResponse>(
+          modelOptionsQueryKey(profile, undefined, owner?.connectionId),
+          patch
+        )
       }
     },
     [owner?.connectionId, owner?.profile, queryClient]

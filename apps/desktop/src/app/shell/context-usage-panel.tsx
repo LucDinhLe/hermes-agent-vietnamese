@@ -55,6 +55,7 @@ export function ContextUsagePanel({ breakdown, loading, usage }: ContextUsagePan
   const cacheTokens = (usage.cache_read ?? 0) + (usage.cache_write ?? 0)
   const turnBudget = usage.turn_budget
   const turnBudgetState = turnBudget?.paused ? 'paused' : turnBudget?.near_limit ? 'near-limit' : 'normal'
+
   const turnBudgetStateLabel = turnBudget?.paused
     ? copy.turnBudgetPaused
     : turnBudget?.near_limit

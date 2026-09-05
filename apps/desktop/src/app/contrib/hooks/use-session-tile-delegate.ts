@@ -22,7 +22,11 @@ type SessionStateCache = ReturnType<typeof useSessionStateCache>
 
 interface SessionTileDelegateParams {
   archiveSession: (storedSessionId: string, owner?: SessionTileOwner) => Promise<unknown>
-  branchStoredSession: (storedSessionId: string, sessionProfile?: string | null, owner?: SessionTileOwner) => Promise<unknown>
+  branchStoredSession: (
+    storedSessionId: string,
+    sessionProfile?: string | null,
+    owner?: SessionTileOwner
+  ) => Promise<unknown>
   executeSlashCommand: ReturnType<typeof usePromptActions>['executeSlashCommand']
   removeSession: (storedSessionId: string, owner?: SessionTileOwner) => Promise<unknown>
   requestGateway: GatewayRequester
@@ -50,15 +54,21 @@ export function useSessionTileDelegate({
 }: SessionTileDelegateParams): void {
   useEffect(() => {
     const runtimeIdByTileKey = new Map<string, string>()
+
     const tileKey = (storedSessionId: string, owner: SessionTileOwner) =>
       `${owner.connectionId}\u0000${owner.profile}\u0000${storedSessionId}`
+
     const requestForOwner = (owner: SessionTileOwner): GatewayRequester =>
-      (<T>(
-        method: string,
-        params: Record<string, unknown> = {},
-        timeoutMs?: number,
-        signal?: AbortSignal
-      ) => requestGatewayForAgent<T>(owner.connectionId, owner.profile, method, params, timeoutMs, signal)) as GatewayRequester
+      (<T>(method: string, params: Record<string, unknown> = {}, timeoutMs?: number, signal?: AbortSignal) =>
+        requestGatewayForAgent<T>(
+          owner.connectionId,
+          owner.profile,
+          method,
+          params,
+          timeoutMs,
+          signal
+        )) as GatewayRequester
+
     // A tile's runtime binding can die the same way the foreground's does
     // (sleep/wake, backend restart). The cache maps stored -> runtime, so walk
     // it backwards to find the durable id this runtime belongs to.
@@ -144,10 +154,11 @@ export function useSessionTileDelegate({
         const ownerRequest = requestForOwner(owner)
         const exactKey = tileKey(storedSessionId, owner)
         const sharedRuntime = runtimeIdByStoredSessionIdRef.current.get(storedSessionId)
+
         const sharedRuntimeMatchesOwner = Boolean(
           sharedRuntime &&
-            sessionConnectionId(sharedRuntime) === owner.connectionId &&
-            sessionEventProfile(sharedRuntime) === owner.profile
+          sessionConnectionId(sharedRuntime) === owner.connectionId &&
+          sessionEventProfile(sharedRuntime) === owner.profile
         )
 
         const existing = runtimeIdByTileKey.get(exactKey) ?? (sharedRuntimeMatchesOwner ? sharedRuntime : undefined)

@@ -75,12 +75,8 @@ vi.mock('@/hermes', () => ({
     getActionStatus(name, lines, profile, connectionId),
   startOAuthLogin: (providerId: string, profile?: null | string, connectionId?: null | string) =>
     startOAuthLogin(providerId, profile, connectionId),
-  pollOAuthSession: (
-    providerId: string,
-    sessionId: string,
-    profile?: null | string,
-    connectionId?: null | string
-  ) => pollOAuthSession(providerId, sessionId, profile, connectionId),
+  pollOAuthSession: (providerId: string, sessionId: string, profile?: null | string, connectionId?: null | string) =>
+    pollOAuthSession(providerId, sessionId, profile, connectionId),
   getHermesConfigRecord: (profile?: null | string, connectionId?: null | string) =>
     getHermesConfigRecord(profile, connectionId),
   getHermesConfigSchema: (profile?: null | string, connectionId?: null | string) =>
@@ -187,27 +183,14 @@ afterEach(() => {
 describe('ToolsetConfigPanel', () => {
   it('keeps capability reads and writes on the captured backend source', async () => {
     const { ToolsetConfigPanel } = await import('./toolset-config-panel')
-    render(
-      <ToolsetConfigPanel
-        connectionId="source-b"
-        onConfiguredChange={vi.fn()}
-        profile="default"
-        toolset="tts"
-      />
-    )
+    render(<ToolsetConfigPanel connectionId="source-b" onConfiguredChange={vi.fn()} profile="default" toolset="tts" />)
 
     await waitFor(() => expect(getToolsetConfig).toHaveBeenCalledWith('tts', 'default', 'source-b'))
     fireEvent.click(await screen.findByRole('button', { name: /ElevenLabs/ }))
     fireEvent.click(await screen.findByRole('button', { name: /Use this backend/i }))
 
     await waitFor(() =>
-      expect(selectToolsetProvider).toHaveBeenCalledWith(
-        'tts',
-        'ElevenLabs',
-        undefined,
-        'default',
-        'source-b'
-      )
+      expect(selectToolsetProvider).toHaveBeenCalledWith('tts', 'ElevenLabs', undefined, 'default', 'source-b')
     )
   })
 
@@ -304,13 +287,7 @@ describe('ToolsetConfigPanel', () => {
     fireEvent.click(useBackend)
 
     await waitFor(() =>
-      expect(selectToolsetProvider).toHaveBeenCalledWith(
-        'tts',
-        'Microsoft Edge TTS',
-        undefined,
-        undefined,
-        undefined
-      )
+      expect(selectToolsetProvider).toHaveBeenCalledWith('tts', 'Microsoft Edge TTS', undefined, undefined, undefined)
     )
     // While the first selection is pending, the activation CTA is disabled —
     // a second click must not fire another PUT.
@@ -492,9 +469,7 @@ describe('ToolsetConfigPanel', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Run setup/ }))
 
-    await waitFor(() =>
-      expect(runToolsetPostSetup).toHaveBeenCalledWith('browser', 'camofox', undefined, undefined)
-    )
+    await waitFor(() => expect(runToolsetPostSetup).toHaveBeenCalledWith('browser', 'camofox', undefined, undefined))
     // The install log is tailed inline. The first poll fires after a 1200ms
     // delay (mirrors command-center's poll cadence), so allow >1200ms here.
     await waitFor(() => expect(getActionStatus).toHaveBeenCalledWith('tools-post-setup', 300, undefined, undefined), {
@@ -528,9 +503,7 @@ describe('ToolsetConfigPanel', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: /Run setup/ }))
 
-    await waitFor(() =>
-      expect(runToolsetPostSetup).toHaveBeenCalledWith('browser', 'camofox', undefined, undefined)
-    )
+    await waitFor(() => expect(runToolsetPostSetup).toHaveBeenCalledWith('browser', 'camofox', undefined, undefined))
     // Give the would-be first poll delay (1200ms) time to NOT fire.
     await new Promise(resolve => setTimeout(resolve, 1500))
     expect(getActionStatus).not.toHaveBeenCalled()
@@ -980,10 +953,9 @@ describe('ToolsetConfigPanel', () => {
           'noopener,noreferrer'
         )
         // Approved poll → the panel refetches the config so status flips.
-        await waitFor(() =>
-          expect(pollOAuthSession).toHaveBeenCalledWith('nous', 'sess-1', undefined, undefined),
-          { timeout: 8000 }
-        )
+        await waitFor(() => expect(pollOAuthSession).toHaveBeenCalledWith('nous', 'sess-1', undefined, undefined), {
+          timeout: 8000
+        })
         await waitFor(() => expect(getToolsetConfig).toHaveBeenCalled(), { timeout: 8000 })
       } finally {
         openSpy.mockRestore()

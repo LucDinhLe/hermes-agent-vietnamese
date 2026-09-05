@@ -142,7 +142,10 @@ export function recordSessionRuntimeOwner(runtimeId: string, owner: SessionTileO
   }
 
   sessionConnectionByRuntimeId.set(runtimeId, sessionConnectionByRuntimeId.get(runtimeId) ?? owner.connectionId)
-  sessionProfileByRuntimeId.set(runtimeId, sessionProfileByRuntimeId.get(runtimeId) ?? normalizeProfileKey(owner.profile))
+  sessionProfileByRuntimeId.set(
+    runtimeId,
+    sessionProfileByRuntimeId.get(runtimeId) ?? normalizeProfileKey(owner.profile)
+  )
 }
 
 /** Composite scopes of registry-sourced sessions that are live (busy or
@@ -829,13 +832,12 @@ const profileKey = () => normalizeProfileKey($activeGatewayProfile.get())
 // tiles, and no repopulation on a profile switch.
 export const $sessionTiles = atom<SessionTile[]>(isSecondaryWindow() ? [] : [...(tilesByProfile[profileKey()] ?? [])])
 
-export function sessionTileForStoredId(
-  storedSessionId: string,
-  owner?: null | SessionTileOwner
-): SessionTile | null {
+export function sessionTileForStoredId(storedSessionId: string, owner?: null | SessionTileOwner): SessionTile | null {
   const matches = $sessionTiles
     .get()
-    .filter(tile => tile.storedSessionId === storedSessionId && (!owner || sameTileOwner(sessionTileOwner(tile), owner)))
+    .filter(
+      tile => tile.storedSessionId === storedSessionId && (!owner || sameTileOwner(sessionTileOwner(tile), owner))
+    )
 
   // A bare id is backward-compatible only while it is unambiguous. If two
   // sources legally expose the same id, guessing would target one at random.
@@ -895,6 +897,7 @@ function adoptLegacyTilesForActiveOwner(): void {
     storedTilesV3.legacyV2OwnerByProfile[key] = owner
     const existing = tilesByProfile[key] ?? []
     const existingIds = new Set(existing.map(sessionTileKey))
+
     const adopted = legacy
       .map(tile => ({
         ...tile,
@@ -1059,10 +1062,7 @@ export function sessionTileDelegate(): SessionTileDelegate | null {
  *  naming an absent pane falls back to append anyway (see insertAtGroup). Tiles
  *  not yet adopted sort after placed ones, stably. Returns `null` when nothing
  *  moves so callers can skip a needless persist. */
-export function orderTilesByTree<T extends SessionTile>(
-  tree: LayoutNode | null,
-  tiles: readonly T[]
-): null | T[] {
+export function orderTilesByTree<T extends SessionTile>(tree: LayoutNode | null, tiles: readonly T[]): null | T[] {
   if (!tree || tiles.length < 2) {
     return null
   }
@@ -1087,7 +1087,9 @@ export function orderTilesByTree<T extends SessionTile>(
 
   const rank = new Map(order.map((id, i) => [id, i]))
 
-  const next = [...tiles].sort((a, b) => (rank.get(sessionTileKey(a)) ?? Infinity) - (rank.get(sessionTileKey(b)) ?? Infinity))
+  const next = [...tiles].sort(
+    (a, b) => (rank.get(sessionTileKey(a)) ?? Infinity) - (rank.get(sessionTileKey(b)) ?? Infinity)
+  )
 
   return next.some((t, i) => t !== tiles[i]) ? next : null
 }
@@ -1466,9 +1468,8 @@ $focusedStoredSessionId.listen(focused => {
     const groupId = $activeTreeGroup.get()
     const tree = $layoutTree.get()
     const active = groupId && tree ? findGroup(tree, groupId)?.active : undefined
-    const tile = active?.startsWith(TILE_PANE_PREFIX)
-      ? sessionTileForKey(active.slice(TILE_PANE_PREFIX.length))
-      : null
+
+    const tile = active?.startsWith(TILE_PANE_PREFIX) ? sessionTileForKey(active.slice(TILE_PANE_PREFIX.length)) : null
 
     // Unread persistence is legacy profile+id scoped. Until that store gains a
     // source dimension, a background A tile must fail closed instead of

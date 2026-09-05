@@ -185,6 +185,7 @@ describe('SkillsView toolset management', () => {
     ])
 
     const { SkillsView } = await import('./index')
+
     const view = (connectionId: string) => (
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={['/skills?tab=toolsets']}>
@@ -192,6 +193,7 @@ describe('SkillsView toolset management', () => {
         </MemoryRouter>
       </QueryClientProvider>
     )
+
     const rendered = render(view('source-a'))
 
     await screen.findByRole('switch', { name: 'Turn Source A Tools toolset off' })

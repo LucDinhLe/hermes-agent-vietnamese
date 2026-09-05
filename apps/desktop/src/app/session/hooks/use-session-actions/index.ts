@@ -1473,8 +1473,8 @@ export function useSessionActions({
         }
 
         const routedRequest = owner
-          ? (<T,>(method: string, params: Record<string, unknown> = {}) =>
-              requestGatewayForAgent<T>(owner.connectionId, owner.profile, method, params))
+          ? <T>(method: string, params: Record<string, unknown> = {}) =>
+              requestGatewayForAgent<T>(owner.connectionId, owner.profile, method, params)
           : requestGateway
 
         // No title: the backend auto-names the branch from its parent's lineage.
@@ -1521,6 +1521,7 @@ export function useSessionActions({
             parent ? parent.last_active || parent.started_at : undefined
           )
         }
+
         ensureSessionState(branched.session_id, routedSessionId)
         updateSessionState(
           branched.session_id,
@@ -1536,6 +1537,7 @@ export function useSessionActions({
         // The branch opens as its own tile in the parent's worktree, not as the
         // primary session — keep its runtime out of the main composer atoms.
         const runtimeInfo = applyRuntimeInfo(branched.info, { foreground: false })
+
         if (ownerIsForeground) {
           patchSessionWorkspace(routedSessionId, runtimeInfo?.cwd)
         }
@@ -1667,11 +1669,7 @@ export function useSessionActions({
   // transcript directly (no resume/active-session dependency), so it works on
   // right-click and nests under its parent.
   const branchStoredSession = useCallback(
-    async (
-      storedSessionId: string,
-      sessionProfile?: string | null,
-      owner?: SessionTileOwner
-    ): Promise<boolean> => {
+    async (storedSessionId: string, sessionProfile?: string | null, owner?: SessionTileOwner): Promise<boolean> => {
       clearNotifications()
 
       // Right-clicking a session outside the paginated sidebar window is a cache
@@ -1682,8 +1680,7 @@ export function useSessionActions({
       const stored =
         (ownerIsForeground
           ? $sessions.get().find(session => sessionMatchesStoredId(session, storedSessionId))
-          : undefined) ??
-        (sessionProfile && !owner ? undefined : await resolveStoredSession(storedSessionId, owner))
+          : undefined) ?? (sessionProfile && !owner ? undefined : await resolveStoredSession(storedSessionId, owner))
 
       const profile = owner?.profile ?? sessionProfile ?? stored?.profile
 
@@ -1726,6 +1723,7 @@ export function useSessionActions({
       const effectiveOwner = owner ?? activeBackendOwner()
       const ownerIsForeground = !effectiveOwner || sameBackendOwner(activeBackendOwner(), effectiveOwner)
       const targetTile = effectiveOwner ? sessionTileForStoredId(storedSessionId, effectiveOwner) : null
+
       const removed = ownerIsForeground
         ? $sessions.get().find(session => sessionMatchesStoredId(session, storedSessionId))
         : undefined
@@ -1742,6 +1740,7 @@ export function useSessionActions({
       if (ownerIsForeground) {
         setSessions(prev => prev.filter(session => !sessionMatchesStoredId(session, storedSessionId)))
       }
+
       // Evict from the project tree's optimistic layer too (the backend snapshot
       // still lists it until its next refresh), so grouped + flat views drop the
       // row in lockstep. Pin the tombstone against the projects.tree prune while
@@ -1763,11 +1762,8 @@ export function useSessionActions({
           await requestGateway('session.close', { session_id: closingRuntimeId }).catch(() => undefined)
         }
 
-        await deleteSession(
-          storedSessionId,
-          effectiveOwner?.profile ?? removed?.profile,
-          effectiveOwner?.connectionId
-        )
+        await deleteSession(storedSessionId, effectiveOwner?.profile ?? removed?.profile, effectiveOwner?.connectionId)
+
         // Only after the RPC lands — the optimistic eviction above can roll
         // back, and a rolled-back row must keep its watermark/marker.
         if (ownerIsForeground) {
@@ -1784,7 +1780,8 @@ export function useSessionActions({
         // A tiled copy of this session must not outlive it: collapse the pane
         // and evict its mirrored runtime state so nothing submits to (or renders)
         // a deleted session.
-        const tiledRuntimeId = targetTile?.runtimeId ??
+        const tiledRuntimeId =
+          targetTile?.runtimeId ??
           (ownerIsForeground ? runtimeIdByStoredSessionIdRef.current.get(storedSessionId) : undefined)
 
         closeSessionTile(storedSessionId, effectiveOwner)
@@ -1793,6 +1790,7 @@ export function useSessionActions({
           if (runtimeIdByStoredSessionIdRef.current.get(storedSessionId) === tiledRuntimeId) {
             runtimeIdByStoredSessionIdRef.current.delete(storedSessionId)
           }
+
           sessionStateByRuntimeIdRef.current.delete(tiledRuntimeId)
           dropSessionState(tiledRuntimeId)
         }
@@ -1856,6 +1854,7 @@ export function useSessionActions({
       const effectiveOwner = owner ?? activeBackendOwner()
       const ownerIsForeground = !effectiveOwner || sameBackendOwner(activeBackendOwner(), effectiveOwner)
       const targetTile = effectiveOwner ? sessionTileForStoredId(storedSessionId, effectiveOwner) : null
+
       const archived = ownerIsForeground
         ? $sessions.get().find(session => sessionMatchesStoredId(session, storedSessionId))
         : undefined
@@ -1886,13 +1885,16 @@ export function useSessionActions({
           effectiveOwner?.profile ?? archived?.profile,
           effectiveOwner?.connectionId
         )
+
         // Archived rows never reach the sidebar, so their persisted unread can
         // only rot. Dropped after the RPC so a failed archive keeps it.
         if (ownerIsForeground) {
           forgetSessionUnread(archivedIds, archived?.profile)
         }
+
         // An archived session is hidden from the sidebar; its tile must go too.
-        const tiledRuntimeId = targetTile?.runtimeId ??
+        const tiledRuntimeId =
+          targetTile?.runtimeId ??
           (ownerIsForeground ? runtimeIdByStoredSessionIdRef.current.get(storedSessionId) : undefined)
 
         closeSessionTile(storedSessionId, effectiveOwner)
@@ -1901,6 +1903,7 @@ export function useSessionActions({
           if (runtimeIdByStoredSessionIdRef.current.get(storedSessionId) === tiledRuntimeId) {
             runtimeIdByStoredSessionIdRef.current.delete(storedSessionId)
           }
+
           sessionStateByRuntimeIdRef.current.delete(tiledRuntimeId)
           dropSessionState(tiledRuntimeId)
         }
@@ -1915,6 +1918,7 @@ export function useSessionActions({
           untombstoneSessions(archivedIds)
           $pinnedSessionIds.set(previousPinned)
         }
+
         notifyError(err, copy.archiveFailed)
       } finally {
         if (ownerIsForeground) {

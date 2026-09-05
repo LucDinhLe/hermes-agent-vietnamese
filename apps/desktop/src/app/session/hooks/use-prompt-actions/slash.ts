@@ -189,6 +189,7 @@ export function useSlashCommand(deps: SlashCommandDeps) {
       }
     ) => {
       const routedRequestGateway = options?.requestGateway ?? requestGateway
+
       // Resolve the session this command targets through the SHARED ladder that
       // submit.ts uses. A slash command runs backend commands against a runtime
       // session, and per-session state (`/goal`, `/usage`, `/status`) is keyed by
@@ -871,7 +872,9 @@ export function useSlashCommand(deps: SlashCommandDeps) {
           const { render: renderSlashOutput, sessionId } = resolved
 
           try {
-            const catalog = await routedRequestGateway<CommandsCatalogLike>('commands.catalog', { session_id: sessionId })
+            const catalog = await routedRequestGateway<CommandsCatalogLike>('commands.catalog', {
+              session_id: sessionId
+            })
 
             renderSlashOutput(renderCommandsCatalog(catalog, copy))
           } catch (err) {

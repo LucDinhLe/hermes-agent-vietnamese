@@ -18,7 +18,9 @@ import http from 'node:http'
 // lưu ở dạng base64 chỉ để trình quét bí mật của GitHub không chặn push, không nhằm che giấu.
 const decode = (b64: string) => Buffer.from(b64, 'base64').toString('utf8')
 
-export const GOOGLE_OAUTH_CLIENT_ID = decode('NjgxMjU1ODA5Mzk1LW9vOGZ0Mm9wcmRybnA5ZTNhcWY2YXYzaG1kaWIxMzVqLmFwcHMuZ29vZ2xldXNlcmNvbnRlbnQuY29t')
+export const GOOGLE_OAUTH_CLIENT_ID = decode(
+  'NjgxMjU1ODA5Mzk1LW9vOGZ0Mm9wcmRybnA5ZTNhcWY2YXYzaG1kaWIxMzVqLmFwcHMuZ29vZ2xldXNlcmNvbnRlbnQuY29t'
+)
 export const GOOGLE_OAUTH_CLIENT_SECRET = decode('R09DU1BYLTR1SGdNUG0tMW83U2stZ2VWNkN1NWNsWEZzeGw=')
 export const GOOGLE_OAUTH_SCOPES = [
   'https://www.googleapis.com/auth/cloud-platform',
@@ -47,7 +49,10 @@ export interface GoogleAccountState {
   projectOverride?: string | null
 }
 
-export type FetchLike = (url: string, init?: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal }) => Promise<{
+export type FetchLike = (
+  url: string,
+  init?: { method?: string; headers?: Record<string, string>; body?: string; signal?: AbortSignal }
+) => Promise<{
   ok: boolean
   status: number
   text(): Promise<string>
@@ -89,11 +94,18 @@ export function buildAuthUrl(redirectUri: string, state: string, challenge: stri
   return u.toString()
 }
 
-async function tokenRequest(fetch: FetchLike, params: Record<string, string>): Promise<{ access_token: string; refresh_token?: string; expires_in: number }> {
+async function tokenRequest(
+  fetch: FetchLike,
+  params: Record<string, string>
+): Promise<{ access_token: string; refresh_token?: string; expires_in: number }> {
   const res = await fetch(GOOGLE_TOKEN_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ client_id: GOOGLE_OAUTH_CLIENT_ID, client_secret: GOOGLE_OAUTH_CLIENT_SECRET, ...params }).toString()
+    body: new URLSearchParams({
+      client_id: GOOGLE_OAUTH_CLIENT_ID,
+      client_secret: GOOGLE_OAUTH_CLIENT_SECRET,
+      ...params
+    }).toString()
   })
 
   if (!res.ok) {
@@ -141,7 +153,9 @@ export function waitForLoopbackCode(opts: LoopbackCodeOptions): Promise<{ code: 
         return
       }
 
-      res.end('<p style="font-family:sans-serif">Đã đăng nhập Google cho Hermes Vietnamese. Bạn có thể đóng cửa sổ này và quay lại ứng dụng.</p>')
+      res.end(
+        '<p style="font-family:sans-serif">Đã đăng nhập Google cho Hermes Vietnamese. Bạn có thể đóng cửa sổ này và quay lại ứng dụng.</p>'
+      )
       finish(null, gotCode)
     })
 
@@ -227,13 +241,17 @@ export class GoogleAccount {
     })
 
     if (!tok.refresh_token) {
-      throw new Error('Google không cấp refresh token; hãy thu hồi quyền của Gemini CLI trong tài khoản Google rồi đăng nhập lại')
+      throw new Error(
+        'Google không cấp refresh token; hãy thu hồi quyền của Gemini CLI trong tài khoản Google rồi đăng nhập lại'
+      )
     }
 
     let email: string | undefined
 
     try {
-      const me = await this.deps.fetch(GOOGLE_USERINFO_URL, { headers: { authorization: `Bearer ${tok.access_token}` } })
+      const me = await this.deps.fetch(GOOGLE_USERINFO_URL, {
+        headers: { authorization: `Bearer ${tok.access_token}` }
+      })
 
       if (me.ok) {
         email = ((await me.json()) as { email?: string }).email
@@ -243,7 +261,12 @@ export class GoogleAccount {
     }
 
     this.state = {
-      tokens: { access_token: tok.access_token, refresh_token: tok.refresh_token, expiry_date: this.now() + tok.expires_in * 1000, email },
+      tokens: {
+        access_token: tok.access_token,
+        refresh_token: tok.refresh_token,
+        expiry_date: this.now() + tok.expires_in * 1000,
+        email
+      },
       project: null,
       tier: null
     }
@@ -272,11 +295,19 @@ export class GoogleAccount {
     if (!this.refreshing) {
       this.refreshing = (async () => {
         try {
-          const tok = await tokenRequest(this.deps.fetch, { grant_type: 'refresh_token', refresh_token: tokens.refresh_token })
+          const tok = await tokenRequest(this.deps.fetch, {
+            grant_type: 'refresh_token',
+            refresh_token: tokens.refresh_token
+          })
 
           const next: GoogleAccountState = {
             ...(this.state as GoogleAccountState),
-            tokens: { ...tokens, access_token: tok.access_token, expiry_date: this.now() + tok.expires_in * 1000, refresh_token: tok.refresh_token ?? tokens.refresh_token }
+            tokens: {
+              ...tokens,
+              access_token: tok.access_token,
+              expiry_date: this.now() + tok.expires_in * 1000,
+              refresh_token: tok.refresh_token ?? tokens.refresh_token
+            }
           }
 
           this.state = next
@@ -297,7 +328,11 @@ export class GoogleAccount {
 
     const res = await this.deps.fetch(`${CODE_ASSIST_BASE}:${method}`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'user-agent': 'HermesVietnamese/google-bridge' },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        'user-agent': 'HermesVietnamese/google-bridge'
+      },
       body: JSON.stringify(body)
     })
 
@@ -314,7 +349,9 @@ export class GoogleAccount {
    */
   /** Dự án do người dùng nhập (ưu tiên) hoặc biến môi trường, giống Gemini CLI. */
   get projectOverride(): string | null {
-    return this.state?.projectOverride ?? process.env.GOOGLE_CLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT_ID ?? null
+    return (
+      this.state?.projectOverride ?? process.env.GOOGLE_CLOUD_PROJECT ?? process.env.GOOGLE_CLOUD_PROJECT_ID ?? null
+    )
   }
 
   /** Đặt (hoặc xoá) dự án Google Cloud rồi buộc xác định lại bậc ở lần gọi sau. */
@@ -327,18 +364,24 @@ export class GoogleAccount {
   private async onboard(tierId: string, explicit: string | null): Promise<string | null> {
     const isFree = tierId === 'free-tier'
 
-    interface Lro { name?: string; done?: boolean; response?: { cloudaicompanionProject?: { id?: string } } }
+    interface Lro {
+      name?: string
+      done?: boolean
+      response?: { cloudaicompanionProject?: { id?: string } }
+    }
 
     let lro = await this.caPost<Lro>('onboardUser', {
       tierId,
-      cloudaicompanionProject: isFree ? undefined : explicit ?? undefined,
-      metadata: { ...CLIENT_METADATA, duetProject: isFree ? undefined : explicit ?? undefined }
+      cloudaicompanionProject: isFree ? undefined : (explicit ?? undefined),
+      metadata: { ...CLIENT_METADATA, duetProject: isFree ? undefined : (explicit ?? undefined) }
     })
 
     for (let i = 0; !lro.done && lro.name && i < 24; i += 1) {
       await new Promise(r => setTimeout(r, 5000))
       const token = await this.accessToken()
-      const res = await this.deps.fetch(`${CODE_ASSIST_BASE}/${lro.name}`, { headers: { authorization: `Bearer ${token}` } })
+      const res = await this.deps.fetch(`${CODE_ASSIST_BASE}/${lro.name}`, {
+        headers: { authorization: `Bearer ${token}` }
+      })
       lro = (await res.json()) as Lro
     }
 
@@ -358,8 +401,17 @@ export class GoogleAccount {
 
     const explicit = this.projectOverride
 
-    interface Tier { id?: string; name?: string; isDefault?: boolean }
-    interface LoadRes { currentTier?: Tier | null; allowedTiers?: Tier[] | null; cloudaicompanionProject?: string | null; paidTier?: Tier | null }
+    interface Tier {
+      id?: string
+      name?: string
+      isDefault?: boolean
+    }
+    interface LoadRes {
+      currentTier?: Tier | null
+      allowedTiers?: Tier[] | null
+      cloudaicompanionProject?: string | null
+      paidTier?: Tier | null
+    }
 
     const load = await this.caPost<LoadRes>('loadCodeAssist', {
       cloudaicompanionProject: explicit ?? undefined,
@@ -404,13 +456,21 @@ export class GoogleAccount {
    * Gọi streamGenerateContent (SSE). Trả về AsyncIterable các JSON chunk kiểu Gemini
    * (đã bóc lớp `response` của Code Assist).
    */
-  async *streamGenerate(model: string, request: unknown, signal?: AbortSignal): AsyncGenerator<Record<string, unknown>> {
+  async *streamGenerate(
+    model: string,
+    request: unknown,
+    signal?: AbortSignal
+  ): AsyncGenerator<Record<string, unknown>> {
     const { project } = await this.ensureProject()
     const token = await this.accessToken()
 
     const res = await this.deps.fetch(`${CODE_ASSIST_BASE}:streamGenerateContent?alt=sse`, {
       method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'user-agent': 'HermesVietnamese/google-bridge' },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/json',
+        'user-agent': 'HermesVietnamese/google-bridge'
+      },
       body: JSON.stringify({ model, project: project ?? undefined, user_prompt_id: crypto.randomUUID(), request }),
       signal
     })
@@ -434,7 +494,10 @@ export class GoogleAccount {
 }
 
 /** Tách dòng từ luồng SSE (body của fetch) hoặc từ text() khi không có body stream. */
-export async function* sseLines(body: AsyncIterable<Uint8Array> | null, res: { text(): Promise<string> }): AsyncGenerator<string> {
+export async function* sseLines(
+  body: AsyncIterable<Uint8Array> | null,
+  res: { text(): Promise<string> }
+): AsyncGenerator<string> {
   if (!body) {
     for (const line of (await res.text()).split(/\r?\n/)) {
       yield line

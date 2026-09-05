@@ -410,7 +410,13 @@ interface ModelCatalogPickerProps {
  * radio-card list and persists the choice to `image_gen.model` /
  * `video_gen.model`.
  */
-function ModelCatalogPicker({ connectionId, toolset, providerName, isActiveBackend, profile }: ModelCatalogPickerProps) {
+function ModelCatalogPicker({
+  connectionId,
+  toolset,
+  providerName,
+  isActiveBackend,
+  profile
+}: ModelCatalogPickerProps) {
   const { t } = useI18n()
   const copy = t.settings.toolsets
   const [catalog, setCatalog] = useState<ToolsetModelsResponse | null>(null)

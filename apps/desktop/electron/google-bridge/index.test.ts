@@ -8,15 +8,25 @@ import { test } from 'vitest'
 
 import { GOOGLE_ACCOUNT_FILE, GOOGLE_BRIDGE_FILE, GoogleBridge, preferredBridgePort } from './index'
 
-const codec = { encrypt: (s: string) => `enc:${Buffer.from(s).toString('base64')}`, decrypt: (s: string) => Buffer.from(s.slice(4), 'base64').toString() }
+const codec = {
+  encrypt: (s: string) => `enc:${Buffer.from(s).toString('base64')}`,
+  decrypt: (s: string) => Buffer.from(s.slice(4), 'base64').toString()
+}
 
-function fakeBackend(): Promise<{ baseUrl: string; token: string; calls: { method: string; url: string; body: unknown }[]; close(): void }> {
+function fakeBackend(): Promise<{
+  baseUrl: string
+  token: string
+  calls: { method: string; url: string; body: unknown }[]
+  close(): void
+}> {
   const calls: { method: string; url: string; body: unknown }[] = []
 
   return new Promise(resolve => {
     const server = http.createServer((req, res) => {
       let body = ''
-      req.on('data', c => { body += c })
+      req.on('data', c => {
+        body += c
+      })
       req.on('end', () => {
         if (req.headers.authorization !== 'Bearer TOK') {
           res.writeHead(401).end()
@@ -63,8 +73,15 @@ test('GoogleBridge: chưa đăng nhập → không chạy server; đã đăng nh
   assert.ok(fs.existsSync(path.join(home, GOOGLE_BRIDGE_FILE)), 'cổng + khoá được ghi ngay')
 
   // giả lập đã đăng nhập: ghi state qua chính codec
-  const state = { tokens: { access_token: 'AT', refresh_token: 'RT', expiry_date: Number.MAX_SAFE_INTEGER, email: 'a@b.c' }, project: 'p', tier: 'standard-tier' }
-  fs.writeFileSync(path.join(home, GOOGLE_ACCOUNT_FILE), JSON.stringify({ v: 1, data: codec.encrypt(JSON.stringify(state)) }))
+  const state = {
+    tokens: { access_token: 'AT', refresh_token: 'RT', expiry_date: Number.MAX_SAFE_INTEGER, email: 'a@b.c' },
+    project: 'p',
+    tier: 'standard-tier'
+  }
+  fs.writeFileSync(
+    path.join(home, GOOGLE_ACCOUNT_FILE),
+    JSON.stringify({ v: 1, data: codec.encrypt(JSON.stringify(state)) })
+  )
 
   const b2 = new GoogleBridge(deps)
   await b2.ensureRunning()
@@ -74,7 +91,13 @@ test('GoogleBridge: chưa đăng nhập → không chạy server; đã đăng nh
   assert.equal(st.serverPort, JSON.parse(fs.readFileSync(path.join(home, GOOGLE_BRIDGE_FILE), 'utf8')).port)
   assert.equal(backend.calls.length, 1)
   assert.equal(backend.calls[0].url, '/api/providers/custom-endpoints')
-  const reg = backend.calls[0].body as { id: string; base_url: string; api_key: string; model: string; models: string[] }
+  const reg = backend.calls[0].body as {
+    id: string
+    base_url: string
+    api_key: string
+    model: string
+    models: string[]
+  }
   assert.equal(reg.id, 'google-account')
   assert.equal(reg.base_url, `http://127.0.0.1:${st.serverPort}/v1`)
   assert.equal(reg.model, 'gemini-2.5-pro')

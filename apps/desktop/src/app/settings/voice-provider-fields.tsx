@@ -48,10 +48,8 @@ function ScopedVoiceProviderFields({ connectionId, profile, section, providerKey
   const { t } = useI18n()
   const keys = useMemo(() => voiceProviderKeys(section, providerKey), [section, providerKey])
   const { data: loadedConfig } = useHermesConfigRecord(profile, connectionId)
-  const setConfigCache = useMemo(
-    () => hermesConfigCacheWriter(profile, connectionId),
-    [connectionId, profile]
-  )
+
+  const setConfigCache = useMemo(() => hermesConfigCacheWriter(profile, connectionId), [connectionId, profile])
 
   const { data: schemaResponse } = useQuery({
     queryKey: ['hermes-config-schema', connectionId?.trim() || 'primary', profile?.trim() || 'default'],

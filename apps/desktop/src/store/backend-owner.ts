@@ -22,9 +22,7 @@ export function connectionOwnerId(connection: HermesConnection | null | undefine
 export function activeBackendOwner(): BackendOwner | null {
   const connectionId = connectionOwnerId($connection.get())
 
-  return connectionId
-    ? { connectionId, profile: normalizeProfileKey($activeGatewayProfile.get()) }
-    : null
+  return connectionId ? { connectionId, profile: normalizeProfileKey($activeGatewayProfile.get()) } : null
 }
 
 export function sessionBackendOwner(runtimeId: null | string | undefined): BackendOwner | null {
@@ -43,7 +41,5 @@ export function backendOwnerKey(owner: BackendOwner): string {
 }
 
 export function sameBackendOwner(left: BackendOwner | null, right: BackendOwner | null): boolean {
-  return Boolean(
-    left && right && left.connectionId === right.connectionId && left.profile === right.profile
-  )
+  return Boolean(left && right && left.connectionId === right.connectionId && left.profile === right.profile)
 }

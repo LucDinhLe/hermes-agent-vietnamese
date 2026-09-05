@@ -1300,6 +1300,7 @@ export async function resolveStoredSession(
 ): Promise<SessionInfo | undefined> {
   if (owner) {
     const foregroundOwnsRowCache = sameBackendOwner(activeBackendOwner(), owner)
+
     const cached = foregroundOwnsRowCache
       ? [...$sessions.get(), ...$cronSessions.get(), ...$messagingSessions.get()].find(session =>
           sessionMatchesStoredId(session, storedSessionId)

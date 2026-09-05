@@ -138,9 +138,7 @@ export function AboutSettings() {
         <BrandMark className="size-16" />
         <div>
           <h2 className="text-lg font-semibold tracking-tight">{a.heading}</h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {a.version(PRODUCT_VERSION)}
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">{a.version(PRODUCT_VERSION)}</p>
         </div>
         {version?.bundleOutOfSync && (
           <div className="mx-auto w-full max-w-2xl rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-left text-sm">
@@ -230,7 +228,11 @@ export function AboutSettings() {
 
             {updateAvailable && supported && !applying && status?.notifyOnly && (
               <Button
-                onClick={() => void window.hermesDesktop?.openExternal?.(status.downloadUrl ?? status.releaseUrl ?? RELEASE_NOTES_URL)}
+                onClick={() =>
+                  void window.hermesDesktop?.openExternal?.(
+                    status.downloadUrl ?? status.releaseUrl ?? RELEASE_NOTES_URL
+                  )
+                }
                 size="sm"
               >
                 <ExternalLink className="size-3" />

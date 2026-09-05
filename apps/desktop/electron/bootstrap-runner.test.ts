@@ -281,18 +281,32 @@ test('resolveInstallScript rethrows when the 404 fallback is unavailable', async
   }
 })
 
-
 test('composite: stamp có engine → -Commit/-Branch trỏ upstream tag/commit, không dùng commit của vỏ', () => {
-  const engine = { tag: 'v2026.8.31', commit: '29112bef099274229cadff79cdff7bf7b99c4b77', repository: 'https://github.com/NousResearch/hermes-agent' }
+  const engine = {
+    tag: 'v2026.8.31',
+    commit: '29112bef099274229cadff79cdff7bf7b99c4b77',
+    repository: 'https://github.com/NousResearch/hermes-agent'
+  }
   const stamp = { commit: 'a'.repeat(40), branch: 'experiment/composite', engine }
 
   assert.deepEqual(pinSourceForStamp(stamp), { commit: engine.commit, branch: engine.tag })
   assert.deepEqual(buildPinArgs(stamp), ['-Commit', engine.commit, '-Branch', engine.tag])
   assert.deepEqual(buildPinArgs(stamp, { pinCommit: false }), ['-Branch', engine.tag])
-  assert.deepEqual(
-    buildPosixPinArgs({ installStamp: stamp, activeRoot: '/r', hermesHome: '/h' }),
-    ['--dir', '/r', '--hermes-home', '/h', '--branch', engine.tag, '--commit', engine.commit]
-  )
+  assert.deepEqual(buildPosixPinArgs({ installStamp: stamp, activeRoot: '/r', hermesHome: '/h' }), [
+    '--dir',
+    '/r',
+    '--hermes-home',
+    '/h',
+    '--branch',
+    engine.tag,
+    '--commit',
+    engine.commit
+  ])
   // stamp cũ (không có engine) giữ hành vi cũ
-  assert.deepEqual(buildPinArgs({ commit: 'b'.repeat(40), branch: 'main' }), ['-Commit', 'b'.repeat(40), '-Branch', 'main'])
+  assert.deepEqual(buildPinArgs({ commit: 'b'.repeat(40), branch: 'main' }), [
+    '-Commit',
+    'b'.repeat(40),
+    '-Branch',
+    'main'
+  ])
 })

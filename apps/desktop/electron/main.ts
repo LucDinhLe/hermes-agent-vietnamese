@@ -4476,7 +4476,6 @@ function desktopUpdateRoute(): DesktopUpdateRoute {
   })
 }
 
-
 // Marker-independent: is the canonical install at ACTIVE_HERMES_ROOT actually
 // runnable right now? A complete CLI install (`install.sh --include-desktop`)
 // or a DMG launch over a prior CLI install satisfies this WITHOUT the desktop

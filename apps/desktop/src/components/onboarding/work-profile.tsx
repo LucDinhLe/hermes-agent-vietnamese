@@ -49,7 +49,9 @@ export function WorkProfileSetup({ connectionId, firstRun = false, onDone, profi
 
     void Promise.all([getWorkProfile(profile, connectionId), getSkills(profile, connectionId)])
       .then(([state, skills]) => {
-        if (cancelled) {return}
+        if (cancelled) {
+          return
+        }
 
         if (firstRun && (state.completed || state.onboarding_required !== true)) {
           setDismissed(true)
@@ -65,10 +67,14 @@ export function WorkProfileSetup({ connectionId, firstRun = false, onDone, profi
         setPreviewed(state.completed && !state.skipped)
       })
       .catch(() => {
-        if (!cancelled) {setError(copy.failed)}
+        if (!cancelled) {
+          setError(copy.failed)
+        }
       })
       .finally(() => {
-        if (!cancelled) {setLoading(false)}
+        if (!cancelled) {
+          setLoading(false)
+        }
       })
 
     return () => {

@@ -103,7 +103,13 @@ export function ModelMenuPanel({
     try {
       const queryKey = modelOptionsQueryKey(profile, activeSessionId, connectionId)
 
-      const next = await requestModelOptions({ connectionId, gateway, profile, refresh: true, sessionId: activeSessionId })
+      const next = await requestModelOptions({
+        connectionId,
+        gateway,
+        profile,
+        refresh: true,
+        sessionId: activeSessionId
+      })
 
       queryClient.setQueryData<ModelOptionsResponse>(queryKey, next)
     } catch {

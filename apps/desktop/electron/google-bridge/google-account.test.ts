@@ -18,7 +18,10 @@ import {
 
 type Call = { url: string; init?: Parameters<FetchLike>[1] }
 
-function fakeFetch(handler: (url: string, init?: Parameters<FetchLike>[1]) => unknown | Promise<unknown>): { fetch: FetchLike; calls: Call[] } {
+function fakeFetch(handler: (url: string, init?: Parameters<FetchLike>[1]) => unknown | Promise<unknown>): {
+  fetch: FetchLike
+  calls: Call[]
+} {
   const calls: Call[] = []
 
   const fetch: FetchLike = async (url, init) => {
@@ -40,16 +43,26 @@ function fakeFetch(handler: (url: string, init?: Parameters<FetchLike>[1]) => un
 function store(initial: GoogleAccountState | null = null) {
   let state = initial
 
-  return { load: () => state, save: (s: GoogleAccountState | null) => { state = s }, get: () => state }
+  return {
+    load: () => state,
+    save: (s: GoogleAccountState | null) => {
+      state = s
+    },
+    get: () => state
+  }
 }
 
 function getUrl(url: string): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
-    http.get(url, res => {
-      let body = ''
-      res.on('data', c => { body += c })
-      res.on('end', () => resolve({ status: res.statusCode ?? 0, body }))
-    }).on('error', reject)
+    http
+      .get(url, res => {
+        let body = ''
+        res.on('data', c => {
+          body += c
+        })
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, body }))
+      })
+      .on('error', reject)
   })
 }
 
@@ -98,9 +111,13 @@ test('signIn: đổi mã lấy token, lấy email, lưu state; thiếu refresh_t
   const s = store()
 
   const { fetch, calls } = fakeFetch(url => {
-    if (url === GOOGLE_TOKEN_URL) {return { access_token: 'AT', refresh_token: 'RT', expires_in: 3600 }}
+    if (url === GOOGLE_TOKEN_URL) {
+      return { access_token: 'AT', refresh_token: 'RT', expires_in: 3600 }
+    }
 
-    if (url === GOOGLE_USERINFO_URL) {return { email: 'luc@example.com' }}
+    if (url === GOOGLE_USERINFO_URL) {
+      return { email: 'luc@example.com' }
+    }
 
     throw new Error(`unexpected ${url}`)
   })
@@ -120,7 +137,12 @@ test('signIn: đổi mã lấy token, lấy email, lưu state; thiếu refresh_t
   assert.equal(await acct.signIn({ timeoutMs: 5000 }), 'luc@example.com')
   assert.ok(acct.signedIn)
   assert.equal(acct.email, 'luc@example.com')
-  assert.deepEqual(s.get()?.tokens, { access_token: 'AT', refresh_token: 'RT', expiry_date: 1000 + 3600_000, email: 'luc@example.com' })
+  assert.deepEqual(s.get()?.tokens, {
+    access_token: 'AT',
+    refresh_token: 'RT',
+    expiry_date: 1000 + 3600_000,
+    email: 'luc@example.com'
+  })
   const body = new URLSearchParams(calls[0].init?.body ?? '')
   assert.equal(body.get('grant_type'), 'authorization_code')
   assert.equal(body.get('code'), 'AUTHCODE')
@@ -142,7 +164,11 @@ test('signIn: đổi mã lấy token, lấy email, lưu state; thiếu refresh_t
 
 test('accessToken: dùng token còn hạn; làm mới khi sắp hết và gộp các lần gọi song song; signOut xoá', async () => {
   let t = 0
-  const s = store({ tokens: { access_token: 'OLD', refresh_token: 'RT', expiry_date: 10_000_000 }, project: null, tier: null })
+  const s = store({
+    tokens: { access_token: 'OLD', refresh_token: 'RT', expiry_date: 10_000_000 },
+    project: null,
+    tier: null
+  })
   const { fetch, calls } = fakeFetch(() => ({ access_token: 'NEW', expires_in: 3600 }))
   const acct = new GoogleAccount({ fetch, load: s.load, save: s.save, now: () => t, openExternal: async () => {} })
 
@@ -165,12 +191,18 @@ test('accessToken: dùng token còn hạn; làm mới khi sắp hết và gộp 
 })
 
 test('ensureProject: người đã có tier → lấy project từ loadCodeAssist; người mới bậc miễn phí → onboardUser, project rỗng vẫn hợp lệ', async () => {
-  const base = { tokens: { access_token: 'AT', refresh_token: 'RT', expiry_date: Number.MAX_SAFE_INTEGER }, project: null, tier: null }
+  const base = {
+    tokens: { access_token: 'AT', refresh_token: 'RT', expiry_date: Number.MAX_SAFE_INTEGER },
+    project: null,
+    tier: null
+  }
 
   const s1 = store({ ...base })
 
   const f1 = fakeFetch(url => {
-    if (url === `${CODE_ASSIST_BASE}:loadCodeAssist`) {return { currentTier: { id: 'standard-tier' }, cloudaicompanionProject: 'proj-1' }}
+    if (url === `${CODE_ASSIST_BASE}:loadCodeAssist`) {
+      return { currentTier: { id: 'standard-tier' }, cloudaicompanionProject: 'proj-1' }
+    }
 
     throw new Error(`unexpected ${url}`)
   })
@@ -184,9 +216,13 @@ test('ensureProject: người đã có tier → lấy project từ loadCodeAssis
   const s2 = store({ ...base })
 
   const f2 = fakeFetch(url => {
-    if (url === `${CODE_ASSIST_BASE}:loadCodeAssist`) {return { allowedTiers: [{ id: 'free-tier', isDefault: true }] }}
+    if (url === `${CODE_ASSIST_BASE}:loadCodeAssist`) {
+      return { allowedTiers: [{ id: 'free-tier', isDefault: true }] }
+    }
 
-    if (url === `${CODE_ASSIST_BASE}:onboardUser`) {return { name: 'operations/1', done: true, response: {} }}
+    if (url === `${CODE_ASSIST_BASE}:onboardUser`) {
+      return { name: 'operations/1', done: true, response: {} }
+    }
 
     throw new Error(`unexpected ${url}`)
   })
@@ -197,8 +233,13 @@ test('ensureProject: người đã có tier → lấy project từ loadCodeAssis
 })
 
 test('streamGenerate: bóc lớp response từ SSE, bỏ dòng không phải data', async () => {
-  const s = store({ tokens: { access_token: 'AT', refresh_token: 'RT', expiry_date: Number.MAX_SAFE_INTEGER }, project: 'p', tier: 'standard-tier' })
-  const sse = 'data: {"response":{"candidates":[{"content":{"parts":[{"text":"Xin"}]}}]}}\n\n: keepalive\ndata: {"response":{"candidates":[{"finishReason":"STOP"}]}}\n'
+  const s = store({
+    tokens: { access_token: 'AT', refresh_token: 'RT', expiry_date: Number.MAX_SAFE_INTEGER },
+    project: 'p',
+    tier: 'standard-tier'
+  })
+  const sse =
+    'data: {"response":{"candidates":[{"content":{"parts":[{"text":"Xin"}]}}]}}\n\n: keepalive\ndata: {"response":{"candidates":[{"finishReason":"STOP"}]}}\n'
 
   const fetch: FetchLike = async (url, init) => {
     assert.equal(url, `${CODE_ASSIST_BASE}:streamGenerateContent?alt=sse`)
@@ -239,7 +280,11 @@ test('sseLines: tách dòng qua ranh giới chunk, bỏ \\r', async () => {
 })
 
 test('ensureProject: Google xếp bậc đòi dự án nhưng không cấp project → thử lại bậc miễn phí; setProject dùng mã người dùng nhập', async () => {
-  const base = { tokens: { access_token: 'AT', refresh_token: 'RT', expiry_date: Number.MAX_SAFE_INTEGER }, project: null, tier: null }
+  const base = {
+    tokens: { access_token: 'AT', refresh_token: 'RT', expiry_date: Number.MAX_SAFE_INTEGER },
+    project: null,
+    tier: null
+  }
   const s = store({ ...base })
   const calls: { url: string; body: Record<string, unknown> }[] = []
 
@@ -248,7 +293,12 @@ test('ensureProject: Google xếp bậc đòi dự án nhưng không cấp proje
     calls.push({ url, body })
 
     if (url.endsWith(':loadCodeAssist')) {
-      return { ok: true, status: 200, text: async () => '', json: async () => ({ allowedTiers: [{ id: 'legacy-tier', isDefault: true }] }) }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => '',
+        json: async () => ({ allowedTiers: [{ id: 'legacy-tier', isDefault: true }] })
+      }
     }
 
     if (url.endsWith(':onboardUser')) {
@@ -259,7 +309,11 @@ test('ensureProject: Google xếp bậc đòi dự án nhưng không cấp proje
   }
 
   const acct = new GoogleAccount({ fetch, load: s.load, save: s.save, openExternal: async () => {} })
-  assert.deepEqual(await acct.ensureProject(), { project: null, tier: 'free-tier' }, 'rơi về bậc miễn phí thay vì báo lỗi')
+  assert.deepEqual(
+    await acct.ensureProject(),
+    { project: null, tier: 'free-tier' },
+    'rơi về bậc miễn phí thay vì báo lỗi'
+  )
   assert.deepEqual(calls.map(c => c.body.tierId).filter(Boolean), ['legacy-tier', 'free-tier'])
 
   acct.setProject('  du-an-cua-toi  ')

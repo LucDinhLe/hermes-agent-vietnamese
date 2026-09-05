@@ -1,12 +1,7 @@
 import type { ComposerTarget } from '@/app/chat/composer/focus'
 import { workspaceChatReturnRoute } from '@/app/routes'
 import { resolveComposerSessionKey } from '@/store/session'
-import {
-  type SessionTile,
-  sessionTileIdentity,
-  sessionTileKey,
-  sessionTileOwner
-} from '@/store/session-states'
+import { type SessionTile, sessionTileIdentity, sessionTileKey, sessionTileOwner } from '@/store/session-states'
 import type { SessionInfo } from '@/types/hermes'
 
 export interface MessagingReturnPlan {

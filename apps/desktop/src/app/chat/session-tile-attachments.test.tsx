@@ -295,9 +295,7 @@ describe('session tile attachment occurrence ownership', () => {
       submitted = result.current.submitText('read this')
     })
 
-    await waitFor(() =>
-      expect(requestGateway).toHaveBeenCalledWith('prompt.submit', expect.anything())
-    )
+    await waitFor(() => expect(requestGateway).toHaveBeenCalledWith('prompt.submit', expect.anything()))
     scope.attachments.remove(original.id)
     scope.attachments.add(replacement)
     submit.resolve({})

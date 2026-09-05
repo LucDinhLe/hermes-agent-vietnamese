@@ -244,10 +244,12 @@ export function openPreview(target: PreviewTarget, source: PreviewRecordSource =
   const activeId = $rightRailActiveTabId.get()
   const activeBrowser = current.find(tab => tab.id === activeId && tab.target.kind === 'url')
   const existingBrowser = current.find(tab => tab.target.kind === 'url')
+
   const id =
     resolved.kind === 'url'
       ? (activeBrowser?.id ?? existingBrowser?.id ?? nextBrowserTabId(current))
       : previewTabId(resolved)
+
   const index = current.findIndex(tab => tab.id === id)
   const tab: PreviewTab = { id, target: resolved }
 
@@ -285,6 +287,7 @@ export function openNewBrowserTab(): void {
 export function openSharedBrowser(): void {
   const current = $previewTabs.get()
   const activeId = $rightRailActiveTabId.get()
+
   const existing =
     current.find(tab => tab.id === activeId && tab.target.kind === 'url') ??
     current.find(tab => tab.target.kind === 'url')

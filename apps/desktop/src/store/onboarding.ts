@@ -14,12 +14,7 @@ import {
 } from '@/hermes'
 import { isProviderSetupErrorMessage } from '@/lib/provider-setup-errors'
 import { evaluateRuntimeReadiness, type RuntimeReadinessResult } from '@/lib/runtime-readiness'
-import {
-  activeBackendOwner,
-  type BackendOwner,
-  backendOwnerKey,
-  sameBackendOwner
-} from '@/store/backend-owner'
+import { activeBackendOwner, type BackendOwner, backendOwnerKey, sameBackendOwner } from '@/store/backend-owner'
 import { setMainModelAssignment } from '@/store/cron-model-impact'
 import { notify, notifyError } from '@/store/notifications'
 import type { ModelOptionProvider, OAuthProvider, OAuthStartResponse } from '@/types/hermes'
@@ -853,13 +848,7 @@ export async function submitOnboardingCode(ctx: OnboardingContext) {
   setFlow({ status: 'submitting', provider, start })
 
   try {
-    const resp = await submitOAuthCode(
-      provider.id,
-      start.session_id,
-      code.trim(),
-      owner?.profile,
-      owner?.connectionId
-    )
+    const resp = await submitOAuthCode(provider.id, start.session_id, code.trim(), owner?.profile, owner?.connectionId)
 
     if (!onboardingOwnerCurrent(owner)) {
       return
@@ -1065,13 +1054,7 @@ export async function saveOnboardingLocalEndpoint(baseUrl: string, apiKey: strin
   let model = ''
 
   try {
-    const probe = await validateProviderCredential(
-      'OPENAI_BASE_URL',
-      url,
-      key,
-      owner?.profile,
-      owner?.connectionId
-    )
+    const probe = await validateProviderCredential('OPENAI_BASE_URL', url, key, owner?.profile, owner?.connectionId)
 
     if (!onboardingOwnerCurrent(owner)) {
       return { ok: false, message: 'The active backend changed. Open provider setup again.' }

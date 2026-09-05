@@ -322,11 +322,7 @@ export async function ensureGatewayProfile(profile: string | null | undefined): 
 
   const target = normalizeProfileKey(profile)
 
-  if (
-    pendingGatewaySwitches === 0 &&
-    normalizeProfileKey($activeGatewayProfile.get()) === target &&
-    $gateway.get()
-  ) {
+  if (pendingGatewaySwitches === 0 && normalizeProfileKey($activeGatewayProfile.get()) === target && $gateway.get()) {
     return
   }
 

@@ -9,7 +9,13 @@ import crypto from 'node:crypto'
 import http from 'node:http'
 
 import type { GoogleAccount } from './google-account'
-import { type GeminiResponse, type OpenAiChatRequest, StreamTranslator, toGeminiRequest, toOpenAiCompletion } from './openai-compat'
+import {
+  type GeminiResponse,
+  type OpenAiChatRequest,
+  StreamTranslator,
+  toGeminiRequest,
+  toOpenAiCompletion
+} from './openai-compat'
 
 export const GOOGLE_BRIDGE_ENDPOINT_ID = 'google-account'
 export const GOOGLE_BRIDGE_DEFAULT_MODEL = 'gemini-2.5-pro'
@@ -150,7 +156,11 @@ export function startGoogleBridgeServer(opts: GoogleBridgeServerOptions): Promis
       try {
         for await (const chunk of opts.account.streamGenerate(model, gemini, abort.signal)) {
           if (!headersSent) {
-            res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' })
+            res.writeHead(200, {
+              'content-type': 'text/event-stream',
+              'cache-control': 'no-cache',
+              connection: 'keep-alive'
+            })
             headersSent = true
           }
 

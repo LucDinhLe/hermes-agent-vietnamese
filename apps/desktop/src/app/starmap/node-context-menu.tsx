@@ -103,12 +103,7 @@ export function NodeContextMenu({ onClose, onNodeRemoved, target }: NodeContextM
     setError(null)
 
     try {
-      const res = await editLearningNode(
-        editing.id,
-        editing.content,
-        editing.owner.profile,
-        editing.owner.connectionId
-      )
+      const res = await editLearningNode(editing.id, editing.content, editing.owner.profile, editing.owner.connectionId)
 
       if (!res.ok) {
         throw new Error(res.message)

@@ -110,7 +110,9 @@ export class GoogleBridge {
         try {
           return JSON.parse(deps.secrets.decrypt(raw.data)) as GoogleAccountState
         } catch (error) {
-          deps.log(`[google-bridge] không đọc được ${GOOGLE_ACCOUNT_FILE}: ${error instanceof Error ? error.message : String(error)}`)
+          deps.log(
+            `[google-bridge] không đọc được ${GOOGLE_ACCOUNT_FILE}: ${error instanceof Error ? error.message : String(error)}`
+          )
 
           return null
         }
@@ -131,7 +133,10 @@ export class GoogleBridge {
     })
 
     const stored = readJson<BridgeRecord>(path.join(deps.hermesHome, GOOGLE_BRIDGE_FILE))
-    this.record = stored?.port && stored.apiKey ? stored : { port: preferredBridgePort(deps.hermesHome), apiKey: crypto.randomBytes(24).toString('base64url') }
+    this.record =
+      stored?.port && stored.apiKey
+        ? stored
+        : { port: preferredBridgePort(deps.hermesHome), apiKey: crypto.randomBytes(24).toString('base64url') }
 
     if (!stored) {
       writeJson(path.join(deps.hermesHome, GOOGLE_BRIDGE_FILE), this.record)
@@ -285,7 +290,10 @@ export class GoogleBridge {
   async activate(): Promise<GoogleBridgeStatus> {
     try {
       await this.registerEndpoint()
-      const res = await this.backendRequest('POST', `/api/providers/custom-endpoints/${GOOGLE_BRIDGE_ENDPOINT_ID}/activate`)
+      const res = await this.backendRequest(
+        'POST',
+        `/api/providers/custom-endpoints/${GOOGLE_BRIDGE_ENDPOINT_ID}/activate`
+      )
 
       if (res && !res.ok) {
         throw new Error(`kích hoạt thất bại: HTTP ${res.status}`)

@@ -54,7 +54,16 @@ test('planLegacyImport + runLegacyImport: sao chép đúng mục, bỏ checkout/
   const old = path.join(root, 'hermes')
   const newHome = path.join(root, 'hermes-vietnamese')
 
-  for (const d of ['sessions/s1', 'memories', 'skills/x', 'hermes-agent/agent', 'venv/bin', 'logs', 'cache', 'bootstrap-cache']) {
+  for (const d of [
+    'sessions/s1',
+    'memories',
+    'skills/x',
+    'hermes-agent/agent',
+    'venv/bin',
+    'logs',
+    'cache',
+    'bootstrap-cache'
+  ]) {
     fs.mkdirSync(path.join(old, d), { recursive: true })
   }
 

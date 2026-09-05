@@ -20,7 +20,9 @@ vi.mock('@/store/session-states', () => ({
   sessionTileForStoredId: vi.fn((storedSessionId: string, owner?: { connectionId: string; profile: string }) => ({
     ...owner,
     storedSessionId,
-    tileId: owner ? encodeURIComponent(JSON.stringify([owner.connectionId, owner.profile, storedSessionId])) : storedSessionId
+    tileId: owner
+      ? encodeURIComponent(JSON.stringify([owner.connectionId, owner.profile, storedSessionId]))
+      : storedSessionId
   })),
   sessionTileIdentity: (owner: { connectionId: string; profile: string }, storedSessionId: string) =>
     encodeURIComponent(JSON.stringify([owner.connectionId, owner.profile, storedSessionId])),
@@ -134,7 +136,7 @@ describe('session drop targeting across stacked tabs', () => {
     expect(openSessionTile).not.toHaveBeenCalled()
   })
 
-  it('keeps a split attached to the dragged session\'s immutable owner', () => {
+  it("keeps a split attached to the dragged session's immutable owner", () => {
     const row = mountStackedTabs()
 
     dragTo(row, 980, 400, { connectionId: 'source-a' })

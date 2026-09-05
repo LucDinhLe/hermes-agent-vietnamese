@@ -24,9 +24,7 @@ beforeEach(() => {
   $visibleModels.set(null)
   $collapsedProviders.set(['claude-code'])
   getGlobalModelOptions.mockResolvedValue({
-    providers: [
-      { models: ['sonnet', 'opus', 'haiku'], name: 'Claude Pro / Max (Claude Code)', slug: 'claude-code' }
-    ]
+    providers: [{ models: ['sonnet', 'opus', 'haiku'], name: 'Claude Pro / Max (Claude Code)', slug: 'claude-code' }]
   })
 })
 
@@ -41,11 +39,7 @@ describe('model visibility provider disclosure', () => {
 
     render(
       <QueryClientProvider client={client}>
-        <ModelVisibilityDialog
-          onOpenChange={vi.fn()}
-          onOpenProviders={vi.fn()}
-          open
-        />
+        <ModelVisibilityDialog onOpenChange={vi.fn()} onOpenProviders={vi.fn()} open />
       </QueryClientProvider>
     )
 

@@ -38,12 +38,7 @@ import { requestGatewayForAgent } from '@/store/gateway'
 import { $pinnedSessionIds, pinSession, unpinSession } from '@/store/layout'
 import { $projectTree } from '@/store/projects'
 import { sessionAwaitingInput } from '@/store/prompts'
-import {
-  $selectedStoredSessionId,
-  $sessions,
-  sessionMatchesStoredId,
-  sessionPinId
-} from '@/store/session'
+import { $selectedStoredSessionId, $sessions, sessionMatchesStoredId, sessionPinId } from '@/store/session'
 import {
   $sessionStates,
   $sessionTileDelegateEpoch,
@@ -127,6 +122,7 @@ function TileChat({
   view: SessionView
 }) {
   const queryClient = useQueryClient()
+
   const requestGateway = useCallback(
     <T,>(method: string, params: Record<string, unknown> = {}, timeoutMs?: number, signal?: AbortSignal) =>
       requestGatewayForAgent<T>(owner.connectionId, owner.profile, method, params, timeoutMs, signal),
@@ -200,30 +196,25 @@ function TileChat({
   const onPickImages = useCallback(() => void pickImages(), [pickImages])
   const onRemoveAttachment = useCallback((id: string) => void removeAttachment(id), [removeAttachment])
   const onRetryResume = useCallback(() => patchSessionTile(tileId, { error: undefined }), [tileId])
+
   const onTranscribeAudio = useCallback(
     async (audio: Blob) =>
-      (
-        await transcribeAudio(
-          await blobToDataUrl(audio),
-          audio.type,
-          owner.profile,
-          owner.connectionId
-        )
-      ).transcript,
+      (await transcribeAudio(await blobToDataUrl(audio), audio.type, owner.profile, owner.connectionId)).transcript,
     [owner.connectionId, owner.profile]
   )
 
   // Per-tile model menu — rendered under this tile's SessionView so the pill
   // + switch target THIS runtime, not the primary (which may be mid-turn).
   const modelMenuContent = useMemo(
-    () =>
+    () => (
       <ModelMenuPanel
         connectionId={owner.connectionId}
         gateway={gateway}
         onSelectModel={selectModel}
         profile={owner.profile}
         requestGateway={requestGateway}
-      />,
+      />
+    ),
     [gateway, owner.connectionId, owner.profile, requestGateway, selectModel]
   )
 
@@ -551,9 +542,11 @@ function useTileMenuRow(tileId: string, tileScoped = true): { pinId: string; pro
   return useSyncExternalStore(subscribe, () => {
     const tile = tileScoped ? tileForRef(tileId) : null
     const storedSessionId = tile?.storedSessionId ?? tileId
+
     const stored = tileScoped
       ? tileStoredRow(tileId)
       : $sessions.get().find(session => sessionMatchesStoredId(session, storedSessionId))
+
     const pinId = stored ? sessionPinId(stored) : storedSessionId
     const title = stored ? sessionTabTitle(stored) : translateNow('commandCenter.nav.newChat.title')
     const profile = sessionTileOwner(tile)?.profile ?? stored?.profile
@@ -679,12 +672,7 @@ export const watchSessionTiles = paneMirror<SessionTile>({
   tabLead: tileId => {
     const tile = tileForRef(tileId)
 
-    return (
-      <SessionStatusDot
-        session={tileStoredRow(tileId)}
-        storedSessionId={tile?.storedSessionId ?? null}
-      />
-    )
+    return <SessionStatusDot session={tileStoredRow(tileId)} storedSessionId={tile?.storedSessionId ?? null} />
   },
   // Until the first turn lists a row there is no title to register, so the tab
   // takes its name from the composer instead — live, without re-registering.
@@ -694,14 +682,14 @@ export const watchSessionTiles = paneMirror<SessionTile>({
     const tile = tileForRef(tileId)
 
     return tile ? (
-    <SessionTabMenu
-      onClose={() => requestCloseSessionTile(tileId)}
-      storedSessionId={tile.storedSessionId}
-      tabPaneId={`session-tile:${tileId}`}
-      tileId={tileId}
-    >
-      {tab}
-    </SessionTabMenu>
+      <SessionTabMenu
+        onClose={() => requestCloseSessionTile(tileId)}
+        storedSessionId={tile.storedSessionId}
+        tabPaneId={`session-tile:${tileId}`}
+        tileId={tileId}
+      >
+        {tab}
+      </SessionTabMenu>
     ) : (
       tab
     )

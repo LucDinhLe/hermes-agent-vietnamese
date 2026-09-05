@@ -173,13 +173,7 @@ export function uninstallHubSkill(
 }
 
 export function updateHubSkills(profile?: null | string, connectionId?: null | string): Promise<void> {
-  return runHubAction(
-    UPDATE_ALL_KEY,
-    'update',
-    () => updateSkillsFromHub(profile, connectionId),
-    profile,
-    connectionId
-  )
+  return runHubAction(UPDATE_ALL_KEY, 'update', () => updateSkillsFromHub(profile, connectionId), profile, connectionId)
 }
 
 export function closeHubLog(): void {
