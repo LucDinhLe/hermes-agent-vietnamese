@@ -36,6 +36,8 @@ jobs:
   # (all lanes true) so post-merge validation is never weakened.
   # ─────────────────────────────────────────────────────────────────────
   detect:
+    # Hermes Vietnamese: quy trình kế thừa từ Nous, chỉ chạy ở kho gốc.
+    if: github.repository == 'NousResearch/hermes-agent'
     name: Detect affected areas
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -69,7 +71,7 @@ jobs:
   tests:
     name: Python tests
     needs: detect
-    if: needs.detect.outputs.python == 'true'
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (needs.detect.outputs.python == 'true') }}
     uses: ./.github/workflows/tests.yml
     with:
       slice_count: 12
@@ -81,13 +83,13 @@ jobs:
   tests-os:
     name: OS-specific tests
     needs: detect
-    if: needs.detect.outputs.python == 'true'
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (needs.detect.outputs.python == 'true') }}
     uses: ./.github/workflows/tests-os.yml
 
   lint:
     name: Python lints
     needs: detect
-    if: needs.detect.outputs.python == 'true'
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (needs.detect.outputs.python == 'true') }}
     uses: ./.github/workflows/lint.yml
     with:
       event_name: ${{ needs.detect.outputs.event_name }}
@@ -95,14 +97,14 @@ jobs:
   js-tests:
     name: JS & TS checks
     needs: detect
-    if: needs.detect.outputs.frontend == 'true'
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (needs.detect.outputs.frontend == 'true') }}
     uses: ./.github/workflows/js-tests.yml
 
   installer-tests:
     name: Installer tests
     needs: detect
     # Windows-only, and only for PRs that touch install.ps1 or its tests.
-    if: needs.detect.outputs.installer == 'true'
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (needs.detect.outputs.installer == 'true') }}
     uses: ./.github/workflows/installer-tests.yml
 
   e2e-desktop:
@@ -120,19 +122,19 @@ jobs:
     # regardless of the PR's diff (verified on #76573 and the docs-only
     # #76582). Tracking issue: #76627 (assigned: Ari). To re-enable,
     # delete the `false &&` below — nothing else changed.
-    if: ${{ false && (needs.detect.outputs.python_prod == 'true' || needs.detect.outputs.frontend == 'true') }}
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (false && (needs.detect.outputs.python_prod == 'true' || needs.detect.outputs.frontend == 'true')) }}
     uses: ./.github/workflows/e2e-desktop.yml
 
   docs-site:
     name: Docs Site
     needs: detect
-    if: needs.detect.outputs.site == 'true'
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (needs.detect.outputs.site == 'true') }}
     uses: ./.github/workflows/docs-site-checks.yml
 
   history-check:
     name: Deny unrelated histories
     needs: detect
-    if: needs.detect.outputs.event_name == 'pull_request'
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (needs.detect.outputs.event_name == 'pull_request') }}
     uses: ./.github/workflows/history-check.yml
 
   contributor-check:
@@ -141,7 +143,7 @@ jobs:
     # AUTHOR_MAP is release bookkeeping for the upstream NousResearch repo.
     # Community forks use GitHub noreply commit identities instead of
     # publishing maintainers' personal email addresses as mapping filenames.
-    if: needs.detect.outputs.python == 'true' && github.repository == 'NousResearch/hermes-agent'
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (needs.detect.outputs.python == 'true' && github.repository == 'NousResearch/hermes-agent') }}
     uses: ./.github/workflows/contributor-check.yml
 
   uv-lockfile:
@@ -152,10 +154,12 @@ jobs:
     # blip, a blocking red X — for diffs that cannot desync the lockfile
     # (docs, frontend, prose). Only pyproject.toml / uv.lock can. A
     # `.github/` change still forces it on via the classifier's fail-open.
-    if: needs.detect.outputs.uv_lock == 'true'
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (needs.detect.outputs.uv_lock == 'true') }}
     uses: ./.github/workflows/uv-lockfile-check.yml
 
   infographic-check:
+    # Hermes Vietnamese: quy trình kế thừa từ Nous, chỉ chạy ở kho gốc.
+    if: github.repository == 'NousResearch/hermes-agent'
     name: Check no committed infographics
     needs: detect
     uses: ./.github/workflows/infographic-check.yml
@@ -163,19 +167,19 @@ jobs:
   lockfile-diff:
     name: package-lock.json diff
     needs: detect
-    if: needs.detect.outputs.event_name == 'pull_request' && needs.detect.outputs.npm_lock == 'true'
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (needs.detect.outputs.event_name == 'pull_request' && needs.detect.outputs.npm_lock == 'true') }}
     uses: ./.github/workflows/lockfile-diff.yml
 
   docker-lint:
     name: Lint Docker scripts
     needs: detect
-    if: needs.detect.outputs.docker_meta == 'true'
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (needs.detect.outputs.docker_meta == 'true') }}
     uses: ./.github/workflows/docker-lint.yml
 
   supply-chain:
     name: Supply-chain scan
     needs: detect
-    if: needs.detect.outputs.event_name == 'pull_request' && (needs.detect.outputs.scan == 'true' || needs.detect.outputs.deps == 'true')
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (needs.detect.outputs.event_name == 'pull_request' && (needs.detect.outputs.scan == 'true' || needs.detect.outputs.deps == 'true')) }}
     uses: ./.github/workflows/supply-chain-audit.yml
     with:
       event_name: ${{ needs.detect.outputs.event_name }}
@@ -185,7 +189,7 @@ jobs:
   review-labels:
     name: Review label gate
     needs: [detect, supply-chain]
-    if: always() && needs.detect.outputs.event_name == 'pull_request' && (needs.detect.outputs.ci_review == 'true' || needs.detect.outputs.mcp_catalog == 'true' || needs.supply-chain.outputs.critical_findings == 'true')
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (always() && needs.detect.outputs.event_name == 'pull_request' && (needs.detect.outputs.ci_review == 'true' || needs.detect.outputs.mcp_catalog == 'true' || needs.supply-chain.outputs.critical_findings == 'true')) }}
     uses: ./.github/workflows/review-labels.yml
     with:
       ci_review: ${{ needs.detect.outputs.ci_review == 'true' }}
@@ -194,6 +198,8 @@ jobs:
       supply_chain: ${{ needs.supply-chain.outputs.critical_findings == 'true' }}
 
   osv-scanner:
+    # Hermes Vietnamese: quy trình kế thừa từ Nous, chỉ chạy ở kho gốc.
+    if: github.repository == 'NousResearch/hermes-agent'
     name: OSV scan
     uses: ./.github/workflows/osv-scanner.yml
 
@@ -230,7 +236,7 @@ jobs:
       # its own check. It was never required here, because it is too slow
       # to block a merge. A separate run also stops it from holding this
       # run open. That is what blocked ``gh run rerun``.
-    if: always()
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (always()) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -273,7 +279,7 @@ jobs:
   ci-timings:
     name: CI timing report
     needs: [all-checks-pass]
-    if: always()
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (always()) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

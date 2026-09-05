@@ -44,6 +44,7 @@ jobs:
     # Fork PRs get no comment: the poller needs a write token, and the
     # ``pull_requests`` payload is empty for a fork run.
     if: >-
+      github.repository == 'NousResearch/hermes-agent' &&
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest

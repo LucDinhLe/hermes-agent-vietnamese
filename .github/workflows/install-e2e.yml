@@ -58,6 +58,8 @@ jobs:
   # Keep a syntax-simple first job so scheduled/tag runs always expose their
   # trigger context before the dynamic reusable-workflow matrices fan out.
   diagnostics:
+    # Hermes Vietnamese: quy trình kế thừa từ Nous, chỉ chạy ở kho gốc.
+    if: github.repository == 'NousResearch/hermes-agent'
     name: Describe trigger
     runs-on: ubuntu-latest
     timeout-minutes: 2
@@ -71,6 +73,8 @@ jobs:
   # Which released versions do we test updating FROM? Resolved once and shared
   # by both route matrices, so the two routes cover the same set.
   pick-releases:
+    # Hermes Vietnamese: quy trình kế thừa từ Nous, chỉ chạy ở kho gốc.
+    if: github.repository == 'NousResearch/hermes-agent'
     name: Pick release tags
     needs: diagnostics
     runs-on: ubuntu-latest
@@ -110,7 +114,7 @@ jobs:
 
   # `hermes update` -- the route most users take.
   update:
-    if: github.event_name != 'workflow_dispatch' || inputs.route != 'installer'
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (github.event_name != 'workflow_dispatch' || inputs.route != 'installer') }}
     needs: pick-releases
     strategy:
       # One release breaking is worth knowing about even if another already
@@ -126,7 +130,7 @@ jobs:
   # Re-running the curl one-liner over an existing checkout: autostash + pull
   # rather than the updater's own git handling.
   installer:
-    if: github.event_name != 'workflow_dispatch' || inputs.route != 'update'
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (github.event_name != 'workflow_dispatch' || inputs.route != 'update') }}
     needs: pick-releases
     strategy:
       fail-fast: false

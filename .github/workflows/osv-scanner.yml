@@ -39,6 +39,8 @@ permissions:
 
 jobs:
   scan:
+    # Hermes Vietnamese: quy trình kế thừa từ Nous, chỉ chạy ở kho gốc.
+    if: github.repository == 'NousResearch/hermes-agent'
     name: Scan lockfiles
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
     with:
@@ -59,7 +61,7 @@ jobs:
     name: Emit review status
     runs-on: ubuntu-latest
     needs: scan
-    if: always()
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (always()) }}
     outputs:
       review_status: ${{ steps.emit.outputs.review_status }}
     steps:

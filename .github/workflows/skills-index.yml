@@ -18,7 +18,7 @@ permissions:
 jobs:
   build-index:
     # Only run on the upstream repository, not on forks
-    if: github.repository == 'NousResearch/hermes-agent'
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (github.repository == 'NousResearch/hermes-agent') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: trusted-automation
@@ -58,7 +58,7 @@ jobs:
   # everything in one pipeline); we just kick it on a schedule.
   trigger-deploy:
     needs: build-index
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: trusted-automation

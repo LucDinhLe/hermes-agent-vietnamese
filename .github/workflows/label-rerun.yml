@@ -28,7 +28,7 @@ concurrency:
 jobs:
   rerun-review-labels:
     name: Rerun review-labels job
-    if: github.event.label.name == 'ci-reviewed'
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (github.event.label.name == 'ci-reviewed') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:

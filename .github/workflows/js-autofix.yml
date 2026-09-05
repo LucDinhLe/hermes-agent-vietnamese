@@ -56,6 +56,8 @@ concurrency:
 
 jobs:
   generate-patch:
+    # Hermes Vietnamese: quy trình kế thừa từ Nous, chỉ chạy ở kho gốc.
+    if: github.repository == 'NousResearch/hermes-agent'
     name: Generate eslint --fix patch
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -136,7 +138,7 @@ jobs:
     needs: generate-patch
     # Skip entirely when generate-patch found no fixes — saves a runner,
     # avoids a redundant checkout/download, and keeps the job graph honest.
-    if: needs.generate-patch.outputs.has-fixes == 'true'
+    if: ${{ github.repository == 'NousResearch/hermes-agent' && (needs.generate-patch.outputs.has-fixes == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: trusted-automation

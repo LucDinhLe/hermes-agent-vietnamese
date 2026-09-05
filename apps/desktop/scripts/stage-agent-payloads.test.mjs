@@ -114,7 +114,9 @@ test('Vietnamese release tags map deterministically to Electron SemVer', () => {
     tag: 'vi-v0.20.0-15',
     baseVersion: '0.20.0',
     iteration: 15,
-    appVersion: '0.20.0-vi.15'
+    appVersion: '0.20.0-vi.15',
+    calver: false,
+    channel: 'legacy'
   })
   assert.throws(() => parseVietnameseReleaseTag('v0.20.0'), /vi-vX.Y.Z-N/)
   assert.throws(() => parseVietnameseReleaseTag('vi-v0.20.0-rc1'), /vi-vX.Y.Z-N/)

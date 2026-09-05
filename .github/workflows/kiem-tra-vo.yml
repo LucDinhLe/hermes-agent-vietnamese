@@ -1,0 +1,73 @@
+name: Kiểm tra vỏ Hermes Vietnamese
+
+# Chạy sau mỗi lần đẩy mã: lõi Nous phải còn nguyên từng byte theo engine.lock,
+# script phát hành và vỏ Electron (apps/desktop) phải qua kiểm thử đơn vị.
+# Kiểm tra của Nous để lại trong kho chỉ chạy ở kho gốc (xem điều kiện trong từng workflow).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kiem-tra-vo-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  loi-nguyen-ban:
+    name: Lõi khớp engine.lock
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26
+      - name: Lõi phải khớp engine.lock
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/engine-sync.mjs check
+
+  script-phat-hanh:
+    name: Script phát hành
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26
+      - run: node --test scripts/engine-sync.test.mjs scripts/vietnamese-release.test.mjs scripts/bundled-release-policy.test.mjs scripts/check-public-docs.test.mjs scripts/validate-public-release-contract.test.mjs
+
+  vo-electron:
+    name: Vỏ Electron (apps/desktop)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 26
+          cache: npm
+      - name: Cài npm 12
+        run: npm install --global npm@12
+      - name: Cài phụ thuộc từ lockfile
+        uses: ./.github/actions/retry
+        with:
+          command: npm ci --no-audit --no-fund
+      - name: Kiểm thử tiến trình chính và script đóng gói
+        run: npm run --prefix apps/desktop test:desktop:platforms
+      - name: Kiểm tra kiểu và lint
+        run: npm run --prefix apps/desktop check:lint
