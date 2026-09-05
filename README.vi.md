@@ -68,7 +68,7 @@ Trên Windows, mở PowerShell trong thư mục tải xuống và chạy `Get-Fi
 
 Bản này dùng mã sản phẩm và thư mục dữ liệu riêng với các bản Hermes cũ, nên cài song song thay vì ghi đè. Trên Windows, lối tắt "Hermes Vietnamese" có thể thay tên lối tắt cũ, nhưng bản cũ vẫn còn nguyên trong danh sách Ứng dụng và vẫn mở được. Trên macOS và Linux, thư mục dữ liệu là `~/.hermes-vietnamese`; bản Hermes cũ dùng `~/.hermes`. Lần mở đầu tiên, nếu máy có dữ liệu Hermes cũ, ứng dụng hỏi "Nhập dữ liệu từ bản Hermes cũ?" rồi sao chép (không xóa hay di chuyển) cấu hình, phiên làm việc, trí nhớ, kỹ năng và các thiết lập khác sang thư mục mới. Bản cũ giữ nguyên nên luôn dùng được để quay lại nếu cần.
 
-Python 3.12.10 và thư viện bắt buộc đã ở trong bộ cài, trên cả ba nền tảng. Bạn không cần tự cài môi trường lập trình hoặc tải `install.ps1` để khởi động lõi. Internet vẫn cần cho tải bộ cài, xác thực, dịch vụ AI và một số công cụ tùy chọn.
+Python 3.11 và thư viện bắt buộc đã ở trong bộ cài, trên cả ba nền tảng. Bạn không cần tự cài môi trường lập trình hoặc tải `install.ps1` để khởi động lõi. Internet vẫn cần cho tải bộ cài, xác thực, dịch vụ AI và một số công cụ tùy chọn.
 
 ### 2. Kết nối model
 

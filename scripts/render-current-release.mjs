@@ -63,16 +63,13 @@ export function renderBlocks(release) {
   ].join('\n\n')
 
   return {
-    'README.md': `> **Bản tải mới nhất là [${release.version}](${tagUrl}), dành cho ${platformList}.** Đây là bản dùng thử cộng đồng (community pilot), chưa phải stable; ${signing}. Hệ điều hành có thể hiển thị cảnh báo khi tải hoặc cài.${macNote}${linuxNote}
+    'README.md': `> **Bản tải mặc định/Latest: [Hermes Vietnamese ${release.version}](${tagUrl})** là **community pilot công khai, chưa phải stable**, dành cho ${platformList}. ${signing}. ${update}${macNote}${linuxNote}
 
-${readmeLinks}
-
-<details>
-<summary>Kiểm tra tệp tải về</summary>
-
-${readmeDetails}
-
-</details>`,
+| Máy đang dùng | Tải trực tiếp | Kích thước | SHA-256 |
+| --- | --- | --- | --- |
+| Windows 10/11, chip x64 | [Bộ cài x64](${dl(w.filename)})${compat ? ` · [tên tương thích cũ](${dl(compat)})` : ''} | ${w.size} byte | \`${w.sha256}\` |
+${m ? `| macOS 12+, Apple Silicon (M1 trở lên) | [DMG](${dl(m.filename)}) | ${m.size} byte | \`${m.sha256}\` |\n` : ''}${l ? `| Linux x64 | [AppImage](${dl(l.filename)})${deb ? ` · [DEB](${dl(deb.filename)})` : ''} | ${l.size} byte${deb ? ` · ${deb.size} byte` : ''} | \`${l.sha256}\`${deb ? `<br>\`${deb.sha256}\`` : ''} |\n` : ''}
+Đối chiếu mã với [SHA256SUMS.txt](${dl('SHA256SUMS.txt')}) của cùng bản phát hành trước khi chạy. Chỉ tải **một** tệp Windows; hai tên có cùng nội dung.`,
     'README.vi.md': `**Latest hiện tại là [${release.version}](${tagUrl}), dành cho ${platformList}.** Bản community pilot chưa phải stable; ${signing}. ${update}${macNote}${linuxNote}
 
 ${items}`,
