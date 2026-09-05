@@ -152,7 +152,8 @@ export function checkPublicDocs(release, documents, live) {
     assert.equal(live.tag_name, release.tag, 'GitHub Latest differs from public descriptor')
     assert.equal(live.draft, false)
     assert.equal(live.prerelease, false)
-    assert.equal(live.target_commitish, release.sourceCommit)
+    // `gh release create` trên thẻ có sẵn ghi target_commitish là tên nhánh, nên đối chiếu commit mà thẻ trỏ tới.
+    assert.equal(live.tagCommit, release.sourceCommit, 'thẻ Latest trên GitHub không trỏ tới sourceCommit')
     assert.deepEqual(live.assets.map(a => a.name).sort(), [...downloadFiles, 'SHA256SUMS.txt'].sort())
 
     for (const filename of downloadFiles) {
@@ -172,9 +173,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   try {
     const release = JSON.parse(fs.readFileSync(path.join(root, '.github/public-release.json'), 'utf8'))
     const documents = Object.fromEntries(release.documentationFiles.map(file => [file, fs.readFileSync(path.join(root, file), 'utf8')]))
-    const live = process.argv.includes('--live')
-      ? JSON.parse(execFileSync('gh', ['api', 'repos/LucDinhLe/hermes-agent-vietnamese/releases/latest'], { encoding: 'utf8' }))
-      : undefined
+    const api = endpoint => JSON.parse(execFileSync('gh', ['api', `repos/LucDinhLe/hermes-agent-vietnamese/${endpoint}`], { encoding: 'utf8' }))
+    const live = process.argv.includes('--live') ? api('releases/latest') : undefined
+    if (live) live.tagCommit = api(`commits/${live.tag_name}`).sha
     console.log(JSON.stringify(checkPublicDocs(release, documents, live)))
   } catch (error) {
     console.error(error.message)

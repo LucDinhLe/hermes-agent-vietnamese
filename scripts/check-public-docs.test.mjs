@@ -14,7 +14,7 @@ function fixture() {
   const base = 'https://github.com/LucDinhLe/hermes-agent-vietnamese/releases'
   const body = `${version} Windows x64 chưa ký số, chưa phải stable 1234 ${release.windowsX64.sha256}\n${base}/tag/${release.tag}\n` + [...release.downloadFiles, 'SHA256SUMS.txt'].map(f => `${base}/download/${release.tag}/${f}`).join('\n')
   const documents = { 'README.md': `<!-- current-release:start -->\n${body}\n<!-- current-release:end -->` }
-  const live = { tag_name: release.tag, draft: false, prerelease: false, target_commitish: release.sourceCommit,
+  const live = { tag_name: release.tag, draft: false, prerelease: false, tagCommit: release.sourceCommit,
     assets: [...release.downloadFiles, 'SHA256SUMS.txt'].map(name => ({ name, size: 1234, digest: `sha256:${release.windowsX64.sha256}`, browser_download_url: `${base}/download/${release.tag}/${name}` })) }
   return { release, documents, live }
 }
