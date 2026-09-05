@@ -23,11 +23,11 @@ Dự án được phát triển từ [Hermes Agent](https://github.com/NousResea
 
 | Máy đang dùng | Tải trực tiếp | Kích thước | SHA-256 |
 | --- | --- | --- | --- |
-| Windows 10/11, chip x64 | [Bộ cài x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/Hermes-2026.9.4-win-x64.exe) · [tên tương thích cũ](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/Hermes-Vietnamese-Windows-x64-Setup.exe) | 345852734 byte | `3cd30aaad47167c439bb6637af3c531ceffc4e2f74d7a808e3a9c105e3938990` |
+| Windows 10/11, chip x64 | [Bộ cài x64](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/Hermes-2026.9.4-win-x64.exe) | 345852734 byte | `3cd30aaad47167c439bb6637af3c531ceffc4e2f74d7a808e3a9c105e3938990` |
 | macOS 12+, Apple Silicon (M1 trở lên) | [DMG](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/Hermes-2026.9.4-mac-arm64.dmg) | 385594943 byte | `8ebc605c66c9cc8eeed6fc314b71cbdabeedea6c62c297035296729571284d8c` |
 | Linux x64 | [AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/Hermes-2026.9.4-linux-x86_64.AppImage) · [DEB](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/Hermes-2026.9.4-linux-amd64.deb) | 397516248 byte · 320996796 byte | `26cfec58e6776f49d5e65cbdd62908119349f7406a4fc549bc417d839134249d`<br>`fc513d2a836ee5c6ca9762a627bb14b01d5a2cb4e09b234fd81439b61018e351` |
 
-Đối chiếu mã với [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/SHA256SUMS.txt) của cùng bản phát hành trước khi chạy. Chỉ tải **một** tệp Windows; hai tên có cùng nội dung.
+Đối chiếu mã với [SHA256SUMS.txt](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/SHA256SUMS.txt) của cùng bản phát hành trước khi chạy.
 <!-- current-release:end -->
 
 ## Điểm mạnh so với cách tự cài Hermes Agent từ mã nguồn

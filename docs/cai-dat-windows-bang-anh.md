@@ -18,7 +18,6 @@ Chỉ tiếp tục khi đủ ba điều kiện:
 Latest là [2026.9.4](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/tag/v2026.9.4), community pilot chưa phải stable; Windows chưa ký số, macOS ký ad-hoc, Linux không có cơ chế ký. Ứng dụng báo khi có bản mới kèm SHA-256, không tự tải hay tự cài.
 
 - Windows x64: [Hermes-2026.9.4-win-x64.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/Hermes-2026.9.4-win-x64.exe), **345852734 byte**, SHA-256 `3cd30aaad47167c439bb6637af3c531ceffc4e2f74d7a808e3a9c105e3938990`.
-- Cùng bộ cài Windows với tên tương thích cũ: [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/Hermes-Vietnamese-Windows-x64-Setup.exe). Chỉ chạy một bộ cài.
 - macOS Apple Silicon (M1 trở lên): [Hermes-2026.9.4-mac-arm64.dmg](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/Hermes-2026.9.4-mac-arm64.dmg), **385594943 byte**, SHA-256 `8ebc605c66c9cc8eeed6fc314b71cbdabeedea6c62c297035296729571284d8c`.
 - Linux x64 AppImage: [Hermes-2026.9.4-linux-x86_64.AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/Hermes-2026.9.4-linux-x86_64.AppImage), **397516248 byte**, SHA-256 `26cfec58e6776f49d5e65cbdd62908119349f7406a4fc549bc417d839134249d`.
 - Linux x64 gói deb (Ubuntu/Debian): [Hermes-2026.9.4-linux-amd64.deb](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/Hermes-2026.9.4-linux-amd64.deb), **320996796 byte**, SHA-256 `fc513d2a836ee5c6ca9762a627bb14b01d5a2cb4e09b234fd81439b61018e351`.
@@ -56,7 +55,7 @@ Nếu Edge tự thêm `(1)`, `(2)` vào tên vì tệp đã từng được tả
 ## 3. Mở bộ cài
 
 1. Khi Edge báo tải xong, bấm biểu tượng thư mục hoặc mở thư mục **Downloads/Tải xuống**.
-2. Mở `Hermes-2026.9.2-win-x64.exe` hoặc tệp tên tương thích đã xác minh ở phần 1.
+2. Mở tệp `Hermes-<phiên bản>-win-x64.exe` đã xác minh ở phần 1.
 3. Nếu Windows SmartScreen hiện cửa sổ **Windows protected your PC**, kiểm tra lại nguồn và SHA-256 rồi chọn **More info/Thông tin thêm → Run anyway/Vẫn chạy**.
 
 Chỉ tiếp tục khi nguồn tải, tên tệp và SHA-256 đúng như phần 1. Nếu Microsoft Defender Antivirus nêu tên một mối đe dọa cụ thể, hãy dừng lại, giữ ảnh chụp và [gửi báo lỗi](https://github.com/LucDinhLe/hermes-agent-vietnamese/issues). Không tắt Defender, SmartScreen hoặc chính sách bảo mật của toàn máy để cài Hermes.
@@ -78,7 +77,7 @@ Nếu chưa có tài khoản hoặc khóa API, chọn **Tôi sẽ chọn nhà cu
 
 ## Kiểm tra tăng cường nếu bạn quen dùng PowerShell
 
-Bạn có thể đối chiếu mã SHA-256 bằng tệp `SHA256SUMS.txt` trong cùng bản phát hành. Mỗi bản có mã riêng, vì vậy không dùng mã của bản cũ để kiểm tra bản mới. Trên Windows, mở PowerShell trong thư mục tải xuống và chạy `Get-FileHash .\Hermes-Vietnamese-Windows-x64-Setup.exe -Algorithm SHA256`, rồi so kết quả với tệp tổng kiểm tra.
+Bạn có thể đối chiếu mã SHA-256 bằng tệp `SHA256SUMS.txt` trong cùng bản phát hành. Mỗi bản có mã riêng, vì vậy không dùng mã của bản cũ để kiểm tra bản mới. Trên Windows, mở PowerShell trong thư mục tải xuống và chạy `Get-FileHash .\Hermes-<phiên bản>-win-x64.exe -Algorithm SHA256`, rồi so kết quả với tệp tổng kiểm tra.
 
 ## Nếu vẫn không cài được
 

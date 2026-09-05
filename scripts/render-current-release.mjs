@@ -69,7 +69,7 @@ export function renderBlocks(release) {
 | --- | --- | --- | --- |
 | Windows 10/11, chip x64 | [Bộ cài x64](${dl(w.filename)})${compat ? ` · [tên tương thích cũ](${dl(compat)})` : ''} | ${w.size} byte | \`${w.sha256}\` |
 ${m ? `| macOS 12+, Apple Silicon (M1 trở lên) | [DMG](${dl(m.filename)}) | ${m.size} byte | \`${m.sha256}\` |\n` : ''}${l ? `| Linux x64 | [AppImage](${dl(l.filename)})${deb ? ` · [DEB](${dl(deb.filename)})` : ''} | ${l.size} byte${deb ? ` · ${deb.size} byte` : ''} | \`${l.sha256}\`${deb ? `<br>\`${deb.sha256}\`` : ''} |\n` : ''}
-Đối chiếu mã với [SHA256SUMS.txt](${dl('SHA256SUMS.txt')}) của cùng bản phát hành trước khi chạy. Chỉ tải **một** tệp Windows; hai tên có cùng nội dung.`,
+Đối chiếu mã với [SHA256SUMS.txt](${dl('SHA256SUMS.txt')}) của cùng bản phát hành trước khi chạy.`,
     'README.vi.md': `**Latest hiện tại là [${release.version}](${tagUrl}), dành cho ${platformList}.** Bản community pilot chưa phải stable; ${signing}. ${update}${macNote}${linuxNote}
 
 ${items}`,

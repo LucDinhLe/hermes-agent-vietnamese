@@ -325,16 +325,13 @@ jobs:
           path: assets
           merge-multiple: true
 
-      - name: Băm, tên tương thích, ghi feed theo kênh
+      - name: Băm, ghi feed theo kênh
         id: feed
         shell: bash
         run: |
           mkdir -p out
           ls -la assets
           cp assets/Hermes-* out/
-          if [ "$CHANNEL" = latest ]; then
-            cp "assets/Hermes-$APP_VERSION-win-x64.exe" out/Hermes-Vietnamese-Windows-x64-Setup.exe
-          fi
           ( cd out && sha256sum Hermes-* > SHA256SUMS.txt && cat SHA256SUMS.txt )
           node --input-type=module -e '
             import fs from "node:fs"
@@ -349,12 +346,11 @@ jobs:
             }
             const deb = linux.extras.find(e => e.filename.endsWith(".deb"))
             const supportedTargets = ["windows-x64", "macos-arm64", "linux-x64"]
-            const windowsX64 = { ...win.primary, authenticode: "NotSigned", ...(channel === "latest" ? { compatibilityFilename: "Hermes-Vietnamese-Windows-x64-Setup.exe" } : {}) }
+            const windowsX64 = { ...win.primary, authenticode: "NotSigned" }
             const macosArm64 = { ...mac.primary, codesign: "AdHoc", minimumSystemVersion: "12.0" }
             const linuxX64 = { ...linux.primary, ...(deb ? { deb } : {}) }
             const downloadFiles = [
               windowsX64.filename,
-              ...(channel === "latest" ? [windowsX64.compatibilityFilename] : []),
               macosArm64.filename,
               linuxX64.filename,
               ...(deb ? [deb.filename] : [])

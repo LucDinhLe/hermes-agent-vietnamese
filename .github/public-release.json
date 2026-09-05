@@ -17,8 +17,7 @@
     "filename": "Hermes-2026.9.4-win-x64.exe",
     "size": 345852734,
     "sha256": "3cd30aaad47167c439bb6637af3c531ceffc4e2f74d7a808e3a9c105e3938990",
-    "authenticode": "NotSigned",
-    "compatibilityFilename": "Hermes-Vietnamese-Windows-x64-Setup.exe"
+    "authenticode": "NotSigned"
   },
   "lifecycle": {
     "runId": 33930157952,
@@ -33,7 +32,6 @@
   ],
   "downloadFiles": [
     "Hermes-2026.9.4-win-x64.exe",
-    "Hermes-Vietnamese-Windows-x64-Setup.exe",
     "Hermes-2026.9.4-mac-arm64.dmg",
     "Hermes-2026.9.4-linux-x86_64.AppImage",
     "Hermes-2026.9.4-linux-amd64.deb"

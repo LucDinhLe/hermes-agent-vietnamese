@@ -6,7 +6,6 @@
 | Nền tảng | Tải xuống | Kích thước (byte) | SHA-256 |
 | --- | --- | --- | --- |
 | Windows x64 | [Hermes-2026.9.4-win-x64.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/Hermes-2026.9.4-win-x64.exe) | 345852734 | `3cd30aaad47167c439bb6637af3c531ceffc4e2f74d7a808e3a9c105e3938990` |
-| Windows x64, tên tương thích cũ | [Hermes-Vietnamese-Windows-x64-Setup.exe](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/Hermes-Vietnamese-Windows-x64-Setup.exe) | 345852734 | `3cd30aaad47167c439bb6637af3c531ceffc4e2f74d7a808e3a9c105e3938990` |
 | macOS Apple Silicon | [Hermes-2026.9.4-mac-arm64.dmg](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/Hermes-2026.9.4-mac-arm64.dmg) | 385594943 | `8ebc605c66c9cc8eeed6fc314b71cbdabeedea6c62c297035296729571284d8c` |
 | Linux x64 AppImage | [Hermes-2026.9.4-linux-x86_64.AppImage](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/Hermes-2026.9.4-linux-x86_64.AppImage) | 397516248 | `26cfec58e6776f49d5e65cbdd62908119349f7406a4fc549bc417d839134249d` |
 | Linux x64 deb | [Hermes-2026.9.4-linux-amd64.deb](https://github.com/LucDinhLe/hermes-agent-vietnamese/releases/download/v2026.9.4/Hermes-2026.9.4-linux-amd64.deb) | 320996796 | `fc513d2a836ee5c6ca9762a627bb14b01d5a2cb4e09b234fd81439b61018e351` |
