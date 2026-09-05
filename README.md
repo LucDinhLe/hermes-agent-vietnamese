@@ -95,7 +95,19 @@ Ngay bên dưới là toàn bộ kết nối tài khoản và khóa API mà lõi
 | Anthropic API | Khóa API Anthropic | Tính phí API riêng, không dùng chung gói Claude Pro/Max |
 | Nhà cung cấp khác | Tài khoản hoặc khóa tương ứng | Theo chính sách của dịch vụ bạn chọn |
 
-Hermes không tặng kèm gói model trả phí. Mỗi người tự đăng nhập tài khoản hoặc nhập khóa API của mình. Gemini dùng khóa API Google AI Studio hoặc Google Vertex AI; bản này không đăng nhập Gemini bằng tài khoản Google vì [điều khoản Gemini CLI không cho phần mềm bên thứ ba dùng lại dịch vụ qua OAuth này](https://github.com/google-gemini/gemini-cli/blob/main/docs/resources/tos-privacy.md) và Google chỉ mở cửa đó cho một số tài khoản. Xem thao tác từng bước tại [Kết nối ChatGPT, Claude và Gemini](README.vi.md#kết-nối-chatgpt-claude-và-gemini).
+Hermes không tặng kèm gói model trả phí. Mỗi người tự đăng nhập tài khoản hoặc nhập khóa API của mình. Xem thao tác từng bước tại [Kết nối ChatGPT, Claude và Gemini](README.vi.md#kết-nối-chatgpt-claude-và-gemini).
+
+#### Dùng Gemini bằng khóa Google AI Studio
+
+Đây là đường chính thức để có Gemini trong Hermes, mở cho mọi tài khoản Google và không cần dự án Google Cloud.
+
+1. Mở [Google AI Studio](https://aistudio.google.com/apikey), đăng nhập tài khoản Google rồi bấm tạo khóa API. Khóa hiện một lần, hãy sao chép và cất chỗ an toàn.
+2. Trong Hermes chọn **Google Gemini (khóa API)**, dán khóa vào và kết nối.
+3. Chọn model trong danh sách hiện ra, chẳng hạn Gemini 2.5 Pro cho việc cần suy luận sâu và Gemini 2.5 Flash cho việc cần nhanh.
+
+Google cho một hạn mức miễn phí mỗi ngày, vượt hạn mức thì tính theo lượng dùng của AI Studio; hạn mức và giá do Google công bố, hãy xem tại trang giá của họ trước khi giao việc lớn. Người đã có dự án Google Cloud có thể chọn Vertex AI thay cho AI Studio.
+
+Bản này không đăng nhập Gemini bằng tài khoản Google theo kiểu Gemini CLI, vì [điều khoản Gemini CLI không cho phần mềm bên thứ ba dùng lại dịch vụ qua OAuth này](https://github.com/google-gemini/gemini-cli/blob/main/docs/resources/tos-privacy.md) và Google chỉ mở cửa đó cho một số tài khoản. Khóa AI Studio đi đúng điều khoản và giữ tài khoản Google của bạn an toàn.
 
 ### Bước 3. Bắt đầu giao việc
 
