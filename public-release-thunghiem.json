@@ -1,0 +1,47 @@
+{
+  "channel": "thunghiem",
+  "tag": "v2026.9.5-thunghiem.4",
+  "version": "2026.9.5-thunghiem.4",
+  "releaseClass": "community-pilot",
+  "updateFeedEnabled": true,
+  "sourceCommit": "3bdd23b7a31a1607ef476af6514346339480c699",
+  "engine": {
+    "tag": "v2026.8.31",
+    "commit": "29112bef099274229cadff79cdff7bf7b99c4b77"
+  },
+  "supportedTargets": [
+    "windows-x64",
+    "macos-arm64",
+    "linux-x64"
+  ],
+  "windowsX64": {
+    "filename": "Hermes-2026.9.5-thunghiem.4-win-x64.exe",
+    "size": 345901313,
+    "sha256": "d51ba394d0cefed31a4486d01167f2c4d516ffd3722e4e297418c38ab3dac447",
+    "authenticode": "NotSigned"
+  },
+  "macosArm64": {
+    "filename": "Hermes-2026.9.5-thunghiem.4-mac-arm64.dmg",
+    "size": 385672411,
+    "sha256": "2403536518e3a80a7c0bebdb98529ae1967e8abaa9fb8d56add6fbd1aa8aa666",
+    "codesign": "AdHoc",
+    "minimumSystemVersion": "12.0"
+  },
+  "linuxX64": {
+    "filename": "Hermes-2026.9.5-thunghiem.4-linux-x86_64.AppImage",
+    "size": 397566151,
+    "sha256": "b72bb62cf6f59522bad60700c644f29cd3cc7d254d950ec56b20eb01eaa10999",
+    "deb": {
+      "filename": "Hermes-2026.9.5-thunghiem.4-linux-amd64.deb",
+      "size": 320912128,
+      "sha256": "cb4ddee555400a0b68919069ad27f49eb3588a32b33b384440656862afd1be40"
+    }
+  },
+  "downloadFiles": [
+    "Hermes-2026.9.5-thunghiem.4-win-x64.exe",
+    "Hermes-2026.9.5-thunghiem.4-mac-arm64.dmg",
+    "Hermes-2026.9.5-thunghiem.4-linux-x86_64.AppImage",
+    "Hermes-2026.9.5-thunghiem.4-linux-amd64.deb"
+  ],
+  "rollback": "Bản chính không bị đụng; gỡ bản thử nghiệm là quay lui."
+}
